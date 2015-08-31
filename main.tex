@@ -1,0 +1,119 @@
+\documentclass[10pt]{sigplanconf}
+
+%%% Packages %%%
+\usepackage{caption}
+\usepackage{color}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{subcaption}
+\usepackage{times}
+\usepackage{url}
+\usepackage{microtype}
+%\usepackage{color,fullpage,microtype}
+%\usepackage{graphicx,wrapfig,subfigure,titling}
+%\usepackage{amssymb,amsmath,amssymb,amsfonts}
+%\usepackage{amsthm}
+%\usepackage{textcomp}
+%\usepackage{multirow}
+%\usepackage{gensymb}
+%\usepackage{array}
+%\usepackage{times}
+%\usepackage[sort]{cite}
+
+%%% Author and Title %%%
+\title{Immovable Objects Meet An Irresistible Force: \\
+Meshing Memory Management for Compaction without Relocation}
+
+\authorinfo{Emery D. Berger \and Andrew McGregor}{
+  College of Information and Computer Sciences \\
+  University of Massachusetts Amherst}{
+  \texttt{emery@cs.umass.edu}, \texttt{mcgregor@cs.umass.edu}}
+
+%%% Copyright Information %%%
+\exclusivelicense
+\conferenceinfo{OOPSLA'16}{XXX}
+\copyrightyear{2016} 
+\copyrightdata{XXX}
+\doi{2815400.2815409}
+
+%%% Set up microtype %%%
+\microtypesetup{
+  final,
+  tracking=true,
+  kerning=true,
+  spacing=true,
+  factor=1100,
+  stretch=20,
+  shrink=20
+}
+\SetTracking{encoding={*}, shape=sc}{0} % No tracking for smallcaps
+
+%%% Caption formatting and spacing %%%
+\captionsetup{font=small,labelfont=bf}
+\setlength{\belowcaptionskip}{-5pt}
+\setlength{\abovecaptionskip}{5pt}
+\setlength{\floatsep}{5pt}
+
+%%% Listings %%%
+\definecolor{mygreen}{rgb}{0,0.6,0}
+\definecolor{mygray}{rgb}{0.5,0.5,0.5}
+\definecolor{mymauve}{rgb}{0.58,0,0.82}
+\lstset{
+  basicstyle=\footnotesize,        % the size of the fonts that are used for the code
+  tabsize=2,                       % sets default tabsize to 2 spaces
+  captionpos=none,                 % sets the caption-position to bottom
+  keywordstyle=\color{blue},       % keyword style
+  commentstyle=\color{mygreen},    % comment style
+  stringstyle=\color{mymauve},     % string literal style
+  keepspaces=true,                 % preserve spaces  
+  morekeywords={*,...},            % if you want to add more keywords to the set
+  numbers=left,                    % place line numbers on the left
+  stepnumber=1,                    % step between line numbers
+  numbersep=5pt,                   % how far the line-numbers are from the code
+  numberstyle=\tiny\color{mygray}, % the style that is used for the line-numbers
+  escapechar=\$                    % escape character for using latex commands in listings
+}
+\lstdefinelanguage{c++threads}[]{c++}{morekeywords={pthread_create,pthread_join,thread,join}}
+\lstset{language=c++threads, basicstyle=\ttfamily\scriptsize,frame=trbl,tabsize=2}
+
+%%% Custom Commands %%%
+\newcommand{\mesh}{\textsc{Mesh}}
+\newcommand{\punt}[1]{}
+
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{conjecture}{Conjecture}[section]
+\newtheorem{fact}{Fact}
+\newtheorem{problem}{Problem}
+\newtheorem{example}{Example}
+\newtheorem{claim}{Claim}
+\newtheorem{proof}{Proof}[section]
+
+\newcommand{\expec}[1]{\mathbb E\left [ #1 \right ]}
+\newcommand{\rounddown}[1]{\left \lfloor  #1 \right \rfloor}
+\newcommand{\roundup}[1]{\left \lceil  #1 \right \rceil}
+
+%%% The Document %%%
+\begin{document}
+
+  \maketitle
+  
+\input{abstract}
+\input{introduction}
+%\input{overview}
+\input{analysis}
+%\input{implementation}
+%\input{evaluation}
+%\input{related}
+%\input{conclusion}
+  
+%  \newpage
+  
+\bibliographystyle{abbrv}
+\bibliography{mesh,../emery/emery}
+
+\end{document}
