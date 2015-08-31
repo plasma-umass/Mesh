@@ -1,0 +1,193 @@
+\section{Analysis}
+\label{sec:analysis}
+
+Pick $m$ random strings of length $b$ with $n$ ones.
+Let $X^s$ be the number of copies of string $s$ and note that $X^s \sim Bin(m,p)$ where $p=1/{b \choose n}$. 
+We say a pair of strings $s^1$ and $s^2$ are combinable if $s^1\cdot s^2=0$. A set of strings is combinable if they are pairwise combinable.
+
+\subsection{Combining Pairs of Strings}
+
+Partition the set of all binary strings of length $b$ with $n$ ones into the sets
+\[A=\{x\in \{0,1\}^b: |x|=n, x_1=1\}\] and \[
+B=\{x\in \{0,1\}^b: |x|=n, x_1=0\} \ .\]
+
+
+%Consider pairing combinable strings greedily. 
+In the case where $n=b/2$, the number of unpaired strings is 
+
+\[U=\sum_{s\in A} |X^s-X^{\bar{s}}|\] 
+since $s$ is only combinable with its complement $\bar{s}$ when $n=b/2$.
+
+\begin{theorem}
+\[D_m(p)/(2p) \leq E(U) \leq D_m(p)/p \ ,\]
+where 
+\[D_m(p)=2(1-p)^{N-\rounddown{Np}}p^{1+\rounddown{Np}}(\rounddown{Np}+1){N\choose \rounddown{Np}+1}\]
+and note that $\sqrt{mp(1-p)}/\sqrt{2} \leq D_m(p)\leq \sqrt{mp(1-p)}$ on the assumption that $1/m\leq p\leq 1-1/m$.
+\end{theorem}
+\begin{proof}
+Let $X\sim Bin(m,p)$.
+By the triangle inequality and linearity of expectation:
+\[E[U]=\sum_{s\in A} E[|X^s-X^{\bar{s}}|]\]
+\[\leq \sum_{s\in A} E[|X^s-mp|] + E[|X^{\bar{s}}-mp|]\]
+\[=1/p \cdot E[|X-mp|]\]
+
+By linearity of expectation:
+\begin{eqnarray*}
+E[U]
+& \geq & 
+\sum_{s\in A} P(X^s\geq mp\geq X^{\bar{s}} \mbox{ or } X^s\leq mp\leq  X^{\bar{s}}) 
+E[|X^s-X^{\bar{s}}| \big | X^s\geq mp\geq X^{\bar{s}} \mbox{ or } X^s\leq mp\leq  X^{\bar{s}}] \\
+& \geq & 1/2 \cdot 
+\sum_{s\in A} E[|X^s-mp|] + E[|X^{\bar{s}}-mp|]\\
+& = & 1/(2p)  E[|X-mp|]
+\end{eqnarray*}
+
+The result follows since by a theorem of De Moivre, the absolute deviation of the binomial distribution is 
+\[E[|X-mp|]=D_n(p)\]
+\[=2(1-p)^{N-\rounddown{Np}}p^{1+\rounddown{Np}}(\rounddown{Np}+1){N\choose \rounddown{Np}+1}\] 
+The bound on $D_n(p)$ is due to Blyth (1980) and  Berend and  Kontorovich (2013).
+\end{proof}
+
+\begin{corollary}
+For any $n\leq b/2$, \[\lim_{n\rightarrow \infty} E(U)/m=0\] i.e.,  the fraction of strings that are unpaired tends to zero when $m\rightarrow \infty$.
+\end{corollary}
+\begin{proof}
+By the previous theorem, if $n=b/2$, $E(U)/m \leq D_m(p)/(mp)\leq \frac{\sqrt{(1-p)}}{\sqrt{mp}} \rightarrow 0$ as $m\rightarrow \infty$. Note that the bound also holds for $n\leq b/2$ because decreasing the weight of the strings only increases the probability that a pair of strings is combinable.
+\end{proof}
+
+\subsubsection{Random Graph Approach}
+Consider the graph where nodes correspond to sampled strings where there
+is an edge between two nodes iff the strings are compatible. So each
+edge is present with probability $q={b-n \choose n}/{b\choose
+  n}$. Note that edges are pair-wise independent but not three-wise
+independent (e.g., there are fewer triangles than you would
+expect). However, the number of incident edges on a node is
+$Bin(m-1,q)$.
+
+Let $M$ be the size of the maximum in the graph. This number is the maximum
+number of mutually combinable pairs. Had the edges been fully
+independent then $E[M]\geq \frac{m}{2}\frac{c}{c+1}$ if $c=q(m-1)/2$
+is constant.
+
+Assuming $mq$ is a small constant less than 1, the following lemma gives a good bound.
+\begin{lemma}
+\[ \frac{m}{2} \cdot  \max \left (2-2(1-q)^{m-1}-(m-1) q,(m-1) q\left (1-2q+\frac{{b-2n \choose n}}{{b \choose n}}\right )^{m-2}\right )\leq E(M)\leq \frac{m}{2} \cdot  \min(1,(m-1)q) \ .\] 
+E.g., for $b=32, n=14$ and $m=5000$ we get $78.5 \leq E(M)\leq 81$. 
+
+Since $E(M)$ is monotonically increasing in $q$, it follows that for $q\geq 1-2^{-1/(m-2)}$ we may deduce that, 
+\[0.307 \times \frac{m}{2}=(1-\ln(2))\frac{m}{2} \leq E(M)\]
+since $2-2(1-q)^{m-1}-(m-1) q$ is maximized at $q=1-2^{-1/(m-2)}$.
+%
+%(1-q)^(m-2)=1/2
+%(m-2) lg (1-q)=-1
+%q=1-2^(-1/(m-2))
+%Note that the lower bounds are not increasing in $q$ for all values of $q$ but we can always maximize over smaller values of $q$.
+%$(m-1) q (1-2(m-2)q)$ is maximized at $mq\approx 1/4$ and at that point takes the value $1/8$. Hence, as soon as $mq\geq 1/4$ we expect to get a matching whose size is at least an eight as large as the maximum possible matching.
+
+It also follows from the upper bound,
+\[P(M\geq 1)\leq {m \choose 2} q \ .\]
+E.g., for $b=32, n=14$, we need $m\geq 394$ for $P(M\geq 1)\geq 1/2$.
+\end{lemma}
+
+\begin{proof}
+The upper bound follows from the fact that $M$ is at most the number
+of edges in the graph. Hence, $E(M)\leq {m \choose 2} q$.
+
+Let $I$ be the number of \emph{isolated edges}; an edge $uv$ is
+isolated if $uv$ is the only edge in the graph incident on $u$ or
+$v$. Let $I_e=1$ if $e$ is isolated, and $I_e=0$ otherwise. Then
+\[
+E(I_{uv})=P(uv\in G)P(uw, vw \not \in G ~ \forall w\in V\setminus \{u,v\}| uv\in G)
+=q\left (1-2q+\frac{{b-2n \choose n}}{{b \choose n}}\right )^{m-2} \ .
+\]
+The first lower bound then follows from $E(I)=\sum_e E(I_e)$.
+
+Another lower bound follows from the following idea. Consider the
+graph formed by removing all but one incident edge from any node with
+two or more incident edges. The remaining graph is a matching. The
+expected size of this matching is at least (because some edge removals
+may have been counted twice):
+
+\begin{eqnarray*}
+{m \choose 2} q-\sum_v E(\max(deg(v)-1,0)
+&=&
+{m \choose 2} q
+-m\sum_{d=1}^{m-1} {m-1\choose i} q^i (1-q)^{m-1-i}(i-1)\\
+&=& {m \choose 2} q-m[(m-1)q-1+(1-q)^{m-1}]\\
+&=& m(1-(1-q)^{m-1})-{m \choose 2} q \ .
+\end{eqnarray*}
+\end{proof}
+
+Note that the expected number of triangles in such a graph is ${m
+  \choose 3} {b-n \choose n}/{b\choose n} {b-2n \choose n}/{b\choose
+  n}$. For example, if $b=32, n=10, m=1000$, we expect less than two
+triangles. Hence, with such parameters, it only makes sense to look for
+pairs of blocks that can be combined rather than sets of three or more
+blocks that can be combined together.
+
+%Another bound:
+%\[E(M) \geq \frac{m}{2} (m-1)q/2
+\subsubsection{Random Walk Approach}
+
+Keep on adding strings up to $m$. If a new string combines with an
+existing one, remove both. Let $S_t$ be number of strings at time
+$t$. Let $q={b-n \choose n}/{b\choose n}=(1-n/b)(1-n/(b-1))\ldots
+(1-n/(b-n+1))\geq (1-n^2/(b-n+1))$. Then,
+
+\[P(S_{t+1}=S_t-1)\geq q\]
+\[P(S_{t+1}=S_t+1)\leq 1-q\]
+
+If $q\leq 1/2$ then $E[S_t]=O(\sqrt{t})$ and $q\leq 1/2$ if $b\geq
+2n^2+n-1$. As a consequence, if $q\leq 1/2$,  we expect the number of
+unpaired strings to go to zero.
+%\[P(S_{t+1}=S_t-1)\geq 1-(1-q)^{S_t}\geq 1-e^{-S_t q}\]
+%\[P(S_{t+1}=S_t+1)\leq (1-q)^{S_t}\]
+%\[
+%2(1-p)^{N-\rounddown{Np}}p^{\rounddown{Np}}(\rounddown{Np}+1){N\choose \rounddown{Np}+1}
+%\leq 
+%\]
+
+\subsection{Combining Multiple Strings}
+Note that this is only possible if $n\leq b/3$.
+
+\begin{lemma}
+Define a graph $G$ where each string corresponds to a node and there
+is an edge between two nodes if the two strings are \emph{not}
+combinable. Then, the optimal number of combined strings is the
+chromatic number of $G$.
+%The number of combined strings 
+\end{lemma}
+
+Unfortunately, the edges of $G$ are not independent. Had they been
+independent, we would have been able to appeal to existing analysis to
+show that the expected value of the chromatic number is
+\[
+\frac{m}{2\log_{1/q} m}\approx \frac{(1-q)m}{2 \ln m}
+\]
+where $q$ is the probability of being combinable. 
+
+The dependencies between edges means $(u,v)$ and $(v,w)$ present
+implies $(u,w)$ are less likely to be present.
+
+However, the following lemma gives a weaker bound for our case:
+\begin{lemma}
+It is possible to combine strings such that less than $(1+\epsilon)
+(m-1)(1-q)+1$ remain with probability at least $1-me^{-\epsilon^2
+  (m-1)(1-q)/3}$. For example, if $b=10, n=2, m=10000$, then the final
+number of strings is at most $4156$ with probability at least
+$1-3.92030 \times 10^{-13}$ by setting $\epsilon=0.1$.
+\end{lemma}
+
+\begin{proof}
+The result follows because a greedy algorithm can color a graph in
+$\Delta+1$ colors where $\Delta$ is the maximum degree of the graph.
+Pick an arbitrary node $v$ and let the degree of $v$ be $D$. Then
+$E[D]=(m-1)(1-q)$ and by the Chernoff bound
+\[P(D\geq (1+\epsilon) (m-1)(1-q)] \leq e^{-\epsilon^2 (m-1)(1-q)/3}
+ \ .\]
+
+Hence by the union bound, the probability that all degrees at less
+than $(1+\epsilon) (m-1)(1-q)$ is at most $me^{-\epsilon^2
+  (m-1)(1-q)/3}$.
+
+\end{proof}
