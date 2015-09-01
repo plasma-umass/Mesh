@@ -1,15 +1,38 @@
 \section{Related Work}
 \label{sec:related}
 
-Hound is the work most closely related to Mesh~\cite{1542521}. Hound
-is a memory leak detector that uses virtual memory remapping to merge
-pages, a technique that Mesh adopts. Like Mesh, Hound uses a BiBoP
-memory allocator. To isolate leaks, it allocates objects sequentially
-and memory protects pages beyond a certain age (in allocation
-time). Unlike most allocators (including Mesh), Hound does not reuse
-freed slots on pages until the page becomes completely empty. This
-lack of reuse could lead to catastrophic memory consumption, which
-Hound attempts to bound by performing what we here call meshing
-(merging old pages that have become mostly empty). Unlike Hound, Mesh
-uses meshing for all pages, and its randomized allocation algorithm
-ensures that compaction is likely to succeed with high probability.
+BiBoP allocators.
+
+\paragraph{Randomized memory management.} Several previous memory managers have employed randomization,
+primarily for fault tolerance and
+security~\cite{Novark:2010:DSH:1866307.1866371, 1134000, 1346296,
+  1250736}. DieHard uses randomized memory allocation to provide
+\emph{probabilistic memory safety}, which enables (probabilistically)
+correct execution in the face of memory usage errors like heap buffer
+overflows and use-after-free~\cite{1134000}. Archipelago extends
+DieHard by placing each object in a randomly-selected page in a 64-bit
+address space, significantly extending its ability to tolerate memory
+errors~\cite{1346296}. Archipelago reduces its footprint by copying
+unused objects into a conventional heap and discards the backing
+physical page; it then uses virtual memory page protection to
+intercept reads and re-instantiates the physical page on
+demand. DieHarder extends DieHard to provide security against attacks
+that exploit memory errors~\cite{Novark:2010:DSH:1866307.1866371},
+while Exterminator leverages a randomized memory allocator to perform
+statistical inference and automatically fix the application by
+generating ``runtime patches''~\cite{1250736}.
+
+\paragraph{Exploiting virtual memory.} Numerous memory managers have
+exploited virtual memory primitives for a variety of purposes (add
+Appel cite, Boehm GC, Archipelago, DieHarder). To our knowledge, the
+only one that merges virtual pages is Hound, a memory leak and
+``bloat'' detector~\cite{1542521}. To isolate leaks, Hound allocates
+objects sequentially and memory protects pages beyond a certain age
+(in allocation time) \emph{explain why.} In order to avoid mixing
+young and old objects, Hound does not reuse freed slots on pages until
+the page becomes completely empty. Because this lack of reuse could
+lead to catastrophic memory consumption, Hound performs what we here
+call meshing (merging old pages that have become mostly empty). Unlike
+Mesh, Hound only considers old pages when performing meshing, and its
+deterministic allocation strategy cannot guarantee successful
+compaction.
