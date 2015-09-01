@@ -1,0 +1,15 @@
+\section{Related Work}
+\label{sec:related}
+
+Hound is the work most closely related to Mesh~\cite{1542521}. Hound
+is a memory leak detector that uses virtual memory remapping to merge
+pages, a technique that Mesh adopts. Like Mesh, Hound uses a BiBoP
+memory allocator. To isolate leaks, it allocates objects sequentially
+and memory protects pages beyond a certain age (in allocation
+time). Unlike most allocators (including Mesh), Hound does not reuse
+freed slots on pages until the page becomes completely empty. This
+lack of reuse could lead to catastrophic memory consumption, which
+Hound attempts to bound by performing what we here call meshing
+(merging old pages that have become mostly empty). Unlike Hound, Mesh
+uses meshing for all pages, and its randomized allocation algorithm
+ensures that compaction is likely to succeed with high probability.
