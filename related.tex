@@ -20,19 +20,27 @@ demand. DieHarder extends DieHard to provide security against attacks
 that exploit memory errors~\cite{Novark:2010:DSH:1866307.1866371},
 while Exterminator leverages a randomized memory allocator to perform
 statistical inference and automatically fix the application by
-generating ``runtime patches''~\cite{1250736}.
+generating ``runtime patches''~\cite{1250736}. Stabilizer randomizes
+the placement of code, stack frames, and heap objects to enable
+statistically sound performance evaluation~\cite{stabilizer:asplos13};
+we adopt Stabilizer's shuffling heap approach. Unlike all of these,
+meshing uses randomization to enable it to effectively compact objects.
 
 \paragraph{Exploiting virtual memory.} Numerous memory managers have
 exploited virtual memory primitives for a variety of purposes (add
 Appel cite, Boehm GC, Archipelago, DieHarder). To our knowledge, the
-only one that merges virtual pages is Hound, a memory leak and
-``bloat'' detector~\cite{1542521}. To isolate leaks, Hound allocates
-objects sequentially and memory protects pages beyond a certain age
-(in allocation time) \emph{explain why.} In order to avoid mixing
-young and old objects, Hound does not reuse freed slots on pages until
-the page becomes completely empty. Because this lack of reuse could
-lead to catastrophic memory consumption, Hound performs what we here
-call meshing (merging old pages that have become mostly empty). Unlike
-Mesh, Hound only considers old pages when performing meshing, and its
-deterministic allocation strategy cannot guarantee successful
-compaction.
+only prior memory manager that merges virtual pages is Hound, a memory
+leak and ``bloat'' detector~\cite{1542521}. Hound uses periodic page
+protection to track accesses and thus identify stale objects. It
+allocates objects sequentially on a page so they are age-segregated;
+as the application frees non-leaked objects, leaked objects and bloat
+are isolated on their own pages. To avoid mixing young and old
+objects, Hound does not reuse freed slots on a page until it becomes
+completely empty. Because this lack of reuse could lead to
+catastrophic memory consumption, Hound introduces \emph{virtual
+  compaction} (merging virtual pages onto physical pages) as a
+backstop. Meshing adapts this virtual compaction approach and combines
+it with a randomized algorithm that lets it effectively merge pages
+regardless of allocation pattern. Unlike meshing, Hound's deterministic allocation
+strategy cannot guarantee successful compaction and is best-effort
+only.
