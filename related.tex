@@ -30,7 +30,7 @@ meshing uses randomization to enable it to effectively compact objects.
 Appel and Li outline a number of approaches for using virtual memory
 in user programs~\cite{Appel:1991:VMP:106972.106984}. Numerous memory
 managers have exploited virtual memory primitives for a variety of
-purposes~\cite{Novark:2010:DSH:1866307.1866371,1346296,Appel:1988:RCC:53990.53992,Boehm:1991:MPG:113445.113459,Dhurjati:2006:EDD:1135532.1135707,electricfence}. The
+purposes~\cite{Novark:2010:DSH:1866307.1866371,1346296,Appel:1988:RCC:53990.53992,Boehm:1991:MPG:113445.113459,Dhurjati:2006:EDD:1135532.1135707,electricfence,pageheap}. The
 only memory manager that merges virtual pages is Hound, a memory leak
 and ``bloat'' detector~\cite{1542521}. Hound uses periodic page
 protection to track accesses and thus identify stale objects. By
