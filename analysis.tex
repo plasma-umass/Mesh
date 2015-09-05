@@ -31,12 +31,14 @@ By the triangle inequality and linearity of expectation:
 \[\leq \sum_{s\in A} E[|X^s-mp|] + E[|X^{\bar{s}}-mp|]\]
 \[=1/p \cdot E[|X-mp|]\]
 
+Define the event,
+\[A=\{X^s\geq mp\geq X^{\bar{s}} \mbox{ or } X^s\leq mp\leq  X^{\bar{s}}\}\]
 By linearity of expectation:
 \begin{eqnarray*}
 E[U]
 & \geq & 
-\sum_{s\in A} P(X^s\geq mp\geq X^{\bar{s}} \mbox{ or } X^s\leq mp\leq  X^{\bar{s}}) 
-E[|X^s-X^{\bar{s}}| \big | X^s\geq mp\geq X^{\bar{s}} \mbox{ or } X^s\leq mp\leq  X^{\bar{s}}] \\
+\sum_{s\in A} P(A) 
+E[|X^s-X^{\bar{s}}| \big | A] \\
 & \geq & 1/2 \cdot 
 \sum_{s\in A} E[|X^s-mp|] + E[|X^{\bar{s}}-mp|]\\
 & = & 1/(2p)  E[|X-mp|]
@@ -71,7 +73,11 @@ is constant.
 
 Assuming $mq$ is a small constant less than 1, the following lemma gives a good bound.
 \begin{lemma}
-\[ \frac{m}{2} \cdot  \max \left (2-2(1-q)^{m-1}-(m-1) q,(m-1) q\left (1-2q+\frac{{b-2n \choose n}}{{b \choose n}}\right )^{m-2}\right )\leq E(M)\leq \frac{m}{2} \cdot  \min(1,(m-1)q) \ .\] 
+\begin{eqnarray*}
+& & \frac{m}{2} \cdot  \max \left (2-2(1-q)^{m-1}-(m-1) q,(m-1) q\left (1-2q+\frac{{b-2n \choose n}}{{b \choose n}}\right )^{m-2}\right ) \\
+&\leq & E(M) \\
+& \leq & \frac{m}{2} \cdot  \min(1,(m-1)q) \ .
+\end{eqnarray*} 
 E.g., for $b=32, n=14$ and $m=5000$ we get $78.5 \leq E(M)\leq 81$. 
 
 Since $E(M)$ is monotonically increasing in $q$, it follows that for $q\geq 1-2^{-1/(m-2)}$ we may deduce that, 
@@ -96,10 +102,11 @@ of edges in the graph. Hence, $E(M)\leq {m \choose 2} q$.
 Let $I$ be the number of \emph{isolated edges}; an edge $uv$ is
 isolated if $uv$ is the only edge in the graph incident on $u$ or
 $v$. Let $I_e=1$ if $e$ is isolated, and $I_e=0$ otherwise. Then
-\[
-E(I_{uv})=P(uv\in G)P(uw, vw \not \in G ~ \forall w\in V\setminus \{u,v\}| uv\in G)
-=q\left (1-2q+\frac{{b-2n \choose n}}{{b \choose n}}\right )^{m-2} \ .
-\]
+\begin{eqnarray*}
+& & E(I_{uv}) \\
+&=& P(uv\in G)P(uw, vw \not \in G ~ \forall w\in V\setminus \{u,v\}| uv\in G)\\
+& =& q\left (1-2q+\frac{{b-2n \choose n}}{{b \choose n}}\right )^{m-2} \ .
+\end{eqnarray*}
 The first lower bound then follows from $E(I)=\sum_e E(I_e)$.
 
 Another lower bound follows from the following idea. Consider the
@@ -109,7 +116,7 @@ expected size of this matching is at least (because some edge removals
 may have been counted twice):
 
 \begin{eqnarray*}
-{m \choose 2} q-\sum_v E(\max(deg(v)-1,0)
+& & {m \choose 2} q-\sum_v E(\max(deg(v)-1,0) \\
 &=&
 {m \choose 2} q
 -m\sum_{d=1}^{m-1} {m-1\choose i} q^i (1-q)^{m-1-i}(i-1)\\
