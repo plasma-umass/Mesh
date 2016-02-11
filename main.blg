@@ -1,0 +1,59 @@
+This is BibTeX, Version 0.99d (TeX Live 2015)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: main.aux
+The style file: abbrv.bst
+I couldn't open database file emery.bib
+---line 45 of file main.aux
+ : \bibdata{mesh,emery
+ :                    }
+I'm skipping whatever remains of this command
+Database file #1: mesh.bib
+Warning--I didn't find a database entry for "Novark:2010:DSH:1866307.1866371"
+Warning--I didn't find a database entry for "1134000"
+Warning--I didn't find a database entry for "1346296"
+Warning--I didn't find a database entry for "1250736"
+Warning--I didn't find a database entry for "stabilizer:asplos13"
+Warning--I didn't find a database entry for "1542521"
+Warning--empty journal in Dhurjati:2006:EDD:1135532.1135707
+You've used 9 entries,
+            2118 wiz_defined-function locations,
+            569 strings with 5727 characters,
+and the built_in function-call counts, 3444 in all, are:
+= -- 373
+> -- 114
+< -- 6
++ -- 48
+- -- 36
+* -- 200
+:= -- 523
+add.period$ -- 32
+call.type$ -- 9
+change.case$ -- 45
+chr.to.int$ -- 0
+cite$ -- 10
+duplicate$ -- 152
+empty$ -- 288
+format.name$ -- 36
+if$ -- 780
+int.to.chr$ -- 0
+int.to.str$ -- 9
+missing$ -- 7
+newline$ -- 48
+num.names$ -- 18
+pop$ -- 53
+preamble$ -- 1
+purify$ -- 36
+quote$ -- 0
+skip$ -- 128
+stack$ -- 0
+substring$ -- 236
+swap$ -- 54
+text.length$ -- 6
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 36
+warning$ -- 1
+while$ -- 38
+width$ -- 10
+write$ -- 111
+(There was 1 error message)

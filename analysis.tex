@@ -21,7 +21,7 @@ since $s$ is only combinable with its complement $\bar{s}$ when $n=b/2$.
 \begin{theorem}
 \[D_m(p)/(2p) \leq E(U) \leq D_m(p)/p \ ,\]
 where 
-\[D_m(p)=2(1-p)^{N-\rounddown{Np}}p^{1+\rounddown{Np}}(\rounddown{Np}+1){N\choose \rounddown{Np}+1}\]
+\[D_m(p)=2(1-p)^{N-\rounddown{mp}}p^{1+\rounddown{mp}}(\rounddown{mp}+1){N\choose \rounddown{mp}+1}\]
 and note that $\sqrt{mp(1-p)}/\sqrt{2} \leq D_m(p)\leq \sqrt{mp(1-p)}$ on the assumption that $1/m\leq p\leq 1-1/m$.
 \end{theorem}
 \begin{proof}
@@ -45,13 +45,13 @@ E[|X^s-X^{\bar{s}}| \big | A] \\
 \end{eqnarray*}
 
 The result follows since by a theorem of De Moivre, the absolute deviation of the binomial distribution is 
-\[E[|X-mp|]=D_n(p)\]
-\[=2(1-p)^{N-\rounddown{Np}}p^{1+\rounddown{Np}}(\rounddown{Np}+1){N\choose \rounddown{Np}+1}\] 
-The bound on $D_n(p)$ is due to Blyth (1980) and  Berend and  Kontorovich (2013).
+\[E[|X-mp|]=D_m(p)\]
+\[=2(1-p)^{m-\rounddown{mp}}p^{1+\rounddown{mp}}(\rounddown{mp}+1){N\choose \rounddown{mp}+1}\] 
+The bound on $D_m(p)$ is due to Blyth (1980) and  Berend and  Kontorovich (2013).
 \end{proof}
 
 \begin{corollary}
-For any $n\leq b/2$, \[\lim_{n\rightarrow \infty} E(U)/m=0\] i.e.,  the fraction of strings that are unpaired tends to zero when $m\rightarrow \infty$.
+For any $n\leq b/2$, \[\lim_{m\rightarrow \infty} E(U)/m=0\] i.e.,  the fraction of strings that are unpaired tends to zero when $m\rightarrow \infty$.
 \end{corollary}
 \begin{proof}
 By the previous theorem, if $n=b/2$, $E(U)/m \leq D_m(p)/(mp)\leq \frac{\sqrt{(1-p)}}{\sqrt{mp}} \rightarrow 0$ as $m\rightarrow \infty$. Note that the bound also holds for $n\leq b/2$ because decreasing the weight of the strings only increases the probability that a pair of strings is combinable.
@@ -74,7 +74,8 @@ is constant.
 Assuming $mq$ is a small constant less than 1, the following lemma gives a good bound.
 \begin{lemma}
 \begin{eqnarray*}
-& & \frac{m}{2} \cdot  \max \left (2-2(1-q)^{m-1}-(m-1) q,(m-1) q\left (1-2q+\frac{{b-2n \choose n}}{{b \choose n}}\right )^{m-2}\right ) \\
+& & \frac{m}{2} \cdot  \max \left (2-2(1-q)^{m-1}-(m-1) q, \right . \\
+& & \left . (m-1) q\left (1-2q+\frac{{b-2n \choose n}}{{b \choose n}}\right )^{m-2}\right ) \\
 &\leq & E(M) \\
 & \leq & \frac{m}{2} \cdot  \min(1,(m-1)q) \ .
 \end{eqnarray*} 
