@@ -80,13 +80,21 @@ public:
     // Round up to the size of a page.
     sz = (sz + CPUInfo::PageSize - 1) & (size_t) ~(CPUInfo::PageSize - 1);
 
-    // TODO: open file in /tmp/alloc-mesh-$PID/XXXXXX
-    int fd = -1;
+    char buf[64];
+    memset(buf, 0, 64);
+    sprintf(buf, "/tmp/alloc-mesh-%d", getpid());
+    mkdir(buf, 0755);
+    sprintf(buf, "/tmp/alloc-mesh-%d/XXXXXX", getpid());
 
-    void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, MAP_PRIVATE | MAP_ANONYMOUS, fd, 0);
+    int fd = mkstemp(buf);
+    if (fd < 0)
+      abort();
+
+    ftruncate(fd, sz);
+    void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED, fd, 0);
 
     if (ptr == MAP_FAILED)
-      ptr = nullptr;
+      abort();
     return ptr;
   }
 

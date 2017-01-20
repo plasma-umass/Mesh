@@ -19,8 +19,8 @@
 
 #include "wrappers/gnuwrapper.cpp"
 
-#define likely(x)	__builtin_expect(!!(x), 1)
-#define unlikely(x)	__builtin_expect(!!(x), 0)
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 using namespace HL;
 
@@ -33,11 +33,16 @@ public:
   typedef ExactlyOneHeap<FileBackedMmapHeap<InternalAlloc>> Super;
 };
 
-template<typename SuperHeap, typename InternalAlloc>
+// 64Kb spans
+#define SPAN_SIZE (64 * 1024)
+
+template <typename SuperHeap, typename InternalAlloc>
 class MiniHeap : public SuperHeap {
 public:
-  MiniHeap(size_t object_size) {
-
+  MiniHeap(size_t object_size) : _object_size(object_size), _random(), _bitmap() {
+    _span = SuperHeap::malloc(SPAN_SIZE);
+    if (!_span)
+      abort();
   }
 
   inline void *malloc(size_t sz) {
@@ -58,6 +63,8 @@ public:
     return false;
   }
 
+  void *_span;
+  size_t _object_size;
   RandomNumberGenerator _random;
   BitMap<InternalAlloc> _bitmap;
 };
@@ -96,7 +103,7 @@ public:
 
 private:
   MiniHeap<SuperHeap, InternalAlloc> *_current;
-  InternalAlloc                       _alloc;
+  InternalAlloc _alloc;
   // TODO: btree of address-ranges to miniheaps, for free
 };
 
