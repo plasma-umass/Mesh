@@ -15,20 +15,15 @@
 
 class RandomNumberGenerator {
 public:
-
-  RandomNumberGenerator()
-    : mt (RealRandomValue::value(), RealRandomValue::value())
-  {
+  RandomNumberGenerator() : mt(RealRandomValue::value(), RealRandomValue::value()) {
   }
 
-  inline unsigned int next (void) {
+  inline unsigned int next(void) {
     return mt.next();
   }
 
 private:
-  
   MWC mt;
-
 };
 
 #endif
