@@ -1,7 +1,7 @@
 include config.mk
 
 
-SRCS = libmesh.cc
+SRCS = src/libmesh.cc
 OBJS = $(SRCS:.cc=.o)
 
 LIB = libmesh.so
@@ -38,7 +38,7 @@ install: $(LIB)
 	ldconfig
 
 clean:
-	rm -f $(LIB) *.o *.gcda *.gcno *.d
+	rm -f $(LIB) src/*.o src/*.gcda src/*.gcno src/*.d
 	find . -name '*~' -print0 | xargs -0 rm -f
 
 paper:

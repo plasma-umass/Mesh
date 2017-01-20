@@ -11,6 +11,7 @@
 
 #define MALLOC_TRACE 0
 
+#include "bitmap.h"
 #include "heaplayers.h"
 
 #include "file-backed-mmap.h"
