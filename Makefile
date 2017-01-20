@@ -41,6 +41,9 @@ clean:
 	rm -f $(LIB) *.o *.gcda *.gcno *.d
 	find . -name '*~' -print0 | xargs -0 rm -f
 
+paper:
+	$(MAKE) -C paper
+
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
 	@echo "  TAGS"
@@ -48,4 +51,4 @@ TAGS:
 
 -include $(OBJS:.o=.d)
 
-.PHONY: all clean install TAGS
+.PHONY: all clean install paper TAGS
