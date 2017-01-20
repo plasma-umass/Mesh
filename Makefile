@@ -41,9 +41,11 @@ clean:
 	rm -f $(LIB) *.o *.gcda *.gcno *.d
 	find . -name '*~' -print0 | xargs -0 rm -f
 
+# double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
-	find . -type f | egrep '\.(cpp|h|cc|hh)$' | xargs etags -l c++
+	@echo "  TAGS"
+	find . -type f | egrep '\.(cpp|h|cc|hh)$$' | xargs etags -l c++
 
 -include $(OBJS:.o=.d)
 
-.PHONY: all clean install
+.PHONY: all clean install TAGS
