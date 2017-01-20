@@ -49,7 +49,7 @@ public:
     CryptGenRandom(hCryptProv, 8, pbData);
     unsigned int v = *((unsigned int *)&pbData) | 1;
     return v;
-#elif defined(linux) || defined(__linux__) || defined(__APPLE__)
+#elif defined(__linux) || defined(__APPLE__)
     // Pull random values out of /dev/urandom.
     unsigned int v;
 
