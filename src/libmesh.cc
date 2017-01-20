@@ -13,6 +13,7 @@
 
 #include "bitmap.h"
 #include "heaplayers.h"
+#include "rng/randomnumbergenerator.h"
 
 #include "file-backed-mmap.h"
 
@@ -57,8 +58,8 @@ public:
     return false;
   }
 
-  // rng
-  // bitmap
+  RandomNumberGenerator _random;
+  BitMap<InternalAlloc> _bitmap;
 };
 
 template <typename SuperHeap, typename InternalAlloc>

@@ -116,7 +116,7 @@ private:
   WORD* _bitarray;
 
   /// The number of elements in the array.
-  unsigned long _elements;
+  size_t _elements;
 };
 
 #endif
