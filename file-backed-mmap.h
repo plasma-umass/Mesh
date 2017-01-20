@@ -68,7 +68,7 @@
 namespace HL {
 
 class PrivateFileBackedMmapHeap {
- public:
+public:
   /// All memory from here is zeroed.
   enum { ZeroMemory = 1 };
   enum { Alignment = MmapWrapper::Alignment };
@@ -98,18 +98,18 @@ class PrivateFileBackedMmapHeap {
   }
 };
 
-template <class InternalAlloc = LockedHeap<PosixLockType, FreelistHeap<BumpAlloc<16384, PrivateFileBackedMmapHeap>>>>
+template <typename InternalAlloc = LockedHeap<PosixLockType, FreelistHeap<BumpAlloc<16384, PrivateFileBackedMmapHeap>>>>
 class FileBackedMmapHeap : public PrivateFileBackedMmapHeap {
- private:
+private:
   // Note: we never reclaim memory obtained for MyHeap, even when
   // this heap is destroyed.
   typedef MyHashMap<void *, size_t, InternalAlloc> mapType;
 
- protected:
+protected:
   mapType MyMap;
   PosixLockType MyMapLock;
 
- public:
+public:
   enum { Alignment = PrivateFileBackedMmapHeap::Alignment };
 
   inline void *malloc(size_t sz) {

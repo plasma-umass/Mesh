@@ -17,6 +17,9 @@
 
 #include "wrappers/gnuwrapper.cpp"
 
+#define likely(x)	__builtin_expect(!!(x), 1)
+#define unlikely(x)	__builtin_expect(!!(x), 0)
+
 using namespace HL;
 
 // allocator for mesh-internal data structures, like heap metadata
@@ -28,19 +31,29 @@ public:
   typedef ExactlyOneHeap<FileBackedMmapHeap<InternalAlloc>> Super;
 };
 
-class MiniHeap {
+template<typename SuperHeap, typename InternalAlloc>
+class MiniHeap : public SuperHeap {
 public:
-  enum { Alignment = 16 };  // FIXME
+  MiniHeap(size_t object_size) {
+
+  }
 
   inline void *malloc(size_t sz) {
+    // random probe into bitmap, if free, use that
+
     return nullptr;
+  }
+
+  inline void free(void *ptr) {
   }
 
   inline size_t getSize(void *ptr) {
     return 0;
   }
 
-  inline void free(void *ptr) {
+  bool isFull() {
+    // FIXME: num_allocated > threshold
+    return false;
   }
 
   // rng
@@ -48,12 +61,44 @@ public:
 };
 
 template <typename SuperHeap, typename InternalAlloc>
-class MeshingHeap : public SuperHeap {
+class MeshingHeap {
 public:
-  enum { Alignment = SuperHeap::Alignment };
+  enum { Alignment = 16 };  // FIXME
+
+  MeshingHeap() : _current(nullptr), _alloc() {
+  }
+
+  inline void *malloc(size_t sz) {
+    if (unlikely(_current == nullptr)) {
+      void *buf = _alloc.malloc(sizeof(MiniHeap<SuperHeap, InternalAlloc>));
+      if (!buf)
+        abort();
+      _current = new (buf) MiniHeap<SuperHeap, InternalAlloc>(sz);
+    }
+
+    void *ptr = _current->malloc(sz);
+    if (_current->isFull())
+      _current = nullptr;
+
+    return ptr;
+  }
+
+  inline void free(void *ptr) {
+    // FIXME: check if ptr is in current, if so free there, otherwise check all other miniheaps
+    // this needs to take into account threads + locks, maybe
+  }
+
+  inline size_t getSize(void *ptr) {
+    return 0;
+  }
+
+private:
+  MiniHeap<SuperHeap, InternalAlloc> *_current;
+  InternalAlloc                       _alloc;
+  // TODO: btree of address-ranges to miniheaps, for free
 };
 
-// no freelists
+// the mesh heap doesn't coalesce and doesn't have free lists
 class CustomHeap : public ANSIWrapper<KingsleyHeap<MeshingHeap<TopHeap, InternalAlloc>, TopHeap>> {};
 
 inline static CustomHeap *getCustomHeap(void) {
@@ -61,10 +106,6 @@ inline static CustomHeap *getCustomHeap(void) {
   static CustomHeap *heap = new (buf) CustomHeap();
   return heap;
 }
-
-// want:
-
-// MiniHeapManager<MiniHeap, TopHeap>
 
 extern "C" {
 void *xxmalloc(size_t sz) {
