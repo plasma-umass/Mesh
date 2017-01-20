@@ -19,15 +19,17 @@
 
 using namespace HL;
 
+// allocator for mesh-internal data structures, like heap metadata
 typedef ExactlyOneHeap<LockedHeap<PosixLockType, FreelistHeap<BumpAlloc<16384, PrivateFileBackedMmapHeap>>>>
     InternalAlloc;
 
 class TopHeap : public ExactlyOneHeap<FileBackedMmapHeap<InternalAlloc>> {
- public:
+public:
   typedef ExactlyOneHeap<FileBackedMmapHeap<InternalAlloc>> Super;
 };
 
 class MiniHeap {
+public:
   enum { Alignment = 16 };  // FIXME
 
   inline void *malloc(size_t sz) {
@@ -47,7 +49,7 @@ class MiniHeap {
 
 template <typename SuperHeap, typename InternalAlloc>
 class MeshingHeap : public SuperHeap {
- public:
+public:
   enum { Alignment = SuperHeap::Alignment };
 };
 

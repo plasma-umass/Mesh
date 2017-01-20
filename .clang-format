@@ -5,3 +5,4 @@ AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 IndentCaseLabels: false
 AlwaysBreakTemplateDeclarations: true
+AccessModifierOffset: -2
