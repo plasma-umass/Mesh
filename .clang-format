@@ -1,5 +1,7 @@
 BasedOnStyle: Google
 ColumnLimit: 120
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: false
 AllowShortFunctionsOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false

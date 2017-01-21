@@ -12,7 +12,7 @@
 
 class MWC {
 public:
-  MWC(unsigned int seed1, unsigned int seed2) : z(seed1), w(seed2) {
+  explicit MWC(unsigned int seed1, unsigned int seed2) : z(seed1), w(seed2) {
   }
 
   inline unsigned int next(void) {

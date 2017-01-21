@@ -5,6 +5,7 @@
 #include <unistd.h>  // for write
 #include <cstddef>   // for size_t
 #include <new>       // for operator new
+#include <random>
 
 // never allocate exeecutable heap
 #define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)
@@ -13,7 +14,7 @@
 
 #include "bitmap.h"
 #include "heaplayers.h"
-#include "rng/randomnumbergenerator.h"
+#include "rng/mwc.h"
 
 #include "file-backed-mmap.h"
 
@@ -33,16 +34,28 @@ public:
   typedef ExactlyOneHeap<FileBackedMmapHeap<InternalAlloc>> Super;
 };
 
-// 64Kb spans
-#define SPAN_SIZE (64 * 1024)
+thread_local static std::random_device RD;
 
-template <typename SuperHeap, typename InternalAlloc>
+template <typename SuperHeap,
+          typename InternalAlloc,
+          size_t PageSize = 4096,
+          size_t MinObjectSize = 16,
+          size_t MaxObjectSize = 2048,
+          size_t MinAvailablePages = 4,
+          size_t SpanSize = 128UL * 1024UL, // 128Kb spans
+          unsigned int FullNumerator = 7,
+          unsigned int FullDenominator = 8>
 class MiniHeap : public SuperHeap {
 public:
-  MiniHeap(size_t object_size) : _object_size(object_size), _random(), _bitmap() {
-    _span = SuperHeap::malloc(SPAN_SIZE);
+  enum { Alignment = (int)MinObjectSize };
+
+  MiniHeap(size_t object_size) : _object_size(object_size), _rng(RD(), RD()), _bitmap() {
+
+    _span = SuperHeap::malloc(SpanSize);
     if (!_span)
       abort();
+
+    constexpr auto heapPages = SpanSize / PageSize;
   }
 
   inline void *malloc(size_t sz) {
@@ -65,7 +78,7 @@ public:
 
   void *_span;
   size_t _object_size;
-  RandomNumberGenerator _random;
+  MWC _rng;
   BitMap<InternalAlloc> _bitmap;
 };
 
