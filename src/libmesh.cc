@@ -34,6 +34,22 @@ public:
   typedef ExactlyOneHeap<FileBackedMmapHeap<InternalAlloc>> Super;
 };
 
+static void
+debug(const char *fmt, ...)
+{
+  static char buf[256];
+  va_list args;
+
+	va_start(args, fmt);
+	int len = vsnprintf(buf, 255, fmt, args);
+	va_end(args);
+
+  buf[255] = 0;
+  if (len > 0)
+    write(STDERR_FILENO, buf, len);
+}
+
+
 thread_local static std::random_device RD;
 
 template <typename SuperHeap,
@@ -43,41 +59,68 @@ template <typename SuperHeap,
           size_t MaxObjectSize = 2048,
           size_t MinAvailablePages = 4,
           size_t SpanSize = 128UL * 1024UL, // 128Kb spans
-          unsigned int FullNumerator = 7,
-          unsigned int FullDenominator = 8>
+          unsigned int FullNumerator = 3,
+          unsigned int FullDenominator = 4>
 class MiniHeap : public SuperHeap {
 public:
   enum { Alignment = (int)MinObjectSize };
 
-  MiniHeap(size_t object_size) : _object_size(object_size), _rng(RD(), RD()), _bitmap() {
+  MiniHeap(size_t objectSize)
+    : _objectSize(objectSize), _objectCount(), _inUseCount(),
+      _fullCount(), _rng(RD(), RD()), _bitmap() {
 
     _span = SuperHeap::malloc(SpanSize);
     if (!_span)
       abort();
 
     constexpr auto heapPages = SpanSize / PageSize;
+    _objectCount = SpanSize / objectSize;
+    _fullCount = FullNumerator * _objectCount / FullDenominator;
+
+    debug("MiniHeap(%zu): reserving %zu objects on %zu pages (%u/%u full: %zu)\n",
+          objectSize, _objectCount, heapPages, FullNumerator, FullDenominator, _fullCount);
+
+    _bitmap.reserve(_objectCount);
   }
 
   inline void *malloc(size_t sz) {
-    // random probe into bitmap, if free, use that
+    assert(sz == _objectSize);
 
-    return nullptr;
+    // should never have been called
+    if (isFull())
+      abort();
+
+    while (true) {
+      auto random = _rng.next() % _objectCount;
+
+      if (_bitmap.tryToSet(random)) {
+        auto ptr = reinterpret_cast<void *>((uintptr_t)_span + random * _objectSize);
+        _inUseCount++;
+        return ptr;
+      }
+    }
   }
 
   inline void free(void *ptr) {
   }
 
   inline size_t getSize(void *ptr) {
-    return 0;
+    auto ptrval = (uintptr_t)ptr;
+    if (ptrval < (uintptr_t)_span || ptrval >= (uintptr_t)_span + SpanSize)
+      return 0;
+
+    return _objectSize;
   }
 
-  bool isFull() {
-    // FIXME: num_allocated > threshold
-    return false;
+  inline bool isFull() {
+    return _inUseCount >= _fullCount;
   }
 
   void *_span;
-  size_t _object_size;
+  size_t _objectSize;
+  size_t _objectCount;
+  size_t _inUseCount;
+  size_t _fullCount;
   MWC _rng;
   BitMap<InternalAlloc> _bitmap;
 };
@@ -99,8 +142,9 @@ public:
     }
 
     void *ptr = _current->malloc(sz);
-    if (_current->isFull())
+    if (_current->isFull()) {
       _current = nullptr;
+    }
 
     return ptr;
   }
@@ -111,7 +155,9 @@ public:
   }
 
   inline size_t getSize(void *ptr) {
-    return 0;
+    if (_current == nullptr)
+      return 0;
+    return _current->getSize(ptr);
   }
 
 private:
@@ -120,8 +166,20 @@ private:
   // TODO: btree of address-ranges to miniheaps, for free
 };
 
+
+// fewer buckets
+template <class PerClassHeap, class BigHeap>
+class MiniKingsleyHeap :
+   public StrictSegHeap<12,
+                        Kingsley::size2Class,
+                        Kingsley::class2Size,
+                        PerClassHeap,
+                        BigHeap> {};
+
+
+
 // the mesh heap doesn't coalesce and doesn't have free lists
-class CustomHeap : public ANSIWrapper<KingsleyHeap<MeshingHeap<TopHeap, InternalAlloc>, TopHeap>> {};
+class CustomHeap : public ANSIWrapper<MiniKingsleyHeap<MeshingHeap<TopHeap, InternalAlloc>, TopHeap>> {};
 
 inline static CustomHeap *getCustomHeap(void) {
   static char buf[sizeof(CustomHeap)];
