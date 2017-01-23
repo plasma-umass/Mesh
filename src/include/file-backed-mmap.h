@@ -52,6 +52,8 @@
 #include "wrappers/mmapwrapper.h"
 #include "wrappers/stlallocator.h"
 
+#include "internal.h"
+
 #ifndef HL_MMAP_PROTECTION_MASK
 #error "define HL_MMAP_PROTECTION_MASK before including heaplayers.h"
 #endif
@@ -87,10 +89,17 @@ public:
     sprintf(buf, "/tmp/alloc-mesh-%d/XXXXXX", getpid());
 
     int fd = mkstemp(buf);
-    if (fd < 0)
+    if (fd < 0) {
+      debug("mkstemp: %s\n", strerror(errno));
       abort();
+    }
 
-    ftruncate(fd, sz);
+    int err = ftruncate(fd, sz);
+    if (err != 0) {
+      debug("ftruncate: %s\n", strerror(errno));
+      abort();
+    }
+
     void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED, fd, 0);
 
     if (ptr == MAP_FAILED)
