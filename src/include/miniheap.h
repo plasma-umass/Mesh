@@ -13,7 +13,7 @@
 using namespace HL;
 
 // single random_device per thread to seed the random number generators in MiniHeaps
-thread_local static std::random_device RD;
+/*thread_local*/ static std::random_device RD;
 
 template <typename SuperHeap,
           typename InternalAlloc,
