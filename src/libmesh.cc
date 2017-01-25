@@ -26,20 +26,31 @@ using namespace HL;
 // allocator for mesh-internal data structures, like heap metadata
 class InternalHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, FreelistHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>> {};
 
-class TopHeap : public ExactlyOneHeap<FileBackedMmapHeap<InternalHeap>> {};
+class TopHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, FileBackedMmapHeap<InternalHeap>>> {};
 
 // fewer buckets than regular KingsleyHeap (to ensure multiple objects fit in the 128Kb spans used by MiniHeaps)
 template <class PerClassHeap, class BigHeap>
 class MiniKingsleyHeap : public Mesh::StrictSegHeap<12, Kingsley::size2Class, Kingsley::class2Size, PerClassHeap, BigHeap> {};
 
+
 // the mesh heap doesn't coalesce and doesn't have free lists
-class CustomHeap : public ANSIWrapper<LockedHeap<PosixLockType, MiniKingsleyHeap<MeshingHeap<TopHeap, InternalHeap>, TopHeap>>> {};
+class CustomHeap : public ANSIWrapper<MiniKingsleyHeap<MeshingHeap<TopHeap, InternalHeap>, TopHeap>> {};
+thread_local CustomHeap *perThreadHeap;
 
 inline static CustomHeap *getCustomHeap(void) {
-  static char buf[sizeof(CustomHeap)];
-  static CustomHeap *heap = new (buf) CustomHeap();
-  return heap;
+  if (!perThreadHeap) {
+    void *buf = InternalHeap().malloc(sizeof(CustomHeap));
+    if (!buf)
+      abort();
+    perThreadHeap = new (buf) CustomHeap();
+  }
+  return perThreadHeap;
 }
+// inline static CustomHeap *getCustomHeap(void) {
+//   static char buf[sizeof(CustomHeap)];
+//   static CustomHeap *heap = new (buf) CustomHeap();
+//   return heap;
+// }
 
 // non-threadsafe printf-like debug statements
 void debug(const char *fmt, ...) {
