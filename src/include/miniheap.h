@@ -4,6 +4,7 @@
 #ifndef MESH_MINIHEAP_H
 #define MESH_MINIHEAP_H
 
+#include <mutex>
 #include <random>
 
 #include "heaplayers.h"
@@ -12,8 +13,19 @@
 
 using namespace HL;
 
-// single random_device per thread to seed the random number generators in MiniHeaps
-/*thread_local*/ static std::random_device RD;
+uint32_t seed() {
+  // single random_device to seed the random number generators in MiniHeaps
+  static std::random_device rd;
+  static std::mutex rdLock;
+
+  std::lock_guard<std::mutex> lock(rdLock);
+
+  uint32_t seed = 0;
+  while (seed == 0) {
+    seed = rd();
+  }
+  return seed;
+}
 
 template <typename SuperHeap,
           typename InternalAlloc,
@@ -30,7 +42,7 @@ public:
 
   MiniHeap(size_t objectSize)
       : SuperHeap(), _objectSize(objectSize), _objectCount(), _inUseCount(), _fullCount(),
-        _rng(RD(), RD()), _bitmap() {
+        _rng(seed(), seed()), _bitmap() {
 
     assert(_inUseCount == 0);
     _span = SuperHeap::malloc(SpanSize);
@@ -51,15 +63,15 @@ public:
   }
 
   inline void *malloc(size_t sz) {
-    assert(sz == _objectSize);
+    assert(sz <= _objectSize);
 
     // should never have been called
     if (isFull())
       abort();
 
     while (true) {
-      // auto random = _rng.next() % _objectCount;
-      auto random = RD() % _objectCount;
+      //auto random = _rng.next() % _objectCount;
+      auto random = seed() % _objectCount;
 
       if (_bitmap.tryToSet(random)) {
         auto ptr = reinterpret_cast<void *>((uintptr_t)_span + random * _objectSize);
