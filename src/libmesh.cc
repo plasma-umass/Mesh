@@ -17,22 +17,23 @@
 
 #include "file-backed-mmap.h"
 #include "meshingheap.h"
+#include "mesh-strictsegheap.h"
 
 #include "wrappers/gnuwrapper.cpp"
 
 using namespace HL;
 
 // allocator for mesh-internal data structures, like heap metadata
-typedef ExactlyOneHeap<LockedHeap<PosixLockType, FreelistHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>> InternalAlloc;
+class InternalHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, FreelistHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>> {};
 
-class TopHeap : public ExactlyOneHeap<FileBackedMmapHeap<InternalAlloc>> {};
+class TopHeap : public ExactlyOneHeap<FileBackedMmapHeap<InternalHeap>> {};
 
 // fewer buckets than regular KingsleyHeap (to ensure multiple objects fit in the 128Kb spans used by MiniHeaps)
 template <class PerClassHeap, class BigHeap>
-class MiniKingsleyHeap : public StrictSegHeap<12, Kingsley::size2Class, Kingsley::class2Size, PerClassHeap, BigHeap> {};
+class MiniKingsleyHeap : public Mesh::StrictSegHeap<12, Kingsley::size2Class, Kingsley::class2Size, PerClassHeap, BigHeap> {};
 
 // the mesh heap doesn't coalesce and doesn't have free lists
-class CustomHeap : public ANSIWrapper<MiniKingsleyHeap<MeshingHeap<TopHeap, InternalAlloc>, TopHeap>> {};
+class CustomHeap : public ANSIWrapper<LockedHeap<PosixLockType, MiniKingsleyHeap<MeshingHeap<TopHeap, InternalHeap>, TopHeap>>> {};
 
 inline static CustomHeap *getCustomHeap(void) {
   static char buf[sizeof(CustomHeap)];
