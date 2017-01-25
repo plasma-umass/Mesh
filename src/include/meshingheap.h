@@ -18,6 +18,14 @@ public:
   }
 
   inline void *malloc(size_t sz) {
+    static int inMalloc = 0;
+    // guard against recursive malloc
+    if (inMalloc != 0) {
+      debug("recursive malloc detected\n");
+      abort();
+    }
+    inMalloc = 1;
+
     if (unlikely(_current == nullptr)) {
       void *buf = _alloc.malloc(sizeof(MiniHeap<SuperHeap, InternalAlloc>));
       if (!buf)
@@ -31,6 +39,7 @@ public:
       _current = nullptr;
     }
 
+    inMalloc = 0;
     return ptr;
   }
 
