@@ -14,11 +14,11 @@ class MeshingHeap {
 public:
   enum { Alignment = 16 };  // FIXME
 
-  MeshingHeap() : _current(nullptr), _alloc() {
+  MeshingHeap() : _current(nullptr) {
   }
 
   inline void *malloc(size_t sz) {
-    static int inMalloc = 0;
+    static thread_local int inMalloc = 0;
     // guard against recursive malloc
     if (inMalloc != 0) {
       debug("recursive malloc detected\n");
@@ -27,7 +27,7 @@ public:
     inMalloc = 1;
 
     if (unlikely(_current == nullptr)) {
-      void *buf = _alloc.malloc(sizeof(MiniHeap<SuperHeap, InternalAlloc>));
+      void *buf = InternalAlloc().malloc(sizeof(MiniHeap<SuperHeap, InternalAlloc>));
       if (!buf)
         abort();
       _current = new (buf) MiniHeap<SuperHeap, InternalAlloc>(sz);
@@ -56,7 +56,6 @@ public:
 
 private:
   MiniHeap<SuperHeap, InternalAlloc> *_current;
-  InternalAlloc _alloc;
   // TODO: btree of address-ranges to miniheaps, for free
 };
 
