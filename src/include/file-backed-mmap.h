@@ -90,13 +90,13 @@ public:
 
     int fd = mkstemp(buf);
     if (fd < 0) {
-      debug("mkstemp: %s\n", strerror(errno));
+      debug("mkstemp: %d\n", errno);
       abort();
     }
 
     int err = ftruncate(fd, sz);
     if (err != 0) {
-      debug("ftruncate: %s\n", strerror(errno));
+      debug("ftruncate: %d\n", errno);
       abort();
     }
 
