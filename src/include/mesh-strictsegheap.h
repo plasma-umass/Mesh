@@ -60,11 +60,11 @@ namespace Mesh {
 	    class LittleHeap,
 	    class BigHeap>
   class StrictSegHeap :
-    public SegHeap<NumBins, size2class, class2size, LittleHeap, BigHeap>
+    public Mesh::SegHeap<NumBins, size2class, class2size, LittleHeap, BigHeap>
   {
   private:
 
-    typedef SegHeap<NumBins, size2class, class2size, LittleHeap, BigHeap> SuperHeap;
+    typedef Mesh::SegHeap<NumBins, size2class, class2size, LittleHeap, BigHeap> SuperHeap;
 
   public:
 
