@@ -24,9 +24,10 @@
 using namespace HL;
 
 // allocator for mesh-internal data structures, like heap metadata
-class InternalHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, FreelistHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>> {};
+class InternalHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, BumpAlloc<16384 * 8, MmapHeap, 16>>> {};
 
 class TopHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, FileBackedMmapHeap<InternalHeap>>> {};
+class TopBigHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, MmapHeap>> {};
 
 // fewer buckets than regular KingsleyHeap (to ensure multiple objects fit in the 128Kb spans used by MiniHeaps)
 template <class PerClassHeap, class BigHeap>
@@ -34,23 +35,32 @@ class MiniKingsleyHeap : public Mesh::StrictSegHeap<12, Kingsley::size2Class, Ki
 
 
 // the mesh heap doesn't coalesce and doesn't have free lists
-class CustomHeap : public ANSIWrapper<MiniKingsleyHeap<MeshingHeap<TopHeap, InternalHeap>, TopHeap>> {};
-thread_local CustomHeap *perThreadHeap;
+class CustomHeap : public ANSIWrapper<MiniKingsleyHeap<MeshingHeap<TopHeap, InternalHeap>, TopBigHeap>> {};
+// thread_local CustomHeap *perThreadHeap;
+
+// inline static CustomHeap *getCustomHeap(void) {
+//   if (!perThreadHeap) {
+//     void *buf = InternalHeap().malloc(sizeof(CustomHeap));
+//     if (!buf)
+//       abort();
+//     perThreadHeap = new (buf) CustomHeap();
+//   }
+//   return perThreadHeap;
+// }
+
+inline static std::mutex *getHeapMutex(void) {
+  static char buf[sizeof(std::mutex)];
+  static std::mutex *heapMutex = new (buf) std::mutex();
+
+  return heapMutex;
+}
 
 inline static CustomHeap *getCustomHeap(void) {
-  if (!perThreadHeap) {
-    void *buf = InternalHeap().malloc(sizeof(CustomHeap));
-    if (!buf)
-      abort();
-    perThreadHeap = new (buf) CustomHeap();
-  }
-  return perThreadHeap;
+  static char buf[sizeof(CustomHeap)];
+  static CustomHeap *heap = new (buf) CustomHeap();
+
+  return heap;
 }
-// inline static CustomHeap *getCustomHeap(void) {
-//   static char buf[sizeof(CustomHeap)];
-//   static CustomHeap *heap = new (buf) CustomHeap();
-//   return heap;
-// }
 
 // non-threadsafe printf-like debug statements
 void debug(const char *fmt, ...) {
@@ -68,14 +78,20 @@ void debug(const char *fmt, ...) {
 
 extern "C" {
 void *xxmalloc(size_t sz) {
+  std::lock_guard<std::mutex> lock(*getHeapMutex());
+
   return getCustomHeap()->malloc(sz);
 }
 
 void xxfree(void *ptr) {
+  std::lock_guard<std::mutex> lock(*getHeapMutex());
+
   getCustomHeap()->free(ptr);
 }
 
 size_t xxmalloc_usable_size(void *ptr) {
+  std::lock_guard<std::mutex> lock(*getHeapMutex());
+
   return getCustomHeap()->getSize(ptr);
 }
 
