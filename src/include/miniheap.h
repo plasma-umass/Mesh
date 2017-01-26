@@ -57,9 +57,9 @@ public:
 
     _bitmap.reserve(_objectCount);
 
-    debug("MiniHeap(%zu): reserving %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p\n",
+    debug("MiniHeap(%zu): reserving %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n",
           objectSize, _objectCount, heapPages, FullNumerator, FullDenominator, _fullCount,
-          this->isFull(), _inUseCount, this);
+          this->isFull(), _inUseCount, _span, reinterpret_cast<uintptr_t>(_span)+SpanSize);
   }
 
   inline void *malloc(size_t sz) {
@@ -76,6 +76,9 @@ public:
       if (_bitmap.tryToSet(random)) {
         auto ptr = reinterpret_cast<void *>((uintptr_t)_span + random * _objectSize);
         _inUseCount++;
+        if (reinterpret_cast<uintptr_t>(ptr)+sz > (reinterpret_cast<uintptr_t>(_span)+SpanSize)) {
+          debug("tried to allocate object off the back of span? %zu\n", sz);
+        }
         return ptr;
       }
     }
@@ -86,7 +89,7 @@ public:
 
   inline size_t getSize(void *ptr) {
     auto ptrval = (uintptr_t)ptr;
-    if (ptrval < (uintptr_t)_span || ptrval >= (uintptr_t)_span + SpanSize)
+    if (ptrval < reinterpret_cast<uintptr_t>(_span) || ptrval >= reinterpret_cast<uintptr_t>(_span) + SpanSize)
       return 0;
 
     return _objectSize;
