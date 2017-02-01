@@ -17,25 +17,23 @@
 
 #include "file-backed-mmap.h"
 #include "meshingheap.h"
-#include "mesh-strictsegheap.h"
 
 #include "wrappers/gnuwrapper.cpp"
 
 using namespace HL;
+using namespace mesh;
 
-// allocator for mesh-internal data structures, like heap metadata
-class InternalHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, BumpAlloc<16384 * 8, MmapHeap, 16>>> {};
-
-class TopHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, FileBackedMmapHeap<InternalHeap>>> {};
+// mmaps over named files
+class TopHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, FileBackedMmapHeap<internal::Heap>>> {};
+// anon mmaps
 class TopBigHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, MmapHeap>> {};
 
-// fewer buckets than regular KingsleyHeap (to ensure multiple objects fit in the 128Kb spans used by MiniHeaps)
-template <class PerClassHeap, class BigHeap>
-class MiniKingsleyHeap : public Mesh::StrictSegHeap<12, Kingsley::size2Class, Kingsley::class2Size, PerClassHeap, BigHeap> {};
+// fewer buckets than regular KingsleyHeap (to ensure multiple objects fit in the 128Kb spans used by MiniHeaps).
+class BottomHeap : public MeshingHeap<12, Kingsley::size2Class, Kingsley::class2Size, TopHeap, TopBigHeap> {};
 
+// TODO: remove the LockedHeap here and use a per-thread BottomHeap
+class CustomHeap : public ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> {};
 
-// the mesh heap doesn't coalesce and doesn't have free lists
-class CustomHeap : public ANSIWrapper<MiniKingsleyHeap<MeshingHeap<TopHeap, InternalHeap>, TopBigHeap>> {};
 // thread_local CustomHeap *perThreadHeap;
 
 // inline static CustomHeap *getCustomHeap(void) {
@@ -47,13 +45,6 @@ class CustomHeap : public ANSIWrapper<MiniKingsleyHeap<MeshingHeap<TopHeap, Inte
 //   }
 //   return perThreadHeap;
 // }
-
-inline static std::mutex *getHeapMutex(void) {
-  static char buf[sizeof(std::mutex)];
-  static std::mutex *heapMutex = new (buf) std::mutex();
-
-  return heapMutex;
-}
 
 inline static CustomHeap *getCustomHeap(void) {
   static char buf[sizeof(CustomHeap)];
@@ -78,20 +69,14 @@ void debug(const char *fmt, ...) {
 
 extern "C" {
 void *xxmalloc(size_t sz) {
-  std::lock_guard<std::mutex> lock(*getHeapMutex());
-
   return getCustomHeap()->malloc(sz);
 }
 
 void xxfree(void *ptr) {
-  std::lock_guard<std::mutex> lock(*getHeapMutex());
-
   getCustomHeap()->free(ptr);
 }
 
 size_t xxmalloc_usable_size(void *ptr) {
-  std::lock_guard<std::mutex> lock(*getHeapMutex());
-
   return getCustomHeap()->getSize(ptr);
 }
 
