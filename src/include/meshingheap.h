@@ -4,17 +4,31 @@
 #ifndef MESH_MESHINGHEAP_H
 #define MESH_MESHINGHEAP_H
 
+#include "internal.h"
 #include "heaplayers.h"
 #include "miniheap.h"
 
 using namespace HL;
 
-template <typename SuperHeap, typename InternalAlloc>
+namespace mesh {
+
+template <int NumBins,
+          int (*getSizeClass)(const size_t),
+          size_t (*getClassMaxSize)(const int),
+          typename SuperHeap,
+          typename BigHeap>
 class MeshingHeap {
+private:
+  typedef MiniHeap<SuperHeap, internal::Heap> MiniHeap;
+
 public:
   enum { Alignment = 16 };  // FIXME
 
-  MeshingHeap() : _current(nullptr) {
+  MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), _current(nullptr), _miniheaps() {
+    static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
+    for (size_t i = 0; i < NumBins; i++) {
+      _littleheap[i] = nullptr;
+    }
   }
 
   inline void *malloc(size_t sz) {
@@ -27,10 +41,10 @@ public:
     inMalloc = 1;
 
     if (unlikely(_current == nullptr)) {
-      void *buf = InternalAlloc().malloc(sizeof(MiniHeap<SuperHeap, InternalAlloc>));
+      void *buf = internal::Heap().malloc(sizeof(MiniHeap));
       if (!buf)
         abort();
-      _current = new (buf) MiniHeap<SuperHeap, InternalAlloc>(sz);
+      _current = new (buf) MiniHeap(sz);
       assert(!_current->isFull());
     }
 
@@ -55,8 +69,15 @@ public:
   }
 
 private:
-  MiniHeap<SuperHeap, InternalAlloc> *_current;
-  // TODO: btree of address-ranges to miniheaps, for free
+  const size_t _maxObjectSize;
+
+  BigHeap _bigheap;
+  MiniHeap *_littleheap[NumBins];
+
+  MiniHeap *_current;
+
+  internal::unordered_map<uintptr_t, MiniHeap *> _miniheaps;
 };
+}
 
 #endif  // MESH_MESHINGHEAP_H
