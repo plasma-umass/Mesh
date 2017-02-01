@@ -21,6 +21,7 @@ COMMON_FLAGS = \
 	-fno-asynchronous-unwind-tables \
 	-ffunction-sections \
 	-fdata-sections \
+	-Wno-gnu-statement-expression \
 	-Werror=implicit-function-declaration \
 	-Werror=implicit-int \
 	-Werror=pointer-sign \

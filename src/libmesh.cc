@@ -4,6 +4,7 @@
 #include <stdlib.h>  // for abort
 #include <unistd.h>  // for write
 #include <cstddef>   // for size_t
+#include <cstdarg>   // for va_start + friends
 #include <new>       // for operator new
 
 // never allocate exeecutable heap
@@ -53,6 +54,13 @@ inline static CustomHeap *getCustomHeap(void) {
   return heap;
 }
 
+inline static std::mutex *getAssertMutex(void) {
+  static char buf[sizeof(std::mutex)];
+  static std::mutex *assertMutex = new (buf) std::mutex();
+
+  return assertMutex;
+}
+
 // non-threadsafe printf-like debug statements
 void debug(const char *fmt, ...) {
   static char buf[256];
@@ -63,8 +71,35 @@ void debug(const char *fmt, ...) {
   va_end(args);
 
   buf[255] = 0;
-  if (len > 0)
+  if (len > 0) {
     write(STDERR_FILENO, buf, len);
+    // ensure a trailing newline is written out
+    if (buf[len-1] != '\n')
+      write(STDERR_FILENO, "\n", 1);
+  }
+}
+
+void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file, int line, const char *fmt, ...) {
+  constexpr size_t buf_len = 4096;
+  constexpr size_t usr_len = 512;
+  static char buf[buf_len];
+  static char usr[usr_len];
+  std::lock_guard<std::mutex> lock(*getAssertMutex());
+
+  va_list args;
+
+  va_start(args, fmt);
+  (void)vsnprintf(usr, usr_len-1, fmt, args);
+  va_end(args);
+
+  usr[usr_len-1] = 0;
+
+  int len = snprintf(buf, buf_len-1, "%s:%d: ASSERTION '%s' FAILED: %s\n", file, line, assertion, usr);
+  if (len > 0) {
+    write(STDERR_FILENO, buf, len);
+  }
+
+  _exit(EXIT_FAILURE);
 }
 
 extern "C" {
