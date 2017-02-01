@@ -25,7 +25,7 @@ using namespace HL;
 using namespace mesh;
 
 // mmaps over named files
-class TopHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, FileBackedMmapHeap<internal::Heap>>> {};
+class TopHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, FileBackedMmapHeap>> {};
 // anon mmaps
 class TopBigHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, MmapHeap>> {};
 

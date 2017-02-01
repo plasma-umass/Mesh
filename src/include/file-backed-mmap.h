@@ -67,15 +67,19 @@
  * @brief Modified MmapHeap for use in Mesh.
  */
 
-namespace HL {
+namespace mesh {
 
-class PrivateFileBackedMmapHeap {
+class FileBackedMmapHeap {
+
+protected:
+  internal::unordered_map<void *, size_t> vmaMap;
+  internal::unordered_map<void *, int> fdMap;
+  std::mutex mapLock;
+
 public:
-  /// All memory from here is zeroed.
-  enum { ZeroMemory = 1 };
   enum { Alignment = MmapWrapper::Alignment };
 
-  static inline void *malloc(size_t sz) {
+  inline void *malloc(size_t sz) {
     if (sz == 0)
       return nullptr;
 
@@ -104,54 +108,45 @@ public:
 
     if (ptr == MAP_FAILED)
       abort();
-    return ptr;
-  }
 
-  static void free(void *ptr, size_t sz) {
-    if ((long)sz < 0) {
-      abort();
+    {
+      std::lock_guard<std::mutex> lock(mapLock);
+      vmaMap[ptr] = sz;
+      fdMap[ptr] = fd;
     }
-    munmap(reinterpret_cast<char *>(ptr), sz);
-  }
-};
 
-template <typename InternalAlloc = LockedHeap<PosixLockType, FreelistHeap<BumpAlloc<16384, PrivateFileBackedMmapHeap>>>>
-class FileBackedMmapHeap : public PrivateFileBackedMmapHeap {
-private:
-  // Note: we never reclaim memory obtained for MyHeap, even when
-  // this heap is destroyed.
-  typedef MyHashMap<void *, size_t, InternalAlloc> mapType;
-
-protected:
-  mapType MyMap;
-  PosixLockType MyMapLock;
-
-public:
-  enum { Alignment = PrivateFileBackedMmapHeap::Alignment };
-
-  inline void *malloc(size_t sz) {
-    void *ptr = PrivateFileBackedMmapHeap::malloc(sz);
-    MyMapLock.lock();
-    MyMap.set(ptr, sz);
-    MyMapLock.unlock();
-    assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
+    d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
     return const_cast<void *>(ptr);
   }
 
   inline size_t getSize(void *ptr) {
-    MyMapLock.lock();
-    size_t sz = MyMap.get(ptr);
-    MyMapLock.unlock();
-    return sz;
+    std::lock_guard<std::mutex> lock(mapLock);
+
+    auto itVma = vmaMap.find(ptr);
+    if (itVma == vmaMap.end())
+      return 0;
+    return itVma->second;
   }
 
   inline void free(void *ptr) {
+    std::lock_guard<std::mutex> lock(mapLock);
+    auto itVma = vmaMap.find(ptr);
+    if (itVma == vmaMap.end())
+      return;
+
     assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
-    MyMapLock.lock();
-    size_t sz = MyMap.get(ptr);
-    PrivateFileBackedMmapHeap::free(ptr, sz);
-    MyMap.erase(ptr);
-    MyMapLock.unlock();
+
+    auto itFd = fdMap.find(ptr);
+    d_assert(itFd != fdMap.end());
+
+    //munmap(ptr, itVma->second);
+    // TODO: unlink
+    close(itFd->second);
+
+    vmaMap.erase(itVma);
+    fdMap.erase(itFd);
+
+    debug("FileBackedMmap: freed %p", ptr);
   }
 };
 }

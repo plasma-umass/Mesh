@@ -99,7 +99,9 @@ public:
       _bitmap.reset(off);
       _inUseCount--;
       if (_inUseCount == 0) {
-        debug("FIXME: free span");
+        SuperHeap::free(_span);
+        // _span = (void *)0xdeadbeef;
+        debug("FIXME: free MiniHeap metadata");
       }
     } else {
       debug("MiniHeap(%p): caught double free of %p?", this, ptrval);
