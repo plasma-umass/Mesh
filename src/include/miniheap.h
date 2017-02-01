@@ -39,17 +39,18 @@ template <typename SuperHeap,
 class MiniHeap : public SuperHeap {
 public:
   enum { Alignment = (int)MinObjectSize };
+  static const size_t span_size = SpanSize;
 
   MiniHeap(size_t objectSize)
       : SuperHeap(), _objectSize(objectSize), _objectCount(), _inUseCount(), _fullCount(),
         _rng(seed(), seed()), _bitmap() {
 
-    assert(_inUseCount == 0);
+    d_assert(_inUseCount == 0);
     _span = SuperHeap::malloc(SpanSize);
     if (!_span)
       abort();
 
-    assert(_inUseCount == 0);
+    d_assert(_inUseCount == 0);
 
     constexpr auto heapPages = SpanSize / PageSize;
     _objectCount = SpanSize / objectSize;
@@ -63,7 +64,7 @@ public:
   }
 
   inline void *malloc(size_t sz) {
-    assert(sz <= _objectSize);
+    d_assert_msg(sz <= _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
     // should never have been called
     if (isFull())
@@ -88,15 +89,19 @@ public:
   }
 
   inline size_t getSize(void *ptr) {
-    auto ptrval = (uintptr_t)ptr;
-    if (ptrval < reinterpret_cast<uintptr_t>(_span) || ptrval >= reinterpret_cast<uintptr_t>(_span) + SpanSize)
-      return 0;
+    auto span = reinterpret_cast<uintptr_t>(_span);
+    auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+    d_assert(span <= ptrval && ptrval < span + SpanSize);
 
     return _objectSize;
   }
 
   inline bool isFull() {
     return _inUseCount >= _fullCount;
+  }
+
+  inline uintptr_t getSpanStart() {
+    return reinterpret_cast<uintptr_t>(_span);
   }
 
   void *_span;

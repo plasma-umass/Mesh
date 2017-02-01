@@ -24,58 +24,83 @@ private:
 public:
   enum { Alignment = 16 };  // FIXME
 
-  MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), _current(nullptr), _miniheaps() {
+  MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), _littleheaps(), _miniheaps() {
     static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
-    for (size_t i = 0; i < NumBins; i++) {
-      _littleheap[i] = nullptr;
-    }
   }
 
   inline void *malloc(size_t sz) {
-    static thread_local int inMalloc = 0;
-    // guard against recursive malloc
-    if (inMalloc != 0) {
-      debug("recursive malloc detected\n");
-      abort();
-    }
-    inMalloc = 1;
+    const int sizeClass = getSizeClass(sz);
+    const size_t sizeMax = getClassMaxSize(sizeClass);
 
-    if (unlikely(_current == nullptr)) {
-      void *buf = internal::Heap().malloc(sizeof(MiniHeap));
-      if (!buf)
-        abort();
-      _current = new (buf) MiniHeap(sz);
-      assert(!_current->isFull());
+    d_assert_msg(sz <= sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", sz, sizeMax, sizeClass);
+
+    void *ptr = nullptr;
+
+    if (likely(sz <= _maxObjectSize)) {
+      assert(sizeClass >= 0);
+      assert(sizeClass < NumBins);
+
+      if (unlikely(_current[sizeClass] == nullptr)) {
+        void *buf = internal::Heap().malloc(sizeof(MiniHeap));
+        d_assert(buf != nullptr);
+
+        auto mh = new (buf) MiniHeap(sz);
+        d_assert(!mh->isFull());
+
+        _current[sizeClass] = mh;
+        _littleheaps[sizeClass].push_back(mh);
+        _miniheaps[mh->getSpanStart()] = mh;
+      }
+
+      auto mh = _current[sizeClass];
+
+      ptr = mh->malloc(sz);
+      if (mh->isFull()) {
+        _current[sizeClass] = nullptr;
+      }
+    } else {
+      ptr = _bigheap.malloc(sz);
     }
 
-    void *ptr = _current->malloc(sz);
-    if (_current->isFull()) {
-      _current = nullptr;
-    }
-
-    inMalloc = 0;
     return ptr;
   }
 
+  static inline uintptr_t getSpanStart(void *ptr) {
+    return reinterpret_cast<uintptr_t>(ptr) & ~(MiniHeap::span_size - 1);
+  }
+
   inline void free(void *ptr) {
-    // FIXME: check if ptr is in current, if so free there, otherwise check all other miniheaps
-    // this needs to take into account threads + locks, maybe
+    auto spanStart = getSpanStart(ptr);
+
+    auto it = _miniheaps.find(spanStart);
+    if (it != _miniheaps.end()) {
+      return it->second->free(ptr);
+    } else {
+      return _bigheap.free(ptr);
+    }
   }
 
   inline size_t getSize(void *ptr) {
-    if (_current == nullptr)
+    if (ptr == nullptr)
       return 0;
-    return _current->getSize(ptr);
+
+    auto spanStart = getSpanStart(ptr);
+
+    auto it = _miniheaps.find(spanStart);
+    if (it != _miniheaps.end()) {
+      return it->second->getSize(ptr);
+    } else {
+      return _bigheap.getSize(ptr);
+    }
   }
 
 private:
   const size_t _maxObjectSize;
 
   BigHeap _bigheap;
-  MiniHeap *_littleheap[NumBins];
+  MiniHeap *_current[NumBins];
 
-  MiniHeap *_current;
-
+  internal::vector<MiniHeap *> _littleheaps[NumBins];
   internal::unordered_map<uintptr_t, MiniHeap *> _miniheaps;
 };
 }

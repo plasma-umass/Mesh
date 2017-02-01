@@ -7,16 +7,16 @@
  * @note   Copyright (C) 2005 by Emery Berger, University of Massachusetts Amherst.
  */
 
-#include <assert.h>
+#ifndef DH_BITMAP_H
+#define DH_BITMAP_H
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "staticlog.h"
-
-#ifndef DH_BITMAP_H
-#define DH_BITMAP_H
+#include "internal.h"
 
 /**
  * @class BitMap
@@ -84,11 +84,11 @@ public:
 private:
   /// Given an index, compute its item (word) and position within the word.
   void computeItemPosition(uint64_t index, uint32_t& item, uint32_t& position) const {
-    assert(index < _elements);
+    d_assert(index < _elements);
     item = index >> WORDBITSHIFT;
     position = index & (WORDBITS - 1);
-    assert(position == index - (item << WORDBITSHIFT));
-    assert(item < _elements / WORDBYTES);
+    d_assert(position == index - (item << WORDBITSHIFT));
+    d_assert(item < _elements / WORDBYTES);
   }
 
   /// A synonym for the datatype corresponding to a word.
