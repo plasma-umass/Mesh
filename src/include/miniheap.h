@@ -36,12 +36,12 @@ template <typename SuperHeap,
           size_t SpanSize = 128UL * 1024UL, // 128Kb spans
           unsigned int FullNumerator = 3,
           unsigned int FullDenominator = 4>
-class MiniHeap : public SuperHeap {
+class MiniHeapBase : public SuperHeap {
 public:
   enum { Alignment = (int)MinObjectSize };
   static const size_t span_size = SpanSize;
 
-  MiniHeap(size_t objectSize)
+  MiniHeapBase(size_t objectSize)
       : SuperHeap(), _objectSize(objectSize), _objectCount(), _inUseCount(), _fullCount(),
         _rng(seed(), seed()), _bitmap() {
 
@@ -72,26 +72,44 @@ public:
 
     while (true) {
       //auto random = _rng.next() % _objectCount;
-      auto random = seed() % _objectCount;
+      size_t random = seed() % _objectCount;
 
       if (_bitmap.tryToSet(random)) {
         auto ptr = reinterpret_cast<void *>((uintptr_t)_span + random * _objectSize);
         _inUseCount++;
-        if (reinterpret_cast<uintptr_t>(ptr)+sz > (reinterpret_cast<uintptr_t>(_span)+SpanSize)) {
-          debug("tried to allocate object off the back of span? %zu\n", sz);
-        }
+        auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+        auto spanStart = reinterpret_cast<uintptr_t>(_span);
+        d_assert_msg(ptrval+sz <= spanStart+SpanSize,
+                     "OOB alloc? sz:%zu (%p-%p) ptr:%p rand:%zu count:%zu osize:%zu\n", sz, _span, spanStart+SpanSize, ptrval, random, _objectCount, _objectSize);
         return ptr;
       }
     }
   }
 
   inline void free(void *ptr) {
+    d_assert(getSize(ptr) == _objectSize);
+
+    auto span = reinterpret_cast<uintptr_t>(_span);
+    auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+
+    auto off = (ptrval - span)/_objectSize;
+    d_assert(0 <= off && off < _objectCount);
+
+    if (_bitmap.isSet(off)) {
+      _bitmap.reset(off);
+      _inUseCount--;
+      if (_inUseCount == 0) {
+        debug("FIXME: free span");
+      }
+    } else {
+      debug("MiniHeap(%p): caught double free of %p?", this, ptrval);
+    }
   }
 
   inline size_t getSize(void *ptr) {
     auto span = reinterpret_cast<uintptr_t>(_span);
     auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    d_assert(span <= ptrval && ptrval < span + SpanSize);
+    d_assert_msg(span <= ptrval && ptrval < span + SpanSize, "span(%p) <= %p < %p", span, ptrval, span + SpanSize);
 
     return _objectSize;
   }
