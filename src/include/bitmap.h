@@ -15,8 +15,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "staticlog.h"
 #include "internal.h"
+#include "staticlog.h"
 
 /**
  * @class BitMap
@@ -35,7 +35,7 @@ public:
    * @param  nelts  the number of elements needed.
    */
 
-  void reserve(uint64_t nelts) {
+  void reserve(unsigned long long nelts) {
     if (_bitarray) {
       Heap::free(_bitarray);
     }
@@ -55,8 +55,8 @@ public:
   }
 
   /// @return true iff the bit was not set (but it is now).
-  inline bool tryToSet(uint64_t index) {
-    uint32_t item, position;
+  inline bool tryToSet(unsigned long long index) {
+    unsigned int item, position;
     computeItemPosition(index, item, position);
     const WORD mask = getMask(position);
     unsigned long oldvalue = _bitarray[item];
@@ -65,8 +65,8 @@ public:
   }
 
   /// Clears the bit at the given index.
-  inline bool reset(uint64_t index) {
-    uint32_t item, position;
+  inline bool reset(unsigned long long index) {
+    unsigned int item, position;
     computeItemPosition(index, item, position);
     unsigned long oldvalue = _bitarray[item];
     WORD newvalue = oldvalue & ~(getMask(position));
@@ -74,8 +74,8 @@ public:
     return (oldvalue != newvalue);
   }
 
-  inline bool isSet(uint64_t index) const {
-    uint32_t item, position;
+  inline bool isSet(unsigned long long index) const {
+    unsigned int item, position;
     computeItemPosition(index, item, position);
     bool result = _bitarray[item] & getMask(position);
     return result;
@@ -83,12 +83,12 @@ public:
 
 private:
   /// Given an index, compute its item (word) and position within the word.
-  void computeItemPosition(uint64_t index, uint32_t& item, uint32_t& position) const {
-    d_assert(index < _elements);
+  void computeItemPosition(unsigned long long index, unsigned int& item, unsigned int& position) const {
+    assert(index < _elements);
     item = index >> WORDBITSHIFT;
     position = index & (WORDBITS - 1);
-    d_assert(position == index - (item << WORDBITSHIFT));
-    d_assert(item < _elements / WORDBYTES);
+    assert(position == index - (item << WORDBITSHIFT));
+    assert(item < _elements / WORDBYTES);
   }
 
   /// A synonym for the datatype corresponding to a word.
@@ -96,7 +96,7 @@ private:
 
   /// To find the bit in a word, do this: word & getMask(bitPosition)
   /// @return a "mask" for the given position.
-  inline static WORD getMask(uint64_t pos) {
+  inline static WORD getMask(unsigned long long pos) {
     return ((WORD)1) << pos;
   }
 
@@ -106,14 +106,18 @@ private:
   /// The number of BYTES in a WORD.
   enum { WORDBYTES = sizeof(WORD) };
 
-  /// The log of the number of bits in a WORD, for shifting.
-  enum { WORDBITSHIFT = staticlog(WORDBITS) };
+/// The log of the number of bits in a WORD, for shifting.
+#if __cplusplus > 199711L
+  enum {WORDBITSHIFT = staticlog(WORDBITS)};
+#else
+  enum { WORDBITSHIFT = StaticLog<WORDBITS>::VALUE };
+#endif
 
   /// The bit array itself.
   WORD* _bitarray;
 
   /// The number of elements in the array.
-  size_t _elements;
+  unsigned long _elements;
 };
 
 #endif
