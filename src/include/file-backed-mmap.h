@@ -62,12 +62,14 @@ namespace mesh {
 class FileBackedMmapHeap {
 
 protected:
-  internal::unordered_map<void *, size_t> vmaMap;
-  internal::unordered_map<void *, int> fdMap;
-  std::mutex mapLock;
+  internal::unordered_map<void *, size_t> _vmaMap;
+  internal::unordered_map<void *, int> _fdMap;
+  std::mutex _mapLock;
 
 public:
   enum { Alignment = MmapWrapper::Alignment };
+
+  FileBackedMmapHeap() : _vmaMap(), _fdMap(), _mapLock() {}
 
   inline void *malloc(size_t sz) {
     if (sz == 0)
@@ -100,9 +102,9 @@ public:
       abort();
 
     {
-      std::lock_guard<std::mutex> lock(mapLock);
-      vmaMap[ptr] = sz;
-      fdMap[ptr] = fd;
+      std::lock_guard<std::mutex> lock(_mapLock);
+      _vmaMap[ptr] = sz;
+      _fdMap[ptr] = fd;
     }
 
     d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
@@ -110,44 +112,48 @@ public:
   }
 
   inline size_t getSize(void *ptr) {
-    std::lock_guard<std::mutex> lock(mapLock);
+    std::lock_guard<std::mutex> lock(_mapLock);
 
-    auto itVma = vmaMap.find(ptr);
-    if (itVma == vmaMap.end())
+    auto itVma = _vmaMap.find(ptr);
+    if (itVma == _vmaMap.end())
       return 0;
     return itVma->second;
   }
 
   inline void free(void *ptr) {
-    std::lock_guard<std::mutex> lock(mapLock);
-    auto itVma = vmaMap.find(ptr);
-    if (itVma == vmaMap.end())
+    std::lock_guard<std::mutex> lock(_mapLock);
+    auto itVma = _vmaMap.find(ptr);
+    if (itVma == _vmaMap.end())
       return;
 
     d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
 
-    auto itFd = fdMap.find(ptr);
-    d_assert(itFd != fdMap.end());
+    auto itFd = _fdMap.find(ptr);
+    d_assert(itFd != _fdMap.end());
 
     //munmap(ptr, itVma->second);
     // TODO: unlink
     close(itFd->second);
 
-    vmaMap.erase(itVma);
-    fdMap.erase(itFd);
+    _vmaMap.erase(itVma);
+    _fdMap.erase(itFd);
 
     debug("FileBackedMmap: freed %p", ptr);
   }
 };
 
 class MmapHeap {
+private:
+  DISALLOW_COPY_AND_ASSIGN(MmapHeap);
 
 protected:
-  internal::unordered_map<void *, size_t> vmaMap;
-  std::mutex mapLock;
+  internal::unordered_map<void *, size_t> _vmaMap;
+  std::mutex _mapLock;
 
 public:
   enum { Alignment = MmapWrapper::Alignment };
+
+  MmapHeap() : _vmaMap(), _mapLock() {}
 
   inline void *malloc(size_t sz) {
     if (sz == 0)
@@ -161,8 +167,8 @@ public:
       abort();
 
     {
-      std::lock_guard<std::mutex> lock(mapLock);
-      vmaMap[ptr] = sz;
+      std::lock_guard<std::mutex> lock(_mapLock);
+      _vmaMap[ptr] = sz;
     }
 
     d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
@@ -170,23 +176,23 @@ public:
   }
 
   inline size_t getSize(void *ptr) {
-    std::lock_guard<std::mutex> lock(mapLock);
+    std::lock_guard<std::mutex> lock(_mapLock);
 
-    auto itVma = vmaMap.find(ptr);
-    if (itVma == vmaMap.end())
+    auto itVma = _vmaMap.find(ptr);
+    if (itVma == _vmaMap.end())
       return 0;
     return itVma->second;
   }
 
   inline void free(void *ptr) {
-    std::lock_guard<std::mutex> lock(mapLock);
-    auto itVma = vmaMap.find(ptr);
-    if (itVma == vmaMap.end())
+    std::lock_guard<std::mutex> lock(_mapLock);
+    auto itVma = _vmaMap.find(ptr);
+    if (itVma == _vmaMap.end())
       return;
 
     d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
 
-    vmaMap.erase(itVma);
+    _vmaMap.erase(itVma);
   }
 };
 }
