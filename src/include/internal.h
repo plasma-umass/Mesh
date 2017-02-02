@@ -40,6 +40,16 @@ void debug(const char* fmt, ...);
 
 namespace mesh {
 
+inline constexpr size_t class2Size(const int i) {
+  auto sz = (size_t)(1ULL << (i + 4));
+  return sz;
+}
+
+inline int size2Class(const size_t sz) {
+  auto cl = (int)HL::ilog2((sz < 8) ? 8 : sz) - 4;
+  return cl;
+}
+
 namespace internal {
 using namespace HL;
 
@@ -48,7 +58,8 @@ void __attribute__((noreturn))
 __mesh_assert_fail(const char* assertion, const char* file, int line, const char* fmt, ...);
 
 // for mesh-internal data structures, like heap metadata
-class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>>> {};
+class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>>> {
+};
 
 // template <typename T>
 // struct StlAllocator {

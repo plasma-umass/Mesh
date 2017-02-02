@@ -30,7 +30,7 @@ class TopHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, FileBackedMmapHe
 class TopBigHeap : public ExactlyOneHeap<LockedHeap<PosixLockType, MmapHeap>> {};
 
 // fewer buckets than regular KingsleyHeap (to ensure multiple objects fit in the 128Kb spans used by MiniHeaps).
-class BottomHeap : public MeshingHeap<12, Kingsley::size2Class, Kingsley::class2Size, TopHeap, TopBigHeap> {};
+class BottomHeap : public MeshingHeap<11, mesh::size2Class, mesh::class2Size, TopHeap, TopBigHeap> {};
 
 // TODO: remove the LockedHeap here and use a per-thread BottomHeap
 class CustomHeap : public ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> {};
