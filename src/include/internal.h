@@ -14,6 +14,10 @@
 
 void debug(const char* fmt, ...);
 
+#define DISALLOW_COPY_AND_ASSIGN(TypeName) \
+  TypeName(const TypeName&);   \
+  void operator=(const TypeName&)
+
 // dynamic (runtime) assert
 #ifndef NDEBUG
 #define d_assert_msg(expr, fmt, ...)                                                   \
