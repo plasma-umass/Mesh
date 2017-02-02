@@ -23,9 +23,9 @@ private:
   typedef MiniHeapBase<SuperHeap, internal::Heap> MiniHeap;
 
 public:
-  enum { Alignment = 16 };  // FIXME
+  enum { Alignment = 16 };
 
-  MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), _littleheaps(), _miniheaps() {
+  MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), /*_littleheaps(),*/ _miniheaps() {
     debug("MeshingHeap init");
     static_assert(getClassMaxSize(NumBins-1) == 16384, "expected 16k max object size");
     static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
@@ -51,16 +51,16 @@ public:
       void *buf = internal::Heap().malloc(sizeof(MiniHeap));
       d_assert(buf != nullptr);
 
-      debug("\t%zu // %zu (%zu)", sizeClass, sizeMax, sz);
+      //debug("\t%zu // %zu (%zu)", sizeClass, sizeMax, sz);
       MiniHeap *mh = new (buf) MiniHeap(sizeMax);
       d_assert(!mh->isFull());
 
-      _littleheaps[sizeClass].push_back(mh);
+      //_littleheaps[sizeClass].push_back(mh);
       _miniheaps[mh->getSpanStart()] = mh;
       _current[sizeClass] = mh;
 
-      d_assert(_littleheaps[sizeClass].size() > 0);
-      d_assert(_littleheaps[sizeClass][_littleheaps[sizeClass].size()-1] == mh);
+      //d_assert(_littleheaps[sizeClass].size() > 0);
+      //d_assert(_littleheaps[sizeClass][_littleheaps[sizeClass].size()-1] == mh);
       d_assert(_miniheaps[mh->getSpanStart()] == mh);
       d_assert(_current[sizeClass] == mh);
     }
@@ -85,15 +85,19 @@ public:
   }
 
   inline MiniHeap *miniheapFor(void *ptr) {
-    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    auto const it = greatest_less(_miniheaps, ptrval);
-    if (it != _miniheaps.end()) {
-      auto candidate = it->second;
-      d_assert(it->second != nullptr);
-      const auto spanStart = candidate->getSpanStart();
-      if (spanStart <= ptrval && ptrval < spanStart + MiniHeap::span_size)
-        return candidate;
+    for (auto i : _miniheaps) {
+      if (i.first <= (uintptr_t)ptr && (uintptr_t)ptr < i.first + MiniHeap::span_size)
+        return i.second;
     }
+    // const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+    // auto const it = greatest_less(_miniheaps, ptrval);
+    // if (it != _miniheaps.end()) {
+    //   auto candidate = it->second;
+    //   d_assert(it->second != nullptr);
+    //   const auto spanStart = candidate->getSpanStart();
+    //   if (spanStart <= ptrval && ptrval < spanStart + MiniHeap::span_size)
+    //     return candidate;
+    // }
 
     return nullptr;
   }
@@ -107,7 +111,7 @@ public:
       // for(auto i : _miniheaps) {
       //   debug("\t%p\n", i.first);
       // }
-      return _bigheap.free(ptr);
+       _bigheap.free(ptr);
     }
   }
 
@@ -129,7 +133,7 @@ private:
   BigHeap _bigheap;
   MiniHeap *_current[NumBins];
 
-  internal::vector<MiniHeap *> _littleheaps[NumBins];
+  //internal::vector<MiniHeap *> _littleheaps[NumBins];
   internal::map<uintptr_t, MiniHeap *> _miniheaps;
 };
 }

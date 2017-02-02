@@ -49,6 +49,7 @@ public:
       _rng(seed(), seed()), _bitmap(), _done(false), _super() {
 
     d_assert(_inUseCount == 0);
+
     _span = _super.malloc(SpanSize);
     if (!_span)
       abort();
@@ -61,79 +62,88 @@ public:
 
     _bitmap.reserve(_maxCount);
 
+    // for error detection
+    memset(_span, 'S', SpanSize);
+
     debug("MiniHeap(%zu): reserving %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n",
           objectSize, _maxCount, heapPages, FullNumerator, FullDenominator, _fullCount,
           this->isFull(), _inUseCount, _span, reinterpret_cast<uintptr_t>(_span)+SpanSize);
   }
 
   inline void *malloc(size_t sz) {
-    d_assert(!_done);
+    d_assert(!_done && !isFull());
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
-    // should never have been called
-    if (isFull())
-      abort();
-
+    // because we are not full, this is guaranteed to terminate
     while (true) {
-      //auto off = _rng.next() % _maxCount;
-      size_t off = seed() % _maxCount;
+      size_t off = _rng.next() % _maxCount;
 
-      if (_bitmap.tryToSet(off)) {
-        auto ptr = reinterpret_cast<void *>((uintptr_t)_span + off * _objectSize);
-        _inUseCount++;
-        auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-        auto spanStart = reinterpret_cast<uintptr_t>(_span);
-        d_assert_msg(ptrval+sz <= spanStart+SpanSize,
-                     "OOB alloc? sz:%zu (%p-%p) ptr:%p rand:%zu count:%zu osize:%zu\n", sz, _span, spanStart+SpanSize, ptrval, random, _maxCount, _objectSize);
+      if (!_bitmap.tryToSet(off))
+        continue;
 
-        memset(ptr, 'A', sz);
+      _inUseCount++;
 
-        {
-          d_assert(getSize(ptr) == _objectSize);
+      // we JUST set the bitmap
+      auto ptr = reinterpret_cast<void *>((uintptr_t)_span + off * _objectSize);
 
-          auto span = reinterpret_cast<uintptr_t>(_span);
-          auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+      auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+      auto spanStart = reinterpret_cast<uintptr_t>(_span);
+      d_assert_msg(ptrval+sz <= spanStart+SpanSize,
+                   "OOB alloc? sz:%zu (%p-%p) ptr:%p rand:%zu count:%zu osize:%zu\n", sz, _span, spanStart+SpanSize, ptrval, random, _maxCount, _objectSize);
 
-          d_assert(span <= ptrval);
-          auto new_off = (ptrval - span)/_objectSize;
-          d_assert_msg(new_off == off, "off calc fucked up %zu %zu", off, new_off);
-          d_assert(new_off < _maxCount);
-
-        }
-
-        return ptr;
+      char *charPtr = reinterpret_cast<char *>(ptr);
+      for (size_t i = 0; i < _objectSize; i++) {
+        d_assert_msg(charPtr[i] == 'S' || charPtr[i] == 'F',
+                     "MiniHeap(%p): on span %p (sz:%zu) %zu not 'F' or 'S': %s", this, _span, _objectSize, i, charPtr[i]);
       }
+      memset(ptr, 'A', sz);
+
+      {
+        d_assert(getSize(ptr) == _objectSize);
+
+        auto span = reinterpret_cast<uintptr_t>(_span);
+        auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+
+        d_assert(span <= ptrval);
+        auto new_off = (ptrval - span)/_objectSize;
+        d_assert_msg(new_off == off, "off calc fucked up %zu %zu", off, new_off);
+        d_assert(new_off < _maxCount);
+      }
+
+      d_assert(_bitmap.isSet(off));
+      return ptr;
     }
   }
 
   inline void free(void *ptr) {
+    d_assert(_inUseCount >= 0);
     d_assert(getSize(ptr) == _objectSize);
-    // d_assert(!_done);
 
     auto span = reinterpret_cast<uintptr_t>(_span);
     auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
     d_assert(span <= ptrval);
     auto off = (ptrval - span)/_objectSize;
+
     d_assert(off < _maxCount);
+    d_assert_msg(_bitmap.isSet(off), "MiniHeap(%p): caught double free of %p?", this, ptr);
 
-    if (_bitmap.isSet(off)) {
-      memset(ptr, 'F', _objectSize);
-      _bitmap.reset(off);
-      _inUseCount--;
-      if (_done) {
-        debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount, (double)_inUseCount/_maxCount, _objectSize);
-      }
-      if (_inUseCount == 0 && _done) {
-        _super.free(_span);
-        // _span = (void *)0xdeadbeef;
-        debug("FIXME: free MiniHeap metadata");
-      }
-    } else {
-      debug("MiniHeap(%p): caught double free of %p?", this, ptrval);
+    // scribble to try to catch problems faster
+    memset(ptr, 'F', _objectSize);
+
+    _bitmap.reset(off);
+    d_assert(!_bitmap.isSet(off));
+    
+    _inUseCount--;
+
+    if (_done) {
+      debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount, (double)_inUseCount/_maxCount, _objectSize);
     }
-
-    d_assert(_inUseCount >= 0);
+    if (_inUseCount == 0 && _done) {
+      _super.free(_span);
+      // _span = (void *)0xdeadbeef;
+      debug("FIXME: free MiniHeap metadata");
+    }
   }
 
   inline size_t getSize(void *ptr) {
