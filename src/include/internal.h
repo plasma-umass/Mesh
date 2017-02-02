@@ -62,12 +62,12 @@ void __attribute__((noreturn))
 __mesh_assert_fail(const char* assertion, const char* file, int line, const char* fmt, ...);
 
 // for mesh-internal data structures, like heap metadata
-// class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>>> {
-// };
+class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>>> {
+};
 
 // FIXME: add back in bumpptr
-class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<MmapHeap>>>> {
-};
+//class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<MmapHeap>>>> {
+//};
 
 // template <typename T>
 // struct StlAllocator {

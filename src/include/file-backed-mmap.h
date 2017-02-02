@@ -115,16 +115,20 @@ public:
     std::lock_guard<std::mutex> lock(_mapLock);
 
     auto itVma = _vmaMap.find(ptr);
-    if (itVma == _vmaMap.end())
+    if (itVma == _vmaMap.end()) {
+      debug("file-mmap: invalid getSize %p", ptr);
       return 0;
+    }
     return itVma->second;
   }
 
   inline void free(void *ptr) {
     std::lock_guard<std::mutex> lock(_mapLock);
     auto itVma = _vmaMap.find(ptr);
-    if (itVma == _vmaMap.end())
+    if (itVma == _vmaMap.end()) {
+      debug("file-mmap: invalid free %p", ptr);
       return;
+    }
 
     d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
 
@@ -179,16 +183,20 @@ public:
     std::lock_guard<std::mutex> lock(_mapLock);
 
     auto itVma = _vmaMap.find(ptr);
-    if (itVma == _vmaMap.end())
+    if (itVma == _vmaMap.end()) {
+      debug("mmap: invalid getSize: %p", ptr);
       return 0;
+    }
     return itVma->second;
   }
 
   inline void free(void *ptr) {
     std::lock_guard<std::mutex> lock(_mapLock);
     auto itVma = _vmaMap.find(ptr);
-    if (itVma == _vmaMap.end())
+    if (itVma == _vmaMap.end()) {
+      debug("mmap: invalid free: %p", ptr);
       return;
+    }
 
     d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
 
