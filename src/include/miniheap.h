@@ -37,6 +37,9 @@ template <typename SuperHeap,
           unsigned int FullNumerator = 3,
           unsigned int FullDenominator = 4>
 class MiniHeapBase : public SuperHeap {
+private:
+  DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
+
 public:
   enum { Alignment = (int)MinObjectSize };
   static const size_t span_size = SpanSize;
@@ -82,6 +85,9 @@ public:
         auto spanStart = reinterpret_cast<uintptr_t>(_span);
         d_assert_msg(ptrval+sz <= spanStart+SpanSize,
                      "OOB alloc? sz:%zu (%p-%p) ptr:%p rand:%zu count:%zu osize:%zu\n", sz, _span, spanStart+SpanSize, ptrval, random, _maxCount, _objectSize);
+
+        memset(ptr, 'A', sz);
+
         return ptr;
       }
     }
@@ -99,6 +105,7 @@ public:
     d_assert(off < _maxCount);
 
     if (_bitmap.isSet(off)) {
+      memset(ptr, 'F', _objectSize);
       _bitmap.reset(off);
       _inUseCount--;
       if (_done) {

@@ -19,12 +19,14 @@ template <int NumBins,
           typename BigHeap>
 class MeshingHeap {
 private:
+  DISALLOW_COPY_AND_ASSIGN(MeshingHeap);
   typedef MiniHeapBase<SuperHeap, internal::Heap> MiniHeap;
 
 public:
   enum { Alignment = 16 };  // FIXME
 
   MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), _littleheaps(), _miniheaps() {
+    debug("MeshingHeap init");
     static_assert(getClassMaxSize(NumBins-1) == 16384, "expected 16k max object size");
     static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
     for (auto i = 0; i < NumBins; i++) {
@@ -38,43 +40,42 @@ public:
 
     d_assert_msg(sz <= sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", sz, sizeMax, sizeClass);
 
-    void *ptr = nullptr;
+    if (sizeMax > _maxObjectSize)
+      return _bigheap.malloc(sz);
 
-    if (sizeMax <= _maxObjectSize) {
-      assert(sizeClass >= 0);
-      assert(sizeClass < NumBins);
+    d_assert(sizeMax <= _maxObjectSize);
+    d_assert(sizeClass >= 0);
+    d_assert(sizeClass < NumBins);
 
-      if (_current[sizeClass] == nullptr) {
-        void *buf = internal::Heap().malloc(sizeof(MiniHeap));
-        d_assert(buf != nullptr);
+    if (_current[sizeClass] == nullptr) {
+      void *buf = internal::Heap().malloc(sizeof(MiniHeap));
+      d_assert(buf != nullptr);
 
-        debug("\t%zu // %zu (%zu)", sizeClass, sizeMax, sz);
-        MiniHeap *mh = new (buf) MiniHeap(sizeMax);
-        d_assert(!mh->isFull());
+      debug("\t%zu // %zu (%zu)", sizeClass, sizeMax, sz);
+      MiniHeap *mh = new (buf) MiniHeap(sizeMax);
+      d_assert(!mh->isFull());
 
-        _littleheaps[sizeClass].push_back(mh);
-        _miniheaps[mh->getSpanStart()] = mh;
-        _current[sizeClass] = mh;
+      _littleheaps[sizeClass].push_back(mh);
+      _miniheaps[mh->getSpanStart()] = mh;
+      _current[sizeClass] = mh;
 
-        d_assert(_littleheaps[sizeClass].size() > 0);
-        d_assert(_littleheaps[sizeClass][_littleheaps[sizeClass].size()-1] == mh);
-        d_assert(_miniheaps[mh->getSpanStart()] == mh);
-        d_assert(_current[sizeClass] == mh);
-      }
-
-      d_assert(_current[sizeClass] != nullptr);
-      MiniHeap *mh = _current[sizeClass];
-
-      ptr = mh->malloc(sizeMax);
-      if (mh->isFull()) {
-        debug("\tzu // %zu FULL (%p)", sizeClass, sizeMax, mh);
-        mh->setDone();
-        _current[sizeClass] = nullptr;
-      }
-    } else {
-      ptr = _bigheap.malloc(sz);
-      // debug("BigAlloc(%zu) from mmap                                                     \t%p-%p", sz, ptr, reinterpret_cast<uintptr_t>(ptr)+sz);
+      d_assert(_littleheaps[sizeClass].size() > 0);
+      d_assert(_littleheaps[sizeClass][_littleheaps[sizeClass].size()-1] == mh);
+      d_assert(_miniheaps[mh->getSpanStart()] == mh);
+      d_assert(_current[sizeClass] == mh);
     }
+
+    d_assert(_current[sizeClass] != nullptr);
+    MiniHeap *mh = _current[sizeClass];
+
+    void *ptr = mh->malloc(sizeMax);
+    if (mh->isFull()) {
+      debug("\tzu // %zu FULL (%p)", sizeClass, sizeMax, mh);
+      mh->setDone();
+      _current[sizeClass] = nullptr;
+    }
+
+    d_assert(_current[sizeClass] != nullptr);
 
     return ptr;
   }
