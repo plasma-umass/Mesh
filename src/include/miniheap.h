@@ -36,7 +36,7 @@ template <typename SuperHeap,
           size_t SpanSize = 128UL * 1024UL, // 128Kb spans
           unsigned int FullNumerator = 3,
           unsigned int FullDenominator = 4>
-class MiniHeapBase : public SuperHeap {
+class MiniHeapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
 
@@ -45,11 +45,11 @@ public:
   static const size_t span_size = SpanSize;
 
   MiniHeapBase(size_t objectSize)
-    : SuperHeap(), _objectSize(objectSize), _maxCount(), _fullCount(), _inUseCount(),
-        _rng(seed(), seed()), _bitmap(), _done(false) {
+    : _objectSize(objectSize), _maxCount(), _fullCount(), _inUseCount(),
+      _rng(seed(), seed()), _bitmap(), _done(false), _super() {
 
     d_assert(_inUseCount == 0);
-    _span = SuperHeap::malloc(SpanSize);
+    _span = _super.malloc(SpanSize);
     if (!_span)
       abort();
 
@@ -125,7 +125,7 @@ public:
         debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount, (double)_inUseCount/_maxCount, _objectSize);
       }
       if (_inUseCount == 0 && _done) {
-        SuperHeap::free(_span);
+        _super.free(_span);
         // _span = (void *)0xdeadbeef;
         debug("FIXME: free MiniHeap metadata");
       }
@@ -165,6 +165,8 @@ public:
   MWC _rng;
   BitMap<InternalAlloc> _bitmap;
   bool _done;
+
+  SuperHeap _super;
 };
 
 #endif  // MESH_MINIHEAP_H
