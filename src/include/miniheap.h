@@ -88,6 +88,19 @@ public:
 
         memset(ptr, 'A', sz);
 
+        {
+          d_assert(getSize(ptr) == _objectSize);
+
+          auto span = reinterpret_cast<uintptr_t>(_span);
+          auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+
+          d_assert(span <= ptrval);
+          auto new_off = (ptrval - span)/_objectSize;
+          d_assert_msg(new_off == off, "off calc fucked up %zu %zu", off, new_off);
+          d_assert(new_off < _maxCount);
+
+        }
+
         return ptr;
       }
     }
@@ -95,7 +108,7 @@ public:
 
   inline void free(void *ptr) {
     d_assert(getSize(ptr) == _objectSize);
-    d_assert(!_done);
+    // d_assert(!_done);
 
     auto span = reinterpret_cast<uintptr_t>(_span);
     auto ptrval = reinterpret_cast<uintptr_t>(ptr);

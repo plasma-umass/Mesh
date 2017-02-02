@@ -70,12 +70,12 @@ public:
 
     void *ptr = mh->malloc(sizeMax);
     if (mh->isFull()) {
-      debug("\tzu // %zu FULL (%p)", sizeClass, sizeMax, mh);
+      debug("\t%zu // %zu FULL (%p)", sizeClass, sizeMax, mh);
       mh->setDone();
       _current[sizeClass] = nullptr;
     }
 
-    d_assert(_current[sizeClass] != nullptr);
+    // d_assert(_current[sizeClass] != nullptr);
 
     return ptr;
   }
