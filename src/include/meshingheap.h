@@ -13,7 +13,7 @@ using namespace HL;
 namespace mesh {
 
 template <int NumBins,
-          int (*getSizeClass)(const size_t),
+          constexpr int (*getSizeClass)(const size_t),
           size_t (*getClassMaxSize)(const int),
           typename SuperHeap,
           typename BigHeap>
@@ -25,6 +25,7 @@ public:
   enum { Alignment = 16 };  // FIXME
 
   MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), _littleheaps(), _miniheaps() {
+    static_assert(getClassMaxSize(NumBins-1) == 16384, "expected 16k max object size");
     static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
     for (auto i = 0; i < NumBins; i++) {
       _current[i] = nullptr;
@@ -39,14 +40,15 @@ public:
 
     void *ptr = nullptr;
 
-    if (likely(sz <= _maxObjectSize)) {
+    if (sizeMax <= _maxObjectSize) {
       assert(sizeClass >= 0);
       assert(sizeClass < NumBins);
 
-      if (unlikely(_current[sizeClass] == nullptr)) {
+      if (_current[sizeClass] == nullptr) {
         void *buf = internal::Heap().malloc(sizeof(MiniHeap));
         d_assert(buf != nullptr);
 
+        debug("\t%zu // %zu (%zu)", sizeClass, sizeMax, sz);
         MiniHeap *mh = new (buf) MiniHeap(sizeMax);
         d_assert(!mh->isFull());
 
@@ -63,8 +65,10 @@ public:
       d_assert(_current[sizeClass] != nullptr);
       MiniHeap *mh = _current[sizeClass];
 
-      ptr = mh->malloc(sz);
+      ptr = mh->malloc(sizeMax);
       if (mh->isFull()) {
+        debug("\tzu // %zu FULL (%p)", sizeClass, sizeMax, mh);
+        mh->setDone();
         _current[sizeClass] = nullptr;
       }
     } else {
