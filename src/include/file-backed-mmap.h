@@ -199,7 +199,7 @@ public:
     }
 
     d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
-    //munmap(ptr, itVma->second);
+    munmap(ptr, itVma->second);
 
     _vmaMap.erase(itVma);
   }
