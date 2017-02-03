@@ -136,13 +136,12 @@ public:
     
     _inUseCount--;
 
-    if (_done) {
-      debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount, (double)_inUseCount/_maxCount, _objectSize);
-    }
+    // if (_done) {
+    //   debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount, (double)_inUseCount/_maxCount, _objectSize);
+    // }
     if (_inUseCount == 0 && _done) {
       _super.free(_span);
-      // _span = (void *)0xdeadbeef;
-      debug("FIXME: free MiniHeap metadata");
+      //_span = (void *)0xdeadbeef;
     }
   }
 
@@ -163,7 +162,6 @@ public:
   }
 
   inline void setDone() {
-    debug("MiniHeap(%p): DONE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount, (double)_inUseCount/_maxCount, _objectSize);
     _done = true;
   }
 

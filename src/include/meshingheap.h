@@ -25,7 +25,7 @@ private:
 public:
   enum { Alignment = 16 };
 
-  MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), /*_littleheaps(),*/ _miniheaps() {
+  MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), _littleheaps(), _miniheaps() {
     debug("MeshingHeap init");
     static_assert(getClassMaxSize(NumBins-1) == 16384, "expected 16k max object size");
     static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
@@ -55,12 +55,12 @@ public:
       MiniHeap *mh = new (buf) MiniHeap(sizeMax);
       d_assert(!mh->isFull());
 
-      //_littleheaps[sizeClass].push_back(mh);
+      _littleheaps[sizeClass].push_back(mh);
       _miniheaps[mh->getSpanStart()] = mh;
       _current[sizeClass] = mh;
 
-      //d_assert(_littleheaps[sizeClass].size() > 0);
-      //d_assert(_littleheaps[sizeClass][_littleheaps[sizeClass].size()-1] == mh);
+      d_assert(_littleheaps[sizeClass].size() > 0);
+      d_assert(_littleheaps[sizeClass][_littleheaps[sizeClass].size()-1] == mh);
       d_assert(_miniheaps[mh->getSpanStart()] == mh);
       d_assert(_current[sizeClass] == mh);
     }
@@ -70,7 +70,6 @@ public:
 
     void *ptr = mh->malloc(sizeMax);
     if (mh->isFull()) {
-      debug("\t%zu // %zu FULL (%p)", sizeClass, sizeMax, mh);
       mh->setDone();
       _current[sizeClass] = nullptr;
     }
@@ -133,7 +132,7 @@ private:
   BigHeap _bigheap;
   MiniHeap *_current[NumBins];
 
-  //internal::vector<MiniHeap *> _littleheaps[NumBins];
+  internal::vector<MiniHeap *> _littleheaps[NumBins];
   internal::map<uintptr_t, MiniHeap *> _miniheaps;
 };
 }
