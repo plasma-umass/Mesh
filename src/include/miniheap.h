@@ -140,6 +140,7 @@ public:
     //   debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount, (double)_inUseCount/_maxCount, _objectSize);
     // }
     if (_inUseCount == 0 && _done) {
+      debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount, (double)_inUseCount/_maxCount, _objectSize);
       _super.free(_span);
       //_span = (void *)0xdeadbeef;
     }
@@ -163,6 +164,14 @@ public:
 
   inline void setDone() {
     _done = true;
+  }
+
+  inline bool isDone() {
+    return _done;
+  }
+
+  inline bool isEmpty() {
+    return _inUseCount == 0;
   }
 
   void *_span;

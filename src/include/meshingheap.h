@@ -105,6 +105,10 @@ public:
     auto mh = miniheapFor(ptr);
     if (mh) {
       mh->free(ptr);
+      if (mh->isDone() && mh->isEmpty()) {
+        // FIXME: free up heap metadata
+        _miniheaps.erase(reinterpret_cast<uintptr_t>(mh));
+      }
     } else {
       // debug("freeing big %p, know about small:", ptr);
       // for(auto i : _miniheaps) {
