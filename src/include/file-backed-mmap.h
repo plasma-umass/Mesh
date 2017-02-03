@@ -135,7 +135,7 @@ public:
     auto itFd = _fdMap.find(ptr);
     d_assert(itFd != _fdMap.end());
 
-    //munmap(ptr, itVma->second);
+    munmap(ptr, itVma->second);
     // TODO: unlink
     close(itFd->second);
 
