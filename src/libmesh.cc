@@ -22,7 +22,7 @@
 #include "wrappers/gnuwrapper.cpp"
 
 // mmaps over named files
-class TopHeap : public ExactlyOneHeap<mesh::FileBackedMmapHeap> {};
+class TopHeap : public ExactlyOneHeap<mesh::MmapHeap> {};
 // anon mmaps
 class TopBigHeap : public ExactlyOneHeap<mesh::MmapHeap> {};
 
