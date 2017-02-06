@@ -33,12 +33,14 @@
 #else
 // UNIX
 #include <fcntl.h>
+#include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <map>
 #endif
+
 
 #include <new>
 
@@ -57,6 +59,8 @@
  * @brief Modified MmapHeap for use in Mesh.
  */
 
+static void *instance;
+
 namespace mesh {
 
 class FileBackedMmapHeap {
@@ -66,10 +70,27 @@ protected:
   internal::unordered_map<void *, int> _fdMap;
   std::mutex _mapLock;
 
+  static void staticPrepareForFork() {
+    d_assert(instance != nullptr);
+    reinterpret_cast<FileBackedMmapHeap *>(instance)->prepareForFork();
+  }
+
+  void prepareForFork() {
+    debug("FileBackedMmapHeap(%p): preparing for fork", this);
+  }
+
 public:
   enum { Alignment = MmapWrapper::Alignment };
 
-  FileBackedMmapHeap() : _vmaMap(), _fdMap(), _mapLock() {}
+  FileBackedMmapHeap() : _vmaMap(), _fdMap(), _mapLock() {
+    d_assert(instance == nullptr);
+    instance = this;
+
+    on_exit([](int status, void *arg){
+        debug("FileBackedMmapHeap(%p): atexit!", arg);
+      }, this);
+    pthread_atfork(staticPrepareForFork, NULL, NULL);
+  }
 
   inline void *malloc(size_t sz) {
     if (sz == 0)
@@ -80,9 +101,9 @@ public:
 
     char buf[64];
     memset(buf, 0, 64);
-    sprintf(buf, "/tmp/alloc-mesh-%d", getpid());
+    sprintf(buf, "/dev/shm/alloc-mesh-%d", getpid());
     mkdir(buf, 0755);
-    sprintf(buf, "/tmp/alloc-mesh-%d/XXXXXX", getpid());
+    sprintf(buf, "/dev/shm/alloc-mesh-%d/XXXXXX", getpid());
 
     int fd = mkstemp(buf);
     if (fd < 0) {
