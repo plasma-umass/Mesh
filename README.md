@@ -18,10 +18,10 @@ Heap used for allocating program memory lives.
 DEFINITIONS
 -----------
 
-- **Page**: The smallest block of memory managed by the operating system,
-  4Kb on Linux.  Memory given to the allocator by the operating system
-  is always in multiples of the page size, and aligned to the page
-  size.
+- **Page**: The smallest block of memory managed by the operating
+  system, 4Kb on most architectures.  Memory given to the allocator by
+  the operating system is always in multiples of the page size, and
+  aligned to the page size.
 - **Span**: The size of memory managed by Mesh -- [currently 128
   Kb](src/include/miniheap.h#L36).
   It is larger than the page size to amortize the cost of heap
