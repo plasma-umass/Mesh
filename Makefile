@@ -6,6 +6,7 @@ OBJS = $(SRCS:.cc=.o)
 
 LIB = libmesh.so
 
+HEAP_LAYERS = Heap-Layers
 
 CONFIG = Makefile config.mk
 
@@ -21,6 +22,11 @@ endif
 
 all: $(LIB) run
 
+$(HEAP_LAYERS):
+	@echo "  GIT   $@"
+	git submodule update --init
+	touch $@
+
 %.o: %.c $(CONFIG)
 	@echo "  CC    $@"
 	$(CC) $(CFLAGS) -MMD -o $@ -c $<
@@ -29,7 +35,7 @@ all: $(LIB) run
 	@echo "  CXX   $@"
 	$(CXX) $(CXXFLAGS) -MMD -o $@ -c $<
 
-$(LIB): $(OBJS) $(CONFIG)
+$(LIB): $(HEAP_LAYERS) $(OBJS) $(CONFIG)
 	@echo "  LD    $@"
 	$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
