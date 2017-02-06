@@ -10,10 +10,23 @@ infrastructure for building high performance memory allocators in C++
 [paper](https://people.cs.umass.edu/~emery/pubs/berger-pldi2001.pdf)
 for details.
 
-The main file that defines the core of the library is [libmesh.cc](src/libmesh.cc).
+The entry point of the library is [`libmesh.cc`](src/libmesh.cc).
+This file is where `malloc`, `free` and the instantiations of the
+Heaps used for allocating program and mesh-internal memory live.
+
+
+BUILDING
+--------
+
+Running `make` will build the library and run a simple test of
+executing `git status` with `libmesh` as the allocator:
+
+```
+$ make
+```
+
 
 TODO
 ----
 
-- modify StrictSegHeap to keep track of hashmap of miniheaps
-- wire up delete
+- Fix issue with `FileBackedMmapHeap` on fork (shared pages between processes) 
