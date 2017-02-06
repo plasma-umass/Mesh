@@ -19,7 +19,7 @@ endif
 .SUFFIXES:
 .SUFFIXES: .cc .cpp .c .o .d .test
 
-all: $(LIB)
+all: $(LIB) run
 
 %.o: %.c $(CONFIG)
 	@echo "  CC    $@"
@@ -44,6 +44,9 @@ clean:
 paper:
 	$(MAKE) -C paper
 
+run: $(LIB)
+	./run
+
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
 	@echo "  TAGS"
@@ -51,4 +54,4 @@ TAGS:
 
 -include $(OBJS:.o=.d)
 
-.PHONY: all clean install paper TAGS
+.PHONY: all clean install paper run TAGS
