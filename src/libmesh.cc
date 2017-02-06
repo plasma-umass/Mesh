@@ -3,8 +3,8 @@
 #include <stdio.h>   // for sprintf
 #include <stdlib.h>  // for abort
 #include <unistd.h>  // for write
-#include <cstddef>   // for size_t
 #include <cstdarg>   // for va_start + friends
+#include <cstddef>   // for size_t
 #include <new>       // for operator new
 
 // never allocate exeecutable heap
@@ -21,28 +21,20 @@
 
 #include "wrappers/gnuwrapper.cpp"
 
-// mmaps over named files
+// The top heap provides memory to back spans managed by MiniHeaps.
 class TopHeap : public ExactlyOneHeap<mesh::MmapHeap> {};
-// anon mmaps
+// The top big heap is called to handle malloc requests for large
+// objects.  We define a separate class to handle these to segregate
+// bookkeeping for large malloc requests from the ones used to back
+// spans (which are allocated from TopHeap)
 class TopBigHeap : public ExactlyOneHeap<mesh::MmapHeap> {};
 
-// fewer buckets than regular KingsleyHeap (to ensure multiple objects fit in the 128Kb spans used by MiniHeaps).
+// fewer buckets than regular KingsleyHeap (to ensure multiple objects
+// fit in the 128Kb spans used by MiniHeaps).
 class BottomHeap : public mesh::MeshingHeap<11, mesh::size2Class, mesh::class2Size, TopHeap, TopBigHeap> {};
 
 // TODO: remove the LockedHeap here and use a per-thread BottomHeap
 class CustomHeap : public ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> {};
-
-// thread_local CustomHeap *perThreadHeap;
-
-// inline static CustomHeap *getCustomHeap(void) {
-//   if (!perThreadHeap) {
-//     void *buf = InternalHeap().malloc(sizeof(CustomHeap));
-//     if (!buf)
-//       abort();
-//     perThreadHeap = new (buf) CustomHeap();
-//   }
-//   return perThreadHeap;
-// }
 
 inline static CustomHeap *getCustomHeap(void) {
   static char buf[sizeof(CustomHeap)];
@@ -51,6 +43,8 @@ inline static CustomHeap *getCustomHeap(void) {
   return heap;
 }
 
+// mutex protecting debug and __mesh_assert_fail to avoid concurrent
+// use of static buffers by multiple threads
 inline static std::mutex *getAssertMutex(void) {
   static char buf[sizeof(std::mutex)];
   static std::mutex *assertMutex = new (buf) std::mutex();
@@ -58,24 +52,31 @@ inline static std::mutex *getAssertMutex(void) {
   return assertMutex;
 }
 
-// non-threadsafe printf-like debug statements
+// threadsafe printf-like debug statements safe for use in an
+// allocator (it will never call into malloc or free to allocate
+// memory)
 void debug(const char *fmt, ...) {
-  static char buf[256];
+  constexpr size_t buf_len = 4096;
+  static char buf[buf_len];
+  std::lock_guard<std::mutex> lock(*getAssertMutex());
+
   va_list args;
 
   va_start(args, fmt);
-  int len = vsnprintf(buf, 255, fmt, args);
+  int len = vsnprintf(buf, buf_len - 1, fmt, args);
   va_end(args);
 
-  buf[255] = 0;
+  buf[buf_len - 1] = 0;
   if (len > 0) {
     write(STDERR_FILENO, buf, len);
     // ensure a trailing newline is written out
-    if (buf[len-1] != '\n')
+    if (buf[len - 1] != '\n')
       write(STDERR_FILENO, "\n", 1);
   }
 }
 
+// out-of-line function called to report an error and exit the program
+// when an assertion failed.
 void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file, int line, const char *fmt, ...) {
   constexpr size_t buf_len = 4096;
   constexpr size_t usr_len = 512;
@@ -86,12 +87,12 @@ void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file,
   va_list args;
 
   va_start(args, fmt);
-  (void)vsnprintf(usr, usr_len-1, fmt, args);
+  (void)vsnprintf(usr, usr_len - 1, fmt, args);
   va_end(args);
 
-  usr[usr_len-1] = 0;
+  usr[usr_len - 1] = 0;
 
-  int len = snprintf(buf, buf_len-1, "%s:%d: ASSERTION '%s' FAILED: %s\n", file, line, assertion, usr);
+  int len = snprintf(buf, buf_len - 1, "%s:%d: ASSERTION '%s' FAILED: %s\n", file, line, assertion, usr);
   if (len > 0) {
     write(STDERR_FILENO, buf, len);
   }
