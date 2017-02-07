@@ -60,7 +60,8 @@ public:
     // we're dealing with 0-indexed offsets
     uniform_int_distribution<size_t> distribution(0, _maxCount - 1);
 
-    // because we are not full, this is guaranteed to terminate
+    // because our span is not full and no other malloc is running
+    // concurrently on this span, this is guaranteed to terminate
     while (true) {
       size_t off = distribution(_prng);
 
@@ -69,17 +70,7 @@ public:
 
       _inUseCount++;
 
-      // we JUST set the bitmap
-      auto ptr = reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
-      d_assert(reinterpret_cast<uintptr_t>(ptr) != getSpanStart() + span_size);
-
-      // auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-      // auto spanStart = reinterpret_cast<uintptr_t>(_span);
-      // d_assert_msg(ptrval + sz <= spanStart + SpanSize,
-      //              "OOB alloc? sz:%zu (%p-%p) ptr:%p rand:%zu count:%zu osize:%zu\n", sz, _span, spanStart + SpanSize,
-      //              ptrval, random, _maxCount, _objectSize);
-
-      return ptr;
+      return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
     }
   }
 
