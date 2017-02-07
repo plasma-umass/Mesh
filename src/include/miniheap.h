@@ -9,22 +9,32 @@
 
 #include "heaplayers.h"
 #include "internal.h"
-#include "rng/mwc.h"
 
-using namespace HL;
+using std::lock_guard;
+using std::mutex;
+using std::uniform_int_distribution;
 
-uint32_t seed() {
-  // single random_device to seed the random number generators in MiniHeaps
-  static std::random_device rd;
-  static std::mutex rdLock;
+namespace mesh {
 
-  std::lock_guard<std::mutex> lock(rdLock);
+uint64_t seed() {
+  static char muBuf[sizeof(std::mutex)];
+  static std::mutex *mu = new (muBuf) std::mutex();
 
-  uint32_t seed = 0;
-  while (seed == 0) {
-    seed = rd();
-  }
-  return seed;
+  static char mtBuf[sizeof(std::mt19937_64)];
+  static std::mt19937_64 *mt = NULL;
+
+  lock_guard<mutex> lock(*mu);
+
+  if (likely(mt != nullptr))
+    return (*mt)();
+
+  // first time requesting a seed
+  std::random_device rd;
+  mt = new (mtBuf) std::mt19937_64(rd());
+
+  static_assert(sizeof(std::mt19937_64::result_type) == sizeof(uint64_t), "expected 64-bit result_type for PRNG");
+
+  return (*mt)();
 }
 
 template <typename SuperHeap,
@@ -44,19 +54,11 @@ public:
   enum { Alignment = (int)MinObjectSize };
   static const size_t span_size = SpanSize;
 
-  MiniHeapBase(size_t objectSize)
-    : _objectSize(objectSize), _maxCount(), _fullCount(), _inUseCount(),
-      _rng(seed(), seed()), _bitmap(), _done(false), _super() {
-
-    d_assert(_inUseCount == 0);
-
+  MiniHeapBase(size_t objectSize) : _objectSize(objectSize), _prng(seed()) {
     _span = _super.malloc(SpanSize);
     if (!_span)
       abort();
 
-    d_assert(_inUseCount == 0);
-
-    constexpr auto heapPages = SpanSize / PageSize;
     _maxCount = SpanSize / objectSize;
     _fullCount = FullNumerator * _maxCount / FullDenominator;
 
@@ -65,18 +67,23 @@ public:
     // for error detection
     memset(_span, 'S', SpanSize);
 
-    debug("MiniHeap(%zu): reserving %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n",
-          objectSize, _maxCount, heapPages, FullNumerator, FullDenominator, _fullCount,
-          this->isFull(), _inUseCount, _span, reinterpret_cast<uintptr_t>(_span)+SpanSize);
+    constexpr auto heapPages = SpanSize / PageSize;
+    debug("MiniHeap(%zu): reserving %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n", objectSize,
+          _maxCount, heapPages, FullNumerator, FullDenominator, _fullCount, this->isFull(), _inUseCount, _span,
+          reinterpret_cast<uintptr_t>(_span) + SpanSize);
   }
 
   inline void *malloc(size_t sz) {
     d_assert(!_done && !isFull());
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
+    // endpoint is _inclusive_, so we subtract 1 from maxCount since
+    // we're dealing with 0-indexed offsets
+    uniform_int_distribution<size_t> distribution(0, _maxCount - 1);
+
     // because we are not full, this is guaranteed to terminate
     while (true) {
-      size_t off = _rng.next() % _maxCount;
+      size_t off = distribution(_prng);
 
       if (!_bitmap.tryToSet(off))
         continue;
@@ -88,13 +95,14 @@ public:
 
       auto ptrval = reinterpret_cast<uintptr_t>(ptr);
       auto spanStart = reinterpret_cast<uintptr_t>(_span);
-      d_assert_msg(ptrval+sz <= spanStart+SpanSize,
-                   "OOB alloc? sz:%zu (%p-%p) ptr:%p rand:%zu count:%zu osize:%zu\n", sz, _span, spanStart+SpanSize, ptrval, random, _maxCount, _objectSize);
+      d_assert_msg(ptrval + sz <= spanStart + SpanSize,
+                   "OOB alloc? sz:%zu (%p-%p) ptr:%p rand:%zu count:%zu osize:%zu\n", sz, _span, spanStart + SpanSize,
+                   ptrval, random, _maxCount, _objectSize);
 
       char *charPtr = reinterpret_cast<char *>(ptr);
       for (size_t i = 0; i < _objectSize; i++) {
-        d_assert_msg(charPtr[i] == 'S' || charPtr[i] == 'F',
-                     "MiniHeap(%p): on span %p (sz:%zu) %zu not 'F' or 'S': %s", this, _span, _objectSize, i, charPtr[i]);
+        d_assert_msg(charPtr[i] == 'S' || charPtr[i] == 'F', "MiniHeap(%p): on span %p (sz:%zu) %zu not 'F' or 'S': %s",
+                     this, _span, _objectSize, i, charPtr[i]);
       }
       memset(ptr, 'A', sz);
 
@@ -105,7 +113,7 @@ public:
         auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
         d_assert(span <= ptrval);
-        auto new_off = (ptrval - span)/_objectSize;
+        auto new_off = (ptrval - span) / _objectSize;
         d_assert_msg(new_off == off, "off calc fucked up %zu %zu", off, new_off);
         d_assert(new_off < _maxCount);
       }
@@ -123,7 +131,7 @@ public:
     auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
     d_assert(span <= ptrval);
-    auto off = (ptrval - span)/_objectSize;
+    auto off = (ptrval - span) / _objectSize;
 
     d_assert(off < _maxCount);
     d_assert_msg(_bitmap.isSet(off), "MiniHeap(%p): caught double free of %p?", this, ptr);
@@ -133,16 +141,18 @@ public:
 
     _bitmap.reset(off);
     d_assert(!_bitmap.isSet(off));
-    
+
     _inUseCount--;
 
     // if (_done) {
-    //   debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount, (double)_inUseCount/_maxCount, _objectSize);
+    //   debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount,
+    //   (double)_inUseCount/_maxCount, _objectSize);
     // }
     if (_inUseCount == 0 && _done) {
-      debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount, (double)_inUseCount/_maxCount, _objectSize);
+      debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount,
+            (double)_inUseCount / _maxCount, _objectSize);
       _super.free(_span);
-      //_span = (void *)0xdeadbeef;
+      _span = reinterpret_cast<void *>(0xdeadbeef);
     }
   }
 
@@ -176,14 +186,15 @@ public:
 
   void *_span;
   size_t _objectSize;
-  size_t _maxCount;
-  size_t _fullCount;
-  size_t _inUseCount;
-  MWC _rng;
-  BitMap<InternalAlloc> _bitmap;
-  bool _done;
+  size_t _maxCount{0};
+  size_t _fullCount{0};
+  size_t _inUseCount{0};
+  mt19937_64 _prng;
+  BitMap<InternalAlloc> _bitmap{};
+  bool _done{false};
 
-  SuperHeap _super;
+  SuperHeap _super{};
 };
+}
 
 #endif  // MESH_MINIHEAP_H
