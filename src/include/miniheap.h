@@ -42,10 +42,14 @@ public:
 
     _bitmap.reserve(_maxCount);
 
+    dumpDebug();
+  }
+
+  void dumpDebug() const {
     constexpr auto heapPages = SpanSize / PageSize;
-    debug("MiniHeap(%zu): reserving %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n", objectSize,
-          _maxCount, heapPages, FullNumerator, FullDenominator, _fullCount, this->isFull(), _inUseCount, _span,
-          reinterpret_cast<uintptr_t>(_span) + SpanSize);
+    debug("MiniHeap(%p:%5zu): %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n",
+          this, _objectSize, _maxCount, heapPages, FullNumerator, FullDenominator, _fullCount, this->isFull(),
+          _inUseCount, _span, reinterpret_cast<uintptr_t>(_span) + SpanSize);
   }
 
   inline void *malloc(size_t sz) {
@@ -66,13 +70,14 @@ public:
       _inUseCount++;
 
       // we JUST set the bitmap
-      auto ptr = reinterpret_cast<void *>((uintptr_t)_span + off * _objectSize);
+      auto ptr = reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
+      d_assert(reinterpret_cast<uintptr_t>(ptr) != getSpanStart() + span_size);
 
-      auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-      auto spanStart = reinterpret_cast<uintptr_t>(_span);
-      d_assert_msg(ptrval + sz <= spanStart + SpanSize,
-                   "OOB alloc? sz:%zu (%p-%p) ptr:%p rand:%zu count:%zu osize:%zu\n", sz, _span, spanStart + SpanSize,
-                   ptrval, random, _maxCount, _objectSize);
+      // auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+      // auto spanStart = reinterpret_cast<uintptr_t>(_span);
+      // d_assert_msg(ptrval + sz <= spanStart + SpanSize,
+      //              "OOB alloc? sz:%zu (%p-%p) ptr:%p rand:%zu count:%zu osize:%zu\n", sz, _span, spanStart + SpanSize,
+      //              ptrval, random, _maxCount, _objectSize);
 
       return ptr;
     }
@@ -106,19 +111,23 @@ public:
     }
   }
 
-  inline size_t getSize(void *ptr) {
-    // auto span = reinterpret_cast<uintptr_t>(_span);
-    // auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    // d_assert_msg(span <= ptrval && ptrval < span + SpanSize, "span(%p) <= %p < %p", span, ptrval, span + SpanSize);
+  inline bool contains(void *ptr) const {
+    auto span = reinterpret_cast<uintptr_t>(_span);
+    auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+    return span <= ptrval && ptrval < span + SpanSize;
+  }
+
+  inline size_t getSize(void *ptr) const {
+    d_assert_msg(contains(ptr), "span(%p) <= %p < %p", _span, ptr, reinterpret_cast<uintptr_t>(_span) + SpanSize);
 
     return _objectSize;
   }
 
-  inline bool isFull() {
+  inline bool isFull() const {
     return _inUseCount >= _fullCount;
   }
 
-  inline uintptr_t getSpanStart() {
+  inline uintptr_t getSpanStart() const {
     return reinterpret_cast<uintptr_t>(_span);
   }
 
@@ -126,11 +135,11 @@ public:
     _done = true;
   }
 
-  inline bool isDone() {
+  inline bool isDone() const {
     return _done;
   }
 
-  inline bool isEmpty() {
+  inline bool isEmpty() const {
     return _inUseCount == 0;
   }
 
