@@ -126,6 +126,7 @@ private:
 
 protected:
   internal::unordered_map<void *, int> _fdMap{};
+  bool _skipFd{false};
 
   static void staticPrepareForFork() {
     d_assert(instance != nullptr);
