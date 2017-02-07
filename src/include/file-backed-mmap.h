@@ -122,19 +122,66 @@ public:
 class FileBackedMmapHeap : public MmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(FileBackedMmapHeap);
-  typedef MmapHeap SuperHeap;
 
 protected:
+  typedef MmapHeap SuperHeap;
+
   internal::unordered_map<void *, int> _fdMap{};
-  bool _skipFd{false};
+  int _pipeFd[2]{-1, -1};
 
   static void staticPrepareForFork() {
     d_assert(instance != nullptr);
     reinterpret_cast<FileBackedMmapHeap *>(instance)->prepareForFork();
   }
 
+  static void staticAfterForkParent() {
+    d_assert(instance != nullptr);
+    reinterpret_cast<FileBackedMmapHeap *>(instance)->afterForkParent();
+  }
+
+  static void staticAfterForkChild() {
+    d_assert(instance != nullptr);
+    reinterpret_cast<FileBackedMmapHeap *>(instance)->afterForkChild();
+  }
+
   void prepareForFork() {
+    xxmalloc_lock();
+    int err = pipe(_pipeFd);
+    if (err == -1)
+      abort();
     debug("FileBackedMmapHeap(%p): preparing for fork", this);
+  }
+
+  void afterForkParent() {
+    xxmalloc_unlock();
+    close(_pipeFd[1]);
+    char buf[8];
+    memset(buf, 0, 8);
+
+    // wait for our child to close + reopen memory.  Without this
+    // fence, we may experience memory corruption?
+
+    while (read(_pipeFd[0], buf, 4) == EAGAIN) {}
+    close(_pipeFd[0]);
+
+    _pipeFd[0] = -1;
+    _pipeFd[1] = -1;
+
+    d_assert(strcmp(buf, "ok") == 0);
+  }
+
+  void afterForkChild() {
+    xxmalloc_unlock();
+    close(_pipeFd[0]);
+
+    // TODO: close + reopen all memory.  malloc is locked in the
+    // parent while this happens
+
+    while (write(_pipeFd[1], "ok", strlen("ok")) == EAGAIN) {}
+    close(_pipeFd[1]);
+
+    _pipeFd[0] = -1;
+    _pipeFd[1] = -1;
   }
 
 public:
@@ -144,8 +191,7 @@ public:
     d_assert(instance == nullptr);
     instance = this;
 
-    on_exit([](int status, void *arg) { debug("FileBackedMmapHeap(%p): atexit!", arg); }, this);
-    pthread_atfork(staticPrepareForFork, NULL, NULL);
+    pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
   }
 
   inline void *malloc(size_t sz) {

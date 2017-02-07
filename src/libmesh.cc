@@ -110,11 +110,15 @@ size_t xxmalloc_usable_size(void *ptr) {
   return getCustomHeap()->getSize(ptr);
 }
 
-void xxmalloc_lock() {
-  debug("MALLOC LOCK CALLED");
+// ensure we don't concurrently allocate/mess with internal heap data
+// structures while forking
+void xxmalloc_lock(void) {
+  getCustomHeap()->lock();
 }
 
-void xxmalloc_unlock() {
-  debug("MALLOC UNLOCK CALLED");
+// ensure we don't concurrently allocate/mess with internal heap data
+// structures while forking
+void xxmalloc_unlock(void) {
+  getCustomHeap()->unlock();
 }
 }
