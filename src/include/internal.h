@@ -47,6 +47,11 @@ void debug(const char *fmt, ...);
 #define d_assert(expr, fmt, ...)
 #endif
 
+extern "C" {
+void xxmalloc_lock(void);
+void xxmalloc_unlock(void);
+}
+
 #include "heaplayers.h"
 
 namespace mesh {
@@ -71,7 +76,7 @@ inline static mutex *getSeedMutex(void) {
 
 // we must re-initialize our seed on program startup and after fork.
 // Must be called with getSeedMutex() held
-mt19937_64 *initSeed() {
+mt19937_64 *initSeed(void) {
   static char mtBuf[sizeof(mt19937_64)];
 
   static_assert(sizeof(mt19937_64::result_type) == sizeof(uint64_t), "expected 64-bit result_type for PRNG");
@@ -81,7 +86,7 @@ mt19937_64 *initSeed() {
   return new (mtBuf) std::mt19937_64(rd());
 }
 
-inline uint64_t seed() {
+inline uint64_t seed(void) {
   static mt19937_64 *mt = NULL;
 
   lock_guard<mutex> lock(*getSeedMutex());
