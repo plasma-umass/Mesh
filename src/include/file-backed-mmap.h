@@ -41,7 +41,6 @@
 #include <map>
 #endif
 
-
 #include <new>
 
 #include "internal.h"
@@ -63,12 +62,70 @@ static void *instance;
 
 namespace mesh {
 
-class FileBackedMmapHeap {
+class MmapHeap {
+private:
+  DISALLOW_COPY_AND_ASSIGN(MmapHeap);
 
 protected:
-  internal::unordered_map<void *, size_t> _vmaMap;
-  internal::unordered_map<void *, int> _fdMap;
-  std::mutex _mapLock;
+  internal::unordered_map<void *, size_t> _vmaMap{};
+
+public:
+  enum { Alignment = MmapWrapper::Alignment };
+
+  MmapHeap() {
+  }
+
+  inline void *map(size_t sz, int flags, int fd) {
+    if (sz == 0)
+      return nullptr;
+
+    // Round up to the size of a page.
+    sz = (sz + CPUInfo::PageSize - 1) & (size_t) ~(CPUInfo::PageSize - 1);
+
+    void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (ptr == MAP_FAILED)
+      abort();
+
+    _vmaMap[ptr] = sz;
+
+    d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
+
+    return ptr;
+  }
+
+  inline void *malloc(size_t sz) {
+    return map(sz, MAP_PRIVATE | MAP_ANONYMOUS, -1);
+  }
+
+  inline size_t getSize(void *ptr) {
+    auto entry = _vmaMap.find(ptr);
+    if (unlikely(entry == _vmaMap.end())) {
+      debug("mmap: invalid getSize: %p", ptr);
+      return 0;
+    }
+    return entry->second;
+  }
+
+  inline void free(void *ptr) {
+    auto entry = _vmaMap.find(ptr);
+    if (unlikely(entry == _vmaMap.end())) {
+      debug("mmap: invalid free: %p", ptr);
+      return;
+    }
+
+    munmap(ptr, entry->second);
+
+    _vmaMap.erase(entry);
+  }
+};
+
+class FileBackedMmapHeap : public MmapHeap {
+private:
+  DISALLOW_COPY_AND_ASSIGN(FileBackedMmapHeap);
+  typedef MmapHeap SuperHeap;
+
+protected:
+  internal::unordered_map<void *, int> _fdMap{};
 
   static void staticPrepareForFork() {
     d_assert(instance != nullptr);
@@ -82,13 +139,11 @@ protected:
 public:
   enum { Alignment = MmapWrapper::Alignment };
 
-  FileBackedMmapHeap() : _vmaMap(), _fdMap(), _mapLock() {
+  FileBackedMmapHeap() : SuperHeap() {
     d_assert(instance == nullptr);
     instance = this;
 
-    on_exit([](int status, void *arg){
-        debug("FileBackedMmapHeap(%p): atexit!", arg);
-      }, this);
+    on_exit([](int status, void *arg) { debug("FileBackedMmapHeap(%p): atexit!", arg); }, this);
     pthread_atfork(staticPrepareForFork, NULL, NULL);
   }
 
@@ -117,112 +172,29 @@ public:
       abort();
     }
 
-    void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED, fd, 0);
+    void *ptr = SuperHeap::map(sz, MAP_SHARED, fd);
 
-    if (ptr == MAP_FAILED)
-      abort();
+    _fdMap[ptr] = fd;
 
-    {
-      std::lock_guard<std::mutex> lock(_mapLock);
-      _vmaMap[ptr] = sz;
-      _fdMap[ptr] = fd;
-    }
-
-    d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
-    return const_cast<void *>(ptr);
-  }
-
-  inline size_t getSize(void *ptr) {
-    std::lock_guard<std::mutex> lock(_mapLock);
-
-    auto itVma = _vmaMap.find(ptr);
-    if (itVma == _vmaMap.end()) {
-      debug("file-mmap: invalid getSize %p", ptr);
-      return 0;
-    }
-    return itVma->second;
+    return ptr;
   }
 
   inline void free(void *ptr) {
-    std::lock_guard<std::mutex> lock(_mapLock);
-    auto itVma = _vmaMap.find(ptr);
-    if (itVma == _vmaMap.end()) {
-      debug("file-mmap: invalid free %p", ptr);
-      return;
-    }
-
-    d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
-
-    auto itFd = _fdMap.find(ptr);
-    d_assert(itFd != _fdMap.end());
-
-    munmap(ptr, itVma->second);
-    // TODO: unlink
-    close(itFd->second);
-
-    _vmaMap.erase(itVma);
-    _fdMap.erase(itFd);
-
-    debug("FileBackedMmap: freed %p", ptr);
-  }
-};
-
-class MmapHeap {
-private:
-  DISALLOW_COPY_AND_ASSIGN(MmapHeap);
-
-protected:
-  internal::unordered_map<void *, size_t> _vmaMap;
-  std::mutex _mapLock;
-
-public:
-  enum { Alignment = MmapWrapper::Alignment };
-
-  MmapHeap() : _vmaMap(), _mapLock() {}
-
-  inline void *malloc(size_t sz) {
-    if (sz == 0)
-      return nullptr;
-
-    // Round up to the size of a page.
-    sz = (sz + CPUInfo::PageSize - 1) & (size_t) ~(CPUInfo::PageSize - 1);
-
-    void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (ptr == MAP_FAILED)
-      abort();
-
-    {
-      std::lock_guard<std::mutex> lock(_mapLock);
-      _vmaMap[ptr] = sz;
-    }
-
-    d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
-    return const_cast<void *>(ptr);
-  }
-
-  inline size_t getSize(void *ptr) {
-    std::lock_guard<std::mutex> lock(_mapLock);
-
-    auto itVma = _vmaMap.find(ptr);
-    if (itVma == _vmaMap.end()) {
-      debug("mmap: invalid getSize: %p", ptr);
-      return 0;
-    }
-    return itVma->second;
-  }
-
-  inline void free(void *ptr) {
-    std::lock_guard<std::mutex> lock(_mapLock);
-    auto itVma = _vmaMap.find(ptr);
-    if (itVma == _vmaMap.end()) {
+    auto entry = _vmaMap.find(ptr);
+    if (unlikely(entry == _vmaMap.end())) {
       debug("mmap: invalid free: %p", ptr);
       return;
     }
 
-    d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
-    munmap(ptr, itVma->second);
+    munmap(ptr, entry->second);
 
-    _vmaMap.erase(itVma);
+    _vmaMap.erase(entry);
+
+    auto fdEntry = _fdMap.find(ptr);
+    d_assert(fdEntry != _fdMap.end());
+    // TODO: unlink
+    close(fdEntry->second);
+    _fdMap.erase(fdEntry);
   }
 };
 }
