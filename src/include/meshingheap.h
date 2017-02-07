@@ -4,8 +4,8 @@
 #ifndef MESH_MESHINGHEAP_H
 #define MESH_MESHINGHEAP_H
 
-#include "internal.h"
 #include "heaplayers.h"
+#include "internal.h"
 #include "miniheap.h"
 
 using namespace HL;
@@ -27,7 +27,7 @@ public:
 
   MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), _littleheaps(), _miniheaps() {
     debug("MeshingHeap init");
-    static_assert(getClassMaxSize(NumBins-1) == 16384, "expected 16k max object size");
+    static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
     static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
     for (auto i = 0; i < NumBins; i++) {
       _current[i] = nullptr;
@@ -52,7 +52,7 @@ public:
       if (buf == nullptr)
         abort();
 
-      //debug("\t%zu // %zu (%zu)", sizeClass, sizeMax, sz);
+      // debug("\t%zu // %zu (%zu)", sizeClass, sizeMax, sz);
       MiniHeap *mh = new (buf) MiniHeap(sizeMax);
       // d_assert(!mh->isFull());
 
@@ -82,16 +82,6 @@ public:
   }
 
   inline MiniHeap *miniheapFor(void *const ptr) {
-    MiniHeap *mh = nullptr;
-    for (auto i : _miniheaps) {
-      if (i.first <= (uintptr_t)ptr && (uintptr_t)ptr < i.first + MiniHeap::span_size) {
-        mh = i.second;
-        d_assert(mh->contains(ptr));
-      }
-    }
-    if (!mh)
-      return nullptr;
-
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     auto it = greatest_leq(_miniheaps, ptrval);
     if (it != _miniheaps.end()) {
@@ -100,29 +90,6 @@ public:
         return candidate;
     }
 
-    if (mh) {
-      debug("SHIT: %p in %p", ptr, mh);
-      mh->dumpDebug();
-      debug("FAILED:");
-      const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-      auto it = greatest_leq(_miniheaps, ptrval);
-      if (it != _miniheaps.end()) {
-        auto candidate = it->second;
-        d_assert(it->second != nullptr);
-        const auto spanStart = candidate->getSpanStart();
-        d_assert(spanStart == it->first);
-        debug("MiniHeap(%p)\t\t%d && %d (%p <= %p < %p)", mh,
-              spanStart <= ptrval,
-              ptrval < (spanStart + MiniHeap::span_size));
-        debug("\tmh == cand: %d", mh == candidate);
-        debug("\tspanStart:  %p", candidate->getSpanStart());
-        debug("\tspanStart:  %p", spanStart);
-        debug("\tptr:        %p", ptr);
-        debug("\tptrval:     %p", ptrval);
-        debug("\tss+sz :     %p", spanStart + MiniHeap::span_size);
-        mh->dumpDebug();
-      }
-    }
     return nullptr;
   }
 
@@ -135,11 +102,7 @@ public:
         _miniheaps.erase(reinterpret_cast<uintptr_t>(mh));
       }
     } else {
-      // debug("freeing big %p, know about small:", ptr);
-      // for(auto i : _miniheaps) {
-      //   debug("\t%p\n", i.first);
-      // }
-       _bigheap.free(ptr);
+      _bigheap.free(ptr);
     }
   }
 
