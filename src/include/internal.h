@@ -5,6 +5,7 @@
 #define MESH_INTERNAL_H
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <unordered_map>
 #include <vector>
