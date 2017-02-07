@@ -111,8 +111,8 @@ using vector = std::vector<T, STLAllocator<T, Heap>>;
 
 // https://stackoverflow.com/questions/529831/returning-the-greatest-key-strictly-less-than-the-given-key-in-a-c-map
 template <typename Map>
-typename Map::const_iterator greatest_less(Map const &m, typename Map::key_type const &k) {
-  typename Map::const_iterator it = m.lower_bound(k);
+typename Map::const_iterator greatest_leq(Map const &m, typename Map::key_type const &k) {
+  typename Map::const_iterator it = m.upper_bound(k);
   if (it != m.begin()) {
     return --it;
   }
@@ -121,8 +121,8 @@ typename Map::const_iterator greatest_less(Map const &m, typename Map::key_type 
 
 // https://stackoverflow.com/questions/529831/returning-the-greatest-key-strictly-less-than-the-given-key-in-a-c-map
 template <typename Map>
-typename Map::iterator greatest_less(Map &m, typename Map::key_type const &k) {
-  typename Map::iterator it = m.lower_bound(k);
+typename Map::iterator greatest_leq(Map &m, typename Map::key_type const &k) {
+  typename Map::iterator it = m.upper_bound(k);
   if (it != m.begin()) {
     return --it;
   }
