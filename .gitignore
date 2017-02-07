@@ -3,3 +3,4 @@
 *.o
 *.so
 TAGS
+/test/fork-example

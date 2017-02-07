@@ -44,14 +44,19 @@ install: $(LIB)
 	ldconfig
 
 clean:
+	rm -f test/fork-example
 	rm -f $(LIB) src/*.o src/*.gcda src/*.gcno src/*.d
 	find . -name '*~' -print0 | xargs -0 rm -f
 
 paper:
 	$(MAKE) -C paper
 
-run: $(LIB)
-	./run
+test/fork-example: test/fork-example.o $(CONFIG)
+	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"
+
+
+run: $(LIB) test/fork-example
+	test/fork-example
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:

@@ -19,7 +19,7 @@
 #include "wrappers/gnuwrapper.cpp"
 
 // The top heap provides memory to back spans managed by MiniHeaps.
-class TopHeap : public ExactlyOneHeap<mesh::MmapHeap> {};
+class TopHeap : public ExactlyOneHeap<mesh::FileBackedMmapHeap> {};
 // The top big heap is called to handle malloc requests for large
 // objects.  We define a separate class to handle these to segregate
 // bookkeeping for large malloc requests from the ones used to back
@@ -111,8 +111,10 @@ size_t xxmalloc_usable_size(void *ptr) {
 }
 
 void xxmalloc_lock() {
+  debug("MALLOC LOCK CALLED");
 }
 
 void xxmalloc_unlock() {
+  debug("MALLOC UNLOCK CALLED");
 }
 }
