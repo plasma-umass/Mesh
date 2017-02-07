@@ -8,3 +8,6 @@ AllowShortLoopsOnASingleLine: false
 IndentCaseLabels: false
 AlwaysBreakTemplateDeclarations: true
 AccessModifierOffset: -2
+
+DerivePointerAlignment: false
+PointerAlignment: Right
