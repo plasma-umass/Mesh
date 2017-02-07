@@ -4,38 +4,16 @@
 #ifndef MESH_MINIHEAP_H
 #define MESH_MINIHEAP_H
 
-#include <mutex>
 #include <random>
 
-#include "heaplayers.h"
+#include "bitmap.h"
 #include "internal.h"
 
-using std::lock_guard;
-using std::mutex;
+#include "heaplayers.h"
+
 using std::uniform_int_distribution;
 
 namespace mesh {
-
-uint64_t seed() {
-  static char muBuf[sizeof(std::mutex)];
-  static std::mutex *mu = new (muBuf) std::mutex();
-
-  static char mtBuf[sizeof(std::mt19937_64)];
-  static std::mt19937_64 *mt = NULL;
-
-  lock_guard<mutex> lock(*mu);
-
-  if (likely(mt != nullptr))
-    return (*mt)();
-
-  // first time requesting a seed
-  std::random_device rd;
-  mt = new (mtBuf) std::mt19937_64(rd());
-
-  static_assert(sizeof(std::mt19937_64::result_type) == sizeof(uint64_t), "expected 64-bit result_type for PRNG");
-
-  return (*mt)();
-}
 
 template <typename SuperHeap,
           typename InternalAlloc,
@@ -54,7 +32,7 @@ public:
   enum { Alignment = (int)MinObjectSize };
   static const size_t span_size = SpanSize;
 
-  MiniHeapBase(size_t objectSize) : _objectSize(objectSize), _prng(seed()) {
+  MiniHeapBase(size_t objectSize) : _objectSize(objectSize), _prng(internal::seed()) {
     _span = _super.malloc(SpanSize);
     if (!_span)
       abort();

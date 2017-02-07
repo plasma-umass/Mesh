@@ -9,15 +9,12 @@
 
 // never allocate exeecutable heap
 #define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)
-
 #define MALLOC_TRACE 0
-
-#include "bitmap.h"
-#include "heaplayers.h"
-#include "rng/mwc.h"
 
 #include "file-backed-mmap.h"
 #include "meshingheap.h"
+
+#include "heaplayers.h"
 
 #include "wrappers/gnuwrapper.cpp"
 
@@ -45,9 +42,9 @@ inline static CustomHeap *getCustomHeap(void) {
 
 // mutex protecting debug and __mesh_assert_fail to avoid concurrent
 // use of static buffers by multiple threads
-inline static std::mutex *getAssertMutex(void) {
-  static char buf[sizeof(std::mutex)];
-  static std::mutex *assertMutex = new (buf) std::mutex();
+inline static mutex *getAssertMutex(void) {
+  static char assertBuf[sizeof(std::mutex)];
+  static mutex *assertMutex = new (assertBuf) mutex();
 
   return assertMutex;
 }
