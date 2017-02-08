@@ -129,6 +129,10 @@ public:
     return _inUseCount == 0;
   }
 
+  const Bitmap<InternalAlloc> &bitmap() const {
+    return _bitmap;
+  }
+
   void *_span;
   size_t _objectSize;
   size_t _maxCount{0};
