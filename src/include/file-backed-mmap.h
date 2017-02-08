@@ -73,7 +73,7 @@ static const char *const TMP_DIRS[] = {
     "/dev/shm", "/tmp",
 };
 
-int copyfile(int dstFd, int srcFd) {
+int copyfile(int dstFd, int srcFd, size_t sz) {
 #if defined(__APPLE__) || defined(__FreeBSD__)
   // fcopyfile works on FreeBSD and OS X 10.5+
   int result = fcopyfile(srcFd, dstFd, 0, COPYFILE_ALL);
@@ -83,7 +83,8 @@ int copyfile(int dstFd, int srcFd) {
   struct stat fileinfo;
   memset(&fileinfo, 0, sizeof(fileinfo));
   fstat(srcFd, &fileinfo);
-  int result = sendfile(dstFd, srcFd, &bytesCopied, fileinfo.st_size);
+  d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz);
+  int result = sendfile(dstFd, srcFd, &bytesCopied, sz);
   // on success, ensure the entire results were copied
   if (result == 0)
     d_assert(bytesCopied == fileinfo.st_size);
@@ -110,7 +111,7 @@ public:
     // Round up to the size of a page.
     sz = (sz + CPUInfo::PageSize - 1) & (size_t) ~(CPUInfo::PageSize - 1);
 
-    void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, flags, fd, 0);
     if (ptr == MAP_FAILED)
       abort();
 
@@ -158,15 +159,16 @@ private:
 public:
   enum { Alignment = MmapWrapper::Alignment };
 
-  FileBackedMmapHeap() : SuperHeap(), _pid(getpid()) {
+  FileBackedMmapHeap() : SuperHeap() {
     d_assert(fbmmInstance == nullptr);
     fbmmInstance = this;
 
-    _spanDir = openSpanDir(_pid);
+    _spanDir = openSpanDir(getpid());
     d_assert(_spanDir != nullptr);
 
     debug("fbmm: storing spans in %s", _spanDir);
 
+    on_exit(staticOnExit, this);
     pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
   }
 
@@ -218,12 +220,25 @@ protected:
       abort();
     }
 
-    if (fallocate(fd, 0, 0, sz) == -1 && errno == EOPNOTSUPP) {
-      int err = ftruncate(fd, sz);
-      if (err != 0) {
-        debug("ftruncate: %d\n", errno);
-        abort();
-      }
+    // we only need the file descriptors, not the path to the file in the FS
+    int err = unlink(buf);
+    if (err != 0) {
+      debug("unlink: %d\n", errno);
+      abort();
+    }
+
+    // TODO: see if fallocate makes any difference in performance
+    err = ftruncate(fd, sz);
+    if (err != 0) {
+      debug("ftruncate: %d\n", errno);
+      abort();
+    }
+
+    // if a new process gets exec'ed, ensure our heap is completely freed.
+    err = fcntl(fd, F_SETFD, FD_CLOEXEC);
+    if (err != 0) {
+      debug("fcntl: %d\n", errno);
+      abort();
     }
 
     return fd;
@@ -236,17 +251,21 @@ protected:
       char buf[buf_len];
       memset(buf, 0, buf_len);
 
-      snprintf(buf, buf_len - 1, "%s/alloc-mesh-%d", tmpDir, _pid);
+      snprintf(buf, buf_len - 1, "%s/alloc-mesh-%d", tmpDir, pid);
       int result = mkdir(buf, 0755);
       if (result != 0)
         continue;
 
-      char *spanDir = reinterpret_cast<char *>(internal::Heap().malloc(strlen(buf)));
+      char *spanDir = reinterpret_cast<char *>(internal::Heap().malloc(strlen(buf)+1));
       strcpy(spanDir, buf);
       return spanDir;
     }
 
     return nullptr;
+  }
+
+  static void staticOnExit(int code, void *data) {
+    reinterpret_cast<FileBackedMmapHeap *>(data)->exit();
   }
 
   static void staticPrepareForFork() {
@@ -264,12 +283,15 @@ protected:
     reinterpret_cast<FileBackedMmapHeap *>(fbmmInstance)->afterForkChild();
   }
 
+  void exit() {
+    rmdir(_spanDir);
+  }
+
   void prepareForFork() {
     xxmalloc_lock();
     int err = pipe(_forkPipe);
     if (err == -1)
       abort();
-    debug("FileBackedMmapHeap(%p): preparing for fork", this);
   }
 
   void afterForkParent() {
@@ -295,8 +317,35 @@ protected:
     xxmalloc_unlock();
     close(_forkPipe[0]);
 
-    // TODO: close + reopen all memory.  malloc is locked in the
-    // parent while this happens
+    char *oldSpanDir = _spanDir;
+
+    // update our pid + spanDir
+    _spanDir = openSpanDir(getpid());
+    d_assert(_spanDir != nullptr);
+
+    // open new files for all open spans
+    for (auto entry : _fdMap) {
+      size_t sz = _vmaMap[entry.first];
+      d_assert(sz != 0);
+
+      int newFd = openSpanFile(sz);
+
+      struct stat fileinfo;
+      memset(&fileinfo, 0, sizeof(fileinfo));
+      fstat(newFd, &fileinfo);
+      d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz);
+
+      internal::copyfile(newFd, entry.second, sz);
+
+      // remap the new region over the old
+      void *ptr = mmap(entry.first, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
+      d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
+
+      close(entry.second);
+      entry.second = newFd;
+    }
+
+    internal::Heap().free(oldSpanDir);
 
     while (write(_forkPipe[1], "ok", strlen("ok")) == EAGAIN) {
     }
@@ -308,7 +357,6 @@ protected:
 
   internal::unordered_map<void *, int> _fdMap{};
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
-  int _pid;
   char *_spanDir{nullptr};
 };
 }
