@@ -10,10 +10,10 @@
 #ifndef DH_BITMAP_H
 #define DH_BITMAP_H
 
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include "internal.h"
 #include "staticlog.h"
@@ -42,8 +42,8 @@ public:
     // Round up the number of elements.
     _elements = WORDBITS * ((nelts + WORDBITS - 1) / WORDBITS);
     // Allocate the right number of bytes.
-    void* buf = Heap::malloc(_elements / 8);
-    _bitarray = (WORD*)buf;
+    void *buf = Heap::malloc(_elements / 8);
+    _bitarray = (WORD *)buf;
     clear();
   }
 
@@ -81,9 +81,17 @@ public:
     return result;
   }
 
+  inline uint64_t inUseCount() const {
+    uint64_t count = 0;
+    for (size_t i = 0; i < _elements/WORDBITS; i++) {
+      count += __builtin_popcountl(_bitarray[i]);
+    }
+    return count;
+  }
+
 private:
   /// Given an index, compute its item (word) and position within the word.
-  void computeItemPosition(unsigned long long index, unsigned int& item, unsigned int& position) const {
+  void computeItemPosition(unsigned long long index, unsigned int &item, unsigned int &position) const {
     assert(index < _elements);
     item = index >> WORDBITSHIFT;
     position = index & (WORDBITS - 1);
@@ -114,7 +122,7 @@ private:
 #endif
 
   /// The bit array itself.
-  WORD* _bitarray;
+  WORD *_bitarray;
 
   /// The number of elements in the array.
   unsigned long _elements;
