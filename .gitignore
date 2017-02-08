@@ -2,5 +2,6 @@
 *.d
 *.o
 *.so
+*.pyc
 TAGS
 /test/fork-example
