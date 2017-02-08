@@ -135,7 +135,7 @@ public:
   size_t _fullCount{0};
   size_t _inUseCount{0};
   mt19937_64 _prng;
-  BitMap<InternalAlloc> _bitmap{};
+  Bitmap<InternalAlloc> _bitmap{};
   bool _done{false};
 
   SuperHeap _super{};

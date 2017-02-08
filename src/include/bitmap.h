@@ -15,19 +15,19 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "internal.h"
+#include "common.h"
 #include "staticlog.h"
 
 /**
- * @class BitMap
+ * @class Bitmap
  * @brief Manages a dynamically-sized bitmap.
  * @param Heap  the source of memory for the bitmap.
  */
 
 template <class Heap>
-class BitMap : private Heap {
+class Bitmap : private Heap {
 public:
-  BitMap(void) : _bitarray(NULL), _elements(0) {
+  Bitmap(void) : _bitarray(NULL), _elements(0) {
   }
 
   /**
