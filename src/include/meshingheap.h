@@ -1,11 +1,14 @@
 // -*- mode: c++ -*-
 // Copyright 2016 University of Massachusetts, Amherst
 
-#ifndef MESH_MESHINGHEAP_H
-#define MESH_MESHINGHEAP_H
+#ifndef MESH__MESHINGHEAP_H
+#define MESH__MESHINGHEAP_H
+
+#include <algorithm>
 
 #include "heaplayers.h"
 #include "internal.h"
+#include "meshing.h"
 #include "miniheap.h"
 
 using namespace HL;
@@ -135,8 +138,17 @@ protected:
 
   inline void meshAllSizeClasses() {
     for (auto heaps : _littleheaps) {
-      if (heaps.size() > 1) {
-        debug("\tfound some heaps to mesh\n");
+      auto begin = heaps.begin();
+      auto end = heaps.end();
+      // if the current heap (the one we are allocating out of) isn't
+      // done, exclude it from meshing
+      if (heaps.size() > 1 && !heaps.back()->isDone())
+        --end;
+      if (std::distance(begin, end) > 1) {
+        // chose a random permutation of same-sized MiniHeaps
+        std::shuffle(begin, end, _prng);
+        for (auto h1 = begin, h2 = ++begin; h2 != end; ++h1, ++h2) {
+        }
       }
     }
   }
@@ -154,4 +166,4 @@ protected:
 };
 }
 
-#endif  // MESH_MESHINGHEAP_H
+#endif  // MESH__MESHINGHEAP_H
