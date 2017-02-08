@@ -26,7 +26,6 @@ public:
   enum { Alignment = 16 };
 
   MeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _bigheap(), _littleheaps(), _miniheaps() {
-    debug("MeshingHeap init");
     static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
     static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
     for (auto i = 0; i < NumBins; i++) {
@@ -77,16 +76,12 @@ public:
     return ptr;
   }
 
-  static inline uintptr_t getSpanStart(void *ptr) {
-    return reinterpret_cast<uintptr_t>(ptr) & ~(MiniHeap::span_size - 1);
-  }
-
   inline MiniHeap *miniheapFor(void *const ptr) {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     auto it = greatest_leq(_miniheaps, ptrval);
-    if (it != _miniheaps.end()) {
+    if (likely(it != _miniheaps.end())) {
       auto candidate = it->second;
-      if (candidate->contains(ptr))
+      if (likely(candidate->contains(ptr)))
         return candidate;
     }
 
@@ -95,11 +90,11 @@ public:
 
   inline void free(void *ptr) {
     auto mh = miniheapFor(ptr);
-    if (mh) {
+    if (likely(mh)) {
       mh->free(ptr);
-      if (mh->isDone() && mh->isEmpty()) {
+      if (unlikely(mh->isDone() && mh->isEmpty())) {
         // FIXME: free up heap metadata
-        _miniheaps.erase(reinterpret_cast<uintptr_t>(mh));
+        _miniheaps.erase(mh->getSpanStart());
       }
     } else {
       _bigheap.free(ptr);
