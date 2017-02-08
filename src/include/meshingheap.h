@@ -150,6 +150,10 @@ protected:
         for (auto it1 = begin, it2 = ++begin; it2 != end; ++it1, ++it2) {
           MiniHeap *h1 = *it1;
           MiniHeap *h2 = *it2;
+
+          if (h1->isDone() || h2->isDone())
+            continue;
+
           const auto len = h1->bitmap().wordCount();
           const auto bitmap1 = h1->bitmap().bitmap();
           const auto bitmap2 = h2->bitmap().bitmap();

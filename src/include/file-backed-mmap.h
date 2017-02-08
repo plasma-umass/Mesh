@@ -222,6 +222,9 @@ public:
     _fdMap.erase(fdEntry);
   }
 
+  void mesh(void *keep, void *remove) {
+  }
+
 protected:
   int openSpanFile(size_t sz) {
     constexpr size_t buf_len = 64;
