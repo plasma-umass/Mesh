@@ -83,7 +83,8 @@ int copyfile(int dstFd, int srcFd, size_t sz) {
   struct stat fileinfo;
   memset(&fileinfo, 0, sizeof(fileinfo));
   fstat(srcFd, &fileinfo);
-  d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz);
+  d_assert_msg(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz,
+               "copyfile: expected %zu == %zu", fileinfo.st_size, sz);
   int result = sendfile(dstFd, srcFd, &bytesCopied, sz);
   // on success, ensure the entire results were copied
   if (result == 0)
@@ -115,7 +116,10 @@ public:
     if (ptr == MAP_FAILED)
       abort();
 
+    d_assert(_vmaMap.find(ptr) == _vmaMap.end());
     _vmaMap[ptr] = sz;
+    d_assert(_vmaMap.find(ptr) != _vmaMap.end());
+    d_assert(_vmaMap[ptr] == sz);
 
     d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
 
@@ -142,9 +146,14 @@ public:
       return;
     }
 
-    munmap(ptr, entry->second);
+    auto sz = entry->second;
+
+    munmap(ptr, sz);
+    //madvise(ptr, sz, MADV_DONTNEED);
+    //mprotect(ptr, sz, PROT_NONE);
 
     _vmaMap.erase(entry);
+    d_assert(_vmaMap.find(ptr) == _vmaMap.end());
   }
 
 protected:
@@ -163,10 +172,10 @@ public:
     d_assert(fbmmInstance == nullptr);
     fbmmInstance = this;
 
+    // check if we have memfd_create, if so use it.
+
     _spanDir = openSpanDir(getpid());
     d_assert(_spanDir != nullptr);
-
-    debug("fbmm: storing spans in %s", _spanDir);
 
     on_exit(staticOnExit, this);
     pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
@@ -190,17 +199,25 @@ public:
   inline void free(void *ptr) {
     auto entry = _vmaMap.find(ptr);
     if (unlikely(entry == _vmaMap.end())) {
-      debug("mmap: invalid free: %p", ptr);
+      debug("fb-mmap: invalid free: %p", ptr);
       return;
     }
 
-    munmap(ptr, entry->second);
+    auto sz = entry->second;
+
+    munmap(ptr, sz);
+    //madvise(ptr, sz, MADV_DONTNEED);
+    //mprotect(ptr, sz, PROT_NONE);
 
     _vmaMap.erase(entry);
+    d_assert(_vmaMap.find(ptr) == _vmaMap.end());
 
     auto fdEntry = _fdMap.find(ptr);
     d_assert(fdEntry != _fdMap.end());
-    // TODO: unlink
+
+    int result = fallocate(fdEntry->second, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, sz);
+    d_assert(result == 0);
+
     close(fdEntry->second);
     _fdMap.erase(fdEntry);
   }
@@ -343,7 +360,7 @@ protected:
       d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
       close(entry.second);
-      entry.second = newFd;
+      _fdMap[entry.first] = newFd;
     }
 
     internal::Heap().free(oldSpanDir);
