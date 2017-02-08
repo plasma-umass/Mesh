@@ -253,7 +253,8 @@ protected:
 
       snprintf(buf, buf_len - 1, "%s/alloc-mesh-%d", tmpDir, pid);
       int result = mkdir(buf, 0755);
-      if (result != 0)
+      // we will get EEXIST if we have re-execed
+      if (result != 0 && errno != EEXIST)
         continue;
 
       char *spanDir = reinterpret_cast<char *>(internal::Heap().malloc(strlen(buf)+1));
