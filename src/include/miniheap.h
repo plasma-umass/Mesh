@@ -42,7 +42,7 @@ public:
 
     _bitmap.reserve(_maxCount);
 
-    dumpDebug();
+    //dumpDebug();
   }
 
   void dumpDebug() const {
@@ -69,6 +69,7 @@ public:
         continue;
 
       _inUseCount++;
+      d_assert(_inUseCount == _bitmap.inUseCount());
 
       return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
     }
@@ -93,12 +94,12 @@ public:
 
     _bitmap.reset(off);
     _inUseCount--;
+    d_assert(_inUseCount == _bitmap.inUseCount());
 
     if (_inUseCount == 0 && _done) {
-      debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %zu", this, _inUseCount, _maxCount,
-            (double)_inUseCount / _maxCount, _objectSize);
+      debug("MiniHeap(%p): FREE %4d/%4d (%f) -- size %5zu\t%p-%p\n", this, _inUseCount, _maxCount,
+            (double)_inUseCount / _maxCount, _objectSize, _span, getSpanStart()+SpanSize);
       _super.free(_span);
-      _span = reinterpret_cast<void *>(0xdeadbeef);
     }
   }
 
