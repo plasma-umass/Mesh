@@ -14,6 +14,19 @@ namespace internal {
 
 // for mesh-internal data structures, like heap metadata
 class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>>> {
+protected:
+  typedef ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>>> SuperHeap;
+
+public:
+  Heap() : SuperHeap() {
+    static_assert(Alignment % 16 == 0, "16-byte alignment");
+  }
+
+  inline void *malloc(size_t sz) {
+    auto ptr = SuperHeap::malloc(sz);
+    d_assert(reinterpret_cast<uint64_t>(ptr) % 16 == 0);
+    return ptr;
+  }
 };
 
 template <typename K, typename V>

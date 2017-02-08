@@ -147,17 +147,20 @@ protected:
       if (std::distance(begin, end) > 1) {
         // chose a random permutation of same-sized MiniHeaps
         std::shuffle(begin, end, _prng);
-        for (auto h1 = begin, h2 = ++begin; h2 != end; ++h1, ++h2) {
-          auto len = (*h1)->bitmap().wordCount();
-          auto bitmap1 = (*h1)->bitmap().bitmap();
-          auto bitmap2 = (*h2)->bitmap().bitmap();
-          d_assert(len == (*h2)->bitmap().wordCount());
+        for (auto it1 = begin, it2 = ++begin; it2 != end; ++it1, ++it2) {
+          MiniHeap *h1 = *it1;
+          MiniHeap *h2 = *it2;
+          const auto len = h1->bitmap().wordCount();
+          const auto bitmap1 = h1->bitmap().bitmap();
+          const auto bitmap2 = h2->bitmap().bitmap();
+          d_assert(len == h2->bitmap().wordCount());
 
           if (mesh::meshable(bitmap1, bitmap2, len)) {
-            debug("----\n2 MESHABLE HEAPS:\n");
-            (*h1)->dumpDebug();
-            (*h2)->dumpDebug();
-            debug("----\n");
+            MiniHeap::mesh(h1, h2);
+            // debug("----\n2 MESHABLE HEAPS:\n");
+            // h1->dumpDebug();
+            // h2->dumpDebug();
+            // debug("----\n");
 
             // TODO: merge the two heaps
           }

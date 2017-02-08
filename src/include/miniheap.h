@@ -1,8 +1,9 @@
 // -*- mode: c++ -*-
 // Copyright 2016 University of Massachusetts, Amherst
 
-#ifndef MESH_MINIHEAP_H
-#define MESH_MINIHEAP_H
+#pragma once
+#ifndef MESH__MINIHEAP_H
+#define MESH__MINIHEAP_H
 
 #include <random>
 
@@ -48,6 +49,12 @@ public:
     debug("MiniHeap(%p:%5zu): %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n",
           this, _objectSize, _maxCount, heapPages, FullNumerator, FullDenominator, _fullCount, this->isFull(),
           _inUseCount, _span, reinterpret_cast<uintptr_t>(_span) + SpanSize);
+  }
+
+  static void mesh(MiniHeapBase *dst, MiniHeapBase *src) {
+    for (auto const &off : src->bitmap()) {
+      debug("mesh: %zu", off);
+    }
   }
 
   inline void *malloc(size_t sz) {
@@ -146,4 +153,4 @@ public:
 };
 }
 
-#endif  // MESH_MINIHEAP_H
+#endif  // MESH__MINIHEAP_H
