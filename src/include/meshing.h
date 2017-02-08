@@ -9,8 +9,12 @@
 
 namespace mesh {
 
-bool meshable(uint64_t *bitmap1, uint64_t *bitmap2, size_t len) {
-  return false;
+bool meshable(const uint64_t *bitmap1, const uint64_t *bitmap2, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    if ((bitmap1[i] ^ bitmap2[i]) != 0)
+      return false;
+  }
+  return true;
 }
 }
 
