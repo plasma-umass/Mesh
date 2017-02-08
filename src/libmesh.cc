@@ -94,7 +94,7 @@ void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file,
     write(STDERR_FILENO, buf, len);
   }
 
-  _exit(EXIT_FAILURE);
+  abort();
 }
 
 extern "C" {
