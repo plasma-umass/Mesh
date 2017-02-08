@@ -41,6 +41,12 @@
 #include <map>
 #endif
 
+#if defined(__APPLE__) || defined(__FreeBSD__)
+#include <copyfile.h>
+#else
+#include <sys/sendfile.h>
+#endif
+
 #include <new>
 
 #include "internal.h"
@@ -58,16 +64,38 @@
  * @brief Modified MmapHeap for use in Mesh.
  */
 
-static void *instance;
+static void *fbmmInstance;
 
 namespace mesh {
+
+namespace internal {
+static const char *const TMP_DIRS[] = {
+    "/dev/shm", "/tmp",
+};
+
+int copyfile(int dstFd, int srcFd) {
+#if defined(__APPLE__) || defined(__FreeBSD__)
+  // fcopyfile works on FreeBSD and OS X 10.5+
+  int result = fcopyfile(srcFd, dstFd, 0, COPYFILE_ALL);
+#else
+  // sendfile will work with non-socket output (i.e. regular file) on Linux 2.6.33+
+  off_t bytesCopied = 0;
+  struct stat fileinfo;
+  memset(&fileinfo, 0, sizeof(fileinfo));
+  fstat(srcFd, &fileinfo);
+  int result = sendfile(dstFd, srcFd, &bytesCopied, fileinfo.st_size);
+  // on success, ensure the entire results were copied
+  if (result == 0)
+    d_assert(bytesCopied == fileinfo.st_size);
+#endif
+
+  return result;
+}
+}
 
 class MmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MmapHeap);
-
-protected:
-  internal::unordered_map<void *, size_t> _vmaMap{};
 
 public:
   enum { Alignment = MmapWrapper::Alignment };
@@ -117,79 +145,27 @@ public:
 
     _vmaMap.erase(entry);
   }
+
+protected:
+  internal::unordered_map<void *, size_t> _vmaMap{};
 };
 
 class FileBackedMmapHeap : public MmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(FileBackedMmapHeap);
-
-protected:
   typedef MmapHeap SuperHeap;
-
-  internal::unordered_map<void *, int> _fdMap{};
-  int _pipeFd[2]{-1, -1};
-
-  static void staticPrepareForFork() {
-    d_assert(instance != nullptr);
-    reinterpret_cast<FileBackedMmapHeap *>(instance)->prepareForFork();
-  }
-
-  static void staticAfterForkParent() {
-    d_assert(instance != nullptr);
-    reinterpret_cast<FileBackedMmapHeap *>(instance)->afterForkParent();
-  }
-
-  static void staticAfterForkChild() {
-    d_assert(instance != nullptr);
-    reinterpret_cast<FileBackedMmapHeap *>(instance)->afterForkChild();
-  }
-
-  void prepareForFork() {
-    xxmalloc_lock();
-    int err = pipe(_pipeFd);
-    if (err == -1)
-      abort();
-    debug("FileBackedMmapHeap(%p): preparing for fork", this);
-  }
-
-  void afterForkParent() {
-    xxmalloc_unlock();
-    close(_pipeFd[1]);
-    char buf[8];
-    memset(buf, 0, 8);
-
-    // wait for our child to close + reopen memory.  Without this
-    // fence, we may experience memory corruption?
-
-    while (read(_pipeFd[0], buf, 4) == EAGAIN) {}
-    close(_pipeFd[0]);
-
-    _pipeFd[0] = -1;
-    _pipeFd[1] = -1;
-
-    d_assert(strcmp(buf, "ok") == 0);
-  }
-
-  void afterForkChild() {
-    xxmalloc_unlock();
-    close(_pipeFd[0]);
-
-    // TODO: close + reopen all memory.  malloc is locked in the
-    // parent while this happens
-
-    while (write(_pipeFd[1], "ok", strlen("ok")) == EAGAIN) {}
-    close(_pipeFd[1]);
-
-    _pipeFd[0] = -1;
-    _pipeFd[1] = -1;
-  }
 
 public:
   enum { Alignment = MmapWrapper::Alignment };
 
-  FileBackedMmapHeap() : SuperHeap() {
-    d_assert(instance == nullptr);
-    instance = this;
+  FileBackedMmapHeap() : SuperHeap(), _pid(getpid()) {
+    d_assert(fbmmInstance == nullptr);
+    fbmmInstance = this;
+
+    _spanDir = openSpanDir(_pid);
+    d_assert(_spanDir != nullptr);
+
+    debug("fbmm: storing spans in %s", _spanDir);
 
     pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
   }
@@ -201,24 +177,7 @@ public:
     // Round up to the size of a page.
     sz = (sz + CPUInfo::PageSize - 1) & (size_t) ~(CPUInfo::PageSize - 1);
 
-    char buf[64];
-    memset(buf, 0, 64);
-    sprintf(buf, "/dev/shm/alloc-mesh-%d", getpid());
-    mkdir(buf, 0755);
-    sprintf(buf, "/dev/shm/alloc-mesh-%d/XXXXXX", getpid());
-
-    int fd = mkstemp(buf);
-    if (fd < 0) {
-      debug("mkstemp: %d\n", errno);
-      abort();
-    }
-
-    int err = ftruncate(fd, sz);
-    if (err != 0) {
-      debug("ftruncate: %d\n", errno);
-      abort();
-    }
-
+    int fd = openSpanFile(sz);
     void *ptr = SuperHeap::map(sz, MAP_SHARED, fd);
 
     _fdMap[ptr] = fd;
@@ -243,6 +202,114 @@ public:
     close(fdEntry->second);
     _fdMap.erase(fdEntry);
   }
+
+protected:
+  int openSpanFile(size_t sz) {
+    constexpr size_t buf_len = 64;
+    char buf[buf_len];
+    memset(buf, 0, buf_len);
+
+    d_assert(_spanDir != nullptr);
+    sprintf(buf, "%s/XXXXXX", _spanDir);
+
+    int fd = mkstemp(buf);
+    if (fd < 0) {
+      debug("mkstemp: %d\n", errno);
+      abort();
+    }
+
+    if (fallocate(fd, 0, 0, sz) == -1 && errno == EOPNOTSUPP) {
+      int err = ftruncate(fd, sz);
+      if (err != 0) {
+        debug("ftruncate: %d\n", errno);
+        abort();
+      }
+    }
+
+    return fd;
+  }
+
+  char *openSpanDir(int pid) {
+    constexpr size_t buf_len = 64;
+
+    for (auto tmpDir : internal::TMP_DIRS) {
+      char buf[buf_len];
+      memset(buf, 0, buf_len);
+
+      snprintf(buf, buf_len - 1, "%s/alloc-mesh-%d", tmpDir, _pid);
+      int result = mkdir(buf, 0755);
+      if (result != 0)
+        continue;
+
+      char *spanDir = reinterpret_cast<char *>(internal::Heap().malloc(strlen(buf)));
+      strcpy(spanDir, buf);
+      return spanDir;
+    }
+
+    return nullptr;
+  }
+
+  static void staticPrepareForFork() {
+    d_assert(fbmmInstance != nullptr);
+    reinterpret_cast<FileBackedMmapHeap *>(fbmmInstance)->prepareForFork();
+  }
+
+  static void staticAfterForkParent() {
+    d_assert(fbmmInstance != nullptr);
+    reinterpret_cast<FileBackedMmapHeap *>(fbmmInstance)->afterForkParent();
+  }
+
+  static void staticAfterForkChild() {
+    d_assert(fbmmInstance != nullptr);
+    reinterpret_cast<FileBackedMmapHeap *>(fbmmInstance)->afterForkChild();
+  }
+
+  void prepareForFork() {
+    xxmalloc_lock();
+    int err = pipe(_forkPipe);
+    if (err == -1)
+      abort();
+    debug("FileBackedMmapHeap(%p): preparing for fork", this);
+  }
+
+  void afterForkParent() {
+    xxmalloc_unlock();
+    close(_forkPipe[1]);
+    char buf[8];
+    memset(buf, 0, 8);
+
+    // wait for our child to close + reopen memory.  Without this
+    // fence, we may experience memory corruption?
+
+    while (read(_forkPipe[0], buf, 4) == EAGAIN) {
+    }
+    close(_forkPipe[0]);
+
+    _forkPipe[0] = -1;
+    _forkPipe[1] = -1;
+
+    d_assert(strcmp(buf, "ok") == 0);
+  }
+
+  void afterForkChild() {
+    xxmalloc_unlock();
+    close(_forkPipe[0]);
+
+    // TODO: close + reopen all memory.  malloc is locked in the
+    // parent while this happens
+
+    while (write(_forkPipe[1], "ok", strlen("ok")) == EAGAIN) {
+    }
+    close(_forkPipe[1]);
+
+    _forkPipe[0] = -1;
+    _forkPipe[1] = -1;
+  }
+
+  internal::unordered_map<void *, int> _fdMap{};
+  int _forkPipe[2]{-1, -1};  // used for signaling during fork
+  int _pid;
+  char *_spanDir{nullptr};
 };
 }
 
