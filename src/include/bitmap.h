@@ -7,8 +7,9 @@
  * @note   Copyright (C) 2005 by Emery Berger, University of Massachusetts Amherst.
  */
 
-#ifndef DH_BITMAP_H
-#define DH_BITMAP_H
+#pragma once
+#ifndef MESH__BITMAP_H
+#define MESH__BITMAP_H
 
 #include <cstdint>
 #include <cstdio>
@@ -17,6 +18,38 @@
 
 #include "common.h"
 #include "staticlog.h"
+
+template <typename Container, typename size_t>
+class BitmapIter : public std::iterator<std::forward_iterator_tag, size_t> {
+public:
+  BitmapIter(const Container &a, const size_t i) : _i(i), _cont(a) {
+  }
+  BitmapIter &operator++() {
+    auto next = _i + 1;
+    for (; next < _cont.bitCount() && !_cont.isSet(next); ++next) {
+    }
+    // if we stopped at the last element and its not set, bump one
+    if (next == _cont.bitCount() - 1 && !_cont.isSet(next)) {
+      next++;
+      d_assert(next == _cont.bitCount());
+    }
+    _i = next;
+    return *this;
+  }
+  bool operator==(const BitmapIter &rhs) const {
+    return _cont.bitmap() == rhs._cont.bitmap() && _i == rhs._i;
+  }
+  bool operator!=(const BitmapIter &rhs) const {
+    return _cont.bitmap() != rhs._cont.bitmap() || _i != rhs._i;
+  }
+  size_t &operator*() {
+    return _i;
+  }
+
+private:
+  size_t _i;
+  const Container &_cont;
+};
 
 /**
  * @class Bitmap
@@ -35,6 +68,9 @@ private:
   enum { WORDBITSHIFT = staticlog(WORDBITS) };
 
 public:
+  typedef BitmapIter<Bitmap, size_t> iterator;
+  typedef BitmapIter<Bitmap, size_t> const const_iterator;
+
   Bitmap(void) {
   }
 
@@ -57,6 +93,10 @@ public:
   // 64-bit) used to store the bitmap
   inline size_t wordCount() const {
     return _elements / 8;
+  }
+
+  inline size_t bitCount() const {
+    return _elements;
   }
 
   const word_t *bitmap() const {
@@ -105,14 +145,40 @@ public:
     return count;
   }
 
+  iterator begin() {
+    return iterator(*this, lowestSetBit());
+  }
+  iterator end() {
+    return iterator(*this, bitCount());
+  }
+  const_iterator begin() const {
+    return iterator(*this, lowestSetBit());
+  }
+  const_iterator end() const {
+    return iterator(*this, bitCount());
+  }
+  const_iterator cbegin() const {
+    return iterator(*this, lowestSetBit());
+  }
+  const_iterator cend() const {
+    return iterator(*this, bitCount());
+  }
+
 private:
+  size_t lowestSetBit() const {
+    return 0;
+  }
+  size_t highestSetBit() const {
+    return 0;
+  }
+
   /// Given an index, compute its item (word) and position within the word.
   void computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
     assert(index < _elements);
     item = index >> WORDBITSHIFT;
     position = index & (WORDBITS - 1);
-    assert(position == index - (item << WORDBITSHIFT));
-    assert(item < _elements / WORDBYTES);
+    d_assert(position == index - (item << WORDBITSHIFT));
+    d_assert(item < _elements / WORDBYTES);
   }
 
   /// To find the bit in a word, do this: word & getMask(bitPosition)
@@ -128,4 +194,4 @@ private:
   size_t _elements{0};
 };
 
-#endif
+#endif  // MESH__BITMAP_H

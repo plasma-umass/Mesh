@@ -74,7 +74,7 @@ WARNFLAGS := \
 	-Wcast-align
 
 
-OPT       =
+OPT       = -O2
 DEBUGINFO = -g
 #LTO       = -flto
 
