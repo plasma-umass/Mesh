@@ -37,8 +37,8 @@ CFLAG_OPTS = \
 CXXFLAG_OPTS = \
 	-std=c++14 \
 	-I Heap-Layers \
-	-I src/include \
-	-I src/include/static \
+	-I impl/include \
+	-I impl/include/static \
 	$(CPPFLAGS) \
 	$(COMMON_FLAGS)
 

@@ -1,7 +1,7 @@
 include config.mk
 
 
-SRCS = src/libmesh.cc
+SRCS = impl/libmesh.cc
 OBJS = $(SRCS:.cc=.o)
 
 LIB = libmesh.so
@@ -45,7 +45,7 @@ install: $(LIB)
 
 clean:
 	rm -f test/fork-example
-	rm -f $(LIB) src/*.o src/*.gcda src/*.gcno src/*.d
+	rm -f $(LIB) impl/*.o impl/*.gcda impl/*.gcno impl/*.d
 	find . -name '*~' -print0 | xargs -0 rm -f
 
 paper:
