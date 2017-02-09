@@ -57,8 +57,7 @@ LINK_FLAGS = $(CFLAG_OPTS) \
 	-Wl,--no-undefined \
 	-Wl,-Bsymbolic-functions \
 	-Wl,-z,now,-z,relro \
-	-ftls-model=initial-exec \
-	-shared
+	-ftls-model=initial-exec
 
 WARNFLAGS := \
         -Wall -Wextra -pedantic \
