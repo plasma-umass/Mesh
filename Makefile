@@ -6,7 +6,7 @@ OBJS = $(SRCS:.cc=.o)
 
 LIB = libmesh.so
 
-HEAP_LAYERS = Heap-Layers
+HEAP_LAYERS = impl/Heap-Layers
 
 CONFIG = Makefile config.mk
 
@@ -25,7 +25,7 @@ all: $(LIB) run
 $(HEAP_LAYERS):
 	@echo "  GIT   $@"
 	git submodule update --init
-	touch $@
+	touch -c $@
 
 %.o: %.c $(CONFIG)
 	@echo "  CC    $@"
