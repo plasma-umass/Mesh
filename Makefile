@@ -1,10 +1,19 @@
 include config.mk
 
 
-SRCS = impl/libmesh.cc
-OBJS = $(SRCS:.cc=.o)
-
+LIB_SRCS = impl/libmesh.cc impl/d_assert.cc
+LIB_OBJS = $(LIB_SRCS:.cc=.o)
 LIB = libmesh.so
+
+UNIT_SRCS = $(wildcard impl/unit/*.cc) impl/d_assert.cc
+UNIT_OBJS = $(UNIT_SRCS:.cc=.o)
+UNIT_CXXFLAGS = -isystem impl/unit/googletest/include -Iimpl/unit/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
+UNIT_LDFLAGS = -lpthread -lunwind
+UNIT_BIN = unit.test
+
+
+
+ALL_OBJS = $(LIB_OBJS)
 
 HEAP_LAYERS = impl/Heap-Layers
 
@@ -20,7 +29,7 @@ endif
 .SUFFIXES:
 .SUFFIXES: .cc .cpp .c .o .d .test
 
-all: $(LIB) run
+all: $(LIB) unittests
 
 $(HEAP_LAYERS):
 	@echo "  GIT   $@"
@@ -35,34 +44,47 @@ $(HEAP_LAYERS):
 	@echo "  CXX   $@"
 	$(CXX) $(CXXFLAGS) -MMD -o $@ -c $<
 
-$(LIB): $(HEAP_LAYERS) $(OBJS) $(CONFIG)
+impl/unit/%.o: impl/unit/%.cc $(CONFIG)
+	@echo "  CXX   $@"
+	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
+
+$(LIB): $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
 	@echo "  LD    $@"
-	$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+	$(CXX) -shared $(LDFLAGS) -o $@ $(LIB_OBJS) $(LIBS)
+
+$(UNIT_BIN): $(CONFIG) $(UNIT_OBJS)
+	@echo "  LD    $@"
+	$(CXX) -O0 $(LDFLAGS) -o $@ $(UNIT_OBJS) $(UNIT_LDFLAGS)
+
+unittests: $(UNIT_BIN)
+	./$(UNIT_BIN)
 
 install: $(LIB)
 	install -c -m 0755 $(LIB) $(PREFIX)/lib/$(LIB)
 	ldconfig
 
 clean:
-	rm -f test/fork-example
-	rm -f $(LIB) impl/*.o impl/*.gcda impl/*.gcno impl/*.d
+	rm -f impl/test/fork-example
+	rm -f $(UNIT_BIN) $(LIB) impl/*.gcda impl/*.gcno
+	find . -name '*.o' -print0 | xargs -0 rm -f
+	find . -name '*.d' -print0 | xargs -0 rm -f
 	find . -name '*~' -print0 | xargs -0 rm -f
 
 paper:
 	$(MAKE) -C paper
 
-test/fork-example: test/fork-example.o $(CONFIG)
+impl/test/fork-example: impl/test/fork-example.o $(CONFIG)
 	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"
 
 
-run: $(LIB) test/fork-example
-	test/fork-example
+run: $(LIB) impl/test/fork-example
+	impl/test/fork-example
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
 	@echo "  TAGS"
 	find . -type f | egrep '\.(cpp|h|cc|hh)$$' | xargs etags -l c++
 
--include $(OBJS:.o=.d)
+-include $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean install paper run TAGS
+.PHONY: all clean unittests install paper run TAGS

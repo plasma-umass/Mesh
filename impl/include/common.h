@@ -77,7 +77,7 @@ inline static mutex *getSeedMutex(void) {
 
 // we must re-initialize our seed on program startup and after fork.
 // Must be called with getSeedMutex() held
-mt19937_64 *initSeed(void) {
+inline mt19937_64 *initSeed(void) {
   static char mtBuf[sizeof(mt19937_64)];
 
   static_assert(sizeof(mt19937_64::result_type) == sizeof(uint64_t), "expected 64-bit result_type for PRNG");

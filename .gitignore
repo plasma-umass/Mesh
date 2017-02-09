@@ -5,3 +5,4 @@
 *.pyc
 TAGS
 /test/fork-example
+/unit.test
