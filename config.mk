@@ -36,6 +36,7 @@ CFLAG_OPTS = \
 CXXFLAG_OPTS = \
 	-std=c++14 \
 	-I impl/vendor/Heap-Layers \
+	-isystem impl/vendor/gflags/build/include \
 	-I impl/include \
 	-I impl/include/static \
 	$(CPPFLAGS) \
@@ -85,7 +86,7 @@ CXXFLAGS   += $(OPT) -fPIC -pthread $(WARNFLAGS) $(CXXFLAG_OPTS)
 CXXFLAGS   += $(DEBUGINFO)
 CXXFLAGS   += $(LTO)
 
-LIBS      = -lgcc -lgcc_eh -ldl
+LIBS      = -lgcc -lgcc_eh -ldl -lpthread -lunwind
 
 LDFLAGS  += $(OPT) $(LINK_FLAGS)
 LDFLAGS  += $(DEBUGINFO)
