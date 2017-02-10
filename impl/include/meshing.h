@@ -19,7 +19,7 @@ inline bool bitmapsMeshable(const uint64_t *bitmap1, const uint64_t *bitmap2, si
   bitmap2 = (const uint64_t *)__builtin_assume_aligned(bitmap2, 16);
 
   for (size_t i = 0; i < len; i++) {
-    if ((bitmap1[i] ^ bitmap2[i]) != 0)
+    if ((bitmap1[i] & bitmap2[i]) != 0)
       return false;
   }
   return true;
@@ -43,8 +43,11 @@ inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) {
     const uint64_t *bitmap1 = bitmaps[i].bitmap();
     const uint64_t *bitmap2 = bitmaps[i+1].bitmap();
 
-    debug("checking '%s' && '%s'", bitmaps[i].to_string().c_str(), bitmaps[i+1].to_string().c_str());
-    if (bitmapsMeshable(bitmap1, bitmap2, len))
+    // 8 words per 64-bit int
+    const size_t longLen = len / 8;
+
+    //debug("checking '%s' && '%s'", bitmaps[i].to_string(32).c_str(), bitmaps[i+1].to_string(32).c_str());
+    if (bitmapsMeshable(bitmap1, bitmap2, longLen))
       meshes++;
   }
 
