@@ -32,22 +32,14 @@ inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) {
   if (bitmaps.size() == 0)
     return 0;
 
-  ssize_t meshes = 0;
-
-  auto len = bitmaps[0].wordCount();
+  auto meshes = 0;
+  auto len = bitmaps[0].wordCount() / 8; // 8 words per 64-bit int
 
   for (size_t i = 0; i < bitmaps.size()-1; i += 2) {
-    d_assert(len == bitmaps[i].wordCount());
-    d_assert(len == bitmaps[i+1].wordCount());
+    const auto bitmap1 = bitmaps[i].bitmap();
+    const auto bitmap2 = bitmaps[i+1].bitmap();
 
-    const uint64_t *bitmap1 = bitmaps[i].bitmap();
-    const uint64_t *bitmap2 = bitmaps[i+1].bitmap();
-
-    // 8 words per 64-bit int
-    const size_t longLen = len / 8;
-
-    //debug("checking '%s' && '%s'", bitmaps[i].to_string(32).c_str(), bitmaps[i+1].to_string(32).c_str());
-    if (bitmapsMeshable(bitmap1, bitmap2, longLen))
+    if (bitmapsMeshable(bitmap1, bitmap2, len))
       meshes++;
   }
 
