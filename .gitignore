@@ -4,5 +4,5 @@
 *.so
 *.pyc
 TAGS
-/test/fork-example
+/impl/test/fork-example
 /unit.test
