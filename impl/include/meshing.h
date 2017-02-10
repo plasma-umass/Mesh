@@ -27,9 +27,28 @@ inline bool bitmapsMeshable(const uint64_t *bitmap1, const uint64_t *bitmap2, si
 
 namespace method {
 
-template <typename Heap>
-inline ssize_t simple(const vector<Bitmap<Heap>> &bitmaps) {
-  return 0;
+template <typename Heap, typename T>
+inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) {
+  if (bitmaps.size() == 0)
+    return 0;
+
+  ssize_t meshes = 0;
+
+  auto len = bitmaps[0].wordCount();
+
+  for (size_t i = 0; i < bitmaps.size()-1; i += 2) {
+    d_assert(len == bitmaps[i].wordCount());
+    d_assert(len == bitmaps[i+1].wordCount());
+
+    const uint64_t *bitmap1 = bitmaps[i].bitmap();
+    const uint64_t *bitmap2 = bitmaps[i+1].bitmap();
+
+    debug("checking '%s' && '%s'", bitmaps[i].to_string().c_str(), bitmaps[i+1].to_string().c_str());
+    if (bitmapsMeshable(bitmap1, bitmap2, len))
+      meshes++;
+  }
+
+  return meshes;
 }
 }
 }
