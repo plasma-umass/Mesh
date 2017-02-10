@@ -33,7 +33,7 @@ inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) {
     return 0;
 
   auto meshes = 0;
-  auto len = bitmaps[0].wordCount() / 8;  // 8 words per 64-bit int
+  const auto len = bitmaps[0].wordCount() / 8;  // 8 words per 64-bit int
 
   for (size_t i = 0; i + 1 < bitmaps.size(); i += 2) {
     const auto bitmap1 = bitmaps[i].bitmap();
