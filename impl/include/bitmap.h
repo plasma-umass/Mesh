@@ -76,6 +76,44 @@ public:
   Bitmap(void) {
   }
 
+  explicit Bitmap(const std::string &str) : Bitmap() {
+    reserve(str.length());
+
+    for (size_t i = 0; i < str.length(); ++i) {
+      char c = str[i];
+      d_assert_msg(c == '0' || c == '1', "expected 0 or 1 in bitstring, not %c ('%s')", c, str.c_str());
+      if (c == '1')
+        tryToSet(i);
+    }
+  }
+
+  Bitmap(Bitmap &&rhs) {
+    _elements = rhs._elements;
+    _bitarray = rhs._bitarray;
+    rhs._bitarray = nullptr;
+  }
+
+  ~Bitmap() {
+    if (_bitarray)
+      Heap::free(_bitarray);
+    _bitarray = nullptr;
+  }
+
+  std::string to_string(ssize_t nElements = -1) const {
+    if (nElements == -1)
+      nElements = _elements;
+    d_assert(0 <= nElements && static_cast<size_t>(nElements) <= _elements);
+
+    std::string s(nElements, '0');
+
+    for (ssize_t i = 0; i < nElements; i++) {
+      if (isSet(i))
+        s[i] = '1';
+    }
+
+    return s;
+  }
+
   /// @brief Sets aside space for a certain number of elements.
   /// @param nelts the number of elements needed.
   void reserve(uint64_t nelts) {
@@ -176,7 +214,7 @@ private:
 
   /// Given an index, compute its item (word) and position within the word.
   void computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
-    assert(index < _elements);
+    d_assert(index < _elements);
     item = index >> WORDBITSHIFT;
     position = index & (WORDBITS - 1);
     d_assert(position == index - (item << WORDBITSHIFT));

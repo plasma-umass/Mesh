@@ -13,7 +13,7 @@ TEST(BitmapTest, SetGet) {
   const int NTRIALS = 1000;
 
   for (int n = 100; n < 10000; n *= 2) {
-    Bitmap<MallocHeap> b;
+    mesh::Bitmap<MallocHeap> b;
 
     b.reserve(n);
     b.clear();
