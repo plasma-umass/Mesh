@@ -7,10 +7,6 @@
 #include <cstddef>   // for size_t
 #include <new>       // for operator new
 
-// never allocate exeecutable heap
-#define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)
-#define MALLOC_TRACE 0
-
 #include "file-backed-mmap.h"
 #include "meshingheap.h"
 
