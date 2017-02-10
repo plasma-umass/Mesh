@@ -43,6 +43,7 @@ TEST(BitmapTest, SetGet) {
           ASSERT_FALSE(b.isSet(i));
         }
       }
+      free(rnd);
     }
   }
 }
