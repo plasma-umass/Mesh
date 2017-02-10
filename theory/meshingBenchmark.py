@@ -1,4 +1,3 @@
-#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
 Created on Fri Feb 03 09:45:30 2017
@@ -84,5 +83,14 @@ def experiment(length = 0, occupancy = 0, numStrings = 0, meshingMethod = "dumb"
 
 if __name__ == '__main__':
 #    experiment(length = 10, occupancy = 3, numStrings = 10, meshingMethod = "random", attempts = 100)
-    experiment(stringList = ['0000000000','1111111111','0101010101','1010101010'])
+#    experiment(stringList = ['0000000000','1111111111','0101010101','1010101010'])
+
+    lengths = [32]
+    occupancies = range(1,10)
+    numsStrings = [80]
+    for i in lengths:
+        for j in occupancies:
+            for k in numsStrings:
+                experiment(length = i, occupancy = j, numStrings = k)
+    
         
