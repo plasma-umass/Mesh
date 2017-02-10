@@ -8,6 +8,7 @@ AllowShortLoopsOnASingleLine: false
 IndentCaseLabels: false
 AlwaysBreakTemplateDeclarations: true
 AccessModifierOffset: -2
+Standard: Cpp11
 
 DerivePointerAlignment: false
 PointerAlignment: Right
