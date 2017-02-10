@@ -30,13 +30,12 @@ COMMON_FLAGS = \
 CPPFLAGS   = -DVERSION=\"$(VERSION)\" -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700
 CFLAG_OPTS = \
 	-std=c11 \
-	-I Heap-Layers \
 	$(CPPFLAGS) \
 	$(COMMON_FLAGS)
 
 CXXFLAG_OPTS = \
 	-std=c++14 \
-	-I impl/Heap-Layers \
+	-I impl/vendor/Heap-Layers \
 	-I impl/include \
 	-I impl/include/static \
 	$(CPPFLAGS) \

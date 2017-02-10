@@ -7,7 +7,7 @@ LIB = libmesh.so
 
 UNIT_SRCS = $(wildcard impl/unit/*.cc) impl/d_assert.cc
 UNIT_OBJS = $(UNIT_SRCS:.cc=.o)
-UNIT_CXXFLAGS = -isystem impl/unit/googletest/include -Iimpl/unit/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
+UNIT_CXXFLAGS = -isystem impl/vendor/googletest/googletest/include -Iimpl/vendor/googletest/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
 UNIT_LDFLAGS = -lpthread -lunwind
 UNIT_BIN = unit.test
 
@@ -15,7 +15,12 @@ UNIT_BIN = unit.test
 
 ALL_OBJS = $(LIB_OBJS)
 
-HEAP_LAYERS = impl/Heap-Layers
+# reference files in each subproject to ensure git fully checks the project out
+HEAP_LAYERS = impl/vendor/Heap-Layers/heaplayers.h
+GTEST       = impl/vendor/googletest/googletest/include/gtest/gtest.h
+GFLAGS      = impl/vendor/gflags/src/gflags.cc
+
+ALL_SUBMODULES = $(HEAP_LAYERS) $(GTEST) $(GFLAGS)
 
 CONFIG = Makefile config.mk
 
@@ -31,7 +36,7 @@ endif
 
 all: $(LIB) unittests
 
-$(HEAP_LAYERS):
+$(ALL_SUBMODULES):
 	@echo "  GIT   $@"
 	git submodule update --init
 	touch -c $@
