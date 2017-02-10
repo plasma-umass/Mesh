@@ -62,6 +62,8 @@ private:
 template <class Heap>
 class Bitmap : private Heap {
 private:
+  DISALLOW_COPY_AND_ASSIGN(Bitmap);
+
   /// A synonym for the datatype corresponding to a word.
   typedef size_t word_t;
   enum { WORDBITS = sizeof(word_t) * 8 };
