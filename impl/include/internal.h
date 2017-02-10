@@ -33,6 +33,16 @@ public:
   }
 };
 
+// make a shared pointer allocated from our internal heap that will
+// also free to the internal heap when all references have been
+// dropped.
+template <typename T, class... Args>
+inline std::shared_ptr<T> make_shared(Args &&... args) {
+  // FIXME: somehow centralize this static.
+  static STLAllocator<T, Heap> heap;
+  return std::allocate_shared<T, STLAllocator<T, Heap>, Args...>(heap, std::forward<Args>(args)...);
+}
+
 template <typename K, typename V>
 using unordered_map = std::unordered_map<K, V, hash<K>, equal_to<K>, STLAllocator<pair<const K, V>, Heap>>;
 

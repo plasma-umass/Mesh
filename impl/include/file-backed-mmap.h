@@ -24,8 +24,9 @@
 
 */
 
-#ifndef HL_FILE_BACKED_MMAPHEAP_H
-#define HL_FILE_BACKED_MMAPHEAP_H
+#pragma once
+#ifndef MESH__FILE_BACKED_MMAPHEAP_H
+#define MESH__FILE_BACKED_MMAPHEAP_H
 
 #if defined(_WIN32)
 #error "TODO"
@@ -51,13 +52,7 @@
 
 #include "internal.h"
 
-#ifndef HL_MMAP_PROTECTION_MASK
-#error "define HL_MMAP_PROTECTION_MASK before including heaplayers.h"
-#endif
-
-#if !defined(MAP_ANONYMOUS) && defined(MAP_ANON)
-#define MAP_ANONYMOUS MAP_ANON
-#endif
+#include "mesh-mmap.h"
 
 /**
  * @class FileBackedMmapHeap
@@ -83,8 +78,8 @@ int copyfile(int dstFd, int srcFd, size_t sz) {
   struct stat fileinfo;
   memset(&fileinfo, 0, sizeof(fileinfo));
   fstat(srcFd, &fileinfo);
-  d_assert_msg(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz,
-               "copyfile: expected %zu == %zu", fileinfo.st_size, sz);
+  d_assert_msg(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz, "copyfile: expected %zu == %zu",
+               fileinfo.st_size, sz);
   int result = sendfile(dstFd, srcFd, &bytesCopied, sz);
   // on success, ensure the entire results were copied
   if (result == 0)
@@ -93,77 +88,37 @@ int copyfile(int dstFd, int srcFd, size_t sz) {
 
   return result;
 }
-}
 
-class MmapHeap {
+class FD {
 private:
-  DISALLOW_COPY_AND_ASSIGN(MmapHeap);
+  DISALLOW_COPY_AND_ASSIGN(FD);
 
 public:
-  enum { Alignment = MmapWrapper::Alignment };
-
-  MmapHeap() {
+  explicit FD(int fd) : _fd{fd} {
   }
 
-  inline void *map(size_t sz, int flags, int fd) {
-    if (sz == 0)
-      return nullptr;
-
-    // Round up to the size of a page.
-    sz = (sz + CPUInfo::PageSize - 1) & (size_t) ~(CPUInfo::PageSize - 1);
-
-    void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, flags, fd, 0);
-    if (ptr == MAP_FAILED)
-      abort();
-
-    d_assert(_vmaMap.find(ptr) == _vmaMap.end());
-    _vmaMap[ptr] = sz;
-    d_assert(_vmaMap.find(ptr) != _vmaMap.end());
-    d_assert(_vmaMap[ptr] == sz);
-
-    d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
-
-    return ptr;
-  }
-
-  inline void *malloc(size_t sz) {
-    return map(sz, MAP_PRIVATE | MAP_ANONYMOUS, -1);
-  }
-
-  inline size_t getSize(void *ptr) {
-    auto entry = _vmaMap.find(ptr);
-    if (unlikely(entry == _vmaMap.end())) {
-      debug("mmap: invalid getSize: %p", ptr);
-      return 0;
+  ~FD() {
+    if (_fd >= 0) {
+      debug("closing fd %d", _fd);
+      close(_fd);
     }
-    return entry->second;
+    _fd = -2;
   }
 
-  inline void free(void *ptr) {
-    auto entry = _vmaMap.find(ptr);
-    if (unlikely(entry == _vmaMap.end())) {
-      debug("mmap: invalid free: %p", ptr);
-      return;
-    }
-
-    auto sz = entry->second;
-
-    munmap(ptr, sz);
-    //madvise(ptr, sz, MADV_DONTNEED);
-    //mprotect(ptr, sz, PROT_NONE);
-
-    _vmaMap.erase(entry);
-    d_assert(_vmaMap.find(ptr) == _vmaMap.end());
+  operator int() const {
+    return _fd;
   }
 
 protected:
-  internal::unordered_map<void *, size_t> _vmaMap{};
+  int _fd{-1};
 };
+}
 
-class FileBackedMmapHeap : public MmapHeap {
+class FileBackedMmapHeap : public mesh::MmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(FileBackedMmapHeap);
   typedef MmapHeap SuperHeap;
+  typedef int abstract_fd;
 
 public:
   enum { Alignment = MmapWrapper::Alignment };
@@ -191,7 +146,8 @@ public:
     int fd = openSpanFile(sz);
     void *ptr = SuperHeap::map(sz, MAP_SHARED, fd);
 
-    _fdMap[ptr] = fd;
+
+    _fdMap[ptr] = internal::make_shared<internal::FD>(fd);
 
     return ptr;
   }
@@ -206,26 +162,24 @@ public:
     auto sz = entry->second;
 
     munmap(ptr, sz);
-    //madvise(ptr, sz, MADV_DONTNEED);
-    //mprotect(ptr, sz, PROT_NONE);
+    // madvise(ptr, sz, MADV_DONTNEED);
+     //mprotect(ptr, sz, PROT_NONE);
 
     _vmaMap.erase(entry);
     d_assert(_vmaMap.find(ptr) == _vmaMap.end());
 
-    auto fdEntry = _fdMap.find(ptr);
-    d_assert(fdEntry != _fdMap.end());
-
-    int result = fallocate(fdEntry->second, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, sz);
+    d_assert(_fdMap.find(ptr) != _fdMap.end());
+    int fd = *_fdMap[ptr];
+    int result = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, sz);
     d_assert(result == 0);
 
-    close(fdEntry->second);
-    _fdMap.erase(fdEntry);
+    _fdMap.erase(ptr);
   }
 
   void mesh(void *keep, void *remove) {
   }
 
-protected:
+private:
   int openSpanFile(size_t sz) {
     constexpr size_t buf_len = 64;
     char buf[buf_len];
@@ -277,7 +231,7 @@ protected:
       if (result != 0 && errno != EEXIST)
         continue;
 
-      char *spanDir = reinterpret_cast<char *>(internal::Heap().malloc(strlen(buf)+1));
+      char *spanDir = reinterpret_cast<char *>(internal::Heap().malloc(strlen(buf) + 1));
       strcpy(spanDir, buf);
       return spanDir;
     }
@@ -356,14 +310,13 @@ protected:
       fstat(newFd, &fileinfo);
       d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz);
 
-      internal::copyfile(newFd, entry.second, sz);
+      internal::copyfile(newFd, *entry.second, sz);
 
       // remap the new region over the old
       void *ptr = mmap(entry.first, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
       d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
-      close(entry.second);
-      _fdMap[entry.first] = newFd;
+      _fdMap[entry.first] = internal::make_shared<internal::FD>(newFd);
     }
 
     internal::Heap().free(oldSpanDir);
@@ -376,10 +329,10 @@ protected:
     _forkPipe[1] = -1;
   }
 
-  internal::unordered_map<void *, int> _fdMap{};
+  internal::unordered_map<void *, shared_ptr<internal::FD>> _fdMap{};
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
   char *_spanDir{nullptr};
 };
 }
 
-#endif  // HL_FILE_BACKED_MMAPHEAP_H
+#endif  // MESH__FILE_BACKED_MMAPHEAP_H
