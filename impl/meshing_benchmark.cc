@@ -12,6 +12,7 @@
 #include "bitmap.h"
 
 #include "internal.h"
+#include "meshing.h"
 
 using std::vector;
 using std::string;
@@ -54,12 +55,12 @@ public:
   vector<Bitmap<MallocHeap>> bitmaps{};
   vector<string> strings{};
 
-  size_t length;
+  size_t length;  // string length
   size_t occupancy;
   size_t nStrings;
   string method;
 
-  int expectedResult{-1};
+  ssize_t expectedResult{-1};
 };
 
 unique_ptr<MeshTestcase> openTestcase(const char *path) {
@@ -119,6 +120,7 @@ unique_ptr<MeshTestcase> openTestcase(const char *path) {
       loop = false;
     } else {
       string sline{line};
+      d_assert(sline.length() == testcase->length);
 
       testcase->bitmaps.emplace_back(sline);
       testcase->strings.emplace_back(sline);
@@ -130,10 +132,29 @@ unique_ptr<MeshTestcase> openTestcase(const char *path) {
   }
   fclose(f);
 
-  d_assert(testcase->strings.size() == testcase->length);
+  d_assert_msg(testcase->strings.size() == testcase->nStrings, "%zu == %zu", testcase->strings.size(),
+               testcase->nStrings);
   d_assert(testcase->expectedResult >= 0);
 
   return testcase;
+}
+
+bool validate(const unique_ptr<MeshTestcase> &testcase) {
+  ssize_t result = 0;
+  if (testcase->method == "dumb") {
+    result = mesh::method::simple<MallocHeap>(testcase->bitmaps);
+    if (result == testcase->expectedResult)
+      return true;
+  } else {
+    printf("ERROR: unimplemented method '%s'\n", testcase->method.c_str());
+    return false;
+  }
+
+  if (result != testcase->expectedResult) {
+    printf("ERROR: unexpected result %zu (expected %zu) for %s method\n", result, testcase->expectedResult,
+           testcase->method.c_str());
+  }
+  return false;
 }
 
 int main(int argc, char *argv[]) {
@@ -153,7 +174,13 @@ int main(int argc, char *argv[]) {
     if (FLAGS_v) {
       printf("meshing strings from %s\n", argv[i]);
     }
+
     auto testcase = openTestcase(argv[i]);
+
+    if (!validate(testcase)) {
+      printf("%s: failed to validate.\n", argv[i]);
+      exit(1);
+    }
   }
 
   return 0;
