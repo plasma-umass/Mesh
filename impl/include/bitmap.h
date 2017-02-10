@@ -19,6 +19,8 @@
 #include "common.h"
 #include "staticlog.h"
 
+namespace mesh {
+
 template <typename Container, typename size_t>
 class BitmapIter : public std::iterator<std::forward_iterator_tag, size_t> {
 public:
@@ -193,5 +195,6 @@ private:
   /// The number of elements (bits) in the array.
   size_t _elements{0};
 };
+}
 
 #endif  // MESH__BITMAP_H

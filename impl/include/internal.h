@@ -7,6 +7,10 @@
 
 #include "common.h"
 
+// never allocate exeecutable heap
+#define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)
+#define MALLOC_TRACE 0
+
 #include "heaplayers.h"
 
 namespace mesh {
