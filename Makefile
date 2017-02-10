@@ -83,7 +83,7 @@ run: $(LIB) impl/test/fork-example
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
 	@echo "  TAGS"
-	find . -type f | egrep '\.(cpp|h|cc|hh)$$' | xargs etags -l c++
+	find . -type f | egrep '\.(cpp|h|cc|hh)$$' | grep -v google | xargs etags -l c++
 
 -include $(ALL_OBJS:.o=.d)
 
