@@ -1,24 +1,30 @@
 include config.mk
 
 
-LIB_SRCS = impl/libmesh.cc impl/d_assert.cc
-LIB_OBJS = $(LIB_SRCS:.cc=.o)
-LIB = libmesh.so
+LIB_SRCS         = impl/libmesh.cc impl/d_assert.cc
+LIB_OBJS         = $(LIB_SRCS:.cc=.o)
+LIB              = libmesh.so
 
-UNIT_SRCS = $(wildcard impl/unit/*.cc) impl/d_assert.cc
-UNIT_OBJS = $(UNIT_SRCS:.cc=.o)
-UNIT_CXXFLAGS = -isystem impl/vendor/googletest/googletest/include -Iimpl/vendor/googletest/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
-UNIT_LDFLAGS = -lpthread -lunwind
-UNIT_BIN = unit.test
+UNIT_SRCS        = $(wildcard impl/unit/*.cc) impl/d_assert.cc
+UNIT_OBJS        = $(UNIT_SRCS:.cc=.o)
+UNIT_CXXFLAGS    = -isystem impl/vendor/googletest/googletest/include -Iimpl/vendor/googletest/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
+UNIT_LDFLAGS     = -lpthread -lunwind
+UNIT_BIN         = unit.test
 
+BENCH_SRCS       = impl/meshing_benchmark.cc impl/d_assert.cc
+BENCH_OBJS       = $(BENCH_SRCS:.cc=.o)
+BENCH_BIN        = meshing-benchmark
 
-
-ALL_OBJS = $(LIB_OBJS)
+ALL_OBJS         = $(LIB_OBJS) $(UNIT_OBJS) $(BENCH_OBJS)
 
 # reference files in each subproject to ensure git fully checks the project out
-HEAP_LAYERS = impl/vendor/Heap-Layers/heaplayers.h
-GTEST       = impl/vendor/googletest/googletest/include/gtest/gtest.h
-GFLAGS      = impl/vendor/gflags/src/gflags.cc
+HEAP_LAYERS      = impl/vendor/Heap-Layers/heaplayers.h
+GTEST            = impl/vendor/googletest/googletest/include/gtest/gtest.h
+GFLAGS           = impl/vendor/gflags/src/gflags.cc
+
+GFLAGS_BUILD_DIR = impl/vendor/gflags/build
+GFLAGS_BUILD     = $(GFLAGS_BUILD_DIR)/Makefile
+GFLAGS_LIB       = $(GFLAGS_BUILD_DIR)/lib/libgflags.a
 
 ALL_SUBMODULES = $(HEAP_LAYERS) $(GTEST) $(GFLAGS)
 
@@ -34,12 +40,22 @@ endif
 .SUFFIXES:
 .SUFFIXES: .cc .cpp .c .o .d .test
 
-all: $(LIB) unittests
+all: test $(BENCH_BIN) $(LIB)
 
 $(ALL_SUBMODULES):
 	@echo "  GIT   $@"
 	git submodule update --init
 	touch -c $@
+
+$(GFLAGS_BUILD): $(GFLAGS) $(CONFIG)
+	@echo "  CMAKE $@"
+	mkdir -p $(GFLAGS_BUILD_DIR)
+	cd $(GFLAGS_BUILD_DIR) && CC=$(CC) CXX=$(CXX) cmake ..
+	touch -c $(GFLAGS_BUILD)
+
+$(GFLAGS_LIB): $(GFLAGS_BUILD) $(CONFIG)
+	@echo "  LD    $@"
+	cd $(GFLAGS_BUILD_DIR) && $(MAKE)
 
 %.o: %.c $(CONFIG)
 	@echo "  CC    $@"
@@ -57,11 +73,15 @@ $(LIB): $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
 	@echo "  LD    $@"
 	$(CXX) -shared $(LDFLAGS) -o $@ $(LIB_OBJS) $(LIBS)
 
+$(BENCH_BIN): $(HEAP_LAYERS) $(GFLAGS_LIB) $(BENCH_OBJS) $(CONFIG)
+	@echo "  LD    $@"
+	$(CXX) $(LDFLAGS) -o $@ $(BENCH_OBJS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
+
 $(UNIT_BIN): $(CONFIG) $(UNIT_OBJS)
 	@echo "  LD    $@"
 	$(CXX) -O0 $(LDFLAGS) -o $@ $(UNIT_OBJS) $(UNIT_LDFLAGS)
 
-unittests: $(UNIT_BIN)
+test check: $(UNIT_BIN)
 	./$(UNIT_BIN)
 
 install: $(LIB)
@@ -71,9 +91,12 @@ install: $(LIB)
 clean:
 	rm -f impl/test/fork-example
 	rm -f $(UNIT_BIN) $(LIB) impl/*.gcda impl/*.gcno
-	find . -name '*.o' -print0 | xargs -0 rm -f
-	find . -name '*.d' -print0 | xargs -0 rm -f
+	find impl -name '*.o' -print0 | xargs -0 rm -f
+	find impl -name '*.d' -print0 | xargs -0 rm -f
 	find . -name '*~' -print0 | xargs -0 rm -f
+
+distclean: clean
+	rm -r $(GFLAGS_BUILD_DIR)
 
 paper:
 	$(MAKE) -C paper
@@ -92,4 +115,4 @@ TAGS:
 
 -include $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean unittests install paper run TAGS
+.PHONY: all clean distclean test check install paper run TAGS
