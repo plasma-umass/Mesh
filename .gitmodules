@@ -1,5 +1,5 @@
 [submodule "Heap-Layers"]
-	path = impl/Heap-Layers
+	path = impl/vendor/Heap-Layers
 	url = https://github.com/emeryberger/Heap-Layers
 [submodule "impl/vendor/gflags"]
 	path = impl/vendor/gflags
