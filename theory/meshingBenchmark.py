@@ -6,12 +6,19 @@ Created on Fri Feb 03 09:45:30 2017
 """
 
 from __future__ import division
+
+import argparse
+import os
+import os.path
+import sys
+
+import networkx as nx
+import numpy as np
+
 from createRandomString import *
 from makeGraph import *
 from meshers import *
-import networkx as nx
-import numpy as np
-import os
+from common import *
 
 
 def dumpStrings(strings, length, occupancy, numStrings, meshingMethod, result):
@@ -78,19 +85,55 @@ def experiment(length = 0, occupancy = 0, numStrings = 0, meshingMethod = "dumb"
         print 'hi'
         
     dumpStrings(strings, length, occupancy, numStrings, meshingMethod, result)
-    
+
+
+def validate(file_name):
+    '''
+    Validates the string file produces the right # meshes
+    '''
+    content = slurp(file_name)
+    lines = content.split()
+    strings, result_str = lines[:-1], lines[-1]
+    if result_str[0] != '-':
+        log(ERROR, 'expected result line to start with -, instead saw: "%s"', result_str)
+        sys.exit(1)
+
+    expected_result = int(result_str[1:])
+
+    length, occupancy, numStrings, method = os.path.basename(file_name).split('.')[0].split(',')
+    length = int(length)
+    occupancy = int(occupancy)
+    numStrings = int(numStrings)
+
+    if numStrings != len(strings):
+        log(ERROR, 'expected %d strings, got %d', numStrings, len(strings))
+        sys.exit(1)
+
+    if method == 'dumb':
+        result = simpleMesher(strings)
+        if result != expected_result:
+            log(ERROR, 'result mismatch %d != %d', result, expected_result)
+            sys.exit(1)
+    else:
+        log(ERROR, 'unsupported meshing method "%s"', method)
+        sys.exit(1)
 
 
 if __name__ == '__main__':
-#    experiment(length = 10, occupancy = 3, numStrings = 10, meshingMethod = "random", attempts = 100)
-#    experiment(stringList = ['0000000000','1111111111','0101010101','1010101010'])
+    parser = argparse.ArgumentParser()
+    parser.add_argument('file_name', metavar='FILE', nargs='?',
+                        help='an optional string file to read in')
+    args = parser.parse_args()
 
-    lengths = [32]
-    occupancies = range(1,10)
-    numsStrings = [80]
-    for i in lengths:
-        for j in occupancies:
-            for k in numsStrings:
-                experiment(length = i, occupancy = j, numStrings = k)
-    
-        
+    if args.file_name:
+        validate(args.file_name)
+    else:
+        # experiment(length = 10, occupancy = 3, numStrings = 10, meshingMethod = "random", attempts = 100)
+        # experiment(stringList = ['0000000000','1111111111','0101010101','1010101010'])
+        lengths = [32]
+        occupancies = range(1,10)
+        numsStrings = [80]
+        for i in lengths:
+            for j in occupancies:
+                for k in numsStrings:
+                    experiment(length = i, occupancy = j, numStrings = k)
