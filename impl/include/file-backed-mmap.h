@@ -99,7 +99,7 @@ public:
 
   ~FD() {
     if (_fd >= 0) {
-      debug("closing fd %d", _fd);
+      debug("closed fd %d", _fd);
       close(_fd);
     }
     _fd = -2;
@@ -176,7 +176,21 @@ public:
     _fdMap.erase(ptr);
   }
 
-  void mesh(void *keep, void *remove) {
+  static void mesh(FileBackedMmapHeap &heap, void *keep, void *remove) {
+    heap.internalMesh(keep, remove);
+  }
+
+  void internalMesh(void *keep, void *remove) {
+    auto sz = _vmaMap[keep];
+
+    d_assert(_fdMap.find(keep) != _fdMap.end());
+    auto keepFd = _fdMap[keep];
+    void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, *keepFd, 0);
+    d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
+
+    _fdMap[remove] = keepFd;
+
+    debug("meshed %p + %p", keep, remove);
   }
 
 private:

@@ -69,7 +69,7 @@ public:
       d_assert(ok && dst->_bitmap.isSet(off));
     }
 
-    // TODO: point src span at dst file
+    dst->_super.mesh(dst->_span, src->_span);
   }
 
   inline void *malloc(size_t sz) {

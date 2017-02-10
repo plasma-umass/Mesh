@@ -160,8 +160,9 @@ protected:
           d_assert(len == h2->bitmap().wordCount());
 
           if (mesh::bitmapsMeshable(bitmap1, bitmap2, len)) {
+            debug("----\n2 MESHABLE HEAPS!\n");
             MiniHeap::mesh(h1, h2);
-            // debug("----\n2 MESHABLE HEAPS:\n");
+
             // h1->dumpDebug();
             // h2->dumpDebug();
             // debug("----\n");
