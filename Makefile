@@ -26,15 +26,15 @@ GFLAGS_BUILD_DIR = impl/vendor/gflags/build
 GFLAGS_BUILD     = $(GFLAGS_BUILD_DIR)/Makefile
 GFLAGS_LIB       = $(GFLAGS_BUILD_DIR)/lib/libgflags.a
 
-ALL_SUBMODULES = $(HEAP_LAYERS) $(GTEST) $(GFLAGS)
+ALL_SUBMODULES   = $(HEAP_LAYERS) $(GTEST) $(GFLAGS)
 
-CONFIG = Makefile config.mk
+CONFIG           = Makefile config.mk
 
 # quiet output, but allow us to look at what commands are being
 # executed by passing 'V=1' to make, without requiring temporarily
 # editing the Makefile.
 ifneq ($V, 1)
-MAKEFLAGS += -s
+MAKEFLAGS       += -s
 endif
 
 .SUFFIXES:
@@ -56,6 +56,7 @@ $(GFLAGS_BUILD): $(GFLAGS) $(CONFIG)
 $(GFLAGS_LIB): $(GFLAGS_BUILD) $(CONFIG)
 	@echo "  LD    $@"
 	cd $(GFLAGS_BUILD_DIR) && $(MAKE)
+	touch -c $@
 
 %.o: %.c $(CONFIG)
 	@echo "  CC    $@"
