@@ -159,7 +159,7 @@ protected:
           const auto bitmap2 = h2->bitmap().bitmap();
           d_assert(len == h2->bitmap().wordCount());
 
-          if (mesh::meshable(bitmap1, bitmap2, len)) {
+          if (mesh::bitmapsMeshable(bitmap1, bitmap2, len)) {
             MiniHeap::mesh(h1, h2);
             // debug("----\n2 MESHABLE HEAPS:\n");
             // h1->dumpDebug();
