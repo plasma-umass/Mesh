@@ -30,21 +30,14 @@ void debug(const char *fmt, ...);
 
 // dynamic (runtime) assert
 #ifndef NDEBUG
-#define d_assert_msg(expr, fmt, ...)                                                   \
-  ({                                                                                   \
-    if (likely(expr)) {                                                                \
-    } else {                                                                           \
-      mesh::internal::__mesh_assert_fail(#expr, __FILE__, __LINE__, fmt, __VA_ARGS__); \
-    }                                                                                  \
-  })
+#define d_assert_msg(expr, fmt, ...) \
+  ((likely(expr))                    \
+       ? static_cast<void>(0)        \
+       : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, __LINE__, fmt, __VA_ARGS__))
 
-#define d_assert(expr)                                                   \
-  ({                                                                     \
-    if (likely(expr)) {                                                  \
-    } else {                                                             \
-      mesh::internal::__mesh_assert_fail(#expr, __FILE__, __LINE__, ""); \
-    }                                                                    \
-  })
+#define d_assert(expr)                   \
+  ((likely(expr)) ? static_cast<void>(0) \
+                  : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, __LINE__, ""))
 #else
 #error "don't disable assertions"
 #define d_assert(expr, fmt, ...)
@@ -69,7 +62,7 @@ inline int size2Class(const size_t sz) {
 
 namespace internal {
 
-inline static mutex *getSeedMutex(void) {
+inline static mutex *getSeedMutex() {
   static char muBuf[sizeof(mutex)];
   static mutex *mu = new (muBuf) mutex();
   return mu;
@@ -77,7 +70,7 @@ inline static mutex *getSeedMutex(void) {
 
 // we must re-initialize our seed on program startup and after fork.
 // Must be called with getSeedMutex() held
-inline mt19937_64 *initSeed(void) {
+inline mt19937_64 *initSeed() {
   static char mtBuf[sizeof(mt19937_64)];
 
   static_assert(sizeof(mt19937_64::result_type) == sizeof(uint64_t), "expected 64-bit result_type for PRNG");
@@ -87,7 +80,7 @@ inline mt19937_64 *initSeed(void) {
   return new (mtBuf) std::mt19937_64(rd());
 }
 
-inline uint64_t seed(void) {
+inline uint64_t seed() {
   static mt19937_64 *mt = NULL;
 
   lock_guard<mutex> lock(*getSeedMutex());
@@ -100,7 +93,7 @@ inline uint64_t seed(void) {
 
 // assertions that don't attempt to recursively malloc
 void __attribute__((noreturn))
-__mesh_assert_fail(const char *assertion, const char *file, int line, const char *fmt, ...);
+__mesh_assert_fail(const char *assertion, const char *file, const char *func, int line, const char *fmt, ...);
 }
 }
 
