@@ -2,6 +2,7 @@
 
 #include <cstdio>   // for sprintf
 #include <cstdlib>  // for abort
+#include <cstdarg>
 
 #include <unistd.h>
 
@@ -41,7 +42,7 @@ void debug(const char *fmt, ...) {
 
 // out-of-line function called to report an error and exit the program
 // when an assertion failed.
-void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file, int line, const char *fmt, ...) {
+void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file, const char *func, int line, const char *fmt, ...) {
   constexpr size_t buf_len = 4096;
   constexpr size_t usr_len = 512;
   static char buf[buf_len];
@@ -56,7 +57,7 @@ void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file,
 
   usr[usr_len - 1] = 0;
 
-  int len = snprintf(buf, buf_len - 1, "%s:%d: ASSERTION '%s' FAILED: %s\n", file, line, assertion, usr);
+  int len = snprintf(buf, buf_len - 1, "%s:%d:%s: ASSERTION '%s' FAILED: %s\n", file, line, func, assertion, usr);
   if (len > 0) {
     write(STDERR_FILENO, buf, len);
   }
