@@ -89,6 +89,8 @@ int copyfile(int dstFd, int srcFd, size_t sz) {
   return result;
 }
 
+// wraps an integer file descriptor to provide close-on-destruct
+// semantics (so that we can use a shared_ptr to refcount a FD)
 class FD {
 private:
   DISALLOW_COPY_AND_ASSIGN(FD);
@@ -98,10 +100,8 @@ public:
   }
 
   ~FD() {
-    if (_fd >= 0) {
-      debug("closed fd %d", _fd);
+    if (_fd >= 0)
       close(_fd);
-    }
     _fd = -2;
   }
 
