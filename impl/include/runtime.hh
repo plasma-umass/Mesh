@@ -118,9 +118,13 @@ private:
   };
 
   static void *startThread(StartThreadArgs *threadArgs);
+  static void sigQuiesceHandler(int sig, siginfo_t *info, void *uctx);
 
+  void installSigHandlers();
   void installSigAltStack();
   void removeSigAltStack();
+
+  void quiesce();
 
   static __thread stack_t _altStack;
 

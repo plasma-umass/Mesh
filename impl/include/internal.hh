@@ -5,6 +5,8 @@
 #ifndef MESH__INTERNAL_H
 #define MESH__INTERNAL_H
 
+#include <signal.h>
+
 #include "common.hh"
 
 // never allocate exeecutable heap
@@ -17,6 +19,7 @@ namespace mesh {
 namespace internal {
 
 static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL; // 16k sigaltstacks
+static constexpr int SIGQUIESCE = SIGUSR2;
 
 // efficiently copy data from srcFd to dstFd
 int copyFile(int dstFd, int srcFd, size_t sz);

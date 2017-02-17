@@ -45,6 +45,7 @@ void StopTheWorld::resume() {
 
 Runtime::Runtime() {
   installSigAltStack();
+  installSigHandlers();
 }
 
 void Runtime::lock() {
@@ -97,6 +98,32 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
   runtime->removeSigAltStack();
 
   return result;
+}
+
+void Runtime::sigQuiesceHandler(int sig, siginfo_t *info, void *uctx) {
+  runtime().quiesce();
+}
+
+void Runtime::quiesce() {
+  debug("quiesce myself");
+
+  // currentIsQuiesced
+
+  // waitToContinue
+}
+
+void Runtime::installSigHandlers() {
+  struct sigaction sigQuiesce;
+  memset(&sigQuiesce, 0, sizeof(sigQuiesce));
+  // no need to explicitly set SIGQUIESCE in the mask - it is
+  // automatically blocked while the handler is running.
+  sigemptyset(&sigQuiesce.sa_mask);
+  sigQuiesce.sa_flags = SA_SIGINFO | SA_RESTART | SA_ONSTACK;
+  sigQuiesce.sa_sigaction = sigQuiesceHandler;
+  if (sigaction(internal::SIGQUIESCE, &sigQuiesce, NULL) == -1) {
+    debug("sigaction(SIGQUIESCE): %d", errno);
+    abort();
+  }
 }
 
 __thread stack_t Runtime::_altStack;
