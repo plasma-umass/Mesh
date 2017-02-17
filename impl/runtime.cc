@@ -43,6 +43,11 @@ void StopTheWorld::quiesce() {
 void StopTheWorld::resume() {
 }
 
+Runtime::Runtime() {
+  _sigAltStack = reinterpret_cast<SigAltStackFn>(dlsym(RTLD_NEXT, "sigaltstack"));
+  installSigAltStack();
+}
+
 void Runtime::lock() {
   _mutex.lock();
 }
@@ -95,12 +100,37 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
   return result;
 }
 
+__thread stack_t Runtime::_altStack;
+
 void Runtime::installSigAltStack() {
-  // TODO: install sigaltstack
-  debug("TODO: install sigaltstack");
+  static_assert(internal::ALTSTACK_SIZE >= MINSIGSTKSZ, "altstack not big enough");
+  d_assert(_altStack.ss_sp == nullptr);
+
+  memset(&_altStack, 0, sizeof(_altStack));
+  // FIXME: should we consider allocating altstack from mmap directly?
+  _altStack.ss_sp = internal::Heap().malloc(internal::ALTSTACK_SIZE);
+  _altStack.ss_size = internal::ALTSTACK_SIZE;
+
+  sigaltstack(&_altStack, nullptr);
 }
 
 void Runtime::removeSigAltStack() {
-  // TODO: remove sigaltstack
+  d_assert(_altStack.ss_sp != nullptr);
+
+  stack_t disableStack;
+
+  memset(&disableStack, 0, sizeof(disableStack));
+  disableStack.ss_flags = SS_DISABLE;
+
+  sigaltstack(&disableStack, nullptr);
+
+  internal::Heap().free(_altStack.ss_sp);
+  _altStack.ss_sp = nullptr;
+  _altStack.ss_size = 0;
+}
+
+int Runtime::sigAltStack(const stack_t *__restrict ss, stack_t *__restrict oss) {
+  d_assert(_sigAltStack != nullptr);
+  return _sigAltStack(ss, oss);
 }
 }
