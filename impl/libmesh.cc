@@ -1,13 +1,13 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>   // for sprintf
 #include <stdlib.h>  // for abort
 #include <unistd.h>  // for write
 #include <cstdarg>   // for va_start + friends
 #include <cstddef>   // for size_t
 #include <new>       // for operator new
-#include <signal.h>
 
 #include "file-backed-mmapheap.h"
 #include "meshingheap.h"
@@ -107,7 +107,6 @@ private:
   }
 
 private:
-
   void installSigAltStack() {
     // TODO: install sigaltstack
     debug("TODO: install sigaltstack");
