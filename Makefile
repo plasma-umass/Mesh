@@ -1,6 +1,6 @@
 include config.mk
 
-COMMON_SRCS      = impl/runtime.cc impl/d_assert.cc
+COMMON_SRCS      = impl/runtime.cc impl/file-backed-mmapheap.cc impl/d_assert.cc
 
 LIB_SRCS         = impl/libmesh.cc $(COMMON_SRCS)
 LIB_OBJS         = $(LIB_SRCS:.cc=.o)

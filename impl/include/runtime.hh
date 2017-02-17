@@ -56,7 +56,9 @@ public:
 class Runtime {
 private:
   DISALLOW_COPY_AND_ASSIGN(Runtime);
+
   explicit Runtime() {
+    installSigAltStack();
   }
 
 public:
