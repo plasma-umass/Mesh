@@ -120,6 +120,7 @@ void FileBackedMmapHeap::staticAfterForkChild() {
 
 void FileBackedMmapHeap::prepareForFork() {
   runtime().lock();
+  runtime().heap().lock();
 
   int err = pipe(_forkPipe);
   if (err == -1)
@@ -127,6 +128,7 @@ void FileBackedMmapHeap::prepareForFork() {
 }
 
 void FileBackedMmapHeap::afterForkParent() {
+  runtime().heap().unlock();
   runtime().unlock();
 
   close(_forkPipe[1]);
@@ -148,6 +150,7 @@ void FileBackedMmapHeap::afterForkParent() {
 }
 
 void FileBackedMmapHeap::afterForkChild() {
+  runtime().heap().unlock();
   runtime().unlock();
 
   close(_forkPipe[0]);

@@ -69,6 +69,10 @@ public:
 
   void lock();
   void unlock();
+
+private:
+  void quiesce();
+  void resume();
 };
 
 class Runtime {
@@ -123,6 +127,7 @@ private:
 
   PthreadCreateFn _pthreadCreate{nullptr};
   MeshHeap _heap{};
+  mutex _mutex{};
   StopTheWorld _stw{};
 };
 
