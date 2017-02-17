@@ -16,10 +16,10 @@
 
 namespace mesh {
 
-// signature of function passed to pthread_create
+// function passed to pthread_create
 typedef void *(*PthreadFn)(void *);
 
-// signature of pthread_create
+// signature of pthread_create itself
 typedef int (*PthreadCreateFn)(pthread_t *thread, const pthread_attr_t *attr, PthreadFn start_routine, void *arg);
 
 // The top heap provides memory to back spans managed by MiniHeaps.
@@ -32,6 +32,7 @@ public:
     getSuperHeap().internalMesh(keep, remove);
   }
 };
+
 // The top big heap is called to handle malloc requests for large
 // objects.  We define a separate class to handle these to segregate
 // bookkeeping for large malloc requests from the ones used to back
@@ -57,6 +58,7 @@ class Runtime {
 private:
   DISALLOW_COPY_AND_ASSIGN(Runtime);
 
+  // ensure we don't mistakenly create additional runtime instances
   explicit Runtime() {
     installSigAltStack();
   }
@@ -101,6 +103,7 @@ private:
   MeshHeap _heap{};
 };
 
+// get a reference to the Runtime singleton
 inline Runtime &runtime() {
   // force alignment by using a buffer of doubles.
   static double buf[(sizeof(Runtime) + sizeof(double) - 1) / sizeof(double)];
