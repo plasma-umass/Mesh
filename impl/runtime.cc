@@ -44,7 +44,6 @@ void StopTheWorld::resume() {
 }
 
 Runtime::Runtime() {
-  _sigAltStack = reinterpret_cast<SigAltStackFn>(dlsym(RTLD_NEXT, "sigaltstack"));
   installSigAltStack();
 }
 
@@ -127,10 +126,5 @@ void Runtime::removeSigAltStack() {
   internal::Heap().free(_altStack.ss_sp);
   _altStack.ss_sp = nullptr;
   _altStack.ss_size = 0;
-}
-
-int Runtime::sigAltStack(const stack_t *__restrict ss, stack_t *__restrict oss) {
-  d_assert(_sigAltStack != nullptr);
-  return _sigAltStack(ss, oss);
 }
 }

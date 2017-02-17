@@ -22,8 +22,6 @@ typedef void *(*PthreadFn)(void *);
 // signature of pthread_create itself
 typedef int (*PthreadCreateFn)(pthread_t *thread, const pthread_attr_t *attr, PthreadFn start_routine, void *arg);
 
-typedef int (*SigAltStackFn)(const stack_t *__restrict ss, stack_t *__restrict oss);
-
 // The top heap provides memory to back spans managed by MiniHeaps.
 class TopHeap : public ExactlyOneHeap<mesh::FileBackedMmapHeap> {
 private:
@@ -101,7 +99,6 @@ public:
   }
 
   int createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg);
-  int sigAltStack(const stack_t *__restrict ss, stack_t *__restrict oss);
 
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
@@ -128,7 +125,6 @@ private:
   static __thread stack_t _altStack;
 
   PthreadCreateFn _pthreadCreate{nullptr};
-  SigAltStackFn _sigAltStack{nullptr};
   MeshHeap _heap{};
   mutex _mutex{};
   StopTheWorld _stw{};

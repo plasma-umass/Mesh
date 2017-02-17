@@ -44,8 +44,4 @@ void xxmalloc_unlock(void) {
 int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg) {
   return mesh::runtime().createThread(thread, attr, startRoutine, arg);
 }
-
-int sigaltstack(const stack_t *__restrict ss, stack_t *__restrict oss) {
-  return mesh::runtime().sigAltStack(ss, oss);
-}
 }
