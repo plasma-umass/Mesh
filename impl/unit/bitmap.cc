@@ -1,11 +1,11 @@
-// Copyright 2016 University of Massachusetts, Amherst
+// Copyright 2017 University of Massachusetts, Amherst
 
 #include <stdint.h>
 #include <stdlib.h>
 
 #include "gtest/gtest.h"
 
-#include "bitmap.h"
+#include "bitmap.hh"
 
 #include <heaplayers.h>
 

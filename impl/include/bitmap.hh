@@ -8,16 +8,16 @@
  */
 
 #pragma once
-#ifndef MESH__BITMAP_H
-#define MESH__BITMAP_H
+#ifndef MESH__BITMAP_HH
+#define MESH__BITMAP_HH
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-#include "common.h"
-#include "staticlog.h"
+#include "common.hh"
+#include "static/staticlog.hh"
 
 namespace mesh {
 

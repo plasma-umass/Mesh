@@ -9,8 +9,8 @@
 #include <cstddef>   // for size_t
 #include <new>       // for operator new
 
-#include "file-backed-mmapheap.h"
-#include "meshingheap.h"
+#include "file-backed-mmapheap.hh"
+#include "meshingheap.hh"
 
 #include "heaplayers.h"
 

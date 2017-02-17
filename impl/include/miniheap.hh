@@ -7,8 +7,8 @@
 
 #include <random>
 
-#include "bitmap.h"
-#include "internal.h"
+#include "bitmap.hh"
+#include "internal.hh"
 
 #include "heaplayers.h"
 

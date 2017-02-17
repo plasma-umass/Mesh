@@ -7,9 +7,10 @@
 #include <algorithm>
 
 #include "heaplayers.h"
-#include "internal.h"
-#include "meshing.h"
-#include "miniheap.h"
+
+#include "internal.hh"
+#include "meshing.hh"
+#include "miniheap.hh"
 
 using namespace HL;
 

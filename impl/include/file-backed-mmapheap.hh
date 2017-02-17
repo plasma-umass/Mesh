@@ -50,9 +50,9 @@
 
 #include <new>
 
-#include "internal.h"
+#include "internal.hh"
 
-#include "mmapheap.h"
+#include "mmapheap.hh"
 
 /**
  * @class FileBackedMmapHeap
