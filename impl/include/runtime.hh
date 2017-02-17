@@ -6,7 +6,7 @@
 #define MESH__RUNTIME_HH
 
 #include <pthread.h>
-#include <signal.h>
+#include <signal.h>  // for stack_t
 
 #include "file-backed-mmapheap.hh"
 #include "internal.hh"
@@ -47,6 +47,7 @@ class MeshHeap : public ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> {
 private:
   DISALLOW_COPY_AND_ASSIGN(MeshHeap);
   typedef ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> SuperHeap;
+
 public:
   explicit MeshHeap() : SuperHeap() {
   }
@@ -57,46 +58,25 @@ private:
   DISALLOW_COPY_AND_ASSIGN(Runtime);
   explicit Runtime() {
   }
+
 public:
   friend Runtime &runtime();
 
-  void lock() {
-  }
-
-  void unlock() {
-  }
+  void lock();
+  void unlock();
 
   inline MeshHeap &heap() {
     return _heap;
   }
 
-  int createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg) {
-    // FIXME: locking
-    if (_pthreadCreate == nullptr) {
-      initThreads();
-    }
-    void *threadArgsBuf = mesh::internal::Heap().malloc(sizeof(StartThreadArgs));
-    d_assert(threadArgsBuf != nullptr);
-    StartThreadArgs *threadArgs = new (threadArgsBuf) StartThreadArgs(this, startRoutine, arg);
-
-    return _pthreadCreate(thread, attr, reinterpret_cast<PthreadFn>(startThread), threadArgs);
-  }
+  int createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg);
 
 private:
   // initialize our pointer to libc's pthread_create.  This happens
   // lazily, as the dynamic linker calls into malloc for dynamic
   // memory allocation, so if we try to do this in MeshHeaps's
   // constructor we deadlock before main even runs.
-  void initThreads() {
-    // FIXME: this assumes glibc
-    void *pthreadHandle = dlopen("libpthread.so.0", RTLD_NOW | RTLD_GLOBAL | RTLD_NOLOAD);
-    d_assert(pthreadHandle != nullptr);
-
-    auto createFn = dlsym(pthreadHandle, "pthread_create");
-    d_assert(createFn != nullptr);
-
-    _pthreadCreate = reinterpret_cast<PthreadCreateFn>(createFn);
-  }
+  void initThreads();
 
   struct StartThreadArgs {
     explicit StartThreadArgs(Runtime *runtime_, PthreadFn startRoutine_, void *arg_)
@@ -108,33 +88,10 @@ private:
     void *arg;
   };
 
-  static void *startThread(StartThreadArgs *threadArgs) {
-    d_assert(threadArgs != nullptr);
+  static void *startThread(StartThreadArgs *threadArgs);
 
-    Runtime *runtime = threadArgs->runtime;
-    PthreadFn startRoutine = threadArgs->startRoutine;
-    void *arg = threadArgs->arg;
-
-    mesh::internal::Heap().free(threadArgs);
-    threadArgs = nullptr;
-
-    runtime->installSigAltStack();
-
-    void *result = startRoutine(arg);
-
-    runtime->removeSigAltStack();
-
-    return result;
-  }
-
-  void installSigAltStack() {
-    // TODO: install sigaltstack
-    debug("TODO: install sigaltstack");
-  }
-
-  void removeSigAltStack() {
-    // TODO: remove sigaltstack
-  }
+  void installSigAltStack();
+  void removeSigAltStack();
 
   static __thread stack_t _altStack;
 

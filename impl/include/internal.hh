@@ -16,6 +16,9 @@
 namespace mesh {
 namespace internal {
 
+// efficiently copy data from srcFd to dstFd
+int copyFile(int dstFd, int srcFd, size_t sz);
+
 // for mesh-internal data structures, like heap metadata
 class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>>> {
 protected:
