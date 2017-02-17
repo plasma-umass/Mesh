@@ -45,7 +45,7 @@
 #include "internal.hh"
 
 #ifndef HL_MMAP_PROTECTION_MASK
-#error "define HL_MMAP_PROTECTION_MASK before including heaplayers.h"
+#error "define HL_MMAP_PROTECTION_MASK before including mmapheap.h"
 #endif
 
 #if !defined(MAP_ANONYMOUS) && defined(MAP_ANON)
@@ -93,6 +93,7 @@ public:
     auto entry = _vmaMap.find(ptr);
     if (unlikely(entry == _vmaMap.end())) {
       debug("mmap: invalid getSize: %p", ptr);
+      abort();
       return 0;
     }
     return entry->second;
@@ -102,6 +103,7 @@ public:
     auto entry = _vmaMap.find(ptr);
     if (unlikely(entry == _vmaMap.end())) {
       debug("mmap: invalid free: %p", ptr);
+      abort();
       return;
     }
 
@@ -120,4 +122,4 @@ protected:
 };
 }
 
-#endif // MESH__MESH_MMAP_H
+#endif  // MESH__MESH_MMAP_H

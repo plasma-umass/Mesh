@@ -1,17 +1,18 @@
 include config.mk
 
+COMMON_SRCS      = impl/runtime.cc impl/d_assert.cc
 
-LIB_SRCS         = impl/libmesh.cc impl/d_assert.cc
+LIB_SRCS         = impl/libmesh.cc $(COMMON_SRCS)
 LIB_OBJS         = $(LIB_SRCS:.cc=.o)
 LIB              = libmesh.so
 
-UNIT_SRCS        = $(wildcard impl/unit/*.cc) impl/d_assert.cc
+UNIT_SRCS        = $(wildcard impl/unit/*.cc) $(COMMON_SRCS)
 UNIT_OBJS        = $(UNIT_SRCS:.cc=.o)
 UNIT_CXXFLAGS    = -isystem impl/vendor/googletest/googletest/include -Iimpl/vendor/googletest/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
-UNIT_LDFLAGS     = -lpthread -lunwind
+UNIT_LDFLAGS     = -ldl -lpthread -lunwind
 UNIT_BIN         = unit.test
 
-BENCH_SRCS       = impl/meshing_benchmark.cc impl/d_assert.cc
+BENCH_SRCS       = impl/meshing_benchmark.cc $(COMMON_SRCS)
 BENCH_OBJS       = $(BENCH_SRCS:.cc=.o)
 BENCH_BIN        = meshing-benchmark
 

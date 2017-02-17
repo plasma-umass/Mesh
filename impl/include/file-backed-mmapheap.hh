@@ -68,27 +68,6 @@ static const char *const TMP_DIRS[] = {
     "/dev/shm", "/tmp",
 };
 
-int copyfile(int dstFd, int srcFd, size_t sz) {
-#if defined(__APPLE__) || defined(__FreeBSD__)
-  // fcopyfile works on FreeBSD and OS X 10.5+
-  int result = fcopyfile(srcFd, dstFd, 0, COPYFILE_ALL);
-#else
-  // sendfile will work with non-socket output (i.e. regular file) on Linux 2.6.33+
-  off_t bytesCopied = 0;
-  struct stat fileinfo;
-  memset(&fileinfo, 0, sizeof(fileinfo));
-  fstat(srcFd, &fileinfo);
-  d_assert_msg(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz, "copyfile: expected %zu == %zu",
-               fileinfo.st_size, sz);
-  int result = sendfile(dstFd, srcFd, &bytesCopied, sz);
-  // on success, ensure the entire results were copied
-  if (result == 0)
-    d_assert(bytesCopied == fileinfo.st_size);
-#endif
-
-  return result;
-}
-
 // wraps an integer file descriptor to provide close-on-destruct
 // semantics (so that we can use a shared_ptr to refcount a FD)
 class FD {
@@ -146,7 +125,6 @@ public:
     int fd = openSpanFile(sz);
     void *ptr = SuperHeap::map(sz, MAP_SHARED, fd);
 
-
     _fdMap[ptr] = internal::make_shared<internal::FD>(fd);
 
     return ptr;
@@ -163,7 +141,7 @@ public:
 
     munmap(ptr, sz);
     // madvise(ptr, sz, MADV_DONTNEED);
-     //mprotect(ptr, sz, PROT_NONE);
+    // mprotect(ptr, sz, PROT_NONE);
 
     _vmaMap.erase(entry);
     d_assert(_vmaMap.find(ptr) == _vmaMap.end());
@@ -324,7 +302,7 @@ private:
       fstat(newFd, &fileinfo);
       d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz);
 
-      internal::copyfile(newFd, *entry.second, sz);
+      internal::copyFile(newFd, *entry.second, sz);
 
       // remap the new region over the old
       void *ptr = mmap(entry.first, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
