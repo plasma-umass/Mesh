@@ -75,6 +75,7 @@ inline mt19937_64 *initSeed() {
   return new (mtBuf) std::mt19937_64(rd());
 }
 
+// cryptographically-strong thread-safe PRNG seed
 inline uint64_t seed() {
   static mt19937_64 *mt = NULL;
 
