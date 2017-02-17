@@ -7,6 +7,7 @@
 #include <cstdarg>   // for va_start + friends
 #include <cstddef>   // for size_t
 #include <new>       // for operator new
+#include <signal.h>
 
 #include "file-backed-mmapheap.h"
 #include "meshingheap.h"
@@ -17,6 +18,8 @@
 
 typedef int (*PthreadCreateFn)(pthread_t *thread, const pthread_attr_t *attr, void *(*start_routine)(void *),
                                void *arg);
+
+typedef void *(*PthreadFn)(void *);
 
 // The top heap provides memory to back spans managed by MiniHeaps.
 class TopHeap : public ExactlyOneHeap<mesh::FileBackedMmapHeap> {
@@ -41,6 +44,11 @@ class BottomHeap : public mesh::MeshingHeap<11, mesh::size2Class, mesh::class2Si
 // TODO: remove the LockedHeap here and use a per-thread BottomHeap
 class CustomHeap : public ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> {
 public:
+  explicit CustomHeap() {
+    // assumes we're called on the initial thread
+    installSigAltStack();
+  }
+
   // initialize our pointer to libc's pthread_create.  This happens
   // lazily, as the dynamic linker calls into malloc for dynamic
   // memory allocation, so if we try to do this in CustomHeaps's
@@ -52,18 +60,65 @@ public:
 
     auto createFn = dlsym(pthreadHandle, "pthread_create");
     d_assert(createFn != nullptr);
+
     _pthreadCreate = reinterpret_cast<PthreadCreateFn>(createFn);
   }
 
-  int pthreadCreate(pthread_t *thread, const pthread_attr_t *attr, void *(*startRoutine)(void *), void *arg) {
+  int pthreadCreate(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg) {
     // FIXME: locking
     if (_pthreadCreate == nullptr) {
       initThreads();
     }
-    return _pthreadCreate(thread, attr, startRoutine, arg);
+    void *threadArgsBuf = mesh::internal::Heap().malloc(sizeof(StartThreadArgs));
+    d_assert(threadArgsBuf != nullptr);
+    StartThreadArgs *threadArgs = new (threadArgsBuf) StartThreadArgs(this, startRoutine, arg);
+
+    return _pthreadCreate(thread, attr, reinterpret_cast<PthreadFn>(CustomHeap::startThread), threadArgs);
   }
 
 private:
+  struct StartThreadArgs {
+    explicit StartThreadArgs(CustomHeap *curr_, PthreadFn startRoutine_, void *arg_)
+        : curr(curr_), startRoutine(startRoutine_), arg(arg_) {
+    }
+
+    CustomHeap *curr;
+    PthreadFn startRoutine;
+    void *arg;
+  };
+
+  static void *startThread(StartThreadArgs *threadArgs) {
+    d_assert(threadArgs != nullptr);
+
+    CustomHeap *curr = threadArgs->curr;
+    PthreadFn startRoutine = threadArgs->startRoutine;
+    void *arg = threadArgs->arg;
+
+    mesh::internal::Heap().free(threadArgs);
+    threadArgs = nullptr;
+
+    curr->installSigAltStack();
+
+    void *result = startRoutine(arg);
+
+    curr->removeSigAltStack();
+
+    return result;
+  }
+
+private:
+
+  void installSigAltStack() {
+    // TODO: install sigaltstack
+    debug("TODO: install sigaltstack");
+  }
+
+  void removeSigAltStack() {
+    // TODO: remove sigaltstack
+  }
+
+  static __thread stack_t _altStack;
+
   PthreadCreateFn _pthreadCreate{nullptr};
 };
 
@@ -99,6 +154,9 @@ void xxmalloc_unlock(void) {
   getCustomHeap()->unlock();
 }
 
+// we need to wrap pthread_create so that we can safely implement a
+// stop-the-world quiescent period for the copy/mremap phase of
+// meshing
 int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start_routine)(void *), void *arg) {
   return getCustomHeap()->pthreadCreate(thread, attr, start_routine, arg);
 }
