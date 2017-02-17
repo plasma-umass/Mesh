@@ -7,10 +7,11 @@
  * @note   Copyright (C) 2005 by Emery Berger, University of Massachusetts Amherst.
  */
 
-#ifndef DH_STATICLOG_H
-#define DH_STATICLOG_H
+#pragma once
+#ifndef MESH__STATICLOG_HH
+#define MESH__STATICLOG_HH
 
-#include "staticif.h"
+#include "staticif.hh"
 
 #if __cplusplus > 199711L
 

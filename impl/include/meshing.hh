@@ -5,9 +5,9 @@
 #ifndef MESH__MESHING_H
 #define MESH__MESHING_H
 
-#include "common.h"
+#include "common.hh"
 
-#include "bitmap.h"
+#include "bitmap.hh"
 
 namespace mesh {
 

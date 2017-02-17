@@ -5,7 +5,7 @@
 #ifndef MESH__INTERNAL_H
 #define MESH__INTERNAL_H
 
-#include "common.h"
+#include "common.hh"
 
 // never allocate exeecutable heap
 #define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)

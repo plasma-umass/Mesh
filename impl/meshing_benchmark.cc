@@ -9,10 +9,10 @@
 
 #include <gflags/gflags.h>
 
-#include "bitmap.h"
+#include "bitmap.hh"
 
-#include "internal.h"
-#include "meshing.h"
+#include "internal.hh"
+#include "meshing.hh"
 
 using std::vector;
 using std::string;

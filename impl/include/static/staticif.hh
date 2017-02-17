@@ -7,8 +7,9 @@
  * @note   Copyright (C) 2005 by Emery Berger, University of Massachusetts Amherst.
  */
 
-#ifndef DH_STATICIF_H
-#define DH_STATICIF_H
+#pragma once
+#ifndef MESH__STATICIF_HH
+#define MESH__STATICIF_HH
 
 #if __cplusplus > 199711L
 

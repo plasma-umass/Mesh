@@ -42,7 +42,7 @@
 #include <map>
 #endif
 
-#include "internal.h"
+#include "internal.hh"
 
 #ifndef HL_MMAP_PROTECTION_MASK
 #error "define HL_MMAP_PROTECTION_MASK before including heaplayers.h"
