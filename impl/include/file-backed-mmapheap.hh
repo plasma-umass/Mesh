@@ -91,7 +91,6 @@ class FileBackedMmapHeap : public mesh::MmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(FileBackedMmapHeap);
   typedef MmapHeap SuperHeap;
-  typedef int abstract_fd;
 
 public:
   enum { Alignment = MmapWrapper::Alignment };
