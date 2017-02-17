@@ -117,15 +117,18 @@ void FileBackedMmapHeap::staticAfterForkChild() {
 }
 
 void FileBackedMmapHeap::prepareForFork() {
-  xxmalloc_lock();
+  runtime().lock();
+
   int err = pipe(_forkPipe);
   if (err == -1)
     abort();
 }
 
 void FileBackedMmapHeap::afterForkParent() {
-  xxmalloc_unlock();
+  runtime().unlock();
+
   close(_forkPipe[1]);
+
   char buf[8];
   memset(buf, 0, 8);
 
@@ -143,7 +146,8 @@ void FileBackedMmapHeap::afterForkParent() {
 }
 
 void FileBackedMmapHeap::afterForkChild() {
-  xxmalloc_unlock();
+  runtime().unlock();
+
   close(_forkPipe[0]);
 
   char *oldSpanDir = _spanDir;

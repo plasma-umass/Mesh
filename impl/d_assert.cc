@@ -20,7 +20,7 @@ inline static mutex *getAssertMutex(void) {
 // threadsafe printf-like debug statements safe for use in an
 // allocator (it will never call into malloc or free to allocate
 // memory)
-void debug(const char *fmt, ...) {
+void mesh::debug(const char *fmt, ...) {
   constexpr size_t buf_len = 4096;
   static char buf[buf_len];
   std::lock_guard<std::mutex> lock(*getAssertMutex());

@@ -22,8 +22,6 @@ using std::mt19937_64;
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-void debug(const char *fmt, ...);
-
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
   TypeName(const TypeName &);              \
   void operator=(const TypeName &)
@@ -43,12 +41,9 @@ void debug(const char *fmt, ...);
 #define d_assert(expr, fmt, ...)
 #endif
 
-extern "C" {
-void xxmalloc_lock(void);
-void xxmalloc_unlock(void);
-}
-
 namespace mesh {
+
+void debug(const char *fmt, ...);
 
 inline constexpr size_t class2Size(const int i) {
   auto sz = (size_t)(1ULL << (i + 4));
