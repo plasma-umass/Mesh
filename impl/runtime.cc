@@ -25,28 +25,39 @@ int internal::copyFile(int dstFd, int srcFd, size_t sz) {
   return result;
 }
 
-
 void StopTheWorld::lock() {
   runtime()._heap.lock();
+
+  quiesce();
 }
 
 void StopTheWorld::unlock() {
+  resume();
+
   runtime()._heap.unlock();
 }
 
+void StopTheWorld::quiesce() {
+}
+
+void StopTheWorld::resume() {
+}
+
 void Runtime::lock() {
-  _heap.lock();
+  _mutex.lock();
 }
 
 void Runtime::unlock() {
-  _heap.unlock();
+  _mutex.unlock();
 }
 
 int Runtime::createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg) {
-  // FIXME: locking
+  lock_guard<Runtime> lock(*this);
+
   if (_pthreadCreate == nullptr) {
     initThreads();
   }
+
   void *threadArgsBuf = mesh::internal::Heap().malloc(sizeof(StartThreadArgs));
   d_assert(threadArgsBuf != nullptr);
   StartThreadArgs *threadArgs = new (threadArgsBuf) StartThreadArgs(this, startRoutine, arg);
