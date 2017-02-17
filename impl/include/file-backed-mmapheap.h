@@ -52,7 +52,7 @@
 
 #include "internal.h"
 
-#include "mesh-mmap.h"
+#include "mmapheap.h"
 
 /**
  * @class FileBackedMmapHeap

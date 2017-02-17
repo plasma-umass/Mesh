@@ -1,4 +1,4 @@
-// Copyright 2016 University of Massachusetts, Amherst
+// Copyright 2017 University of Massachusetts, Amherst
 
 #include <cstdio>
 #include <cstring>

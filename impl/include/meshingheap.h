@@ -1,5 +1,5 @@
 // -*- mode: c++ -*-
-// Copyright 2016 University of Massachusetts, Amherst
+// Copyright 2017 University of Massachusetts, Amherst
 
 #ifndef MESH__MESHINGHEAP_H
 #define MESH__MESHINGHEAP_H
