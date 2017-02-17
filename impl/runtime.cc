@@ -25,6 +25,15 @@ int internal::copyFile(int dstFd, int srcFd, size_t sz) {
   return result;
 }
 
+
+void StopTheWorld::lock() {
+  runtime()._heap.lock();
+}
+
+void StopTheWorld::unlock() {
+  runtime()._heap.unlock();
+}
+
 void Runtime::lock() {
   _heap.lock();
 }

@@ -54,6 +54,23 @@ public:
   }
 };
 
+class Runtime;
+
+class StopTheWorld {
+private:
+  DISALLOW_COPY_AND_ASSIGN(StopTheWorld);
+
+  // ensure we don't mistakenly create additional STW instances
+  explicit StopTheWorld() {
+  }
+
+public:
+  friend Runtime;
+
+  void lock();
+  void unlock();
+};
+
 class Runtime {
 private:
   DISALLOW_COPY_AND_ASSIGN(Runtime);
@@ -65,9 +82,14 @@ private:
 
 public:
   friend Runtime &runtime();
+  friend StopTheWorld;
 
   void lock();
   void unlock();
+
+  inline StopTheWorld &stopTheWorld() {
+    return _stw;
+  }
 
   inline MeshHeap &heap() {
     return _heap;
@@ -101,6 +123,7 @@ private:
 
   PthreadCreateFn _pthreadCreate{nullptr};
   MeshHeap _heap{};
+  StopTheWorld _stw{};
 };
 
 // get a reference to the Runtime singleton
