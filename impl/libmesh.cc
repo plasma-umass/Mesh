@@ -4,6 +4,12 @@
 
 #include "wrappers/gnuwrapper.cpp"
 
+static __attribute__((constructor)) void libmesh_init() {
+  // force the runtime's constructor to run
+  volatile auto mem = mesh::runtime().heap().malloc(0);
+  if (mem != nullptr)
+    mesh::runtime().heap().free(mem);
+}
 
 extern "C" {
 void *xxmalloc(size_t sz) {
@@ -19,13 +25,15 @@ size_t xxmalloc_usable_size(void *ptr) {
 }
 
 // ensure we don't concurrently allocate/mess with internal heap data
-// structures while forking
+// structures while forking.  This is not normally invoked when
+// libmesh is dynamically linked or LD_PRELOADed into a binary.
 void xxmalloc_lock(void) {
   mesh::runtime().lock();
 }
 
 // ensure we don't concurrently allocate/mess with internal heap data
-// structures while forking
+// structures while forking.  This is not normally invoked when
+// libmesh is dynamically linked or LD_PRELOADed into a binary.
 void xxmalloc_unlock(void) {
   mesh::runtime().unlock();
 }
@@ -35,5 +43,9 @@ void xxmalloc_unlock(void) {
 // meshing
 int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg) {
   return mesh::runtime().createThread(thread, attr, startRoutine, arg);
+}
+
+int sigaltstack(const stack_t *__restrict ss, stack_t *__restrict oss) {
+  return mesh::runtime().sigAltStack(ss, oss);
 }
 }

@@ -16,6 +16,8 @@
 namespace mesh {
 namespace internal {
 
+static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL; // 16k sigaltstacks
+
 // efficiently copy data from srcFd to dstFd
 int copyFile(int dstFd, int srcFd, size_t sz);
 
@@ -27,12 +29,6 @@ protected:
 public:
   Heap() : SuperHeap() {
     static_assert(Alignment % 16 == 0, "16-byte alignment");
-  }
-
-  inline void *malloc(size_t sz) {
-    auto ptr = SuperHeap::malloc(sz);
-    d_assert(reinterpret_cast<uint64_t>(ptr) % 16 == 0);
-    return ptr;
   }
 };
 
