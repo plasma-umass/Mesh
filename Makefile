@@ -1,29 +1,29 @@
 include config.mk
 
-COMMON_SRCS      = impl/runtime.cc impl/file-backed-mmapheap.cc impl/d_assert.cc
+COMMON_SRCS      = src/runtime.cc src/file-backed-mmapheap.cc src/d_assert.cc
 
-LIB_SRCS         = impl/libmesh.cc $(COMMON_SRCS)
+LIB_SRCS         = src/libmesh.cc $(COMMON_SRCS)
 LIB_OBJS         = $(LIB_SRCS:.cc=.o)
 LIB              = libmesh.so
 
-UNIT_SRCS        = $(wildcard impl/unit/*.cc) $(COMMON_SRCS)
+UNIT_SRCS        = $(wildcard src/unit/*.cc) $(COMMON_SRCS)
 UNIT_OBJS        = $(UNIT_SRCS:.cc=.o)
-UNIT_CXXFLAGS    = -isystem impl/vendor/googletest/googletest/include -Iimpl/vendor/googletest/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
+UNIT_CXXFLAGS    = -isystem src/vendor/googletest/googletest/include -Isrc/vendor/googletest/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
 UNIT_LDFLAGS     = -ldl -lpthread -lunwind
 UNIT_BIN         = unit.test
 
-BENCH_SRCS       = impl/meshing_benchmark.cc $(COMMON_SRCS)
+BENCH_SRCS       = src/meshing_benchmark.cc $(COMMON_SRCS)
 BENCH_OBJS       = $(BENCH_SRCS:.cc=.o)
 BENCH_BIN        = meshing-benchmark
 
 ALL_OBJS         = $(LIB_OBJS) $(UNIT_OBJS) $(BENCH_OBJS)
 
 # reference files in each subproject to ensure git fully checks the project out
-HEAP_LAYERS      = impl/vendor/Heap-Layers/heaplayers.h
-GTEST            = impl/vendor/googletest/googletest/include/gtest/gtest.h
-GFLAGS           = impl/vendor/gflags/src/gflags.cc
+HEAP_LAYERS      = src/vendor/Heap-Layers/heaplayers.h
+GTEST            = src/vendor/googletest/googletest/include/gtest/gtest.h
+GFLAGS           = src/vendor/gflags/src/gflags.cc
 
-GFLAGS_BUILD_DIR = impl/vendor/gflags/build
+GFLAGS_BUILD_DIR = src/vendor/gflags/build
 GFLAGS_BUILD     = $(GFLAGS_BUILD_DIR)/Makefile
 GFLAGS_LIB       = $(GFLAGS_BUILD_DIR)/lib/libgflags.a
 
@@ -67,7 +67,7 @@ $(GFLAGS_LIB): $(GFLAGS_BUILD) $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(CXXFLAGS) -MMD -o $@ -c $<
 
-impl/unit/%.o: impl/unit/%.cc $(CONFIG)
+src/unit/%.o: src/unit/%.cc $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
 
@@ -91,10 +91,10 @@ install: $(LIB)
 	ldconfig
 
 clean:
-	rm -f impl/test/fork-example
-	rm -f $(UNIT_BIN) $(LIB) impl/*.gcda impl/*.gcno
-	find impl -name '*.o' -print0 | xargs -0 rm -f
-	find impl -name '*.d' -print0 | xargs -0 rm -f
+	rm -f src/test/fork-example
+	rm -f $(UNIT_BIN) $(LIB) src/*.gcda src/*.gcno
+	find src -name '*.o' -print0 | xargs -0 rm -f
+	find src -name '*.d' -print0 | xargs -0 rm -f
 	find . -name '*~' -print0 | xargs -0 rm -f
 
 distclean: clean
@@ -103,12 +103,12 @@ distclean: clean
 paper:
 	$(MAKE) -C paper
 
-impl/test/fork-example: impl/test/fork-example.o $(CONFIG)
+src/test/fork-example: src/test/fork-example.o $(CONFIG)
 	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"
 
 
-run: $(LIB) impl/test/fork-example
-	impl/test/fork-example
+run: $(LIB) src/test/fork-example
+	src/test/fork-example
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
