@@ -72,7 +72,7 @@ public:
   void unlock();
 
 private:
-  void quiesce();
+  void quiesceOthers();
   void resume();
 };
 
@@ -84,9 +84,6 @@ private:
   explicit Runtime();
 
 public:
-  friend Runtime &runtime();
-  friend StopTheWorld;
-
   void lock();
   void unlock();
 
@@ -124,9 +121,12 @@ private:
   void installSigAltStack();
   void removeSigAltStack();
 
-  void quiesce();
+  void quiesceSelf();
 
   static __thread stack_t _altStack;
+
+  friend Runtime &runtime();
+  friend StopTheWorld;
 
   PthreadCreateFn _pthreadCreate{nullptr};
   MeshHeap _heap{};

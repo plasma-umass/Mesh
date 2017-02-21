@@ -1,4 +1,4 @@
-// -*- mode: c++ -*-
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
 #ifndef MESH__MESHINGHEAP_H
@@ -19,7 +19,7 @@ namespace mesh {
 template <int NumBins,
           int (*getSizeClass)(const size_t),
           size_t (*getClassMaxSize)(const int),
-          int MeshPeriod, // perform meshing on average once every MeshPeriod frees
+          int MeshPeriod,  // perform meshing on average once every MeshPeriod frees
           typename SuperHeap,
           typename BigHeap>
 class MeshingHeap {
@@ -137,7 +137,9 @@ protected:
     return shouldMesh;
   }
 
-  inline void meshAllSizeClasses() {
+  void meshAllSizeClasses() {
+    // lock_guard<StopTheWorld> lock(runtime().stopTheWorld());
+
     for (auto heaps : _littleheaps) {
       auto begin = heaps.begin();
       auto end = heaps.end();

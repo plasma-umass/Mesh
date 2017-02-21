@@ -17,7 +17,7 @@ using std::uniform_int_distribution;
 namespace mesh {
 
 template <typename SuperHeap,
-          typename InternalAlloc,
+          typename InternalHeap,
           size_t PageSize = 4096,
           size_t MinObjectSize = 16,
           size_t MaxObjectSize = 2048,
@@ -28,6 +28,7 @@ template <typename SuperHeap,
 class MiniHeapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
+  typedef Bitmap<InternalHeap> InternalBitmap;
 
 public:
   enum { Alignment = (int)MinObjectSize };
@@ -151,7 +152,7 @@ public:
     return _inUseCount == 0;
   }
 
-  const Bitmap<InternalAlloc> &bitmap() const {
+  const InternalBitmap &bitmap() const {
     return _bitmap;
   }
 
@@ -161,7 +162,7 @@ public:
   size_t _fullCount{0};
   size_t _inUseCount{0};
   mt19937_64 _prng;
-  Bitmap<InternalAlloc> _bitmap{};
+  InternalBitmap _bitmap{};
   bool _done{false};
 
   SuperHeap _super{};
