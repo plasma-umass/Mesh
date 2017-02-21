@@ -1,9 +1,9 @@
 [submodule "Heap-Layers"]
-	path = impl/vendor/Heap-Layers
+	path = src/vendor/Heap-Layers
 	url = https://github.com/emeryberger/Heap-Layers
-[submodule "impl/vendor/gflags"]
-	path = impl/vendor/gflags
+[submodule "src/vendor/gflags"]
+	path = src/vendor/gflags
 	url = https://github.com/gflags/gflags.git
-[submodule "impl/vendor/googletest"]
-	path = impl/vendor/googletest
+[submodule "src/vendor/googletest"]
+	path = src/vendor/googletest
 	url = https://github.com/google/googletest.git
