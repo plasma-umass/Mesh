@@ -1,4 +1,4 @@
-// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /**
  * @file   bitmap.h
  * @brief  A bitmap class, with one bit per element.
@@ -7,16 +7,16 @@
  */
 
 #pragma once
-#ifndef MESH__BITMAP_HH
-#define MESH__BITMAP_HH
+#ifndef MESH__BITMAP_H
+#define MESH__BITMAP_H
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-#include "common.hh"
-#include "static/staticlog.hh"
+#include "common.h"
+#include "static/staticlog.h"
 
 namespace mesh {
 

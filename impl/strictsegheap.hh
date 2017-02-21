@@ -1,7 +1,5 @@
-// -*- C++ -*-
-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /*
-
   Heap Layers: An Extensible Memory Allocation Infrastructure
 
   Copyright (C) 2000-2012 by Emery Berger
@@ -21,7 +19,6 @@
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-
 */
 
 /**
@@ -32,7 +29,7 @@
 #ifndef MESH_STRICTSEGHEAP_H
 #define MESH_STRICTSEGHEAP_H
 
-#include "mesh-segheap.h"
+#include "segheap.h"
 
 /**
  * @class StrictSegHeap

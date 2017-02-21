@@ -8,10 +8,10 @@
  */
 
 #pragma once
-#ifndef MESH__STATICLOG_HH
-#define MESH__STATICLOG_HH
+#ifndef MESH__STATICLOG_H
+#define MESH__STATICLOG_H
 
-#include "staticif.hh"
+#include "staticif.h"
 
 #if __cplusplus > 199711L
 

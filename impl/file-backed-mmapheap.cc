@@ -1,8 +1,8 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
-#include "file-backed-mmapheap.hh"
+#include "file-backed-mmapheap.h"
 
-#include "runtime.hh"
+#include "runtime.h"
 
 namespace mesh {
 

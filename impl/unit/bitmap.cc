@@ -5,7 +5,7 @@
 
 #include "gtest/gtest.h"
 
-#include "bitmap.hh"
+#include "bitmap.h"
 
 #include <heaplayers.h>
 

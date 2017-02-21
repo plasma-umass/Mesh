@@ -1,4 +1,4 @@
-// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
 #ifndef MESH__MESHINGHEAP_H
@@ -8,9 +8,9 @@
 
 #include "heaplayers.h"
 
-#include "internal.hh"
-#include "meshing.hh"
-#include "miniheap.hh"
+#include "internal.h"
+#include "meshing.h"
+#include "miniheap.h"
 
 using namespace HL;
 

@@ -1,13 +1,13 @@
-// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
 #pragma once
 #ifndef MESH__MESHING_H
 #define MESH__MESHING_H
 
-#include "common.hh"
+#include "common.h"
 
-#include "bitmap.hh"
+#include "bitmap.h"
 
 namespace mesh {
 

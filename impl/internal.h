@@ -1,4 +1,4 @@
-// -*- mode: c++ -*-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
 #pragma once
@@ -7,7 +7,7 @@
 
 #include <signal.h>
 
-#include "common.hh"
+#include "common.h"
 
 // never allocate exeecutable heap
 #define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)
