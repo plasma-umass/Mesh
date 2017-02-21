@@ -1,7 +1,5 @@
-// -*- C++ -*-
-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /*
-
   Heap Layers: An Extensible Memory Allocation Infrastructure
 
   Copyright (C) 2000-2012 by Emery Berger
@@ -21,7 +19,6 @@
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-
 */
 
 /**
@@ -56,8 +53,9 @@
  * </TT>
  **/
 
-#include <assert.h>
 #include "utility/gcd.h"
+
+#include "common.h"
 
 namespace Mesh {
 
@@ -102,8 +100,8 @@ public:
 
     {
       const int sc = getSizeClass(sz);
-      assert(sc >= 0);
-      assert(sc < NumBins);
+      d_assert(sc >= 0);
+      d_assert(sc < NumBins);
       int idx = sc;
       int block = idx2block(idx);
       unsigned long map = binmap[block];
@@ -124,11 +122,11 @@ public:
 
         while ((bit & map) == 0) {
           bit <<= 1;
-          assert(bit != 0);
+          d_assert(bit != 0);
           idx++;
         }
 
-        assert(idx < NumBins);
+        d_assert(idx < NumBins);
         ptr = myLittleHeap[idx].malloc(sz);
 
         if (ptr == NULL) {
@@ -159,18 +157,18 @@ public:
       bigheap.free(ptr);
     } else {
       int objectSizeClass = getSizeClass(objectSize);
-      assert(objectSizeClass >= 0);
-      assert(objectSizeClass < NumBins);
+      d_assert(objectSizeClass >= 0);
+      d_assert(objectSizeClass < NumBins);
       // Put the freed object into the right sizeclass heap.
-      assert(getClassMaxSize(objectSizeClass) >= objectSize);
+      d_assert(getClassMaxSize(objectSizeClass) >= objectSize);
 #if 1
       while (getClassMaxSize(objectSizeClass) > objectSize) {
         objectSizeClass--;
       }
 #endif
-      assert(getClassMaxSize(objectSizeClass) <= objectSize);
+      d_assert(getClassMaxSize(objectSizeClass) <= objectSize);
       if (objectSizeClass > 0) {
-        assert(objectSize >= getClassMaxSize(objectSizeClass - 1));
+        d_assert(objectSize >= getClassMaxSize(objectSizeClass - 1));
       }
 
       myLittleHeap[objectSizeClass].free(ptr);
@@ -198,8 +196,8 @@ private:
 private:
   static inline int idx2block(int i) {
     int blk = i >> SHIFTS_PER_ULONG;
-    assert(blk < NUM_ULONGS);
-    assert(blk >= 0);
+    d_assert(blk < NUM_ULONGS);
+    d_assert(blk >= 0);
     return blk;
   }
 

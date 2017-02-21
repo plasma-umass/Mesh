@@ -1,16 +1,16 @@
-// -*- mode: c++ -*-
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
 #pragma once
-#ifndef MESH__RUNTIME_HH
-#define MESH__RUNTIME_HH
+#ifndef MESH__RUNTIME_H
+#define MESH__RUNTIME_H
 
 #include <pthread.h>
 #include <signal.h>  // for stack_t
 
-#include "file-backed-mmapheap.hh"
-#include "internal.hh"
-#include "meshingheap.hh"
+#include "file-backed-mmapheap.h"
+#include "internal.h"
+#include "meshingheap.h"
 
 #include "heaplayers.h"
 
@@ -142,4 +142,5 @@ inline Runtime &runtime() {
   return *runtimePtr;
 }
 }
-#endif  // MESH__RUNTIME_HH
+
+#endif  // MESH__RUNTIME_H

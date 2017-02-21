@@ -2,7 +2,7 @@
 
 #include <dirent.h>
 
-#include "runtime.hh"
+#include "runtime.h"
 
 __thread stack_t mesh::Runtime::_altStack;
 

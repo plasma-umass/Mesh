@@ -1,7 +1,5 @@
-// -*- mode: c++ -*-
-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /*
-
   Heap Layers: An Extensible Memory Allocation Infrastructure
 
   Copyright (C) 2000-2014 by Emery Berger
@@ -21,7 +19,6 @@
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-
 */
 
 #pragma once
@@ -42,7 +39,7 @@
 #include <map>
 #endif
 
-#include "internal.hh"
+#include "internal.h"
 
 #ifndef HL_MMAP_PROTECTION_MASK
 #error "define HL_MMAP_PROTECTION_MASK before including mmapheap.h"

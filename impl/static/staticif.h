@@ -8,8 +8,8 @@
  */
 
 #pragma once
-#ifndef MESH__STATICIF_HH
-#define MESH__STATICIF_HH
+#ifndef MESH__STATICIF_H
+#define MESH__STATICIF_H
 
 #if __cplusplus > 199711L
 

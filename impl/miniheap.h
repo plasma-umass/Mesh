@@ -1,4 +1,4 @@
-// -*- mode: c++ -*-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
 #pragma once
@@ -7,8 +7,8 @@
 
 #include <random>
 
-#include "bitmap.hh"
-#include "internal.hh"
+#include "bitmap.h"
+#include "internal.h"
 
 #include "heaplayers.h"
 

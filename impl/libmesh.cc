@@ -1,6 +1,6 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
-#include "runtime.hh"
+#include "runtime.h"
 
 #include "wrappers/gnuwrapper.cpp"
 

@@ -6,7 +6,7 @@
 
 #include <unistd.h>
 
-#include "common.hh"
+#include "common.h"
 
 // mutex protecting debug and __mesh_assert_fail to avoid concurrent
 // use of static buffers by multiple threads
