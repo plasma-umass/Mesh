@@ -26,7 +26,7 @@ FileBackedMmapHeap::FileBackedMmapHeap() : SuperHeap() {
 }
 
 void FileBackedMmapHeap::internalMesh(void *keep, void *remove) {
-  lock_guard<StopTheWorld> lock(runtime().stopTheWorld());
+  //lock_guard<StopTheWorld> lock(runtime().stopTheWorld());
 
   auto sz = _vmaMap[keep];
 

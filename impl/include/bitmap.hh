@@ -1,5 +1,4 @@
-// -*- C++ -*-
-
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /**
  * @file   bitmap.h
  * @brief  A bitmap class, with one bit per element.

@@ -1,4 +1,4 @@
-// -*- mode: c++ -*-
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
 #pragma once

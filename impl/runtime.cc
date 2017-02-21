@@ -1,6 +1,10 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
+#include <dirent.h>
+
 #include "runtime.hh"
+
+__thread stack_t mesh::Runtime::_altStack;
 
 namespace mesh {
 
@@ -28,7 +32,7 @@ int internal::copyFile(int dstFd, int srcFd, size_t sz) {
 void StopTheWorld::lock() {
   runtime()._heap.lock();
 
-  quiesce();
+  quiesceOthers();
 }
 
 void StopTheWorld::unlock() {
@@ -37,7 +41,11 @@ void StopTheWorld::unlock() {
   runtime()._heap.unlock();
 }
 
-void StopTheWorld::quiesce() {
+void StopTheWorld::quiesceOthers() {
+  debug("quiesce others");
+
+  auto fd = open("/proc/self/task", O_CLOEXEC | O_DIRECTORY | O_RDONLY);
+  d_assert(fd > 0);
 }
 
 void StopTheWorld::resume() {
@@ -101,10 +109,10 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
 }
 
 void Runtime::sigQuiesceHandler(int sig, siginfo_t *info, void *uctx) {
-  runtime().quiesce();
+  runtime().quiesceSelf();
 }
 
-void Runtime::quiesce() {
+void Runtime::quiesceSelf() {
   debug("quiesce myself");
 
   // currentIsQuiesced
@@ -125,8 +133,6 @@ void Runtime::installSigHandlers() {
     abort();
   }
 }
-
-__thread stack_t Runtime::_altStack;
 
 void Runtime::installSigAltStack() {
   static_assert(internal::ALTSTACK_SIZE >= MINSIGSTKSZ, "altstack not big enough");
