@@ -4,7 +4,8 @@
 *.so
 *.pyc
 TAGS
-/impl/test/fork-example
+/src/test/fork-example
+/src/test/thread-example
 /unit.test
 /meshing-benchmark
 config.mk
