@@ -137,44 +137,31 @@ protected:
     return shouldMesh;
   }
 
+  // check for meshes in all size classes
   void meshAllSizeClasses() {
-    // lock_guard<StopTheWorld> lock(runtime().stopTheWorld());
+    internal::vector<internal::vector<MiniHeap *>> mergeSets;
 
-    for (auto heaps : _littleheaps) {
-      auto begin = heaps.begin();
-      auto end = heaps.end();
-      // if the current heap (the one we are allocating out of) isn't
-      // done, exclude it from meshing
-      if (heaps.size() > 1 && !heaps.back()->isDone())
-        --end;
-      if (std::distance(begin, end) > 1) {
-        // chose a random permutation of same-sized MiniHeaps
-        std::shuffle(begin, end, _prng);
-        for (auto it1 = begin, it2 = ++begin; it2 != end; ++it1, ++it2) {
-          MiniHeap *h1 = *it1;
-          MiniHeap *h2 = *it2;
+    auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
+        std::allocator_arg, internal::allocator,
+        [&](internal::vector<MiniHeap *> &&mesh) { mergeSets.push_back(std::move(mesh)); });
 
-          if (h1->isDone() || h2->isDone())
-            continue;
-
-          const auto len = h1->bitmap().wordCount();
-          const auto bitmap1 = h1->bitmap().bitmap();
-          const auto bitmap2 = h2->bitmap().bitmap();
-          d_assert(len == h2->bitmap().wordCount());
-
-          if (mesh::bitmapsMeshable(bitmap1, bitmap2, len)) {
-            debug("----\n2 MESHABLE HEAPS!\n");
-            MiniHeap::mesh(h1, h2);
-
-            // h1->dumpDebug();
-            // h2->dumpDebug();
-            // debug("----\n");
-
-            // TODO: merge the two heaps
-          }
-        }
-      }
+    for (const auto &miniheaps : _littleheaps) {
+      randomSort(_prng, miniheaps, meshFound);
     }
+
+    if (mergeSets.size() == 0) {
+      debug("nothing to merge");
+      return;
+    }
+
+    internal::StopTheWorld();
+
+    for (const auto &mergeSet : mergeSets) {
+      d_assert(mergeSet.size() == 2);  // FIXME
+      MiniHeap::mesh(mergeSet[0], mergeSet[1]);
+    }
+
+    internal::StartTheWorld();
   }
 
   const size_t _maxObjectSize;

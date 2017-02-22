@@ -12,8 +12,6 @@
 
 #include "heaplayers.h"
 
-using std::uniform_int_distribution;
-
 namespace mesh {
 
 template <typename SuperHeap,
@@ -79,7 +77,7 @@ public:
 
     // endpoint is _inclusive_, so we subtract 1 from maxCount since
     // we're dealing with 0-indexed offsets
-    uniform_int_distribution<size_t> distribution(0, _maxCount - 1);
+    std::uniform_int_distribution<size_t> distribution(0, _maxCount - 1);
 
     // because our span is not full and no other malloc is running
     // concurrently on this span, this is guaranteed to terminate
