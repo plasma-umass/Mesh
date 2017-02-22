@@ -33,10 +33,10 @@ void mesh::debug(const char *fmt, ...) {
 
   buf[buf_len - 1] = 0;
   if (len > 0) {
-    write(STDERR_FILENO, buf, len);
+    (void)write(STDERR_FILENO, buf, len);
     // ensure a trailing newline is written out
     if (buf[len - 1] != '\n')
-      write(STDERR_FILENO, "\n", 1);
+      (void)write(STDERR_FILENO, "\n", 1);
   }
 }
 
@@ -59,7 +59,7 @@ void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file,
 
   int len = snprintf(buf, buf_len - 1, "%s:%d:%s: ASSERTION '%s' FAILED: %s\n", file, line, func, assertion, usr);
   if (len > 0) {
-    write(STDERR_FILENO, buf, len);
+    (void)write(STDERR_FILENO, buf, len);
   }
 
   abort();
