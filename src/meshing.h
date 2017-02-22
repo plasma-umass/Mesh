@@ -14,19 +14,7 @@
 
 namespace mesh {
 
-inline bool bitmapsMeshable(const uint64_t *bitmap1, const uint64_t *bitmap2, size_t len) noexcept {
-  d_assert(reinterpret_cast<uintptr_t>(bitmap1) % 16 == 0);
-  d_assert(reinterpret_cast<uintptr_t>(bitmap2) % 16 == 0);
-
-  bitmap1 = (const uint64_t *)__builtin_assume_aligned(bitmap1, 16);
-  bitmap2 = (const uint64_t *)__builtin_assume_aligned(bitmap2, 16);
-
-  for (size_t i = 0; i < len; i++) {
-    if ((bitmap1[i] & bitmap2[i]) != 0)
-      return false;
-  }
-  return true;
-}
+bool bitmapsMeshable(const uint64_t *__restrict__ bitmap1, const uint64_t *__restrict__ bitmap2, size_t len) noexcept;
 
 namespace method {
 

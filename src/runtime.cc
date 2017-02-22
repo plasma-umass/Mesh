@@ -105,6 +105,8 @@ void StopTheWorld::resume() {
 }
 
 Runtime::Runtime() {
+  _caches = &_mainCache;
+
   installSigAltStack();
   installSigHandlers();
 }
@@ -146,6 +148,9 @@ void Runtime::initThreads() {
   _pthreadCreate = reinterpret_cast<PthreadCreateFn>(createFn);
 }
 
+ThreadCache::ThreadCache() : _tid(Runtime::gettid()), _prev{this}, _next{this} {
+}
+
 void *Runtime::startThread(StartThreadArgs *threadArgs) {
   d_assert(threadArgs != nullptr);
 
@@ -156,10 +161,14 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
   mesh::internal::Heap().free(threadArgs);
   threadArgs = nullptr;
 
+  ThreadCache tc;
+
   runtime->installSigAltStack();
+  runtime->registerThread(&tc);
 
   void *result = startRoutine(arg);
 
+  runtime->unregisterThread(&tc);
   runtime->removeSigAltStack();
 
   return result;
@@ -175,6 +184,26 @@ void Runtime::quiesceSelf() {
   // currentIsQuiesced
 
   // waitToContinue
+}
+
+void Runtime::registerThread(ThreadCache *tc) {
+  d_assert(_caches != nullptr);
+  d_assert(tc->_next == tc);
+  d_assert(tc->_prev == tc);
+  auto next = _caches->_next;
+  _caches->_next = tc;
+  tc->_next = next;
+  tc->_prev = _caches;
+  next->_prev = tc;
+}
+
+void Runtime::unregisterThread(ThreadCache *tc) {
+  auto prev = tc->_prev;
+  auto next = tc->_next;
+  prev->_next = next;
+  next->_prev = prev;
+  tc->_next = tc;
+  tc->_prev = tc;
 }
 
 void Runtime::installSigHandlers() {

@@ -10,7 +10,7 @@ else
 
 PREFIX = /usr/local
 
-COMMON_SRCS      = src/runtime.cc src/file-backed-mmapheap.cc src/d_assert.cc
+COMMON_SRCS      = src/runtime.cc src/meshing.cc src/file-backed-mmapheap.cc src/d_assert.cc
 
 LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc
 LIB_OBJS         = $(addprefix build/,$(LIB_SRCS:.cc=.o))

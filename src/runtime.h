@@ -5,9 +5,9 @@
 #ifndef MESH__RUNTIME_H
 #define MESH__RUNTIME_H
 
+#include <fcntl.h>  // for pid_t
 #include <pthread.h>
 #include <signal.h>  // for stack_t
-#include <fcntl.h>  // for pid_t
 
 #include "file-backed-mmapheap.h"
 #include "internal.h"
@@ -55,8 +55,23 @@ public:
   }
 };
 
-// forward declaration of runtime so we can declare it a friend to StopTheWorld
+// forward declaration of runtime so we can declare it a friend
 class Runtime;
+
+class ThreadCache {
+private:
+  DISALLOW_COPY_AND_ASSIGN(ThreadCache);
+
+public:
+  explicit ThreadCache();
+
+private:
+  friend Runtime;
+
+  pid_t _tid;
+  ThreadCache *_prev;
+  ThreadCache *_next;
+};
 
 class StopTheWorld {
 private:
@@ -120,6 +135,9 @@ private:
   static void *startThread(StartThreadArgs *threadArgs);
   static void sigQuiesceHandler(int sig, siginfo_t *info, void *uctx);
 
+  void registerThread(ThreadCache *tc);
+  void unregisterThread(ThreadCache *tc);
+
   void installSigHandlers();
   void installSigAltStack();
   void removeSigAltStack();
@@ -135,6 +153,8 @@ private:
   MeshHeap _heap{};
   mutex _mutex{};
   StopTheWorld _stw{};
+  ThreadCache _mainCache{};
+  ThreadCache *_caches{nullptr};
 };
 
 // get a reference to the Runtime singleton
