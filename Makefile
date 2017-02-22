@@ -1,4 +1,12 @@
-include config.mk
+-include config.mk
+
+ifeq ($(VERSION),)
+
+all:
+	@echo "run ./configure before running make."
+	@exit 1
+
+else
 
 PREFIX = /usr/local
 
@@ -65,7 +73,7 @@ $(GFLAGS_LIB): $(GFLAGS_BUILD) $(CONFIG)
 	@echo "  CC    $@"
 	$(CC) $(CFLAGS) -MMD -o $@ -c $<
 
-%.o: %.cc $(CONFIG)
+%.o: %.cc $(CONFIG) $(GFLAGS_LIB)
 	@echo "  CXX   $@"
 	$(CXX) $(CXXFLAGS) -MMD -o $@ -c $<
 
@@ -92,16 +100,6 @@ install: $(LIB)
 	install -c -m 0755 $(LIB) $(PREFIX)/lib/$(LIB)
 	ldconfig
 
-clean:
-	rm -f src/test/fork-example
-	rm -f $(UNIT_BIN) $(LIB) src/*.gcda src/*.gcno
-	find src -name '*.o' -print0 | xargs -0 rm -f
-	find src -name '*.d' -print0 | xargs -0 rm -f
-	find . -name '*~' -print0 | xargs -0 rm -f
-
-distclean: clean
-	rm -r $(GFLAGS_BUILD_DIR)
-
 paper:
 	$(MAKE) -C paper
 
@@ -111,6 +109,18 @@ src/test/fork-example: src/test/fork-example.o $(CONFIG)
 
 run: $(LIB) src/test/fork-example
 	src/test/fork-example
+
+endif
+
+clean:
+	rm -f src/test/fork-example
+	rm -f $(UNIT_BIN) $(BENCH_BIN) $(LIB) src/*.gcda src/*.gcno
+	find src -name '*.o' -print0 | xargs -0 rm -f
+	find src -name '*.d' -print0 | xargs -0 rm -f
+	find . -name '*~' -print0 | xargs -0 rm -f
+
+distclean: clean
+	rm -r $(GFLAGS_BUILD_DIR)
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
