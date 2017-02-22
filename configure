@@ -10,6 +10,7 @@ VERSION = '0.1.0'
 
 c = ConfigBuilder()
 
+c.append('version', VERSION)
 c.config('version', VERSION)
 c.config('canonical-name', NAME)
 c.config('package-bugreport', 'bpowers@cs.umass.edu')
