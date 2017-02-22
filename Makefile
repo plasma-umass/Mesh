@@ -12,7 +12,7 @@ PREFIX = /usr/local
 
 COMMON_SRCS      = src/runtime.cc src/file-backed-mmapheap.cc src/d_assert.cc
 
-LIB_SRCS         = src/libmesh.cc $(COMMON_SRCS)
+LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc
 LIB_OBJS         = $(addprefix build/,$(LIB_SRCS:.cc=.o))
 LIB              = libmesh.so
 
@@ -80,7 +80,7 @@ build/src/vendor/googletest/%.o: src/vendor/googletest/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
 
-build/%.o: %.cc build $(CONFIG) $(GFLAGS_LIB)
+build/src/%.o: src/%.cc build $(CONFIG) $(GFLAGS_LIB)
 	@echo "  CXX   $@"
 	$(CXX) $(CXXFLAGS) -MMD -o $@ -c $<
 
@@ -110,8 +110,11 @@ install: $(LIB)
 paper:
 	$(MAKE) -C paper
 
-src/test/fork-example: src/test/fork-example.o $(CONFIG)
+src/test/fork-example: build/src/test/fork-example.o $(CONFIG)
 	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"
+
+src/test/thread-example: src/test/thread.cc $(CONFIG)
+	$(CXX) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)" -lpthread
 
 
 run: $(LIB) src/test/fork-example
