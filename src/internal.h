@@ -18,7 +18,7 @@
 namespace mesh {
 namespace internal {
 
-static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL; // 16k sigaltstacks
+static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
 static constexpr int SIGQUIESCE = SIGUSR2;
 
 // efficiently copy data from srcFd to dstFd
@@ -44,6 +44,8 @@ inline std::shared_ptr<T> make_shared(Args &&... args) {
   static STLAllocator<T, Heap> heap;
   return std::allocate_shared<T, STLAllocator<T, Heap>, Args...>(heap, std::forward<Args>(args)...);
 }
+
+extern STLAllocator<char, Heap> allocator;
 
 template <typename K, typename V>
 using unordered_map = std::unordered_map<K, V, hash<K>, equal_to<K>, STLAllocator<pair<const K, V>, Heap>>;

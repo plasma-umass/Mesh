@@ -9,6 +9,8 @@ __thread stack_t mesh::Runtime::_altStack;
 
 namespace mesh {
 
+STLAllocator<char, internal::Heap> allocator{};
+
 int internal::copyFile(int dstFd, int srcFd, size_t sz) {
 #if defined(__APPLE__) || defined(__FreeBSD__)
   // fcopyfile works on FreeBSD and OS X 10.5+
@@ -28,6 +30,14 @@ int internal::copyFile(int dstFd, int srcFd, size_t sz) {
 #endif
 
   return result;
+}
+
+void internal::StopTheWorld() noexcept {
+  runtime().stopTheWorld().lock();
+}
+
+void internal::StartTheWorld() noexcept {
+  runtime().stopTheWorld().unlock();
 }
 
 void StopTheWorld::lock() {

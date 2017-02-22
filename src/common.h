@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <random>
@@ -18,6 +19,7 @@
 using std::lock_guard;
 using std::mutex;
 using std::mt19937_64;
+using std::function;
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
@@ -56,6 +58,9 @@ inline int size2Class(const size_t sz) {
 }
 
 namespace internal {
+
+void StopTheWorld() noexcept;
+void StartTheWorld() noexcept;
 
 inline static mutex *getSeedMutex() {
   static char muBuf[sizeof(mutex)];
