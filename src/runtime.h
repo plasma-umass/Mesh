@@ -7,6 +7,7 @@
 
 #include <pthread.h>
 #include <signal.h>  // for stack_t
+#include <fcntl.h>  // for pid_t
 
 #include "file-backed-mmapheap.h"
 #include "internal.h"
@@ -90,6 +91,8 @@ public:
   inline StopTheWorld &stopTheWorld() {
     return _stw;
   }
+
+  static pid_t gettid() noexcept;
 
   inline MeshHeap &heap() {
     return _heap;
