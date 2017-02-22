@@ -66,7 +66,7 @@ void StopTheWorld::quiesceOthers() {
   char buf[BUF_LEN];
 
   internal::vector<pid_t> threadIds;
-  pid_t self = syscall(SYS_gettid);
+  pid_t self = Runtime::gettid();
 
   off_t off = 0;
 
@@ -93,10 +93,8 @@ void StopTheWorld::quiesceOthers() {
 
   close(taskDir);
 
-  if (threadIds.size() == 0) {
-    debug("\tonly thread running, noone to quiet");
+  if (threadIds.size() == 0)
     return;
-  }
 
   for (auto tid : threadIds) {
     debug("\tquiet %d", tid);
@@ -117,6 +115,10 @@ void Runtime::lock() {
 
 void Runtime::unlock() {
   _mutex.unlock();
+}
+
+pid_t Runtime::gettid() noexcept {
+  return syscall(SYS_gettid);
 }
 
 int Runtime::createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg) {
