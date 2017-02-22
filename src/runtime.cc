@@ -2,6 +2,8 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
 #include <dirent.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
 
 #include "runtime.h"
 
@@ -9,7 +11,7 @@ __thread stack_t mesh::Runtime::_altStack;
 
 namespace mesh {
 
-STLAllocator<char, internal::Heap> allocator{};
+STLAllocator<char, internal::Heap> internal::allocator{};
 
 int internal::copyFile(int dstFd, int srcFd, size_t sz) {
 #if defined(__APPLE__) || defined(__FreeBSD__)
@@ -41,7 +43,9 @@ void internal::StartTheWorld() noexcept {
 }
 
 void StopTheWorld::lock() {
-  runtime()._heap.lock();
+  // checks for meshing happen inside of free, so we already hold the
+  // heap lock
+  // runtime()._heap.lock();
 
   quiesceOthers();
 }
@@ -49,14 +53,54 @@ void StopTheWorld::lock() {
 void StopTheWorld::unlock() {
   resume();
 
-  runtime()._heap.unlock();
+  // runtime()._heap.unlock();
 }
 
 void StopTheWorld::quiesceOthers() {
+  static const size_t BUF_LEN = 2048;
   debug("quiesce others");
 
-  auto fd = open("/proc/self/task", O_CLOEXEC | O_DIRECTORY | O_RDONLY);
-  d_assert(fd > 0);
+  auto taskDir = open("/proc/self/task", O_CLOEXEC | O_DIRECTORY | O_RDONLY);
+  d_assert(taskDir > 0);
+
+  char buf[BUF_LEN];
+
+  internal::vector<pid_t> threadIds;
+  pid_t self = syscall(SYS_gettid);
+
+  off_t off = 0;
+
+  memset(buf, 0, BUF_LEN);
+  int len = getdirentries(taskDir, buf, BUF_LEN, &off);
+  while (len > 0) {
+    long dentOff = 0;
+    while (dentOff < len) {
+      auto dirent = reinterpret_cast<struct dirent *>(&buf[dentOff]);
+      dentOff += dirent->d_reclen;
+
+      if (strlen(dirent->d_name) == 0 || dirent->d_name[0] < '0' || dirent->d_name[0] > '9')
+        continue;
+
+      pid_t tid = atoi(dirent->d_name);
+      if (tid != self)
+        threadIds.push_back(tid);
+    }
+
+    memset(buf, 0, BUF_LEN);
+    len = getdirentries(taskDir, buf, BUF_LEN, &off);
+  }
+  d_assert(len == 0);
+
+  close(taskDir);
+
+  if (threadIds.size() == 0) {
+    debug("\tonly thread running, noone to quiet");
+    return;
+  }
+
+  for (auto tid : threadIds) {
+    debug("\tquiet %d", tid);
+  }
 }
 
 void StopTheWorld::resume() {

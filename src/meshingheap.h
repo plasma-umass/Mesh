@@ -149,10 +149,10 @@ protected:
       randomSort(_prng, miniheaps, meshFound);
     }
 
-    if (mergeSets.size() == 0) {
-      debug("nothing to merge");
-      return;
-    }
+    // if (mergeSets.size() == 0) {
+    //   debug("nothing to merge");
+    //   return;
+    // }
 
     internal::StopTheWorld();
 
