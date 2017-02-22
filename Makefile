@@ -1,5 +1,7 @@
 include config.mk
 
+PREFIX = /usr/local
+
 COMMON_SRCS      = src/runtime.cc src/file-backed-mmapheap.cc src/d_assert.cc
 
 LIB_SRCS         = src/libmesh.cc $(COMMON_SRCS)
@@ -9,7 +11,7 @@ LIB              = libmesh.so
 UNIT_SRCS        = $(wildcard src/unit/*.cc) $(COMMON_SRCS)
 UNIT_OBJS        = $(UNIT_SRCS:.cc=.o)
 UNIT_CXXFLAGS    = -isystem src/vendor/googletest/googletest/include -Isrc/vendor/googletest/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
-UNIT_LDFLAGS     = -ldl -lpthread -lunwind
+UNIT_LDFLAGS     = -ldl -lpthread
 UNIT_BIN         = unit.test
 
 BENCH_SRCS       = src/meshing_benchmark.cc $(COMMON_SRCS)
