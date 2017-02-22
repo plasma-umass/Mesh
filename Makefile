@@ -13,17 +13,20 @@ PREFIX = /usr/local
 COMMON_SRCS      = src/runtime.cc src/file-backed-mmapheap.cc src/d_assert.cc
 
 LIB_SRCS         = src/libmesh.cc $(COMMON_SRCS)
-LIB_OBJS         = $(LIB_SRCS:.cc=.o)
+LIB_OBJS         = $(addprefix build/,$(LIB_SRCS:.cc=.o))
 LIB              = libmesh.so
 
-UNIT_SRCS        = $(wildcard src/unit/*.cc) $(COMMON_SRCS)
-UNIT_OBJS        = $(UNIT_SRCS:.cc=.o)
+GTEST_SRCS       = src/vendor/googletest/googletest/src/gtest-all.cc \
+                   src/vendor/googletest/googletest/src/gtest_main.cc
+
+UNIT_SRCS        = $(wildcard src/unit/*.cc) $(GTEST_SRCS) $(COMMON_SRCS)
+UNIT_OBJS        = $(addprefix build/,$(UNIT_SRCS:.cc=.o))
 UNIT_CXXFLAGS    = -isystem src/vendor/googletest/googletest/include -Isrc/vendor/googletest/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
-UNIT_LDFLAGS     = -ldl -lpthread
+UNIT_LDFLAGS     = $(LIBS)
 UNIT_BIN         = unit.test
 
 BENCH_SRCS       = src/meshing_benchmark.cc $(COMMON_SRCS)
-BENCH_OBJS       = $(BENCH_SRCS:.cc=.o)
+BENCH_OBJS       = $(addprefix build/,$(BENCH_SRCS:.cc=.o))
 BENCH_BIN        = meshing-benchmark
 
 ALL_OBJS         = $(LIB_OBJS) $(UNIT_OBJS) $(BENCH_OBJS)
@@ -53,6 +56,10 @@ endif
 
 all: test $(BENCH_BIN) $(LIB)
 
+build:
+	mkdir -p build
+	mkdir -p $(basename $(ALL_OBJS))
+
 $(ALL_SUBMODULES):
 	@echo "  GIT   $@"
 	git submodule update --init
@@ -69,15 +76,15 @@ $(GFLAGS_LIB): $(GFLAGS_BUILD) $(CONFIG)
 	cd $(GFLAGS_BUILD_DIR) && $(MAKE)
 	touch -c $@
 
-%.o: %.c $(CONFIG)
-	@echo "  CC    $@"
-	$(CC) $(CFLAGS) -MMD -o $@ -c $<
+build/src/vendor/googletest/%.o: src/vendor/googletest/%.cc build $(CONFIG)
+	@echo "  CXX   $@"
+	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
 
-%.o: %.cc $(CONFIG) $(GFLAGS_LIB)
+build/%.o: %.cc build $(CONFIG) $(GFLAGS_LIB)
 	@echo "  CXX   $@"
 	$(CXX) $(CXXFLAGS) -MMD -o $@ -c $<
 
-src/unit/%.o: src/unit/%.cc $(CONFIG)
+build/src/unit/%.o: src/unit/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
 
@@ -114,13 +121,13 @@ endif
 
 clean:
 	rm -f src/test/fork-example
-	rm -f $(UNIT_BIN) $(BENCH_BIN) $(LIB) src/*.gcda src/*.gcno
-	find src -name '*.o' -print0 | xargs -0 rm -f
-	find src -name '*.d' -print0 | xargs -0 rm -f
+	rm -f $(UNIT_BIN) $(BENCH_BIN) $(LIB)
 	find . -name '*~' -print0 | xargs -0 rm -f
+	rm -rf build
+
 
 distclean: clean
-	rm -r $(GFLAGS_BUILD_DIR)
+	rm -rf $(GFLAGS_BUILD_DIR)
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
