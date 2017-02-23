@@ -19,7 +19,7 @@ namespace mesh {
 namespace internal {
 
 static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
-static constexpr int SIGQUIESCE = SIGUSR2;
+#define SIGQUIESCE (SIGRTMIN + 7)
 
 // efficiently copy data from srcFd to dstFd
 int copyFile(int dstFd, int srcFd, size_t sz);

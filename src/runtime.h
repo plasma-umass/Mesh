@@ -43,7 +43,7 @@ class TopBigHeap : public ExactlyOneHeap<mesh::MmapHeap> {};
 
 // fewer buckets than regular KingsleyHeap (to ensure multiple objects
 // fit in the 128Kb spans used by MiniHeaps).
-class BottomHeap : public mesh::MeshingHeap<11, mesh::size2Class, mesh::class2Size, 20, TopHeap, TopBigHeap> {};
+class BottomHeap : public mesh::MeshingHeap<11, mesh::size2Class, mesh::class2Size, 10000, TopHeap, TopBigHeap> {};
 
 // TODO: remove the LockedHeap here and use a per-thread BottomHeap
 class MeshHeap : public ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> {
@@ -71,10 +71,11 @@ private:
   friend Runtime;
   friend StopTheWorld;
 
+  atomic_bool _waiting{false};
   atomic_int64_t _shutdownEpoch{-1};
   pthread_t _tid;
-  ThreadCache *_prev;
-  ThreadCache *_next;
+  ThreadCache *_prev{nullptr};
+  ThreadCache *_next{nullptr};
 };
 
 class StopTheWorld {
