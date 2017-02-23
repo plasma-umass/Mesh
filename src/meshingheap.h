@@ -149,15 +149,12 @@ protected:
       randomSort(_prng, miniheaps, meshFound);
     }
 
-    // if (mergeSets.size() == 0) {
-    //   debug("nothing to merge");
-    //   return;
-    // }
+    if (mergeSets.size() == 0)
+      return;
+
+    debug("found something to merge!\n");
 
     internal::StopTheWorld();
-
-    if (mergeSets.size() > 0)
-      debug("found something to merge!");
 
     for (const auto &mergeSet : mergeSets) {
       d_assert(mergeSet.size() == 2);  // FIXME
