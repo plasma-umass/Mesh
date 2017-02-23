@@ -43,7 +43,7 @@ class TopBigHeap : public ExactlyOneHeap<mesh::MmapHeap> {};
 
 // fewer buckets than regular KingsleyHeap (to ensure multiple objects
 // fit in the 128Kb spans used by MiniHeaps).
-class BottomHeap : public mesh::MeshingHeap<11, mesh::size2Class, mesh::class2Size, 10000, TopHeap, TopBigHeap> {};
+class BottomHeap : public mesh::MeshingHeap<11, mesh::size2Class, mesh::class2Size, 1000, TopHeap, TopBigHeap> {};
 
 // TODO: remove the LockedHeap here and use a per-thread BottomHeap
 class MeshHeap : public ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> {
