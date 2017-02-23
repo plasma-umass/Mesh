@@ -113,6 +113,7 @@ public:
     _fdMap.erase(ptr);
   }
 
+  // must be called with the world stopped
   static void mesh(FileBackedMmapHeap &heap, void *keep, void *remove) {
     heap.internalMesh(keep, remove);
   }

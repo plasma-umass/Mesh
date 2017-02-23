@@ -7,9 +7,10 @@
 
 #include "runtime.h"
 
-__thread stack_t mesh::Runtime::_altStack;
-
 namespace mesh {
+
+__thread stack_t Runtime::_altStack;
+__thread ThreadCache *Runtime::_threadCache;
 
 STLAllocator<char, internal::Heap> internal::allocator{};
 
@@ -56,56 +57,74 @@ void StopTheWorld::unlock() {
   // runtime()._heap.unlock();
 }
 
-void StopTheWorld::quiesceOthers() {
-  static const size_t BUF_LEN = 2048;
-  debug("quiesce others");
-
-  auto taskDir = open("/proc/self/task", O_CLOEXEC | O_DIRECTORY | O_RDONLY);
-  d_assert(taskDir > 0);
-
-  char buf[BUF_LEN];
-
-  internal::vector<pid_t> threadIds;
-  pid_t self = Runtime::gettid();
-
-  off_t off = 0;
-
-  memset(buf, 0, BUF_LEN);
-  int len = getdirentries(taskDir, buf, BUF_LEN, &off);
-  while (len > 0) {
-    long dentOff = 0;
-    while (dentOff < len) {
-      auto dirent = reinterpret_cast<struct dirent *>(&buf[dentOff]);
-      dentOff += dirent->d_reclen;
-
-      if (strlen(dirent->d_name) == 0 || dirent->d_name[0] < '0' || dirent->d_name[0] > '9')
-        continue;
-
-      pid_t tid = atoi(dirent->d_name);
-      if (tid != self)
-        threadIds.push_back(tid);
-    }
-
-    memset(buf, 0, BUF_LEN);
-    len = getdirentries(taskDir, buf, BUF_LEN, &off);
+void StopTheWorld::quiesceSelf() {
+  int64_t nextEpoch = -1;
+  {
+    lock_guard<mutex> lock(_sharedMu);
+    nextEpoch = _resumeEpoch.load() + 1;
+    if (_waiters.fetch_sub(1) == 1)
+      _waitersCv.notify_one();
   }
-  d_assert(len == 0);
+  d_assert(nextEpoch > -1);
 
-  close(taskDir);
+  std::unique_lock<mutex> lock(_sharedMu);
+  while (_resumeEpoch.load() < nextEpoch)
+    _resumeCv.wait(lock);
 
-  if (threadIds.size() == 0)
+  // if (_resumeEpoch.load() > nextEpoch)
+  //   debug("%x: \tmaybe missed an epoch?", pthread_self());
+  // debug("%x: was quiet, resuming", pthread_self());
+}
+
+void StopTheWorld::quiesceOthers() {
+  d_assert(_waiters == 0);
+
+  const auto self = Runtime::_threadCache;
+  size_t count = 0;
+  for (auto tc = self->_next; tc != self; tc = tc->_next) {
+    if (tc->_shutdownEpoch > -1)
+      continue;
+    ++count;
+  }
+
+  // if there are no other threads, nothing to quiesce
+  if (count == 0)
     return;
 
-  for (auto tid : threadIds) {
-    debug("\tquiet %d", tid);
+  // debug("%x: STOP THE WORLD", pthread_self());
+
+  {
+    lock_guard<mutex> lock(_sharedMu);
+    ++_resumeEpoch;
   }
+
+  _waiters = count;
+
+  for (auto tc = self->_next; tc != self; tc = tc->_next) {
+    if (tc->_shutdownEpoch > -1)
+      continue;
+    pthread_kill(tc->_tid, internal::SIGQUIESCE);
+  }
+
+  {
+    std::unique_lock<mutex> lock(_sharedMu);
+    _waitersCv.wait(lock, [this] { return _waiters == 0; });
+  }
+
+  // debug("%x: WORLD STOPPED", pthread_self());
 }
 
 void StopTheWorld::resume() {
+  std::unique_lock<mutex> lock(_sharedMu);
+
+  ++_resumeEpoch;
+  lock.unlock();
+  _resumeCv.notify_all();
 }
 
 Runtime::Runtime() {
   _caches = &_mainCache;
+  _threadCache = &_mainCache;
 
   installSigAltStack();
   installSigHandlers();
@@ -117,10 +136,6 @@ void Runtime::lock() {
 
 void Runtime::unlock() {
   _mutex.unlock();
-}
-
-pid_t Runtime::gettid() noexcept {
-  return syscall(SYS_gettid);
 }
 
 int Runtime::createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg) {
@@ -148,7 +163,7 @@ void Runtime::initThreads() {
   _pthreadCreate = reinterpret_cast<PthreadCreateFn>(createFn);
 }
 
-ThreadCache::ThreadCache() : _tid(Runtime::gettid()), _prev{this}, _next{this} {
+ThreadCache::ThreadCache() : _tid(pthread_self()), _prev{this}, _next{this} {
 }
 
 void *Runtime::startThread(StartThreadArgs *threadArgs) {
@@ -161,49 +176,56 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
   mesh::internal::Heap().free(threadArgs);
   threadArgs = nullptr;
 
-  ThreadCache tc;
+  void *buf = internal::Heap().malloc(sizeof(ThreadCache));
+  ThreadCache *tc = new (buf) ThreadCache;
 
   runtime->installSigAltStack();
-  runtime->registerThread(&tc);
+  runtime->registerThread(tc);
 
   void *result = startRoutine(arg);
 
-  runtime->unregisterThread(&tc);
+  runtime->unregisterThread(tc);
   runtime->removeSigAltStack();
 
   return result;
 }
 
 void Runtime::sigQuiesceHandler(int sig, siginfo_t *info, void *uctx) {
-  runtime().quiesceSelf();
-}
-
-void Runtime::quiesceSelf() {
-  debug("quiesce myself");
-
-  // currentIsQuiesced
-
-  // waitToContinue
+  runtime()._stw.quiesceSelf();
 }
 
 void Runtime::registerThread(ThreadCache *tc) {
+  runtime()._heap.lock();
+
   d_assert(_caches != nullptr);
   d_assert(tc->_next == tc);
   d_assert(tc->_prev == tc);
+
   auto next = _caches->_next;
   _caches->_next = tc;
   tc->_next = next;
   tc->_prev = _caches;
   next->_prev = tc;
+
+  _threadCache = tc;
+
+  runtime()._heap.unlock();
 }
 
 void Runtime::unregisterThread(ThreadCache *tc) {
-  auto prev = tc->_prev;
-  auto next = tc->_next;
-  prev->_next = next;
-  next->_prev = prev;
-  tc->_next = tc;
-  tc->_prev = tc;
+  _threadCache->_shutdownEpoch.exchange(_stw._resumeEpoch);
+
+  // TODO: do this asynchronously in a subsequent epoch.  We can't
+  // free this here, because the thread cache structure may be used
+  // when destroying thread-local storage (which happens after this
+  // function is called)
+
+  // auto prev = tc->_prev;
+  // auto next = tc->_next;
+  // prev->_next = next;
+  // next->_prev = prev;
+  // tc->_next = tc;
+  // tc->_prev = tc;
 }
 
 void Runtime::installSigHandlers() {
