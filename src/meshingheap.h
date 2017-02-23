@@ -156,6 +156,9 @@ protected:
 
     internal::StopTheWorld();
 
+    if (mergeSets.size() > 0)
+      debug("found something to merge!");
+
     for (const auto &mergeSet : mergeSets) {
       d_assert(mergeSet.size() == 2);  // FIXME
       MiniHeap::mesh(mergeSet[0], mergeSet[1]);

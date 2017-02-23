@@ -5,7 +5,6 @@
 #ifndef MESH__RUNTIME_H
 #define MESH__RUNTIME_H
 
-#include <fcntl.h>  // for pid_t
 #include <pthread.h>
 #include <signal.h>  // for stack_t
 
@@ -14,6 +13,8 @@
 #include "meshingheap.h"
 
 #include "heaplayers.h"
+
+using std::condition_variable;
 
 namespace mesh {
 
@@ -57,6 +58,7 @@ public:
 
 // forward declaration of runtime so we can declare it a friend
 class Runtime;
+class StopTheWorld;
 
 class ThreadCache {
 private:
@@ -67,8 +69,10 @@ public:
 
 private:
   friend Runtime;
+  friend StopTheWorld;
 
-  pid_t _tid;
+  atomic_int64_t _shutdownEpoch{-1};
+  pthread_t _tid;
   ThreadCache *_prev;
   ThreadCache *_next;
 };
@@ -89,7 +93,16 @@ public:
 
 private:
   void quiesceOthers();
+  void quiesceSelf();
   void resume();
+
+  mutex _sharedMu{};
+
+  atomic_int _waiters{0};
+  condition_variable _waitersCv{};
+
+  atomic_int64_t _resumeEpoch{0};
+  condition_variable _resumeCv{};
 };
 
 class Runtime {
@@ -106,8 +119,6 @@ public:
   inline StopTheWorld &stopTheWorld() {
     return _stw;
   }
-
-  static pid_t gettid() noexcept;
 
   inline MeshHeap &heap() {
     return _heap;
@@ -145,6 +156,7 @@ private:
   void quiesceSelf();
 
   static __thread stack_t _altStack;
+  static __thread ThreadCache *_threadCache;
 
   friend Runtime &runtime();
   friend StopTheWorld;

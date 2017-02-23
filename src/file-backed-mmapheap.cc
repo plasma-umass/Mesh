@@ -27,8 +27,6 @@ FileBackedMmapHeap::FileBackedMmapHeap() : SuperHeap() {
 }
 
 void FileBackedMmapHeap::internalMesh(void *keep, void *remove) {
-  //lock_guard<StopTheWorld> lock(runtime().stopTheWorld());
-
   auto sz = _vmaMap[keep];
 
   d_assert(_fdMap.find(keep) != _fdMap.end());
