@@ -58,22 +58,34 @@ void StopTheWorld::unlock() {
 }
 
 void StopTheWorld::quiesceSelf() {
-  int64_t nextEpoch = -1;
-  {
-    lock_guard<mutex> lock(_sharedMu);
-    nextEpoch = _resumeEpoch.load() + 1;
-    if (_waiters.fetch_sub(1) == 1)
-      _waitersCv.notify_one();
-  }
-  d_assert(nextEpoch > -1);
+  //debug("%x/%d: shutting myself up\n", pthread_self(), syscall(SYS_gettid));
+  d_assert(Runtime::_threadCache->_waiting);
 
-  std::unique_lock<mutex> lock(_sharedMu);
-  while (_resumeEpoch.load() < nextEpoch)
-    _resumeCv.wait(lock);
+  // FIXME: remove while loop
+  while (true) {
+    int64_t nextEpoch = -1;
+    {
+      lock_guard<mutex> lock(_sharedMu);
+      nextEpoch = _resumeEpoch.load() + 1;
+      Runtime::_threadCache->_waiting = false;
+      if (_waiters.fetch_sub(1) == 1)
+        _waitersCv.notify_one();
+    }
+    d_assert(nextEpoch > -1);
+
+    {
+      std::unique_lock<mutex> lock(_sharedMu);
+      while (_resumeEpoch.load() < nextEpoch)
+        _resumeCv.wait(lock);
+      // if (!Runtime::_threadCache->_waiting)
+      //   debug("%x/%d:\t\t\t\t expecting reschedule\n", pthread_self(), syscall(SYS_gettid));
+      break;
+    }
+  }
 
   // if (_resumeEpoch.load() > nextEpoch)
   //   debug("%x: \tmaybe missed an epoch?", pthread_self());
-  // debug("%x: was quiet, resuming", pthread_self());
+  //debug("%x: was quiet, resuming\n", pthread_self());
 }
 
 void StopTheWorld::quiesceOthers() {
@@ -91,7 +103,7 @@ void StopTheWorld::quiesceOthers() {
   if (count == 0)
     return;
 
-  // debug("%x: STOP THE WORLD", pthread_self());
+  //debug("%x/%d: STOP THE WORLD (count: %d)\n", pthread_self(), syscall(SYS_gettid), count);
 
   {
     lock_guard<mutex> lock(_sharedMu);
@@ -100,18 +112,26 @@ void StopTheWorld::quiesceOthers() {
 
   _waiters = count;
 
+  size_t killCount = 0;
+  const pthread_t selfId = pthread_self();
+
   for (auto tc = self->_next; tc != self; tc = tc->_next) {
     if (tc->_shutdownEpoch > -1)
       continue;
-    pthread_kill(tc->_tid, internal::SIGQUIESCE);
+    tc->_waiting = true;
+    d_assert(tc->_tid != selfId);
+    //debug("\tkill %x\n", tc->_tid);
+    pthread_kill(tc->_tid, SIGQUIESCE);
+    ++killCount;
   }
+  d_assert(count == killCount);
 
   {
     std::unique_lock<mutex> lock(_sharedMu);
     _waitersCv.wait(lock, [this] { return _waiters == 0; });
   }
 
-  // debug("%x: WORLD STOPPED", pthread_self());
+  //debug("%x: WORLD STOPPED", pthread_self());
 }
 
 void StopTheWorld::resume() {
@@ -195,6 +215,14 @@ void Runtime::sigQuiesceHandler(int sig, siginfo_t *info, void *uctx) {
 }
 
 void Runtime::registerThread(ThreadCache *tc) {
+  sigset_t sigset;
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGQUIESCE);
+
+  // make sure this thread is able to handle our SIGQUIESCE signal
+  int result = sigprocmask(SIG_UNBLOCK, &sigset, nullptr);
+  d_assert(result == 0);
+
   runtime()._heap.lock();
 
   d_assert(_caches != nullptr);
@@ -236,7 +264,7 @@ void Runtime::installSigHandlers() {
   sigemptyset(&sigQuiesce.sa_mask);
   sigQuiesce.sa_flags = SA_SIGINFO | SA_RESTART | SA_ONSTACK;
   sigQuiesce.sa_sigaction = sigQuiesceHandler;
-  if (sigaction(internal::SIGQUIESCE, &sigQuiesce, NULL) == -1) {
+  if (sigaction(SIGQUIESCE, &sigQuiesce, NULL) == -1) {
     debug("sigaction(SIGQUIESCE): %d", errno);
     abort();
   }
