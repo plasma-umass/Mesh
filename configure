@@ -53,7 +53,7 @@ c.append('cflags', '-Wcast-align')
 
 c.append('cflags', '-Isrc/vendor/googletest/googletest/include')
 c.append('cflags', '-Isrc/vendor/googletest/googletest')
-c.append('cflags', '-isystem src/vendor/gflags/build/include')
+c.append('cflags', '-isystem build/src/vendor/gflags/include')
 c.append('cflags', '-Isrc/vendor/Heap-Layers')
 
 c.append('ldflags', '-Wl,--no-add-needed')

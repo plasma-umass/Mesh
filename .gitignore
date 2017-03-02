@@ -9,3 +9,4 @@ TAGS
 /unit.test
 /meshing-benchmark
 config.mk
+/build
