@@ -34,9 +34,9 @@ ALL_OBJS         = $(LIB_OBJS) $(UNIT_OBJS) $(BENCH_OBJS)
 # reference files in each subproject to ensure git fully checks the project out
 HEAP_LAYERS      = src/vendor/Heap-Layers/heaplayers.h
 GTEST            = src/vendor/googletest/googletest/include/gtest/gtest.h
-GFLAGS           = src/vendor/gflags/src/gflags.cc
+GFLAGS           = src/vendor/gflags/CMakeLists.txt
 
-GFLAGS_BUILD_DIR = src/vendor/gflags/build
+GFLAGS_BUILD_DIR = build/src/vendor/gflags
 GFLAGS_BUILD     = $(GFLAGS_BUILD_DIR)/Makefile
 GFLAGS_LIB       = $(GFLAGS_BUILD_DIR)/lib/libgflags.a
 
@@ -68,7 +68,7 @@ $(ALL_SUBMODULES):
 $(GFLAGS_BUILD): $(GFLAGS) $(CONFIG)
 	@echo "  CMAKE $@"
 	mkdir -p $(GFLAGS_BUILD_DIR)
-	cd $(GFLAGS_BUILD_DIR) && CC=$(CC) CXX=$(CXX) cmake ..
+	cd $(GFLAGS_BUILD_DIR) && CC=$(CC) CXX=$(CXX) cmake $(realpath $(dir $(GFLAGS)))
 	touch -c $(GFLAGS_BUILD)
 
 $(GFLAGS_LIB): $(GFLAGS_BUILD) $(CONFIG)
