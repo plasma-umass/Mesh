@@ -38,6 +38,7 @@ Running `make` will build the library and run a simple test of
 executing `git status` with `libmesh` as the allocator:
 
 ```
+$ ./configure
 $ make
 ```
 
