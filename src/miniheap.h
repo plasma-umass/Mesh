@@ -37,16 +37,14 @@ public:
     if (!_span)
       abort();
 
-    _maxCount = SpanSize / objectSize;
-    _fullCount = FullNumerator * _maxCount / FullDenominator;
-
-    _bitmap.reserve(_maxCount);
+    _bitmap.reserve(maxCount());
   }
+
 
   void dumpDebug() const {
     constexpr auto heapPages = SpanSize / PageSize;
     debug("MiniHeap(%p:%5zu): %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n",
-          this, _objectSize, _maxCount, heapPages, FullNumerator, FullDenominator, _fullCount, this->isFull(),
+          this, _objectSize, maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(),
           _inUseCount, _span, reinterpret_cast<uintptr_t>(_span) + SpanSize);
   }
 
@@ -77,7 +75,7 @@ public:
 
     // endpoint is _inclusive_, so we subtract 1 from maxCount since
     // we're dealing with 0-indexed offsets
-    std::uniform_int_distribution<size_t> distribution(0, _maxCount - 1);
+    std::uniform_int_distribution<size_t> distribution(0, maxCount() - 1);
 
     // because our span is not full and no other malloc is running
     // concurrently on this span, this is guaranteed to terminate
@@ -100,7 +98,7 @@ public:
     auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
     auto off = (ptrval - span) / _objectSize;
-    if (span > ptrval || off >= _maxCount) {
+    if (span > ptrval || off >= maxCount()) {
       debug("MiniHeap(%p): invalid free of %p", this, ptr);
       return;
     }
@@ -124,6 +122,14 @@ public:
     return span <= ptrval && ptrval < span + SpanSize;
   }
 
+  inline size_t maxCount() const {
+    return SpanSize / _objectSize;
+  }
+
+  inline size_t fullCount() const {
+    return FullNumerator * maxCount() / FullDenominator;
+  }
+
   inline size_t getSize(void *ptr) const {
     d_assert_msg(contains(ptr), "span(%p) <= %p < %p", _span, ptr, reinterpret_cast<uintptr_t>(_span) + SpanSize);
 
@@ -131,7 +137,7 @@ public:
   }
 
   inline bool isFull() const {
-    return _inUseCount >= _fullCount;
+    return _inUseCount >= fullCount();
   }
 
   inline uintptr_t getSpanStart() const {
@@ -156,8 +162,6 @@ public:
 
   void *_span;
   size_t _objectSize;
-  size_t _maxCount{0};
-  size_t _fullCount{0};
   size_t _inUseCount{0};
   mt19937_64 _prng;
   InternalBitmap _bitmap{};

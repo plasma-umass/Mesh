@@ -46,4 +46,4 @@ $ make
 TODO
 ----
 
-- Fix issue with `FileBackedMmapHeap` on fork (shared pages between processes) 
+- bitmap: reserve bitmap up front
