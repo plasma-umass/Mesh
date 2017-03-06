@@ -1,6 +1,18 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
+#define USE_MEMFD 1
+
+#ifdef USE_MEMFD
+#include <sys/syscall.h>
+
+#include <unistd.h>
+
+//#include <sys/memfd.h>
+#include <asm/unistd_64.h>
+#include <linux/memfd.h>
+#endif
+
 #include "file-backed-mmapheap.h"
 
 #include "runtime.h"
@@ -39,6 +51,25 @@ void FileBackedMmapHeap::internalMesh(void *keep, void *remove) {
   debug("meshed %p + %p", keep, remove);
 }
 
+#ifdef USE_MEMFD
+static int sys_memfd_create(const char *name, unsigned int flags) {
+  return syscall(__NR_memfd_create, name, flags);
+}
+
+int FileBackedMmapHeap::openSpanFile(size_t sz) {
+  errno = 0;
+  int fd = sys_memfd_create("mesh_heap", MFD_CLOEXEC);
+  d_assert_msg(fd >= 0, "memfd_create(%d) failed: %s", __NR_memfd_create, strerror(errno));
+
+  int err = ftruncate(fd, sz);
+  if (err != 0) {
+    debug("ftruncate: %d\n", errno);
+    abort();
+  }
+
+  return fd;
+}
+#else
 int FileBackedMmapHeap::openSpanFile(size_t sz) {
   constexpr size_t buf_len = 64;
   char buf[buf_len];
@@ -76,6 +107,7 @@ int FileBackedMmapHeap::openSpanFile(size_t sz) {
 
   return fd;
 }
+#endif  // USE_MEMFD
 
 char *FileBackedMmapHeap::openSpanDir(int pid) {
   constexpr size_t buf_len = 64;
