@@ -14,10 +14,7 @@ TEST(BitmapTest, SetGet) {
   const int NTRIALS = 1000;
 
   for (int n = 100; n < 10000; n *= 2) {
-    mesh::Bitmap<MallocHeap> b;
-
-    b.reserve(n);
-    b.clear();
+    mesh::Bitmap<MallocHeap> b{static_cast<size_t>(n)};
 
     for (int k = 0; k < NTRIALS; k++) {
       // Generate a random stream of bits.
