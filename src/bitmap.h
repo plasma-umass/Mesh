@@ -58,7 +58,7 @@ private:
  * @param Heap  the source of memory for the bitmap.
  */
 
-template <class Heap>
+template <typename Heap>
 class Bitmap : private Heap {
 private:
   DISALLOW_COPY_AND_ASSIGN(Bitmap);
@@ -70,11 +70,15 @@ private:
   /// The log of the number of bits in a word_t, for shifting.
   enum { WORDBITSHIFT = staticlog(WORDBITS) };
 
+  explicit Bitmap() {
+  }
+
 public:
   typedef BitmapIter<Bitmap, size_t> iterator;
   typedef BitmapIter<Bitmap, size_t> const const_iterator;
 
-  Bitmap(void) {
+  explicit Bitmap(size_t nBits) : Bitmap() {
+    reserve(nBits);
   }
 
   explicit Bitmap(const std::string &str) : Bitmap() {
@@ -122,7 +126,7 @@ public:
       Heap::free(_bitarray);
     }
     // Round up the number of elements.
-    _elements = WORDBITS * ((nelts + WORDBITS - 1) / WORDBITS);
+    _elements = nelts;
     // Allocate the right number of bytes.
     _bitarray = reinterpret_cast<word_t *>(Heap::malloc(wordCount()));
     d_assert(_bitarray != nullptr);
@@ -133,7 +137,7 @@ public:
   // number of machine words (4-byte on 32-bit systems, 8-byte on
   // 64-bit) used to store the bitmap
   inline size_t wordCount() const {
-    return _elements / 8;
+    return WORDBITS * ((_elements + WORDBITS - 1) / WORDBITS) / 8;
   }
 
   inline size_t bitCount() const {

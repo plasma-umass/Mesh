@@ -32,12 +32,10 @@ public:
   enum { Alignment = (int)MinObjectSize };
   static const size_t span_size = SpanSize;
 
-  MiniHeapBase(size_t objectSize) : _objectSize(objectSize), _prng(internal::seed()) {
+  MiniHeapBase(size_t objectSize) : _objectSize(objectSize), _bitmap(maxCount()), _prng(internal::seed()) {
     _span = _super.malloc(SpanSize);
     if (!_span)
       abort();
-
-    _bitmap.reserve(maxCount());
   }
 
 
@@ -163,8 +161,8 @@ public:
   void *_span;
   size_t _objectSize;
   size_t _inUseCount{0};
+  InternalBitmap _bitmap;
   mt19937_64 _prng;
-  InternalBitmap _bitmap{};
   bool _done{false};
 
   SuperHeap _super{};
