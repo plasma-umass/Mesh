@@ -13,32 +13,33 @@
 #include <linux/memfd.h>
 #endif
 
-#include "file-backed-mmapheap.h"
+#include "meshable-arena.h"
 
 #include "runtime.h"
 
 namespace mesh {
 
-static void *fbmmInstance;
+static void *arenaInstance;
 
 static const char *const TMP_DIRS[] = {
     "/dev/shm", "/tmp",
 };
 
-FileBackedMmapHeap::FileBackedMmapHeap() : SuperHeap() {
-  d_assert(fbmmInstance == nullptr);
-  fbmmInstance = this;
+MeshableArena::MeshableArena() : SuperHeap() {
+  d_assert(arenaInstance == nullptr);
+  arenaInstance = this;
 
-  // check if we have memfd_create, if so use it.
-
+#ifndef USE_MEMFD
   _spanDir = openSpanDir(getpid());
   d_assert(_spanDir != nullptr);
+#endif
 
+  // TODO: move this to runtime
   on_exit(staticOnExit, this);
   pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
 }
 
-void FileBackedMmapHeap::internalMesh(void *keep, void *remove) {
+void MeshableArena::internalMesh(void *keep, void *remove) {
   auto sz = _vmaMap[keep];
 
   d_assert(_fdMap.find(keep) != _fdMap.end());
@@ -56,9 +57,9 @@ static int sys_memfd_create(const char *name, unsigned int flags) {
   return syscall(__NR_memfd_create, name, flags);
 }
 
-int FileBackedMmapHeap::openSpanFile(size_t sz) {
+int MeshableArena::openSpanFile(size_t sz) {
   errno = 0;
-  int fd = sys_memfd_create("mesh_heap", MFD_CLOEXEC);
+  int fd = sys_memfd_create("mesh_arena", MFD_CLOEXEC);
   d_assert_msg(fd >= 0, "memfd_create(%d) failed: %s", __NR_memfd_create, strerror(errno));
 
   int err = ftruncate(fd, sz);
@@ -70,7 +71,7 @@ int FileBackedMmapHeap::openSpanFile(size_t sz) {
   return fd;
 }
 #else
-int FileBackedMmapHeap::openSpanFile(size_t sz) {
+int MeshableArena::openSpanFile(size_t sz) {
   constexpr size_t buf_len = 64;
   char buf[buf_len];
   memset(buf, 0, buf_len);
@@ -109,7 +110,7 @@ int FileBackedMmapHeap::openSpanFile(size_t sz) {
 }
 #endif  // USE_MEMFD
 
-char *FileBackedMmapHeap::openSpanDir(int pid) {
+char *MeshableArena::openSpanDir(int pid) {
   constexpr size_t buf_len = 64;
 
   for (auto tmpDir : TMP_DIRS) {
@@ -130,26 +131,26 @@ char *FileBackedMmapHeap::openSpanDir(int pid) {
   return nullptr;
 }
 
-void FileBackedMmapHeap::staticOnExit(int code, void *data) {
-  reinterpret_cast<FileBackedMmapHeap *>(data)->exit();
+void MeshableArena::staticOnExit(int code, void *data) {
+  reinterpret_cast<MeshableArena *>(data)->exit();
 }
 
-void FileBackedMmapHeap::staticPrepareForFork() {
-  d_assert(fbmmInstance != nullptr);
-  reinterpret_cast<FileBackedMmapHeap *>(fbmmInstance)->prepareForFork();
+void MeshableArena::staticPrepareForFork() {
+  d_assert(arenaInstance != nullptr);
+  reinterpret_cast<MeshableArena *>(arenaInstance)->prepareForFork();
 }
 
-void FileBackedMmapHeap::staticAfterForkParent() {
-  d_assert(fbmmInstance != nullptr);
-  reinterpret_cast<FileBackedMmapHeap *>(fbmmInstance)->afterForkParent();
+void MeshableArena::staticAfterForkParent() {
+  d_assert(arenaInstance != nullptr);
+  reinterpret_cast<MeshableArena *>(arenaInstance)->afterForkParent();
 }
 
-void FileBackedMmapHeap::staticAfterForkChild() {
-  d_assert(fbmmInstance != nullptr);
-  reinterpret_cast<FileBackedMmapHeap *>(fbmmInstance)->afterForkChild();
+void MeshableArena::staticAfterForkChild() {
+  d_assert(arenaInstance != nullptr);
+  reinterpret_cast<MeshableArena *>(arenaInstance)->afterForkChild();
 }
 
-void FileBackedMmapHeap::prepareForFork() {
+void MeshableArena::prepareForFork() {
   runtime().lock();
   runtime().heap().lock();
 
@@ -158,7 +159,7 @@ void FileBackedMmapHeap::prepareForFork() {
     abort();
 }
 
-void FileBackedMmapHeap::afterForkParent() {
+void MeshableArena::afterForkParent() {
   runtime().heap().unlock();
   runtime().unlock();
 
@@ -180,7 +181,7 @@ void FileBackedMmapHeap::afterForkParent() {
   d_assert(strcmp(buf, "ok") == 0);
 }
 
-void FileBackedMmapHeap::afterForkChild() {
+void MeshableArena::afterForkChild() {
   runtime().heap().unlock();
   runtime().unlock();
 

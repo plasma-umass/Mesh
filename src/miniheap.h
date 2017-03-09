@@ -14,13 +14,8 @@
 
 namespace mesh {
 
-template <typename SuperHeap,
-          typename InternalHeap,
+template <typename InternalHeap,
           size_t PageSize = 4096,
-          size_t MinObjectSize = 16,
-          size_t MaxObjectSize = 2048,
-          size_t MinAvailablePages = 4,
-          size_t SpanSize = 128UL * 1024UL, // 128Kb spans
           unsigned int FullNumerator = 3,
           unsigned int FullDenominator = 4>
 class MiniHeapBase {
@@ -29,21 +24,17 @@ private:
   typedef Bitmap<InternalHeap> InternalBitmap;
 
 public:
-  enum { Alignment = (int)MinObjectSize };
-  static const size_t span_size = SpanSize;
-
-  MiniHeapBase(size_t objectSize) : _objectSize(objectSize), _bitmap(maxCount()), _prng(internal::seed()) {
-    _span = _super.malloc(SpanSize);
+  MiniHeapBase(void *span, size_t spanSize, size_t objectSize) : _span(span), _spanSize(spanSize), _objectSize(objectSize), _bitmap(maxCount()) {
     if (!_span)
       abort();
   }
 
 
   void dumpDebug() const {
-    constexpr auto heapPages = SpanSize / PageSize;
+    constexpr auto heapPages = _spanSize / PageSize;
     debug("MiniHeap(%p:%5zu): %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n",
           this, _objectSize, maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(),
-          _inUseCount, _span, reinterpret_cast<uintptr_t>(_span) + SpanSize);
+          _inUseCount, _span, reinterpret_cast<uintptr_t>(_span) + _spanSize);
   }
 
   static void mesh(MiniHeapBase *dst, MiniHeapBase *src) {
@@ -64,10 +55,11 @@ public:
       d_assert(ok && dst->_bitmap.isSet(off));
     }
 
-    dst->_super.mesh(dst->_span, src->_span);
+    debug("TODO: MiniHeap::mesh");
+    //dst->_super.mesh(dst->_span, src->_span);
   }
 
-  inline void *malloc(size_t sz) {
+  inline void *malloc(mt19937_64 &prng, size_t sz) {
     d_assert(!_done && !isFull());
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
@@ -78,7 +70,7 @@ public:
     // because our span is not full and no other malloc is running
     // concurrently on this span, this is guaranteed to terminate
     while (true) {
-      size_t off = distribution(_prng);
+      size_t off = distribution(prng);
 
       if (!_bitmap.tryToSet(off))
         continue;
@@ -108,20 +100,20 @@ public:
 
     _bitmap.reset(off);
     _inUseCount--;
+  }
 
-    if (_inUseCount == 0 && _done) {
-      _super.free(_span);
-    }
+  inline bool shouldReclaim() const {
+    return _inUseCount == 0 && _done;
   }
 
   inline bool contains(void *ptr) const {
     auto span = reinterpret_cast<uintptr_t>(_span);
     auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    return span <= ptrval && ptrval < span + SpanSize;
+    return span <= ptrval && ptrval < span + _spanSize;
   }
 
   inline size_t maxCount() const {
-    return SpanSize / _objectSize;
+    return _spanSize / _objectSize;
   }
 
   inline size_t fullCount() const {
@@ -129,7 +121,7 @@ public:
   }
 
   inline size_t getSize(void *ptr) const {
-    d_assert_msg(contains(ptr), "span(%p) <= %p < %p", _span, ptr, reinterpret_cast<uintptr_t>(_span) + SpanSize);
+    d_assert_msg(contains(ptr), "span(%p) <= %p < %p", _span, ptr, reinterpret_cast<uintptr_t>(_span) + _spanSize);
 
     return _objectSize;
   }
@@ -159,14 +151,14 @@ public:
   }
 
   void *_span;
-  size_t _objectSize;
+  const size_t _spanSize;
+  const size_t _objectSize;
   size_t _inUseCount{0};
   InternalBitmap _bitmap;
-  mt19937_64 _prng;
   bool _done{false};
-
-  SuperHeap _super{};
 };
+
+typedef MiniHeapBase<internal::Heap> MiniHeap;
 }
 
 #endif  // MESH__MINIHEAP_H

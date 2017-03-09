@@ -8,9 +8,11 @@
 #include <pthread.h>
 #include <signal.h>  // for stack_t
 
-#include "file-backed-mmapheap.h"
 #include "internal.h"
-#include "meshingheap.h"
+
+#include "globalmeshingheap.h"
+#include "localmeshingheap.h"
+#include "mmapheap.h"
 
 #include "heaplayers.h"
 
@@ -25,10 +27,8 @@ typedef void *(*PthreadFn)(void *);
 typedef int (*PthreadCreateFn)(pthread_t *thread, const pthread_attr_t *attr, PthreadFn start_routine, void *arg);
 
 // The top heap provides memory to back spans managed by MiniHeaps.
-class TopHeap : public ExactlyOneHeap<mesh::FileBackedMmapHeap> {
-private:
-  typedef ExactlyOneHeap<mesh::FileBackedMmapHeap> SuperHeap;
-
+class TopHeap
+    : public ExactlyOneHeap<mesh::GlobalMeshingHeap<mesh::MmapHeap, 11, mesh::size2Class, mesh::class2Size, 1000>> {
 public:
   void mesh(void *keep, void *remove) {
     getSuperHeap().internalMesh(keep, remove);
@@ -43,7 +43,7 @@ class TopBigHeap : public ExactlyOneHeap<mesh::MmapHeap> {};
 
 // fewer buckets than regular KingsleyHeap (to ensure multiple objects
 // fit in the 128Kb spans used by MiniHeaps).
-class BottomHeap : public mesh::MeshingHeap<11, mesh::size2Class, mesh::class2Size, 1000, TopHeap, TopBigHeap> {};
+class BottomHeap : public mesh::LocalMeshingHeap<11, mesh::size2Class, mesh::class2Size, 1000, TopHeap> {};
 
 // TODO: remove the LockedHeap here and use a per-thread BottomHeap
 class MeshHeap : public ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> {
