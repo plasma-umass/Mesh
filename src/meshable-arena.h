@@ -59,6 +59,7 @@ protected:
 };
 }
 
+template <size_t ArenaSize>
 class MeshableArena : public mesh::MmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MeshableArena);
@@ -73,38 +74,28 @@ public:
     if (sz == 0)
       return nullptr;
 
-    // Round up to the size of a page.
-    sz = (sz + CPUInfo::PageSize - 1) & (size_t) ~(CPUInfo::PageSize - 1);
+    d_assert_msg(sz % 4096 == 0, "multiple-page allocs only, sz bad: %zu", sz);
 
-    void *ptr = SuperHeap::map(sz, MAP_SHARED, fd);
+    if (sz == 4096) {
+      // TODO: search bitmap for first 0
+      return 0;
+    }
 
-    _fdMap[ptr] = internal::make_shared<internal::FD>(fd);
-
-    return ptr;
+    // otherwise allocate after last set bit for now, I guess.
+    return 0;
   }
 
   inline void free(void *ptr) {
-    auto entry = _vmaMap.find(ptr);
-    if (unlikely(entry == _vmaMap.end())) {
-      debug("fb-mmap: invalid free: %p", ptr);
-      return;
-    }
+    // TODO: munmap, punch hole, free bitmap
 
-    auto sz = entry->second;
-
-    munmap(ptr, sz);
+    // munmap(ptr, sz);
     // madvise(ptr, sz, MADV_DONTNEED);
     // mprotect(ptr, sz, PROT_NONE);
 
-    _vmaMap.erase(entry);
-    d_assert(_vmaMap.find(ptr) == _vmaMap.end());
 
-    d_assert(_fdMap.find(ptr) != _fdMap.end());
-    int fd = *_fdMap[ptr];
-    int result = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, sz);
-    d_assert(result == 0);
-
-    _fdMap.erase(ptr);
+    // int fd = *_fd;
+    // int result = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, sz);
+    // d_assert(result == 0);
   }
 
   // must be called with the world stopped
@@ -115,7 +106,7 @@ public:
   void internalMesh(void *keep, void *remove);
 
 private:
-  int openSpanFile(size_t sz);
+  int openSpanFile();
   char *openSpanDir(int pid);
 
   static void staticOnExit(int code, void *data);
@@ -136,6 +127,7 @@ private:
   void afterForkParent();
   void afterForkChild();
 
+  internal::Bitmap _bitmap;
   shared_ptr<internal::FD> _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
   char *_spanDir{nullptr};

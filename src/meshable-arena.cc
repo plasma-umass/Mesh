@@ -25,7 +25,7 @@ static const char *const TMP_DIRS[] = {
     "/dev/shm", "/tmp",
 };
 
-MeshableArena::MeshableArena() : SuperHeap() {
+MeshableArena::MeshableArena() : SuperHeap(), _bitmap{ArenaSize / 4096UL} {
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
@@ -33,6 +33,8 @@ MeshableArena::MeshableArena() : SuperHeap() {
   _spanDir = openSpanDir(getpid());
   d_assert(_spanDir != nullptr);
 #endif
+
+  _fd = internal::make_shared<internal::FD>(fd);
 
   // TODO: move this to runtime
   on_exit(staticOnExit, this);
