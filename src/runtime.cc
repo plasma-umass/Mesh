@@ -223,7 +223,7 @@ void Runtime::registerThread(ThreadCache *tc) {
   int result = sigprocmask(SIG_UNBLOCK, &sigset, nullptr);
   d_assert(result == 0);
 
-  runtime()._heap.lock();
+  //runtime()._heap.lock();
 
   d_assert(_caches != nullptr);
   d_assert(tc->_next == tc);
@@ -237,7 +237,7 @@ void Runtime::registerThread(ThreadCache *tc) {
 
   _threadCache = tc;
 
-  runtime()._heap.unlock();
+  //runtime()._heap.unlock();
 }
 
 void Runtime::unregisterThread(ThreadCache *tc) {

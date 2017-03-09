@@ -22,11 +22,12 @@ template <typename BigHeap,
           int (*getSizeClass)(const size_t),
           size_t (*getClassMaxSize)(const int),
           int MeshPeriod,                 // perform meshing on average once every MeshPeriod frees
-          size_t ArenaSize = 1ULL << 34>  // 16 GB
+          size_t MinStringLen = 8UL,
+          size_t ArenaSize = 1UL << 34>  // 16 GB
 class GlobalMeshingHeap : public MeshableArena<ArenaSize> {
 private:
   DISALLOW_COPY_AND_ASSIGN(GlobalMeshingHeap);
-  typedef MeshableArena Super;
+  typedef MeshableArena<ArenaSize> Super;
 
 public:
   enum { Alignment = 16 };
@@ -42,20 +43,34 @@ public:
     resetNextMeshCheck();
   }
 
-  inline MiniHeap *allocMiniheap(size_t sz) {
-    const int sizeClass = getSizeClass(sz);
+  inline MiniHeap *allocMiniheap(size_t objectSize) {
+    d_assert(objectSize <= _maxObjectSize);
+
+    const int sizeClass = getSizeClass(objectSize);
     const size_t sizeMax = getClassMaxSize(sizeClass);
 
-    d_assert_msg(sz == sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", sz, sizeMax, sizeClass);
-    d_assert(sizeMax <= _maxObjectSize);
+    d_assert_msg(objectSize == sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize, sizeMax, sizeClass);
     d_assert(sizeClass >= 0);
     d_assert(sizeClass < NumBins);
 
     void *buf = internal::Heap().malloc(sizeof(MiniHeap));
-    if (buf == nullptr)
+    if (unlikely(buf == nullptr))
       abort();
 
-    MiniHeap *mh = new (buf) MiniHeap(sizeMax);
+    // if we have objects bigger than the size of a page, allocate
+    // multiple pages to amortize the cost of creating a
+    // miniheap/globally locking the heap.
+    size_t nObjects = max(MiniHeap::PageSize / sizeMax, MinStringLen);
+
+    const size_t nPages = (sizeMax * nObjects + (MiniHeap::PageSize - 1))  / MiniHeap::PageSize;
+    const size_t spanSize = MiniHeap::PageSize * nPages;
+    d_assert(0 < spanSize);
+
+    void *span = Super::malloc(spanSize);
+    if (unlikely(span == nullptr))
+      abort();
+
+    MiniHeap *mh = new (buf) MiniHeap(span, spanSize, sizeMax);
     _littleheaps[sizeClass].push_back(mh);
     _miniheaps[mh->getSpanStart()] = mh;
   }
@@ -152,12 +167,13 @@ protected:
   }
 
   void *arenaEnd() {
-    return reinterpret_cast<char *> arenaBegin + arenaSize;
+    return reinterpret_cast<char *>(_arenaBegin) + ArenaSize;
   }
 
   void *_arenaBegin{nullptr};
 
   const size_t _maxObjectSize;
+  size_t _nextMeshCheck{0};
 
   BigHeap _bigheap{};
   MiniHeap *_current[NumBins];

@@ -14,16 +14,16 @@
 
 namespace mesh {
 
-template <typename InternalHeap,
-          size_t PageSize = 4096,
+template <size_t PageSise = 4096,
           unsigned int FullNumerator = 3,
           unsigned int FullDenominator = 4>
 class MiniHeapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
-  typedef Bitmap<InternalHeap> InternalBitmap;
 
 public:
+  static const size_t PageSize = PageSise;
+
   MiniHeapBase(void *span, size_t spanSize, size_t objectSize) : _span(span), _spanSize(spanSize), _objectSize(objectSize), _bitmap(maxCount()) {
     if (!_span)
       abort();
@@ -146,7 +146,7 @@ public:
     return _inUseCount == 0;
   }
 
-  const InternalBitmap &bitmap() const {
+  const internal::Bitmap &bitmap() const {
     return _bitmap;
   }
 
@@ -154,11 +154,11 @@ public:
   const size_t _spanSize;
   const size_t _objectSize;
   size_t _inUseCount{0};
-  InternalBitmap _bitmap;
+  internal::Bitmap _bitmap;
   bool _done{false};
 };
 
-typedef MiniHeapBase<internal::Heap> MiniHeap;
+typedef MiniHeapBase<> MiniHeap;
 }
 
 #endif  // MESH__MINIHEAP_H

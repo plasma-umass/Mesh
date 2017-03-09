@@ -9,6 +9,8 @@
 
 #include "common.h"
 
+#include "bitmap.h"
+
 // never allocate exeecutable heap
 #define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)
 #define MALLOC_TRACE 0
@@ -75,7 +77,10 @@ typename Map::iterator greatest_leq(Map &m, typename Map::key_type const &k) {
   }
   return m.end();
 }
-}
-}
+
+typedef Bitmap<Heap> Bitmap;
+
+} // namespace internal
+} // namespace mesh
 
 #endif  // MESH__INTERNAL_H

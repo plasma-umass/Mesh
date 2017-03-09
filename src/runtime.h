@@ -28,7 +28,8 @@ typedef int (*PthreadCreateFn)(pthread_t *thread, const pthread_attr_t *attr, Pt
 
 // The top heap provides memory to back spans managed by MiniHeaps.
 class TopHeap
-    : public ExactlyOneHeap<mesh::GlobalMeshingHeap<mesh::MmapHeap, 11, mesh::size2Class, mesh::class2Size, 1000>> {
+    : public ExactlyOneHeap<LockedHeap<
+          PosixLockType, mesh::GlobalMeshingHeap<mesh::MmapHeap, 11, mesh::size2Class, mesh::class2Size, 1000>>> {
 public:
   void mesh(void *keep, void *remove) {
     getSuperHeap().internalMesh(keep, remove);
@@ -45,11 +46,10 @@ class TopBigHeap : public ExactlyOneHeap<mesh::MmapHeap> {};
 // fit in the 128Kb spans used by MiniHeaps).
 class BottomHeap : public mesh::LocalMeshingHeap<11, mesh::size2Class, mesh::class2Size, 1000, TopHeap> {};
 
-// TODO: remove the LockedHeap here and use a per-thread BottomHeap
-class MeshHeap : public ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> {
+class MeshHeap : public ANSIWrapper<BottomHeap> {
 private:
   DISALLOW_COPY_AND_ASSIGN(MeshHeap);
-  typedef ANSIWrapper<LockedHeap<PosixLockType, BottomHeap>> SuperHeap;
+  typedef ANSIWrapper<BottomHeap> SuperHeap;
 
 public:
   explicit MeshHeap() : SuperHeap() {
