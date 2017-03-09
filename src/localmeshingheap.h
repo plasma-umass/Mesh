@@ -1,8 +1,8 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
-#ifndef MESH__MESHINGHEAP_H
-#define MESH__MESHINGHEAP_H
+#ifndef MESH__LOCALMESHINGHEAP_H
+#define MESH__LOCALMESHINGHEAP_H
 
 #include <algorithm>
 
@@ -22,10 +22,10 @@ template <int NumBins,
           int MeshPeriod,  // perform meshing on average once every MeshPeriod frees
           typename SuperHeap,
           typename BigHeap>
-class MeshingHeap {
+class LocalMeshingHeap {
 private:
-  DISALLOW_COPY_AND_ASSIGN(MeshingHeap);
-  typedef MiniHeapBase<internal::Heap> MiniHeap;
+  DISALLOW_COPY_AND_ASSIGN(LocalMeshingHeap);
+  typedef MiniHeapBase<SuperHeap, internal::Heap> MiniHeap;
 
 public:
   enum { Alignment = 16 };
@@ -177,4 +177,4 @@ protected:
 };
 }
 
-#endif  // MESH__MESHINGHEAP_H
+#endif  // MESH__LOCALMESHINGHEAP_H

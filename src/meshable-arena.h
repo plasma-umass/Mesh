@@ -2,8 +2,8 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
 #pragma once
-#ifndef MESH__FILE_BACKED_MMAPHEAP_H
-#define MESH__FILE_BACKED_MMAPHEAP_H
+#ifndef MESH__MESHABLE_ARENA_H
+#define MESH__MESHABLE_ARENA_H
 
 #if defined(_WIN32)
 #error "TODO"
@@ -30,11 +30,6 @@
 #include "internal.h"
 
 #include "mmapheap.h"
-
-/**
- * @class FileBackedMmapHeap
- * @brief Modified MmapHeap for use in Mesh.
- */
 
 namespace mesh {
 
@@ -64,15 +59,15 @@ protected:
 };
 }
 
-class FileBackedMmapHeap : public mesh::MmapHeap {
+class MeshableArena : public mesh::MmapHeap {
 private:
-  DISALLOW_COPY_AND_ASSIGN(FileBackedMmapHeap);
+  DISALLOW_COPY_AND_ASSIGN(MeshableArena);
   typedef MmapHeap SuperHeap;
 
 public:
   enum { Alignment = MmapWrapper::Alignment };
 
-  explicit FileBackedMmapHeap();
+  explicit MeshableArena();
 
   inline void *malloc(size_t sz) {
     if (sz == 0)
@@ -81,7 +76,6 @@ public:
     // Round up to the size of a page.
     sz = (sz + CPUInfo::PageSize - 1) & (size_t) ~(CPUInfo::PageSize - 1);
 
-    int fd = openSpanFile(sz);
     void *ptr = SuperHeap::map(sz, MAP_SHARED, fd);
 
     _fdMap[ptr] = internal::make_shared<internal::FD>(fd);
@@ -114,7 +108,7 @@ public:
   }
 
   // must be called with the world stopped
-  static void mesh(FileBackedMmapHeap &heap, void *keep, void *remove) {
+  static void mesh(MeshableArena &heap, void *keep, void *remove) {
     heap.internalMesh(keep, remove);
   }
 
@@ -131,18 +125,21 @@ private:
 
   void exit() {
     // FIXME: do this from the destructor, and test that destructor is
-    // called
-    rmdir(_spanDir);
+    // called.  Also don't leak _spanDir
+    if (_spanDir != nullptr) {
+      rmdir(_spanDir);
+      _spanDir = nullptr;
+    }
   }
 
   void prepareForFork();
   void afterForkParent();
   void afterForkChild();
 
-  internal::unordered_map<void *, shared_ptr<internal::FD>> _fdMap{};
+  shared_ptr<internal::FD> _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
   char *_spanDir{nullptr};
 };
 }
 
-#endif  // MESH__FILE_BACKED_MMAPHEAP_H
+#endif  // MESH__MESHABLE_ARENA_H
