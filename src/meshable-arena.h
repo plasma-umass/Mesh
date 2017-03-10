@@ -76,11 +76,11 @@ public:
     d_assert_msg(sz % 4096 == 0, "multiple-page allocs only, sz bad: %zu", sz);
 
     if (sz == 4096) {
-      // TODO: search bitmap for first 0
+      debug("TODO: Arena: search bitmap for first 0");
       return 0;
     }
 
-    // otherwise allocate after last set bit for now, I guess.
+    debug("TODO: Arena: otherwise allocate after last set bit for now, I guess");
     return 0;
   }
 
@@ -90,7 +90,6 @@ public:
     // munmap(ptr, sz);
     // madvise(ptr, sz, MADV_DONTNEED);
     // mprotect(ptr, sz, PROT_NONE);
-
 
     // int fd = *_fd;
     // int result = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, sz);
