@@ -56,10 +56,10 @@ public:
     // if we have objects bigger than the size of a page, allocate
     // multiple pages to amortize the cost of creating a
     // miniheap/globally locking the heap.
-    size_t nObjects = max(MiniHeap::PageSize / sizeMax, MinStringLen);
+    size_t nObjects = max(HL::CPUInfo::PageSize / sizeMax, MinStringLen);
 
-    const size_t nPages = (sizeMax * nObjects + (MiniHeap::PageSize - 1)) / MiniHeap::PageSize;
-    const size_t spanSize = MiniHeap::PageSize * nPages;
+    const size_t nPages = (sizeMax * nObjects + (HL::CPUInfo::PageSize - 1)) / HL::CPUInfo::PageSize;
+    const size_t spanSize = HL::CPUInfo::PageSize * nPages;
     d_assert(0 < spanSize);
 
     void *span = Super::malloc(spanSize);
