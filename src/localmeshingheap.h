@@ -15,10 +15,10 @@ using namespace HL;
 
 namespace mesh {
 
-template <int NumBins,
-          int (*getSizeClass)(const size_t),
-          size_t (*getClassMaxSize)(const int),
-          int MeshPeriod,  // perform meshing on average once every MeshPeriod frees
+template <int NumBins,                           // number of size classes
+          int (*getSizeClass)(const size_t),     // same as for global
+          size_t (*getClassMaxSize)(const int),  // same as for global
+          int MeshPeriod,                        // perform meshing on average once every MeshPeriod frees
           typename GlobalMeshingHeap>
 class LocalMeshingHeap {
 private:
@@ -27,7 +27,8 @@ private:
 public:
   enum { Alignment = 16 };
 
-  LocalMeshingHeap(GlobalMeshingHeap *global) : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()), _global(global) {
+  LocalMeshingHeap(GlobalMeshingHeap *global)
+      : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()), _global(global) {
     static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
     for (auto i = 0; i < NumBins; i++) {
       _current[i] = nullptr;

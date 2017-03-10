@@ -14,9 +14,7 @@
 
 namespace mesh {
 
-template <size_t PageSise = 4096,
-          unsigned int FullNumerator = 3,
-          unsigned int FullDenominator = 4>
+template <size_t PageSise = 4096, unsigned int FullNumerator = 3, unsigned int FullDenominator = 4>
 class MiniHeapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
@@ -24,17 +22,17 @@ private:
 public:
   static const size_t PageSize = PageSise;
 
-  MiniHeapBase(void *span, size_t spanSize, size_t objectSize) : _span(span), _spanSize(spanSize), _objectSize(objectSize), _bitmap(maxCount()) {
+  MiniHeapBase(void *span, size_t spanSize, size_t objectSize)
+      : _span(span), _spanSize(spanSize), _objectSize(objectSize), _bitmap(maxCount()) {
     if (!_span)
       abort();
   }
 
-
   void dumpDebug() const {
     constexpr auto heapPages = _spanSize / PageSize;
-    debug("MiniHeap(%p:%5zu): %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n",
-          this, _objectSize, maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(),
-          _inUseCount, _span, reinterpret_cast<uintptr_t>(_span) + _spanSize);
+    debug("MiniHeap(%p:%5zu): %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n", this, _objectSize,
+          maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(), _inUseCount, _span,
+          reinterpret_cast<uintptr_t>(_span) + _spanSize);
   }
 
   static void mesh(MiniHeapBase *dst, MiniHeapBase *src) {
@@ -56,7 +54,7 @@ public:
     }
 
     debug("TODO: MiniHeap::mesh");
-    //dst->_super.mesh(dst->_span, src->_span);
+    // dst->_super.mesh(dst->_span, src->_span);
   }
 
   inline void *malloc(mt19937_64 &prng, size_t sz) {

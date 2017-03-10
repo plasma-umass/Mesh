@@ -58,7 +58,7 @@ void StopTheWorld::unlock() {
 }
 
 void StopTheWorld::quiesceSelf() {
-  //debug("%x/%d: shutting myself up\n", pthread_self(), syscall(SYS_gettid));
+  // debug("%x/%d: shutting myself up\n", pthread_self(), syscall(SYS_gettid));
   d_assert(Runtime::_threadCache->_waiting);
 
   // FIXME: remove while loop
@@ -85,7 +85,7 @@ void StopTheWorld::quiesceSelf() {
 
   // if (_resumeEpoch.load() > nextEpoch)
   //   debug("%x: \tmaybe missed an epoch?", pthread_self());
-  //debug("%x: was quiet, resuming\n", pthread_self());
+  // debug("%x: was quiet, resuming\n", pthread_self());
 }
 
 void StopTheWorld::quiesceOthers() {
@@ -103,7 +103,7 @@ void StopTheWorld::quiesceOthers() {
   if (count == 0)
     return;
 
-  //debug("%x/%d: STOP THE WORLD (count: %d)\n", pthread_self(), syscall(SYS_gettid), count);
+  // debug("%x/%d: STOP THE WORLD (count: %d)\n", pthread_self(), syscall(SYS_gettid), count);
 
   {
     lock_guard<mutex> lock(_sharedMu);
@@ -120,7 +120,7 @@ void StopTheWorld::quiesceOthers() {
       continue;
     tc->_waiting = true;
     d_assert(tc->_tid != selfId);
-    //debug("\tkill %x\n", tc->_tid);
+    // debug("\tkill %x\n", tc->_tid);
     pthread_kill(tc->_tid, SIGQUIESCE);
     ++killCount;
   }
@@ -131,7 +131,7 @@ void StopTheWorld::quiesceOthers() {
     _waitersCv.wait(lock, [this] { return _waiters == 0; });
   }
 
-  //debug("%x: WORLD STOPPED", pthread_self());
+  // debug("%x: WORLD STOPPED", pthread_self());
 }
 
 void StopTheWorld::resume() {
@@ -223,7 +223,7 @@ void Runtime::registerThread(ThreadCache *tc) {
   int result = sigprocmask(SIG_UNBLOCK, &sigset, nullptr);
   d_assert(result == 0);
 
-  //runtime()._heap.lock();
+  // runtime()._heap.lock();
 
   d_assert(_caches != nullptr);
   d_assert(tc->_next == tc);
@@ -237,7 +237,7 @@ void Runtime::registerThread(ThreadCache *tc) {
 
   _threadCache = tc;
 
-  //runtime()._heap.unlock();
+  // runtime()._heap.unlock();
 }
 
 void Runtime::unregisterThread(ThreadCache *tc) {

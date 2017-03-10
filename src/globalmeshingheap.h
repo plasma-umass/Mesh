@@ -17,11 +17,11 @@ using namespace HL;
 
 namespace mesh {
 
-template <typename BigHeap,
-          int NumBins,
-          int (*getSizeClass)(const size_t),
-          size_t (*getClassMaxSize)(const int),
-          int MeshPeriod,                 // perform meshing on average once every MeshPeriod frees
+template <typename BigHeap,                      // for large allocations
+          int NumBins,                           // number of size classes
+          int (*getSizeClass)(const size_t),     // same as for local
+          size_t (*getClassMaxSize)(const int),  // same as for local
+          int MeshPeriod,                        // perform meshing on average once every MeshPeriod frees
           size_t MinStringLen = 8UL>
 class GlobalMeshingHeap : public MeshableArena {
 private:
@@ -44,7 +44,8 @@ public:
     const int sizeClass = getSizeClass(objectSize);
     const size_t sizeMax = getClassMaxSize(sizeClass);
 
-    d_assert_msg(objectSize == sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize, sizeMax, sizeClass);
+    d_assert_msg(objectSize == sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize, sizeMax,
+                 sizeClass);
     d_assert(sizeClass >= 0);
     d_assert(sizeClass < NumBins);
 
@@ -57,7 +58,7 @@ public:
     // miniheap/globally locking the heap.
     size_t nObjects = max(MiniHeap::PageSize / sizeMax, MinStringLen);
 
-    const size_t nPages = (sizeMax * nObjects + (MiniHeap::PageSize - 1))  / MiniHeap::PageSize;
+    const size_t nPages = (sizeMax * nObjects + (MiniHeap::PageSize - 1)) / MiniHeap::PageSize;
     const size_t spanSize = MiniHeap::PageSize * nPages;
     d_assert(0 < spanSize);
 
