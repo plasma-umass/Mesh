@@ -24,10 +24,12 @@ public:
       : _span(span), _spanSize(spanSize), _objectSize(objectSize), _bitmap(maxCount()) {
     if (!_span)
       abort();
+
+    dumpDebug();
   }
 
   void dumpDebug() const {
-    constexpr auto heapPages = _spanSize / HL::CPUInfo::PageSize;
+    const auto heapPages = _spanSize / HL::CPUInfo::PageSize;
     debug("MiniHeap(%p:%5zu): %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n", this, _objectSize,
           maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(), _inUseCount, _span,
           reinterpret_cast<uintptr_t>(_span) + _spanSize);

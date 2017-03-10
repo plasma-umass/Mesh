@@ -5,6 +5,7 @@
 #define MESH__LOCALMESHINGHEAP_H
 
 #include <algorithm>
+#include <stdalign.h>
 
 #include "heaplayers.h"
 
@@ -37,6 +38,22 @@ public:
   }
 
   inline void *malloc(size_t sz) {
+    if (sz == 0)
+      return nullptr;
+
+    if (sz <= 8) {
+      sz = 8;
+    } else if (sz < alignof(max_align_t)) {
+      sz = alignof(max_align_t);
+    } else {
+      // Enforce alignment requirements: round up allocation sizes if
+      // needed.  NOTE: Alignment needs to be a power of two.
+      static_assert((alignof(max_align_t) & (alignof(max_align_t) - 1)) == 0, "Alignment not a power of two.");
+
+      // Enforce alignment.
+      sz = (sz + alignof(max_align_t) - 1UL) & ~(alignof(max_align_t) - 1UL);
+    }
+
     const int sizeClass = getSizeClass(sz);
     const size_t sizeMax = getClassMaxSize(sizeClass);
 
@@ -56,7 +73,7 @@ public:
 
       _current[sizeClass] = mh;
 
-      // d_assert(_current[sizeClass] == mh);
+      d_assert(_current[sizeClass] == mh);
     }
 
     MiniHeap *mh = _current[sizeClass];
@@ -71,6 +88,9 @@ public:
   }
 
   inline void free(void *ptr) {
+    if (ptr == nullptr)
+      return;
+
     // FIXME: check _current
 
     _global->free(ptr);

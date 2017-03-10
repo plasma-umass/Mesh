@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "static/staticlog.h"
 #include "utility/ilog2.h"
 
 using std::lock_guard;
@@ -47,13 +48,15 @@ namespace mesh {
 
 void debug(const char *fmt, ...);
 
+static constexpr size_t MinObjectSize = 8;
+
 inline constexpr size_t class2Size(const int i) {
-  auto sz = (size_t)(1ULL << (i + 4));
+  auto sz = (size_t)(1ULL << (i + staticlog(MinObjectSize)));
   return sz;
 }
 
 inline int size2Class(const size_t sz) {
-  auto cl = (int)HL::ilog2((sz < 8) ? 8 : sz) - 4;
+  auto cl = (int)HL::ilog2((sz < 8) ? 8 : sz) - staticlog(MinObjectSize);
   return cl;
 }
 
