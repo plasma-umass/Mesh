@@ -73,16 +73,40 @@ public:
     if (sz == 0)
       return nullptr;
 
+    d_assert(_arenaBegin != nullptr);
     d_assert_msg(sz % HL::CPUInfo::PageSize == 0, "multiple-page allocs only, sz bad: %zu", sz);
 
     if (sz == HL::CPUInfo::PageSize) {
-      debug("TODO: Arena: search bitmap for first 0");
       size_t page = _bitmap.setFirstEmpty();
       return reinterpret_cast<char *>(_arenaBegin) + HL::CPUInfo::PageSize * page;
     }
 
-    debug("TODO: Arena: otherwise allocate after last set bit for now, I guess");
-    return 0;
+    const auto nPages = sz / HL::CPUInfo::PageSize;
+    d_assert(nPages >= 2);
+
+    // FIXME: we could be smarter here
+    size_t firstPage = 0;
+    bool found = false;
+    while (!found) {
+      firstPage = _bitmap.setFirstEmpty(firstPage);
+      found = true;
+      for (size_t i = 1; i < nPages; i++) {
+        // if one of the pages we need is already in use, bump our
+        // offset into the page index up and try again
+        if (_bitmap.isSet(firstPage + i)) {
+          firstPage += i + 1;
+          found = false;
+          break;
+        }
+      }
+    }
+
+    for (size_t i = 1; i < nPages; i++) {
+      bool ok = _bitmap.tryToSet(firstPage + i);
+      d_assert(ok);
+    }
+
+    return reinterpret_cast<char *>(_arenaBegin) + HL::CPUInfo::PageSize * firstPage;
   }
 
   inline void free(void *ptr) {

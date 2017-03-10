@@ -49,10 +49,6 @@ public:
     d_assert(sizeClass >= 0);
     d_assert(sizeClass < NumBins);
 
-    void *buf = internal::Heap().malloc(sizeof(MiniHeap));
-    if (unlikely(buf == nullptr))
-      abort();
-
     // if we have objects bigger than the size of a page, allocate
     // multiple pages to amortize the cost of creating a
     // miniheap/globally locking the heap.
@@ -66,7 +62,11 @@ public:
     if (unlikely(span == nullptr))
       abort();
 
+    void *buf = internal::Heap().malloc(sizeof(MiniHeap));
+    if (unlikely(buf == nullptr))
+      abort();
     MiniHeap *mh = new (buf) MiniHeap(span, spanSize, sizeMax);
+
     _littleheaps[sizeClass].push_back(mh);
     _miniheaps[mh->getSpanStart()] = mh;
 
