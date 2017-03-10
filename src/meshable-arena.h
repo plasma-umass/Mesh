@@ -59,7 +59,6 @@ protected:
 };
 }
 
-template <size_t ArenaSize>
 class MeshableArena : public mesh::MmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MeshableArena);
@@ -106,7 +105,7 @@ public:
   void internalMesh(void *keep, void *remove);
 
 private:
-  int openSpanFile();
+  int openSpanFile(size_t sz);
   char *openSpanDir(int pid);
 
   static void staticOnExit(int code, void *data);
@@ -126,6 +125,12 @@ private:
   void prepareForFork();
   void afterForkParent();
   void afterForkChild();
+
+  void *arenaEnd() {
+    return reinterpret_cast<char *>(_arenaBegin) + internal::ArenaSize;
+  }
+
+  void *_arenaBegin{nullptr};
 
   internal::Bitmap _bitmap;
   shared_ptr<internal::FD> _fd;

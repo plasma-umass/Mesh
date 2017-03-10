@@ -27,11 +27,12 @@ private:
 public:
   enum { Alignment = 16 };
 
-  LocalMeshingHeap(GlobalMeshingHeap &global) : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed(), _global(global)) {
+  LocalMeshingHeap(GlobalMeshingHeap *global) : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()), _global(global) {
     static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
     for (auto i = 0; i < NumBins; i++) {
       _current[i] = nullptr;
     }
+    d_assert(_global != nullptr);
   }
 
   inline void *malloc(size_t sz) {
@@ -41,14 +42,14 @@ public:
     // d_assert_msg(sz <= sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", sz, sizeMax, sizeClass);
 
     if (unlikely(sizeMax > _maxObjectSize))
-      return _global.malloc(sz);
+      return _global->malloc(sz);
 
     // d_assert(sizeMax <= _maxObjectSize);
     // d_assert(sizeClass >= 0);
     // d_assert(sizeClass < NumBins);
 
     if (unlikely(_current[sizeClass] == nullptr)) {
-      MiniHeap *mh = _global.allocMiniheap(sizeMax);
+      MiniHeap *mh = _global->allocMiniheap(sizeMax);
       if (unlikely(mh == nullptr))
         abort();
 
@@ -71,20 +72,20 @@ public:
   inline void free(void *ptr) {
     // FIXME: check _current
 
-    _global.free(ptr);
+    _global->free(ptr);
   }
 
   inline size_t getSize(void *ptr) {
     // FIXME: check _current
 
-    return _global.getSize(ptr);
+    return _global->getSize(ptr);
   }
 
 protected:
   const size_t _maxObjectSize;
   MiniHeap *_current[NumBins];
   mt19937_64 _prng;
-  GlobalMeshingHeap &_global;
+  GlobalMeshingHeap *_global;
 };
 }
 

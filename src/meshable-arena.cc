@@ -25,7 +25,7 @@ static const char *const TMP_DIRS[] = {
     "/dev/shm", "/tmp",
 };
 
-MeshableArena::MeshableArena() : SuperHeap(), _bitmap{ArenaSize / 4096UL} {
+MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / 4096UL} {
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
@@ -34,6 +34,11 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{ArenaSize / 4096UL} {
   d_assert(_spanDir != nullptr);
 #endif
 
+  int fd = openSpanFile(internal::ArenaSize);
+  if (fd < 0) {
+    debug("mesh: opening arena file failed.\n");
+    abort();
+  }
   _fd = internal::make_shared<internal::FD>(fd);
 
   // TODO: move this to runtime
@@ -42,14 +47,17 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{ArenaSize / 4096UL} {
 }
 
 void MeshableArena::internalMesh(void *keep, void *remove) {
-  auto sz = _vmaMap[keep];
 
-  d_assert(_fdMap.find(keep) != _fdMap.end());
-  auto keepFd = _fdMap[keep];
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, *keepFd, 0);
-  d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
+  d_assert_msg(false, "TODO: internal mesh", "");
 
-  _fdMap[remove] = keepFd;
+  // auto sz = _vmaMap[keep];
+
+  // d_assert(_fdMap.find(keep) != _fdMap.end());
+  // auto keepFd = _fdMap[keep];
+  // void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, *keepFd, 0);
+  // d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
+
+  // _fdMap[remove] = keepFd;
 
   debug("meshed %p + %p", keep, remove);
 }
@@ -195,26 +203,21 @@ void MeshableArena::afterForkChild() {
   _spanDir = openSpanDir(getpid());
   d_assert(_spanDir != nullptr);
 
-  // open new files for all open spans
-  for (auto entry : _fdMap) {
-    size_t sz = _vmaMap[entry.first];
-    d_assert(sz != 0);
+  // open new file for the arena
+  int newFd = openSpanFile(internal::ArenaSize);
 
-    int newFd = openSpanFile(sz);
+  struct stat fileinfo;
+  memset(&fileinfo, 0, sizeof(fileinfo));
+  fstat(newFd, &fileinfo);
+  d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == internal::ArenaSize);
 
-    struct stat fileinfo;
-    memset(&fileinfo, 0, sizeof(fileinfo));
-    fstat(newFd, &fileinfo);
-    d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz);
+  internal::copyFile(newFd, *_fd, internal::ArenaSize);
 
-    internal::copyFile(newFd, *entry.second, sz);
+  // remap the new region over the old
+  void *ptr = mmap(_arenaBegin, internal::ArenaSize, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
+  d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
-    // remap the new region over the old
-    void *ptr = mmap(entry.first, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
-    d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
-
-    _fdMap[entry.first] = internal::make_shared<internal::FD>(newFd);
-  }
+  _fd = internal::make_shared<internal::FD>(newFd);
 
   internal::Heap().free(oldSpanDir);
 

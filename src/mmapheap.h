@@ -86,7 +86,7 @@ public:
     return map(sz, MAP_PRIVATE | MAP_ANONYMOUS, -1);
   }
 
-  inline size_t getSize(void *ptr) {
+  inline size_t getSize(void *ptr) const {
     auto entry = _vmaMap.find(ptr);
     if (unlikely(entry == _vmaMap.end())) {
       debug("mmap: invalid getSize: %p", ptr);

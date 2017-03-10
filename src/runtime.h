@@ -12,6 +12,7 @@
 
 #include "globalmeshingheap.h"
 #include "localmeshingheap.h"
+#include "lockedheap.h"
 #include "mmapheap.h"
 
 #include "heaplayers.h"
@@ -26,33 +27,64 @@ typedef void *(*PthreadFn)(void *);
 // signature of pthread_create itself
 typedef int (*PthreadCreateFn)(pthread_t *thread, const pthread_attr_t *attr, PthreadFn start_routine, void *arg);
 
-// The top heap provides memory to back spans managed by MiniHeaps.
-class TopHeap
-    : public ExactlyOneHeap<LockedHeap<
-          PosixLockType, mesh::GlobalMeshingHeap<mesh::MmapHeap, 11, mesh::size2Class, mesh::class2Size, 1000>>> {
-public:
-  void mesh(void *keep, void *remove) {
-    getSuperHeap().internalMesh(keep, remove);
-  }
-};
+static const int N_BINS = 11;
+static const int MESH_PERIOD = 1000;
 
-// The top big heap is called to handle malloc requests for large
-// objects.  We define a separate class to handle these to segregate
-// bookkeeping for large malloc requests from the ones used to back
-// spans (which are allocated from TopHeap)
-class TopBigHeap : public ExactlyOneHeap<mesh::MmapHeap> {};
+// The global heap manages the spans that back MiniHeaps as well as
+// large allocations.
+class GlobalHeap
+    : public mesh::LockedHeap<
+          mesh::GlobalMeshingHeap<mesh::MmapHeap, N_BINS, mesh::size2Class, mesh::class2Size, MESH_PERIOD>> {};
 
-// fewer buckets than regular KingsleyHeap (to ensure multiple objects
+// Fewer buckets than regular KingsleyHeap (to ensure multiple objects
 // fit in the 128Kb spans used by MiniHeaps).
-class BottomHeap : public mesh::LocalMeshingHeap<11, mesh::size2Class, mesh::class2Size, 1000, TopHeap> {};
-
-class MeshHeap : public ANSIWrapper<BottomHeap> {
+class LocalHeap : public mesh::LocalMeshingHeap<N_BINS, mesh::size2Class, mesh::class2Size, MESH_PERIOD, GlobalHeap> {
 private:
-  DISALLOW_COPY_AND_ASSIGN(MeshHeap);
-  typedef ANSIWrapper<BottomHeap> SuperHeap;
+  DISALLOW_COPY_AND_ASSIGN(LocalHeap);
+  typedef mesh::LocalMeshingHeap<N_BINS, mesh::size2Class, mesh::class2Size, MESH_PERIOD, GlobalHeap> SuperHeap;
 
 public:
-  explicit MeshHeap() : SuperHeap() {
+  explicit LocalHeap(GlobalHeap *global) : SuperHeap(global) {
+  }
+
+  // from ANSIHeap
+  inline void *calloc(size_t s1, size_t s2) {
+    auto *ptr = (char *)malloc(s1 * s2);
+    if (ptr) {
+      memset(ptr, 0, s1 * s2);
+    }
+    return (void *)ptr;
+  }
+
+  // from ANSIHeap
+  inline void *realloc(void *ptr, const size_t sz) {
+    if (ptr == 0) {
+      return malloc(sz);
+    }
+    if (sz == 0) {
+      free(ptr);
+      return 0;
+    }
+
+    auto objSize = getSize(ptr);
+    if (objSize == sz) {
+      return ptr;
+    }
+
+    // Allocate a new block of size sz.
+    auto *buf = malloc(sz);
+
+    // Copy the contents of the original object
+    // up to the size of the new block.
+
+    auto minSize = (objSize < sz) ? objSize : sz;
+    if (buf) {
+      memcpy(buf, ptr, minSize);
+    }
+
+    // Free the old block.
+    free(ptr);
+    return buf;
   }
 };
 
@@ -121,7 +153,7 @@ public:
     return _stw;
   }
 
-  inline MeshHeap &heap() {
+  inline GlobalHeap &heap() {
     return _heap;
   }
 
@@ -163,7 +195,7 @@ private:
   friend StopTheWorld;
 
   PthreadCreateFn _pthreadCreate{nullptr};
-  MeshHeap _heap{};
+  GlobalHeap _heap{};
   mutex _mutex{};
   StopTheWorld _stw{};
   ThreadCache _mainCache{};
