@@ -22,12 +22,11 @@ template <typename BigHeap,
           int (*getSizeClass)(const size_t),
           size_t (*getClassMaxSize)(const int),
           int MeshPeriod,                 // perform meshing on average once every MeshPeriod frees
-          size_t MinStringLen = 8UL,
-          size_t ArenaSize = 1UL << 34>  // 16 GB
-class GlobalMeshingHeap : public MeshableArena<ArenaSize> {
+          size_t MinStringLen = 8UL>
+class GlobalMeshingHeap : public MeshableArena {
 private:
   DISALLOW_COPY_AND_ASSIGN(GlobalMeshingHeap);
-  typedef MeshableArena<ArenaSize> Super;
+  typedef MeshableArena Super;
 
 public:
   enum { Alignment = 16 };
@@ -35,10 +34,6 @@ public:
   GlobalMeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()) {
     static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
     static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
-
-    _arenaBegin = 0;
-
-    
 
     resetNextMeshCheck();
   }
@@ -73,6 +68,8 @@ public:
     MiniHeap *mh = new (buf) MiniHeap(span, spanSize, sizeMax);
     _littleheaps[sizeClass].push_back(mh);
     _miniheaps[mh->getSpanStart()] = mh;
+
+    return mh;
   }
 
   inline void *malloc(size_t sz) {
@@ -85,7 +82,7 @@ public:
     return _bigheap.malloc(sz);
   }
 
-  inline MiniHeap *miniheapFor(void *const ptr) {
+  inline MiniHeap *miniheapFor(void *const ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     auto it = greatest_leq(_miniheaps, ptrval);
     if (likely(it != _miniheaps.end())) {
@@ -112,7 +109,7 @@ public:
     }
   }
 
-  inline size_t getSize(void *ptr) {
+  inline size_t getSize(void *ptr) const {
     if (ptr == nullptr)
       return 0;
 
@@ -166,16 +163,15 @@ protected:
     internal::StartTheWorld();
   }
 
-  void *arenaEnd() {
-    return reinterpret_cast<char *>(_arenaBegin) + ArenaSize;
-  }
-
-  void *_arenaBegin{nullptr};
-
   const size_t _maxObjectSize;
   size_t _nextMeshCheck{0};
 
+  // The big heap is handles malloc requests for large objects.  We
+  // define a separate class to handle these to segregate bookkeeping
+  // for large malloc requests from the ones used to back spans (which
+  // are allocated from the arena)
   BigHeap _bigheap{};
+
   MiniHeap *_current[NumBins];
 
   mt19937_64 _prng;
