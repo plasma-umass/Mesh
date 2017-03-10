@@ -30,13 +30,13 @@ TEST(BitmapTest, SetGet) {
           bool r = b.tryToSet(i);
           ASSERT_TRUE(r);
         } else {
-          b.reset(i);
+          b.unset(i);
         }
       }
       for (int i = 0; i < n; i++) {
         if (rnd[i] == 0) {
           ASSERT_TRUE(b.isSet(i));
-          b.reset(i);
+          b.unset(i);
         } else {
           ASSERT_FALSE(b.isSet(i));
         }
@@ -44,4 +44,34 @@ TEST(BitmapTest, SetGet) {
       free(rnd);
     }
   }
+}
+
+TEST(BitmapTest, Builtins) {
+  mesh::Bitmap<MallocHeap> b{1024};
+
+  uint64_t i = b.setFirstEmpty();
+  ASSERT_EQ(i, 0);
+
+  b.unset(i);
+
+  static constexpr uint64_t curr = 66;
+  for (size_t i = 0; i < curr; i++) {
+    b.tryToSet(i);
+  }
+
+  i = b.setFirstEmpty();
+  ASSERT_EQ(i, curr);
+
+  for (size_t i = 0; i < curr; i++) {
+    b.unset(i);
+  }
+
+  i = b.setFirstEmpty();
+  ASSERT_EQ(i, 0);
+
+  i = b.setFirstEmpty(4);
+  ASSERT_EQ(i, 4);
+
+  i = b.setFirstEmpty(111);
+  ASSERT_EQ(i, 111);
 }

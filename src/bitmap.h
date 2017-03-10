@@ -155,18 +155,44 @@ public:
     }
   }
 
+  inline uint64_t setFirstEmpty(uint64_t startingAt = 0) {
+    uint32_t startWord, off;
+    computeItemPosition(startingAt, startWord, off);
+
+    const size_t words = wordCount();
+    for (size_t i = startWord; i < words; i++) {
+      if (_bitarray[i] == ~0ULL)
+        continue;
+
+      d_assert(off <= 63);
+      word_t unsetBits = ~_bitarray[i];
+
+      // if the offset is 3, we want to mark the first 3 bits as 'set'
+      // or 'unavailable'.
+      unsetBits &= ~((1UL << off) - 1);
+
+      // debug("unset bits: %zx (off: %u, startingAt: %llu", unsetBits, off, startingAt);
+
+      size_t off = __builtin_ffsll(unsetBits) - 1;
+      const bool ok = tryToSetAt(i, off);
+      d_assert(ok);
+
+      return WORDBITS * i + off;
+    }
+
+    debug("mesh: bitmap completely full, aborting.\n");
+    abort();
+  }
+
   /// @return true iff the bit was not set (but it is now).
   inline bool tryToSet(uint64_t index) {
     uint32_t item, position;
     computeItemPosition(index, item, position);
-    const word_t mask = getMask(position);
-    word_t oldvalue = _bitarray[item];
-    _bitarray[item] |= mask;
-    return !(oldvalue & mask);
+    return tryToSetAt(item, position);
   }
 
   /// Clears the bit at the given index.
-  inline bool reset(uint64_t index) {
+  inline bool unset(uint64_t index) {
     uint32_t item, position;
     computeItemPosition(index, item, position);
     word_t oldvalue = _bitarray[item];
@@ -217,8 +243,15 @@ private:
     return 0;
   }
 
+  inline bool tryToSetAt(uint32_t item, uint32_t position) {
+    const word_t mask = getMask(position);
+    word_t oldvalue = _bitarray[item];
+    _bitarray[item] |= mask;
+    return !(oldvalue & mask);
+  }
+
   /// Given an index, compute its item (word) and position within the word.
-  void computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
+  inline void computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
     d_assert(index < _elements);
     item = index >> WORDBITSHIFT;
     position = index & (WORDBITS - 1);
