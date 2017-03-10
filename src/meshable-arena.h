@@ -77,7 +77,8 @@ public:
 
     if (sz == HL::CPUInfo::PageSize) {
       debug("TODO: Arena: search bitmap for first 0");
-      return 0;
+      size_t page = _bitmap.setFirstEmpty();
+      return reinterpret_cast<char *>(_arenaBegin) + HL::CPUInfo::PageSize * page;
     }
 
     debug("TODO: Arena: otherwise allocate after last set bit for now, I guess");

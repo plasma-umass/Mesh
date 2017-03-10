@@ -40,6 +40,8 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUI
     abort();
   }
   _fd = internal::make_shared<internal::FD>(fd);
+  _arenaBegin = SuperHeap::map(internal::ArenaSize, MAP_SHARED, fd);
+  d_assert(_arenaBegin != nullptr);
 
   // TODO: move this to runtime
   on_exit(staticOnExit, this);

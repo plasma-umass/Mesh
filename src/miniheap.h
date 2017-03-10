@@ -94,7 +94,7 @@ public:
       return;
     }
 
-    _bitmap.reset(off);
+    _bitmap.unset(off);
     _inUseCount--;
   }
 
