@@ -47,7 +47,6 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / 4096
 }
 
 void MeshableArena::internalMesh(void *keep, void *remove) {
-
   d_assert_msg(false, "TODO: internal mesh", "");
 
   // auto sz = _vmaMap[keep];

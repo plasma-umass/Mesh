@@ -120,6 +120,9 @@ src/test/thread-example: src/test/thread.cc $(CONFIG)
 run: $(LIB) src/test/fork-example
 	src/test/fork-example
 
+format:
+	clang-format -i src/*.cc src/*.h
+
 endif
 
 clean:
@@ -139,4 +142,4 @@ TAGS:
 
 -include $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean distclean test check install paper run TAGS
+.PHONY: all clean distclean format test check install paper run TAGS

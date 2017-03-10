@@ -20,7 +20,7 @@
 namespace mesh {
 namespace internal {
 
-static constexpr size_t ArenaSize = 1UL << 34;  // 16 GB
+static constexpr size_t ArenaSize = 1UL << 34;        // 16 GB
 static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 
@@ -81,7 +81,7 @@ typename Map::iterator greatest_leq(Map &m, typename Map::key_type const &k) {
 
 typedef Bitmap<Heap> Bitmap;
 
-} // namespace internal
-} // namespace mesh
+}  // namespace internal
+}  // namespace mesh
 
 #endif  // MESH__INTERNAL_H

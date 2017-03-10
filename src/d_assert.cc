@@ -1,9 +1,9 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
+#include <cstdarg>
 #include <cstdio>   // for sprintf
 #include <cstdlib>  // for abort
-#include <cstdarg>
 
 #include <unistd.h>
 
@@ -43,7 +43,8 @@ void mesh::debug(const char *fmt, ...) {
 
 // out-of-line function called to report an error and exit the program
 // when an assertion failed.
-void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file, const char *func, int line, const char *fmt, ...) {
+void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file, const char *func, int line,
+                                        const char *fmt, ...) {
   constexpr size_t buf_len = 4096;
   constexpr size_t usr_len = 512;
   static char buf[buf_len];
