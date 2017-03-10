@@ -97,6 +97,9 @@ public:
   }
 
   inline size_t getSize(void *ptr) {
+    if (ptr == nullptr)
+      return 0;
+
     // FIXME: check _current
 
     return _global->getSize(ptr);
