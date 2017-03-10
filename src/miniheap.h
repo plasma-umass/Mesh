@@ -14,14 +14,12 @@
 
 namespace mesh {
 
-template <size_t PageSise = 4096, unsigned int FullNumerator = 3, unsigned int FullDenominator = 4>
+template <unsigned int FullNumerator = 3, unsigned int FullDenominator = 4>
 class MiniHeapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
 
 public:
-  static const size_t PageSize = PageSise;
-
   MiniHeapBase(void *span, size_t spanSize, size_t objectSize)
       : _span(span), _spanSize(spanSize), _objectSize(objectSize), _bitmap(maxCount()) {
     if (!_span)
@@ -29,7 +27,7 @@ public:
   }
 
   void dumpDebug() const {
-    constexpr auto heapPages = _spanSize / PageSize;
+    constexpr auto heapPages = _spanSize / HL::CPUInfo::PageSize;
     debug("MiniHeap(%p:%5zu): %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n", this, _objectSize,
           maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(), _inUseCount, _span,
           reinterpret_cast<uintptr_t>(_span) + _spanSize);

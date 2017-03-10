@@ -73,9 +73,9 @@ public:
     if (sz == 0)
       return nullptr;
 
-    d_assert_msg(sz % 4096 == 0, "multiple-page allocs only, sz bad: %zu", sz);
+    d_assert_msg(sz % HL::CPUInfo::PageSize == 0, "multiple-page allocs only, sz bad: %zu", sz);
 
-    if (sz == 4096) {
+    if (sz == HL::CPUInfo::PageSize) {
       debug("TODO: Arena: search bitmap for first 0");
       return 0;
     }

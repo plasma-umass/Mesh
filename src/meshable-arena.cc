@@ -25,7 +25,7 @@ static const char *const TMP_DIRS[] = {
     "/dev/shm", "/tmp",
 };
 
-MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / 4096UL} {
+MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUInfo::PageSize} {
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
