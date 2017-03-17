@@ -91,7 +91,13 @@ public:
     if (ptr == nullptr)
       return;
 
-    // FIXME: check _current
+    for (size_t i = 0; i < NumBins; i++) {
+      const auto curr = _current[i];
+      if (curr && curr->contains(ptr)) {
+        curr->free(ptr);
+        return;
+      }
+    }
 
     _global->free(ptr);
   }
@@ -100,7 +106,12 @@ public:
     if (ptr == nullptr)
       return 0;
 
-    // FIXME: check _current
+    for (size_t i = 0; i < NumBins; i++) {
+      const auto curr = _current[i];
+      if (curr && curr->contains(ptr)) {
+        return curr->getSize(ptr);
+      }
+    }
 
     return _global->getSize(ptr);
   }

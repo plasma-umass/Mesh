@@ -96,12 +96,26 @@ public:
   }
 
   inline void free(void *ptr) {
-    auto mh = miniheapFor(ptr);
+    const auto mh = miniheapFor(ptr);
     if (likely(mh)) {
       mh->free(ptr);
       if (unlikely(mh->isDone() && mh->isEmpty())) {
-        // FIXME: free up heap metadata
-        _miniheaps.erase(mh->getSpanStart());
+        const auto span = mh->getSpanStart();
+        // FIXME: free meshed spans too
+        Super::free(reinterpret_cast<void *>(span), mh->spanSize());
+        _miniheaps.erase(span);
+
+        // removing the miniheap from the vector of same-sized heaps
+        // is sort of annoying, look into using a doubly-linked list
+        // instead.
+        const auto sizeClass = getSizeClass(mh->objectSize());
+        const auto it = std::find(_littleheaps[sizeClass].begin(), _littleheaps[sizeClass].end(), mh);
+        d_assert(it != _littleheaps[sizeClass].end());
+        std::swap(*it, _littleheaps[sizeClass].back());
+        _littleheaps[sizeClass].pop_back();
+
+        mh->MiniHeap::~MiniHeap();
+        internal::Heap().free(mh);
       } else if (unlikely(shouldMesh())) {
         meshAllSizeClasses();
       }
