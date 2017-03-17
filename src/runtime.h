@@ -28,7 +28,7 @@ typedef void *(*PthreadFn)(void *);
 typedef int (*PthreadCreateFn)(pthread_t *thread, const pthread_attr_t *attr, PthreadFn start_routine, void *arg);
 
 static const int N_BINS = 12; // 16Kb max object size
-static const int MESH_PERIOD = 1000;
+static const int MESH_PERIOD = 100;
 
 // The global heap manages the spans that back MiniHeaps as well as
 // large allocations.

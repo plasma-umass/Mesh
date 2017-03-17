@@ -69,6 +69,12 @@ public:
 
   explicit MeshableArena();
 
+  inline bool contains(void *ptr) const {
+    auto arena = reinterpret_cast<uintptr_t>(_arenaBegin);
+    auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+    return arena <= ptrval && ptrval < arena + internal::ArenaSize;
+  }
+
   inline void *malloc(size_t sz) {
     if (sz == 0)
       return nullptr;
@@ -78,7 +84,7 @@ public:
 
     if (sz == HL::CPUInfo::PageSize) {
       size_t page = _bitmap.setFirstEmpty();
-      return reinterpret_cast<char *>(_arenaBegin) + HL::CPUInfo::PageSize * page;
+      return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * page;
     }
 
     const auto nPages = sz / HL::CPUInfo::PageSize;
@@ -106,19 +112,25 @@ public:
       d_assert(ok);
     }
 
-    return reinterpret_cast<char *>(_arenaBegin) + HL::CPUInfo::PageSize * firstPage;
+    return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * firstPage;
   }
 
-  inline void free(void *ptr) {
+  inline void free(void *ptr, size_t sz) {
+    d_assert(contains(ptr));
+    d_assert(sz > 0);
+
+    d_assert(sz / CPUInfo::PageSize > 0);
+    d_assert(sz % CPUInfo::PageSize == 0);
+
     // TODO: munmap, punch hole, free bitmap
 
     // munmap(ptr, sz);
-    // madvise(ptr, sz, MADV_DONTNEED);
+    madvise(ptr, sz, MADV_DONTNEED);
     // mprotect(ptr, sz, PROT_NONE);
 
-    // int fd = *_fd;
-    // int result = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, sz);
-    // d_assert(result == 0);
+    const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
+    int result = fallocate(*_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
+    d_assert(result == 0);
   }
 
   // must be called with the world stopped

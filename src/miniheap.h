@@ -14,29 +14,38 @@
 
 namespace mesh {
 
-template <unsigned int FullNumerator = 3, unsigned int FullDenominator = 4>
+template <unsigned int FullNumerator = 3,    // for free threshold
+          unsigned int FullDenominator = 4,  // for free threshold
+          size_t MaxMeshes = 8>              // maximum number of VM spans we can track
 class MiniHeapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
 
 public:
   MiniHeapBase(void *span, size_t spanSize, size_t objectSize)
-      : _span(span), _spanSize(spanSize), _objectSize(objectSize), _bitmap(maxCount()) {
-    if (!_span)
+      : _span{reinterpret_cast<char *>(span)},
+        _meshCount{1},
+        _spanSize(spanSize),
+        _objectSize(objectSize),
+        _bitmap(maxCount()) {
+    if (!_span[0])
       abort();
 
-    dumpDebug();
+    d_assert(_span[1] == nullptr);
+
+    // dumpDebug();
   }
 
   void dumpDebug() const {
     const auto heapPages = _spanSize / HL::CPUInfo::PageSize;
     debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n", this, _objectSize,
-          maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(), _inUseCount, _span,
+          maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(), _inUseCount, _span[0],
           reinterpret_cast<uintptr_t>(_span) + _spanSize);
   }
 
   static void mesh(MiniHeapBase *dst, MiniHeapBase *src) {
     uintptr_t srcSpan = src->getSpanStart();
+    // FIXME: dst might have a few spans
     uintptr_t dstSpan = dst->getSpanStart();
     auto objectSize = dst->_objectSize;
 
@@ -82,10 +91,11 @@ public:
   inline void free(void *ptr) {
     d_assert(getSize(ptr) == _objectSize);
 
-    auto span = reinterpret_cast<uintptr_t>(_span);
-    auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+    const auto span = spanStart(ptr);
+    d_assert(span != 0);
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
-    auto off = (ptrval - span) / _objectSize;
+    const auto off = (ptrval - span) / _objectSize;
     if (span > ptrval || off >= maxCount()) {
       debug("MiniHeap(%p): invalid free of %p", this, ptr);
       return;
@@ -104,10 +114,25 @@ public:
     return _inUseCount == 0 && _done;
   }
 
+  inline uintptr_t spanStart(void *ptr) const {
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+
+    for (size_t i = 0; i < _meshCount; ++i) {
+      d_assert(_span[i] != nullptr);
+      const auto span = reinterpret_cast<uintptr_t>(_span[i]);
+      if (span <= ptrval && ptrval < span + _spanSize)
+        return span;
+    }
+
+    return 0;
+  }
+
   inline bool contains(void *ptr) const {
-    auto span = reinterpret_cast<uintptr_t>(_span);
-    auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    return span <= ptrval && ptrval < span + _spanSize;
+    return spanStart(ptr) != 0;
+  }
+
+  inline size_t spanSize() const {
+    return _spanSize;
   }
 
   inline size_t maxCount() const {
@@ -118,10 +143,15 @@ public:
     return FullNumerator * maxCount() / FullDenominator;
   }
 
-  inline size_t getSize(void *ptr) const {
-    d_assert_msg(contains(ptr), "span(%p) <= %p < %p", _span, ptr, reinterpret_cast<uintptr_t>(_span) + _spanSize);
-
+  inline size_t objectSize() const {
     return _objectSize;
+  }
+
+  inline size_t getSize(void *ptr) const {
+    d_assert_msg(contains(ptr), "span(%p) <= %p < %p", _span[0], ptr,
+                 reinterpret_cast<uintptr_t>(_span[0]) + _spanSize);
+
+    return objectSize();
   }
 
   inline bool isFull() const {
@@ -129,7 +159,7 @@ public:
   }
 
   inline uintptr_t getSpanStart() const {
-    return reinterpret_cast<uintptr_t>(_span);
+    return reinterpret_cast<uintptr_t>(_span[0]);
   }
 
   inline void setDone() {
@@ -148,7 +178,8 @@ public:
     return _bitmap;
   }
 
-  void *_span;
+  char *_span[MaxMeshes];
+  size_t _meshCount;
   const size_t _spanSize;
   const size_t _objectSize;
   size_t _inUseCount{0};
