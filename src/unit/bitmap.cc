@@ -1,8 +1,9 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdlib>
+#include <unordered_map>
 
 #include "gtest/gtest.h"
 
@@ -74,4 +75,31 @@ TEST(BitmapTest, Builtins) {
 
   i = b.setFirstEmpty(111);
   ASSERT_EQ(i, 111);
+}
+
+TEST(BitmapTest, Iter) {
+  mesh::Bitmap<MallocHeap> b{512};
+
+  b.tryToSet(0);
+  b.tryToSet(200);
+  b.tryToSet(500);
+
+  std::unordered_map<size_t, bool> bits;
+
+  ASSERT_EQ(bits.size(), 0);
+
+  size_t n = 0;
+  for (auto const &off : b) {
+    bits[off] = true;
+    n++;
+  }
+
+  ASSERT_EQ(n, 3);
+  ASSERT_EQ(bits.size(), 3);
+
+  ASSERT_EQ(bits[0], true);
+  ASSERT_EQ(bits[200], true);
+  ASSERT_EQ(bits[500], true);
+
+  ASSERT_EQ(bits[1], false);
 }
