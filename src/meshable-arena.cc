@@ -13,6 +13,9 @@
 #include <linux/memfd.h>
 #endif
 
+#include <sys/ioctl.h>
+#include <linux/fs.h>
+
 #include "meshable-arena.h"
 
 #include "runtime.h"
@@ -42,6 +45,8 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUI
   _fd = internal::make_shared<internal::FD>(fd);
   _arenaBegin = SuperHeap::map(internal::ArenaSize, MAP_SHARED, fd);
   d_assert(_arenaBegin != nullptr);
+
+  debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
 
   // TODO: move this to runtime
   on_exit(staticOnExit, this);
@@ -212,7 +217,16 @@ void MeshableArena::afterForkChild() {
   fstat(newFd, &fileinfo);
   d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == internal::ArenaSize);
 
-  internal::copyFile(newFd, *_fd, internal::ArenaSize);
+  const int oldFd = *_fd;
+
+  const size_t arenaPages = _bitmap.bitCount();
+  for (size_t i = 0; i < arenaPages; ++i) {
+    if (!_bitmap.isSet(i))
+      continue;
+
+    int result = internal::copyFile(newFd, oldFd, i*CPUInfo::PageSize, CPUInfo::PageSize);
+    d_assert(result == CPUInfo::PageSize);
+  }
 
   // remap the new region over the old
   void *ptr = mmap(_arenaBegin, internal::ArenaSize, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
