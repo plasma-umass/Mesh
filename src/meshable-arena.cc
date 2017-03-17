@@ -46,7 +46,7 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUI
   _arenaBegin = SuperHeap::map(internal::ArenaSize, MAP_SHARED, fd);
   d_assert(_arenaBegin != nullptr);
 
-  debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
+  //debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
 
   // TODO: move this to runtime
   on_exit(staticOnExit, this);

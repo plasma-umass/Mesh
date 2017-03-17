@@ -43,27 +43,13 @@ public:
           reinterpret_cast<uintptr_t>(_span) + _spanSize);
   }
 
-  static void mesh(MiniHeapBase *dst, MiniHeapBase *src) {
-    uintptr_t srcSpan = src->getSpanStart();
-    // FIXME: dst might have a few spans
-    uintptr_t dstSpan = dst->getSpanStart();
-    auto objectSize = dst->_objectSize;
+  inline void *mallocAt(size_t off) {
+    if (!_bitmap.tryToSet(off))
+      return nullptr;
 
-    // for each object in src, copy it to dst + update dst's bitmap
-    // and in-use count
-    for (auto const &off : src->bitmap()) {
-      debug("mesh offset: %zu", off);
-      d_assert(!dst->_bitmap.isSet(off));
-      void *dstObject = reinterpret_cast<void *>(dstSpan + off * objectSize);
-      void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize);
-      memcpy(dstObject, srcObject, objectSize);
-      dst->_inUseCount++;
-      bool ok = dst->_bitmap.tryToSet(off);
-      d_assert(ok && dst->_bitmap.isSet(off));
-    }
+    _inUseCount++;
 
-    debug("TODO: MiniHeap::mesh");
-    // dst->_super.mesh(dst->_span, src->_span);
+    return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
   }
 
   inline void *malloc(mt19937_64 &prng, size_t sz) {
@@ -79,12 +65,9 @@ public:
     while (true) {
       size_t off = distribution(prng);
 
-      if (!_bitmap.tryToSet(off))
-        continue;
-
-      _inUseCount++;
-
-      return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
+      void *ptr = mallocAt(off);
+      if (ptr)
+        return ptr;
     }
   }
 
