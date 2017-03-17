@@ -4,8 +4,8 @@
 #ifndef MESH__LOCALMESHINGHEAP_H
 #define MESH__LOCALMESHINGHEAP_H
 
-#include <algorithm>
 #include <stdalign.h>
+#include <algorithm>
 
 #include "heaplayers.h"
 

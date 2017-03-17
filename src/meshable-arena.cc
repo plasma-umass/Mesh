@@ -13,8 +13,8 @@
 #include <linux/memfd.h>
 #endif
 
-#include <sys/ioctl.h>
 #include <linux/fs.h>
+#include <sys/ioctl.h>
 
 #include "meshable-arena.h"
 
@@ -46,7 +46,7 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUI
   _arenaBegin = SuperHeap::map(internal::ArenaSize, MAP_SHARED, fd);
   d_assert(_arenaBegin != nullptr);
 
-  //debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
+  // debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
 
   // TODO: move this to runtime
   on_exit(staticOnExit, this);
@@ -224,7 +224,7 @@ void MeshableArena::afterForkChild() {
     if (!_bitmap.isSet(i))
       continue;
 
-    int result = internal::copyFile(newFd, oldFd, i*CPUInfo::PageSize, CPUInfo::PageSize);
+    int result = internal::copyFile(newFd, oldFd, i * CPUInfo::PageSize, CPUInfo::PageSize);
     d_assert(result == CPUInfo::PageSize);
   }
 
