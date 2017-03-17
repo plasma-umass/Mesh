@@ -14,22 +14,20 @@ __thread ThreadCache *Runtime::_threadCache;
 
 STLAllocator<char, internal::Heap> internal::allocator{};
 
-int internal::copyFile(int dstFd, int srcFd, size_t sz) {
+int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 #if defined(__APPLE__) || defined(__FreeBSD__)
+#error FIXME: use off
   // fcopyfile works on FreeBSD and OS X 10.5+
   int result = fcopyfile(srcFd, dstFd, 0, COPYFILE_ALL);
 #else
+  d_assert(off >= 0);
+
+  off_t newOff = lseek(dstFd, off, SEEK_SET);
+  d_assert(newOff == off);
+
+  errno = 0;
   // sendfile will work with non-socket output (i.e. regular file) on Linux 2.6.33+
-  off_t bytesCopied = 0;
-  struct stat fileinfo;
-  memset(&fileinfo, 0, sizeof(fileinfo));
-  fstat(srcFd, &fileinfo);
-  d_assert_msg(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == sz, "copyfile: expected %zu == %zu",
-               fileinfo.st_size, sz);
-  int result = sendfile(dstFd, srcFd, &bytesCopied, sz);
-  // on success, ensure the entire results were copied
-  if (result == 0)
-    d_assert(bytesCopied == fileinfo.st_size);
+  int result = sendfile(dstFd, srcFd, &off, sz);
 #endif
 
   return result;

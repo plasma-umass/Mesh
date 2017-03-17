@@ -156,7 +156,9 @@ private:
 
   void *_arenaBegin{nullptr};
 
+  // per-page bitmap
   internal::Bitmap _bitmap;
+
   shared_ptr<internal::FD> _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
   char *_spanDir{nullptr};

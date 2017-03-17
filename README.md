@@ -46,4 +46,3 @@ $ make
 TODO
 ----
 
-- bitmap: reserve bitmap up front

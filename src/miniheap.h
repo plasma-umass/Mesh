@@ -30,7 +30,7 @@ public:
 
   void dumpDebug() const {
     const auto heapPages = _spanSize / HL::CPUInfo::PageSize;
-    debug("MiniHeap(%p:%5zu): %zu objects on %zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n", this, _objectSize,
+    debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n", this, _objectSize,
           maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(), _inUseCount, _span,
           reinterpret_cast<uintptr_t>(_span) + _spanSize);
   }

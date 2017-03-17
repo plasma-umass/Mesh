@@ -20,12 +20,13 @@
 namespace mesh {
 namespace internal {
 
-static constexpr size_t ArenaSize = 1UL << 35;        // 32 GB
+// static constexpr size_t ArenaSize = 1UL << 35;     // 32 GB
+static constexpr size_t ArenaSize = 1UL << 31;        // 2 GB
 static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 
 // efficiently copy data from srcFd to dstFd
-int copyFile(int dstFd, int srcFd, size_t sz);
+int copyFile(int dstFd, int srcFd, off_t off, size_t sz);
 
 // for mesh-internal data structures, like heap metadata
 class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>>> {
