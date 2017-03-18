@@ -20,7 +20,7 @@ template <int NumBins,                           // number of size classes
           int (*getSizeClass)(const size_t),     // same as for global
           size_t (*getClassMaxSize)(const int),  // same as for global
           int MeshPeriod,                        // perform meshing on average once every MeshPeriod frees
-          typename GlobalMeshingHeap>
+          typename GlobalHeap>
 class LocalMeshingHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(LocalMeshingHeap);
@@ -28,7 +28,7 @@ private:
 public:
   enum { Alignment = 16 };
 
-  LocalMeshingHeap(GlobalMeshingHeap *global)
+  LocalMeshingHeap(GlobalHeap *global)
       : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()), _global(global) {
     static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
     for (auto i = 0; i < NumBins; i++) {
@@ -67,7 +67,9 @@ public:
     // d_assert(sizeClass < NumBins);
 
     if (unlikely(_current[sizeClass] == nullptr)) {
+      _global->lock();
       MiniHeap *mh = _global->allocMiniheap(sizeMax);
+      _global->unlock();
       if (unlikely(mh == nullptr))
         abort();
 
@@ -120,7 +122,7 @@ protected:
   const size_t _maxObjectSize;
   MiniHeap *_current[NumBins];
   mt19937_64 _prng;
-  GlobalMeshingHeap *_global;
+  GlobalHeap *_global;
 };
 }
 
