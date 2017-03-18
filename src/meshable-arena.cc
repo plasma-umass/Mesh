@@ -63,7 +63,7 @@ void MeshableArena::mesh(void *keep, void *remove, size_t sz) {
 
   _offMap[removeOff] = internal::PageType::Meshed;
 
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, *_fd, 0);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, *_fd, keepOff);
   freePhys(remove, sz);
   d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 }
