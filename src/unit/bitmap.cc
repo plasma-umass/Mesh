@@ -103,3 +103,28 @@ TEST(BitmapTest, Iter) {
 
   ASSERT_EQ(bits[1], false);
 }
+
+TEST(BitmapTest, Iter2) {
+  mesh::Bitmap<MallocHeap> b{512};
+
+  b.tryToSet(200);
+  b.tryToSet(500);
+
+  std::unordered_map<size_t, bool> bits;
+
+  ASSERT_EQ(bits.size(), 0);
+
+  size_t n = 0;
+  for (auto const &off : b) {
+    bits[off] = true;
+    n++;
+  }
+
+  ASSERT_EQ(n, 2);
+  ASSERT_EQ(bits.size(), 2);
+
+  ASSERT_EQ(bits[200], true);
+  ASSERT_EQ(bits[500], true);
+
+  ASSERT_EQ(bits.find(0), bits.end());
+}
