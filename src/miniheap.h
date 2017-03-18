@@ -157,6 +157,10 @@ public:
     return _inUseCount == 0;
   }
 
+  inline size_t inUseCount() const {
+    return _inUseCount;
+  }
+
   const internal::Bitmap &bitmap() const {
     return _bitmap;
   }
