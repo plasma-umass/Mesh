@@ -150,9 +150,8 @@ public:
   // must be called with the world stopped, after call to mesh()
   // completes src is a nullptr
   void mesh(MiniHeap *dst, MiniHeap *&src) {
-    uintptr_t srcSpan = src->getSpanStart();
     // FIXME: dst might have a few spans
-    uintptr_t dstSpan = dst->getSpanStart();
+    uintptr_t srcSpan = src->getSpanStart();
     auto objectSize = dst->_objectSize;
 
     size_t sz = dst->spanSize();
@@ -161,12 +160,10 @@ public:
     // and in-use count
     for (auto const &off : src->bitmap()) {
       d_assert(!dst->_bitmap.isSet(off));
-      void *dstObject = reinterpret_cast<void *>(dstSpan + off * objectSize);
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize);
+      void *dstObject = dst->mallocAt(off);
+      d_assert(dstObject != nullptr);
       memcpy(dstObject, srcObject, objectSize);
-      dst->_inUseCount++;
-      bool ok = dst->_bitmap.tryToSet(off);
-      d_assert(ok && dst->_bitmap.isSet(off));
     }
 
     dst->meshedSpan(srcSpan);
