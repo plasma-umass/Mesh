@@ -93,8 +93,8 @@ public:
       return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * page;
     }
 
-    const auto nPages = sz / HL::CPUInfo::PageSize;
-    d_assert(nPages >= 2);
+    const auto pageCount = sz / HL::CPUInfo::PageSize;
+    d_assert(pageCount >= 2);
 
     // FIXME: we could be smarter here
     size_t firstPage = 0;
@@ -102,7 +102,8 @@ public:
     while (!found) {
       firstPage = _bitmap.setFirstEmpty(firstPage);
       found = true;
-      for (size_t i = 1; i < nPages; i++) {
+      // check that enough pages after the first empty page are available.
+      for (size_t i = 1; i < pageCount; i++) {
         // if one of the pages we need is already in use, bump our
         // offset into the page index up and try again
         if (_bitmap.isSet(firstPage + i)) {
@@ -113,7 +114,11 @@ public:
       }
     }
 
-    for (size_t i = 1; i < nPages; i++) {
+    // now that we know they are available, set the empty pages to
+    // in-use.  This is safe because this whole function is called
+    // under the GlobalHeap lock, so there is no chance of concurrent
+    // modification between the loop above and the one below.
+    for (size_t i = 1; i < pageCount; i++) {
       bool ok = _bitmap.tryToSet(firstPage + i);
       d_assert(ok);
     }
@@ -141,10 +146,24 @@ public:
     d_assert(sz / CPUInfo::PageSize > 0);
     d_assert(sz % CPUInfo::PageSize == 0);
 
-    madvise(ptr, sz, MADV_DONTNEED);
-    // mprotect(ptr, sz, PROT_NONE);
+    const auto off = offsetFor(ptr);
+    const auto offIt = _offMap.find(off);
+    d_assert(offIt != _offMap.end());
+    if (offIt->second == internal::PageType::Identity) {
+      madvise(ptr, sz, MADV_DONTNEED);
+      freePhys(ptr, sz);
+    } else {
+      // restore identity mapping
+      mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, *_fd, off);
+    }
 
-    freePhys(ptr, sz);
+    _offMap.erase(offIt);
+    const auto firstPage = off / CPUInfo::PageSize;
+    const auto pageCount = sz / CPUInfo::PageSize;
+    for (size_t i = 0; i < pageCount; i++) {
+      d_assert(_bitmap.isSet(firstPage + i));
+      _bitmap.unset(firstPage + i);
+    }
   }
 
   // must be called with the world stopped
@@ -153,6 +172,13 @@ public:
 private:
   int openSpanFile(size_t sz);
   char *openSpanDir(int pid);
+
+  off_t offsetFor(const void *ptr) const {
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+    const auto arena = reinterpret_cast<uintptr_t>(_arenaBegin);
+    d_assert(ptrval >= arena);
+    return ptrval - arena;
+  }
 
   static void staticOnExit(int code, void *data);
   static void staticPrepareForFork();

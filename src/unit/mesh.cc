@@ -19,8 +19,7 @@ static inline void note(const char *note) {
   write(-1, note, strlen(note));
 }
 
-
-TEST(MeshTest, TryMesh) {
+static inline void meshTest(bool invert) {
   GlobalHeap &gheap = runtime().heap();
 
   // allocate two miniheaps for the same object size from our global heap
@@ -54,6 +53,12 @@ TEST(MeshTest, TryMesh) {
   ASSERT_EQ(mh1->inUseCount(), 1);
   ASSERT_EQ(mh2->inUseCount(), 1);
 
+  if (invert) {
+    MiniHeap *tmp = mh1;
+    mh1 = mh2;
+    mh2 = tmp;
+  }
+
   note("ABOUT TO MESH");
   // mesh the two miniheaps together
   gheap.mesh(mh1, mh2);
@@ -84,8 +89,16 @@ TEST(MeshTest, TryMesh) {
   gheap.free(s1);
   ASSERT_TRUE(!mh1->isEmpty());
   gheap.free(s2);
-  ASSERT_TRUE(mh1->isEmpty()); // safe because mh1 isn't "done"
+  ASSERT_TRUE(mh1->isEmpty());  // safe because mh1 isn't "done"
 
   note("ABOUT TO FREE");
   gheap.freeMiniheap(mh1);
+}
+
+TEST(MeshTest, TryMesh) {
+  meshTest(false);
+}
+
+TEST(MeshTest, TryMeshInverse) {
+  meshTest(true);
 }
