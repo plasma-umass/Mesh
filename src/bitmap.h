@@ -237,10 +237,17 @@ public:
 
 private:
   size_t lowestSetBit() const {
-    return 0;
-  }
-  size_t highestSetBit() const {
-    return 0;
+    const size_t words = wordCount();
+    for (size_t i = 0; i < words; i++) {
+      if (_bitarray[i] == 0ULL)
+        continue;
+
+      const size_t off = __builtin_ffsll(_bitarray[i]) - 1;
+
+      return WORDBITS * i + off;
+    }
+
+    return bitCount();
   }
 
   inline bool tryToSetAt(uint32_t item, uint32_t position) {
