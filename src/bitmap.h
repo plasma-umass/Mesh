@@ -161,15 +161,26 @@ public:
 
     const size_t words = wordCount();
     for (size_t i = startWord; i < words; i++) {
-      if (_bitarray[i] == ~0ULL)
+      const auto bits = _bitarray[i];
+      if (bits == ~0UL) {
+        off = 0;
         continue;
+      }
 
-      d_assert(off <= 63);
-      word_t unsetBits = ~_bitarray[i];
+      d_assert(off <= 63U);
+      word_t unsetBits = ~bits;
+      d_assert(unsetBits != 0);
 
       // if the offset is 3, we want to mark the first 3 bits as 'set'
       // or 'unavailable'.
       unsetBits &= ~((1UL << off) - 1);
+
+      // if, after we've masked off everything below our offset there
+      // are no free bits, continue
+      if (unsetBits == 0) {
+        off = 0;
+        continue;
+      }
 
       // debug("unset bits: %zx (off: %u, startingAt: %llu", unsetBits, off, startingAt);
 
