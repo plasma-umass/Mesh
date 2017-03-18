@@ -176,6 +176,15 @@ public:
     _meshCount++;
   }
 
+  size_t meshCount() const {
+    return _meshCount;
+  }
+
+  char *const *spans() const {
+    return _span;
+  }
+
+private:
   char *_span[MaxMeshes];
   size_t _meshCount;
   const size_t _spanSize;

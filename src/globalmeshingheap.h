@@ -109,13 +109,14 @@ public:
   }
 
   void freeMiniheap(MiniHeap *&mh) {
-    const auto span = mh->getSpanStart();
+    const auto spans = mh->spans();
     const auto spanSize = mh->spanSize();
 
-    // FIXME: free meshed spans too
-    Super::free(reinterpret_cast<void *>(span), spanSize);
-
-    _miniheaps.erase(span);
+    const auto meshCount = mh->meshCount();
+    for (size_t i = 0; i < meshCount; i++) {
+      Super::free(reinterpret_cast<void *>(spans[i]), spanSize);
+      _miniheaps.erase(reinterpret_cast<uintptr_t>(spans[i]));
+    }
 
     freeMiniheapAfterMesh(mh);
     mh = nullptr;
@@ -151,15 +152,15 @@ public:
   // completes src is a nullptr
   void mesh(MiniHeap *dst, MiniHeap *&src) {
     // FIXME: dst might have a few spans
-    uintptr_t srcSpan = src->getSpanStart();
-    auto objectSize = dst->_objectSize;
+    const auto srcSpan = src->getSpanStart();
+    auto objectSize = dst->objectSize();
 
     size_t sz = dst->spanSize();
 
     // for each object in src, copy it to dst + update dst's bitmap
     // and in-use count
     for (auto const &off : src->bitmap()) {
-      d_assert(!dst->_bitmap.isSet(off));
+      d_assert(!dst->bitmap().isSet(off));
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize);
       void *dstObject = dst->mallocAt(off);
       d_assert(dstObject != nullptr);

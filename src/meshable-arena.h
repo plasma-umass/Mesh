@@ -122,6 +122,18 @@ public:
     return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * firstPage;
   }
 
+  inline void freePhys(void *ptr, size_t sz) {
+    d_assert(contains(ptr));
+    d_assert(sz > 0);
+
+    d_assert(sz / CPUInfo::PageSize > 0);
+    d_assert(sz % CPUInfo::PageSize == 0);
+
+    const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
+    int result = fallocate(*_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
+    d_assert(result == 0);
+  }
+
   inline void free(void *ptr, size_t sz) {
     d_assert(contains(ptr));
     d_assert(sz > 0);
@@ -129,15 +141,10 @@ public:
     d_assert(sz / CPUInfo::PageSize > 0);
     d_assert(sz % CPUInfo::PageSize == 0);
 
-    // TODO: munmap, punch hole, free bitmap
-
-    // munmap(ptr, sz);
     madvise(ptr, sz, MADV_DONTNEED);
     // mprotect(ptr, sz, PROT_NONE);
 
-    const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
-    int result = fallocate(*_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
-    d_assert(result == 0);
+    freePhys(ptr, sz);
   }
 
   // must be called with the world stopped

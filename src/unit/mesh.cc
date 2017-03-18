@@ -14,6 +14,12 @@ using namespace mesh;
 static constexpr size_t StrLen = 128;
 static constexpr size_t ObjCount = 32;
 
+// shows up in strace logs, but otherwise does nothing
+static inline void note(const char *note) {
+  write(-1, note, strlen(note));
+}
+
+
 TEST(MeshTest, TryMesh) {
   GlobalHeap &gheap = runtime().heap();
 
@@ -48,8 +54,10 @@ TEST(MeshTest, TryMesh) {
   ASSERT_EQ(mh1->inUseCount(), 1);
   ASSERT_EQ(mh2->inUseCount(), 1);
 
+  note("ABOUT TO MESH");
   // mesh the two miniheaps together
   gheap.mesh(mh1, mh2);
+  note("DONE MESHING");
 
   // mh2 is consumed by mesh call, ensure it is now a null pointer
   ASSERT_EQ(mh2, nullptr);
@@ -78,6 +86,6 @@ TEST(MeshTest, TryMesh) {
   gheap.free(s2);
   ASSERT_TRUE(mh1->isEmpty()); // safe because mh1 isn't "done"
 
-  write(-1, "ABOUT TO FREE", 13); // for strace
+  note("ABOUT TO FREE");
   gheap.freeMiniheap(mh1);
 }
