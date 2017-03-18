@@ -95,27 +95,38 @@ public:
     return nullptr;
   }
 
+  void freeMiniheapAfterMesh(MiniHeap *mh) {
+    // removing the miniheap from the vector of same-sized heaps is
+    // sort of annoying, look into using a doubly-linked list instead.
+    const auto sizeClass = getSizeClass(mh->objectSize());
+    const auto it = std::find(_littleheaps[sizeClass].begin(), _littleheaps[sizeClass].end(), mh);
+    d_assert(it != _littleheaps[sizeClass].end());
+    std::swap(*it, _littleheaps[sizeClass].back());
+    _littleheaps[sizeClass].pop_back();
+
+    mh->MiniHeap::~MiniHeap();
+    internal::Heap().free(mh);
+  }
+
+  void freeMiniheap(MiniHeap *&mh) {
+    const auto span = mh->getSpanStart();
+    const auto spanSize = mh->spanSize();
+
+    // FIXME: free meshed spans too
+    Super::free(reinterpret_cast<void *>(span), spanSize);
+
+    _miniheaps.erase(span);
+
+    freeMiniheapAfterMesh(mh);
+    mh = nullptr;
+  }
+
   inline void free(void *ptr) {
-    const auto mh = miniheapFor(ptr);
+    auto mh = miniheapFor(ptr);
     if (likely(mh)) {
       mh->free(ptr);
       if (unlikely(mh->isDone() && mh->isEmpty())) {
-        const auto span = mh->getSpanStart();
-        // FIXME: free meshed spans too
-        Super::free(reinterpret_cast<void *>(span), mh->spanSize());
-        _miniheaps.erase(span);
-
-        // removing the miniheap from the vector of same-sized heaps
-        // is sort of annoying, look into using a doubly-linked list
-        // instead.
-        const auto sizeClass = getSizeClass(mh->objectSize());
-        const auto it = std::find(_littleheaps[sizeClass].begin(), _littleheaps[sizeClass].end(), mh);
-        d_assert(it != _littleheaps[sizeClass].end());
-        std::swap(*it, _littleheaps[sizeClass].back());
-        _littleheaps[sizeClass].pop_back();
-
-        mh->MiniHeap::~MiniHeap();
-        internal::Heap().free(mh);
+        freeMiniheap(mh);
       } else if (unlikely(shouldMesh())) {
         meshAllSizeClasses();
       }
@@ -136,16 +147,19 @@ public:
     }
   }
 
-  void mesh(MiniHeap *dst, MiniHeap *src) {
+  // must be called with the world stopped, after call to mesh()
+  // completes src is a nullptr
+  void mesh(MiniHeap *dst, MiniHeap *&src) {
     uintptr_t srcSpan = src->getSpanStart();
     // FIXME: dst might have a few spans
     uintptr_t dstSpan = dst->getSpanStart();
     auto objectSize = dst->_objectSize;
 
+    size_t sz = dst->spanSize();
+
     // for each object in src, copy it to dst + update dst's bitmap
     // and in-use count
     for (auto const &off : src->bitmap()) {
-      debug("mesh offset: %zu", off);
       d_assert(!dst->_bitmap.isSet(off));
       void *dstObject = reinterpret_cast<void *>(dstSpan + off * objectSize);
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize);
@@ -155,8 +169,12 @@ public:
       d_assert(ok && dst->_bitmap.isSet(off));
     }
 
-    debug("TODO: MiniHeap::mesh");
-    // dst->_super.mesh(dst->_span, src->_span);
+    dst->meshedSpan(srcSpan);
+    Super::mesh(reinterpret_cast<void *>(dst->getSpanStart()), reinterpret_cast<void *>(src->getSpanStart()), sz);
+    freeMiniheapAfterMesh(src);
+    src = nullptr;
+
+    _miniheaps[srcSpan] = dst;
   }
 
 protected:
@@ -193,7 +211,7 @@ protected:
 
     internal::StopTheWorld();
 
-    for (const auto &mergeSet : mergeSets) {
+    for (auto &mergeSet : mergeSets) {
       d_assert(mergeSet.size() == 2);  // FIXME
       mesh(mergeSet[0], mergeSet[1]);
     }

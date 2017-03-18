@@ -161,6 +161,17 @@ public:
     return _bitmap;
   }
 
+  void meshedSpan(uintptr_t spanStart) {
+    if (_meshCount >= MaxMeshes) {
+      debug("fatal: too many meshes for one miniheap");
+      dumpDebug();
+      abort();
+    }
+
+    _span[_meshCount] = reinterpret_cast<char *>(spanStart);
+    _meshCount++;
+  }
+
   char *_span[MaxMeshes];
   size_t _meshCount;
   const size_t _spanSize;

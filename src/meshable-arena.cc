@@ -53,19 +53,18 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUI
   pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
 }
 
-void MeshableArena::internalMesh(void *keep, void *remove) {
-  d_assert_msg(false, "TODO: internal mesh", "");
+void MeshableArena::mesh(void *keep, void *remove, size_t sz) {
+  const auto keepOff = reinterpret_cast<uintptr_t>(keep) - reinterpret_cast<uintptr_t>(_arenaBegin);
+  const auto removeOff = reinterpret_cast<uintptr_t>(remove) - reinterpret_cast<uintptr_t>(_arenaBegin);
+  d_assert(_offMap.find(keepOff) != _offMap.end());
+  d_assert(_offMap.find(removeOff) != _offMap.end());
 
-  // auto sz = _vmaMap[keep];
+  d_assert(_offMap[keepOff] == internal::PageType::Identity);
 
-  // d_assert(_fdMap.find(keep) != _fdMap.end());
-  // auto keepFd = _fdMap[keep];
-  // void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, *keepFd, 0);
-  // d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
+  _offMap[removeOff] = internal::PageType::Meshed;
 
-  // _fdMap[remove] = keepFd;
-
-  debug("meshed %p + %p", keep, remove);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, *_fd, 0);
+  d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 }
 
 #ifdef USE_MEMFD

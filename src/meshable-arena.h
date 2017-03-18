@@ -57,6 +57,11 @@ public:
 protected:
   int _fd;
 };
+
+enum PageType {
+  Identity,
+  Meshed,
+};
 }
 
 class MeshableArena : public mesh::MmapHeap {
@@ -84,6 +89,7 @@ public:
 
     if (sz == HL::CPUInfo::PageSize) {
       size_t page = _bitmap.setFirstEmpty();
+      _offMap[CPUInfo::PageSize * page] = internal::PageType::Identity;
       return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * page;
     }
 
@@ -112,6 +118,7 @@ public:
       d_assert(ok);
     }
 
+    _offMap[CPUInfo::PageSize * firstPage] = internal::PageType::Identity;
     return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * firstPage;
   }
 
@@ -134,11 +141,7 @@ public:
   }
 
   // must be called with the world stopped
-  static void mesh(MeshableArena &heap, void *keep, void *remove) {
-    heap.internalMesh(keep, remove);
-  }
-
-  void internalMesh(void *keep, void *remove);
+  void mesh(void *keep, void *remove, size_t sz);
 
 private:
   int openSpanFile(size_t sz);
@@ -170,6 +173,9 @@ private:
 
   // per-page bitmap
   internal::Bitmap _bitmap;
+
+  // indexed by offset
+  internal::unordered_map<off_t, internal::PageType> _offMap{};
 
   shared_ptr<internal::FD> _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
