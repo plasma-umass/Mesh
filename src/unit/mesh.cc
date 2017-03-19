@@ -22,9 +22,13 @@ static inline void note(const char *note) {
 static inline void meshTest(bool invert) {
   GlobalHeap &gheap = runtime().heap();
 
+  ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0);
+
   // allocate two miniheaps for the same object size from our global heap
   MiniHeap *mh1 = gheap.allocMiniheap(StrLen);
   MiniHeap *mh2 = gheap.allocMiniheap(StrLen);
+
+  ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 2);
 
   // sanity checks
   ASSERT_TRUE(mh1 != mh2);
@@ -93,6 +97,8 @@ static inline void meshTest(bool invert) {
 
   note("ABOUT TO FREE");
   gheap.freeMiniheap(mh1);
+
+  ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0);
 }
 
 TEST(MeshTest, TryMesh) {

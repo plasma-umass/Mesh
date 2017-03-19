@@ -169,6 +169,10 @@ public:
   // must be called with the world stopped
   void mesh(void *keep, void *remove, size_t sz);
 
+  const internal::Bitmap &bitmap() const {
+    return _bitmap;
+  }
+
 private:
   int openSpanFile(size_t sz);
   char *openSpanDir(int pid);

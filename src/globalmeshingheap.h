@@ -175,6 +175,10 @@ public:
     _miniheaps[srcSpan] = dst;
   }
 
+  size_t getAllocatedMiniheapCount() const {
+    return Super::bitmap().inUseCount();
+  }
+
 protected:
   inline void resetNextMeshCheck() {
     uniform_int_distribution<size_t> distribution(1, MeshPeriod);
