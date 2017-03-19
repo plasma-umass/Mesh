@@ -40,8 +40,8 @@ using std::function;
   ((likely(expr)) ? static_cast<void>(0) \
                   : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, __LINE__, ""))
 #else
-#error "don't disable assertions"
-#define d_assert(expr, fmt, ...)
+#define d_assert_msg(expr, fmt, ...)
+#define d_assert(expr)
 #endif
 
 namespace mesh {
@@ -51,13 +51,11 @@ void debug(const char *fmt, ...);
 static constexpr size_t MinObjectSize = 8;
 
 inline constexpr size_t class2Size(const int i) {
-  auto sz = (size_t)(1ULL << (i + staticlog(MinObjectSize)));
-  return sz;
+  return static_cast<size_t>(1ULL << (i + staticlog(MinObjectSize)));
 }
 
 inline int size2Class(const size_t sz) {
-  auto cl = (int)HL::ilog2((sz < 8) ? 8 : sz) - staticlog(MinObjectSize);
-  return cl;
+  return static_cast<int>(HL::ilog2((sz < 8) ? 8 : sz) - staticlog(MinObjectSize));
 }
 
 namespace internal {
