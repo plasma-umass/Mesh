@@ -28,13 +28,13 @@ private:
   DISALLOW_COPY_AND_ASSIGN(GlobalMeshingHeap);
   typedef MeshableArena Super;
 
+  static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
+  static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
+
 public:
   enum { Alignment = 16 };
 
   GlobalMeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()) {
-    static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
-    static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
-
     resetNextMeshCheck();
   }
 
@@ -123,6 +123,9 @@ public:
   }
 
   inline void free(void *ptr) {
+    // two possibilities: most likely the ptr is small (and therefor
+    // owned by a miniheap), or is a large allocation
+
     auto mh = miniheapFor(ptr);
     if (likely(mh)) {
       mh->free(ptr);
@@ -198,8 +201,9 @@ protected:
   void meshAllSizeClasses() {
     internal::vector<internal::vector<MiniHeap *>> mergeSets;
 
+    // FIXME: is it safe to have this function not use internal::allocator?
     auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
-        std::allocator_arg, internal::allocator,
+        // std::allocator_arg, internal::allocator,
         [&](internal::vector<MiniHeap *> &&mesh) { mergeSets.push_back(std::move(mesh)); });
 
     for (const auto &miniheaps : _littleheaps) {

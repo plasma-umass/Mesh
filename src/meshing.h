@@ -5,6 +5,8 @@
 #ifndef MESH__MESHING_H
 #define MESH__MESHING_H
 
+#include <algorithm>
+
 #include "common.h"
 
 #include "internal.h"

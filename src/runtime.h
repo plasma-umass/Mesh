@@ -5,6 +5,7 @@
 #ifndef MESH__RUNTIME_H
 #define MESH__RUNTIME_H
 
+#include <condition_variable>
 #include <pthread.h>
 #include <signal.h>  // for stack_t
 
