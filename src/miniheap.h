@@ -5,6 +5,7 @@
 #ifndef MESH__MINIHEAP_H
 #define MESH__MINIHEAP_H
 
+#include <atomic>
 #include <random>
 
 #include "bitmap.h"
@@ -13,6 +14,8 @@
 #include "heaplayers.h"
 
 namespace mesh {
+
+using std::atomic_size_t;
 
 template <unsigned int FullNumerator = 3,    // for free threshold
           unsigned int FullDenominator = 4,  // for free threshold
@@ -38,8 +41,9 @@ public:
 
   void dumpDebug() const {
     const auto heapPages = _spanSize / HL::CPUInfo::PageSize;
+    const size_t inUseCount = _inUseCount;
     debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n", this, _objectSize,
-          maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(), _inUseCount, _span[0],
+          maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(), inUseCount, _span[0],
           reinterpret_cast<uintptr_t>(_span) + _spanSize);
   }
 
@@ -189,7 +193,7 @@ private:
   size_t _meshCount;
   const size_t _spanSize;
   const size_t _objectSize;
-  size_t _inUseCount{0};
+  atomic_size_t _inUseCount{0};
   internal::Bitmap _bitmap;
   bool _done{false};
 };
