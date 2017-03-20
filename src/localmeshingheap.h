@@ -4,8 +4,11 @@
 #ifndef MESH__LOCALMESHINGHEAP_H
 #define MESH__LOCALMESHINGHEAP_H
 
+#include <pthread.h>
 #include <stdalign.h>
+
 #include <algorithm>
+#include <atomic>
 
 #include "heaplayers.h"
 
@@ -15,6 +18,52 @@
 using namespace HL;
 
 namespace mesh {
+
+// forward declaration of StopTheWorld so we can declare it a friend
+class StopTheWorld;
+
+class STWThreadState {
+private:
+  DISALLOW_COPY_AND_ASSIGN(STWThreadState);
+
+public:
+  explicit STWThreadState();
+
+  void insert(STWThreadState *head) {
+    d_assert(head != nullptr);
+
+    auto next = head->_next;
+    head->_next = this;
+    _next = next;
+    _prev = head;
+    next->_prev = this;
+  }
+
+  void unregister(int64_t currEpoch) {
+    _shutdownEpoch.exchange(currEpoch);
+
+    // TODO: do this asynchronously in a subsequent epoch.  We can't
+    // free this here, because the thread cache structure may be used
+    // when destroying thread-local storage (which happens after this
+    // function is called)
+
+    // auto prev = tc->_prev;
+    // auto next = tc->_next;
+    // prev->_next = next;
+    // next->_prev = prev;
+    // tc->_next = tc;
+    // tc->_prev = tc;
+  }
+
+private:
+  friend StopTheWorld;
+
+  atomic_bool _waiting{false};
+  atomic_int64_t _shutdownEpoch{-1};
+  pthread_t _tid;
+  STWThreadState *_prev{nullptr};
+  STWThreadState *_next{nullptr};
+};
 
 template <int NumBins,                           // number of size classes
           int (*getSizeClass)(const size_t),     // same as for global
@@ -38,22 +87,6 @@ public:
   }
 
   inline void *malloc(size_t sz) {
-    if (sz == 0)
-      return nullptr;
-
-    if (sz <= 8) {
-      sz = 8;
-    } else if (sz < alignof(max_align_t)) {
-      sz = alignof(max_align_t);
-    } else {
-      // Enforce alignment requirements: round up allocation sizes if
-      // needed.  NOTE: Alignment needs to be a power of two.
-      static_assert((alignof(max_align_t) & (alignof(max_align_t) - 1)) == 0, "Alignment not a power of two.");
-
-      // Enforce alignment.
-      sz = (sz + alignof(max_align_t) - 1UL) & ~(alignof(max_align_t) - 1UL);
-    }
-
     const int sizeClass = getSizeClass(sz);
     const size_t sizeMax = getClassMaxSize(sizeClass);
 
@@ -90,9 +123,6 @@ public:
   }
 
   inline void free(void *ptr) {
-    if (ptr == nullptr)
-      return;
-
     for (size_t i = 0; i < NumBins; i++) {
       const auto curr = _current[i];
       if (curr && curr->contains(ptr)) {
@@ -105,9 +135,6 @@ public:
   }
 
   inline size_t getSize(void *ptr) {
-    if (ptr == nullptr)
-      return 0;
-
     for (size_t i = 0; i < NumBins; i++) {
       const auto curr = _current[i];
       if (curr && curr->contains(ptr)) {
@@ -118,11 +145,16 @@ public:
     return _global->getSize(ptr);
   }
 
+  STWThreadState *stwState() {
+    return &_stwState;
+  }
+
 protected:
   const size_t _maxObjectSize;
   MiniHeap *_current[NumBins];
   mt19937_64 _prng;
   GlobalHeap *_global;
+  STWThreadState _stwState{};
 };
 }
 

@@ -10,7 +10,8 @@
 namespace mesh {
 
 __thread stack_t Runtime::_altStack;
-__thread ThreadCache *Runtime::_threadCache;
+__thread STWThreadState *Runtime::_stwState;
+__thread LocalHeap *Runtime::_localHeap;
 
 STLAllocator<char, internal::Heap> internal::allocator{};
 
@@ -57,7 +58,7 @@ void StopTheWorld::unlock() {
 
 void StopTheWorld::quiesceSelf() {
   // debug("%x/%d: shutting myself up\n", pthread_self(), syscall(SYS_gettid));
-  d_assert(Runtime::_threadCache->_waiting);
+  d_assert(Runtime::_stwState->_waiting);
 
   // FIXME: remove while loop
   while (true) {
@@ -65,7 +66,7 @@ void StopTheWorld::quiesceSelf() {
     {
       lock_guard<mutex> lock(_sharedMu);
       nextEpoch = _resumeEpoch.load() + 1;
-      Runtime::_threadCache->_waiting = false;
+      Runtime::_stwState->_waiting = false;
       if (_waiters.fetch_sub(1) == 1)
         _waitersCv.notify_one();
     }
@@ -75,7 +76,7 @@ void StopTheWorld::quiesceSelf() {
       std::unique_lock<mutex> lock(_sharedMu);
       while (_resumeEpoch.load() < nextEpoch)
         _resumeCv.wait(lock);
-      // if (!Runtime::_threadCache->_waiting)
+      // if (!Runtime::_stwState->_waiting)
       //   debug("%x/%d:\t\t\t\t expecting reschedule\n", pthread_self(), syscall(SYS_gettid));
       break;
     }
@@ -89,7 +90,7 @@ void StopTheWorld::quiesceSelf() {
 void StopTheWorld::quiesceOthers() {
   d_assert(_waiters == 0);
 
-  const auto self = Runtime::_threadCache;
+  const auto self = Runtime::_stwState;
   size_t count = 0;
   for (auto tc = self->_next; tc != self; tc = tc->_next) {
     if (tc->_shutdownEpoch > -1)
@@ -141,9 +142,6 @@ void StopTheWorld::resume() {
 }
 
 Runtime::Runtime() {
-  _caches = &_mainCache;
-  _threadCache = &_mainCache;
-
   installSigAltStack();
   installSigHandlers();
 }
@@ -181,7 +179,18 @@ void Runtime::initThreads() {
   _pthreadCreate = reinterpret_cast<PthreadCreateFn>(createFn);
 }
 
-ThreadCache::ThreadCache() : _tid(pthread_self()), _prev{this}, _next{this} {
+STWThreadState::STWThreadState() : _tid(pthread_self()), _prev{this}, _next{this} {
+}
+
+void Runtime::allocLocalHeap() {
+  d_assert(_localHeap == nullptr);
+
+  void *buf = mesh::internal::Heap().malloc(sizeof(LocalHeap));
+  if (buf == nullptr) {
+    mesh::debug("mesh: unable to allocate LocalHeap, aborting.\n");
+    abort();
+  }
+  _localHeap = new (buf) LocalHeap(&mesh::runtime().heap());
 }
 
 void *Runtime::startThread(StartThreadArgs *threadArgs) {
@@ -194,15 +203,14 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
   mesh::internal::Heap().free(threadArgs);
   threadArgs = nullptr;
 
-  void *buf = internal::Heap().malloc(sizeof(ThreadCache));
-  ThreadCache *tc = new (buf) ThreadCache;
+  auto stwState = runtime->localHeap()->stwState();
 
   runtime->installSigAltStack();
-  runtime->registerThread(tc);
+  runtime->registerThread(stwState);
 
   void *result = startRoutine(arg);
 
-  runtime->unregisterThread(tc);
+  runtime->unregisterThread(stwState);
   runtime->removeSigAltStack();
 
   return result;
@@ -212,7 +220,7 @@ void Runtime::sigQuiesceHandler(int sig, siginfo_t *info, void *uctx) {
   runtime()._stw.quiesceSelf();
 }
 
-void Runtime::registerThread(ThreadCache *tc) {
+void Runtime::registerThread(STWThreadState *stwState) {
   sigset_t sigset;
   sigemptyset(&sigset);
   sigaddset(&sigset, SIGQUIESCE);
@@ -223,35 +231,15 @@ void Runtime::registerThread(ThreadCache *tc) {
 
   // runtime()._heap.lock();
 
-  d_assert(_caches != nullptr);
-  d_assert(tc->_next == tc);
-  d_assert(tc->_prev == tc);
+  stwState->insert(_threads);
 
-  auto next = _caches->_next;
-  _caches->_next = tc;
-  tc->_next = next;
-  tc->_prev = _caches;
-  next->_prev = tc;
-
-  _threadCache = tc;
+  _stwState = stwState;
 
   // runtime()._heap.unlock();
 }
 
-void Runtime::unregisterThread(ThreadCache *tc) {
-  _threadCache->_shutdownEpoch.exchange(_stw._resumeEpoch);
-
-  // TODO: do this asynchronously in a subsequent epoch.  We can't
-  // free this here, because the thread cache structure may be used
-  // when destroying thread-local storage (which happens after this
-  // function is called)
-
-  // auto prev = tc->_prev;
-  // auto next = tc->_next;
-  // prev->_next = next;
-  // next->_prev = prev;
-  // tc->_next = tc;
-  // tc->_prev = tc;
+void Runtime::unregisterThread(STWThreadState *stwState) {
+  stwState->unregister(_stw._resumeEpoch);
 }
 
 void Runtime::installSigHandlers() {
