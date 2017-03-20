@@ -109,6 +109,7 @@ public:
       allocLocalHeap();
     return _localHeap;
   }
+  void registerThread(STWThreadState *stwState);
 
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
@@ -130,7 +131,6 @@ private:
   static void *startThread(StartThreadArgs *threadArgs);
   static void sigQuiesceHandler(int sig, siginfo_t *info, void *uctx);
 
-  void registerThread(STWThreadState *tc);
   void unregisterThread(STWThreadState *tc);
 
   void installSigHandlers();

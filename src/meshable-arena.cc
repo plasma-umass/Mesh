@@ -219,11 +219,7 @@ void MeshableArena::afterForkChild() {
 
   const int oldFd = *_fd;
 
-  const size_t arenaPages = _bitmap.bitCount();
-  for (size_t i = 0; i < arenaPages; ++i) {
-    if (!_bitmap.isSet(i))
-      continue;
-
+  for (auto const &i : _bitmap) {
     int result = internal::copyFile(newFd, oldFd, i * CPUInfo::PageSize, CPUInfo::PageSize);
     d_assert(result == CPUInfo::PageSize);
   }
