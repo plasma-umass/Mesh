@@ -180,6 +180,7 @@ void Runtime::initThreads() {
 }
 
 STWThreadState::STWThreadState() : _tid(pthread_self()), _prev{this}, _next{this} {
+  runtime().registerThread(this);
 }
 
 void Runtime::allocLocalHeap() {
@@ -206,7 +207,6 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
   auto stwState = runtime->localHeap()->stwState();
 
   runtime->installSigAltStack();
-  runtime->registerThread(stwState);
 
   void *result = startRoutine(arg);
 
@@ -229,13 +229,16 @@ void Runtime::registerThread(STWThreadState *stwState) {
   int result = sigprocmask(SIG_UNBLOCK, &sigset, nullptr);
   d_assert(result == 0);
 
-  // runtime()._heap.lock();
+  runtime()._heap.lock();
 
-  stwState->insert(_threads);
+  if (_threads == nullptr)
+    _threads = stwState;
+  else
+    stwState->insert(_threads);
 
   _stwState = stwState;
 
-  // runtime()._heap.unlock();
+  runtime()._heap.unlock();
 }
 
 void Runtime::unregisterThread(STWThreadState *stwState) {

@@ -17,6 +17,8 @@ c.config('package-bugreport', 'bpowers@cs.umass.edu')
 
 if c.debug_build:
     c.append('cflags', '-g')
+else:
+    c.append('cflags', '-DNDEBUG')
 
 if c.optimize_build:
     c.append('cflags', '-O3 -flto')
