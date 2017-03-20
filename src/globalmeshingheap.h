@@ -5,6 +5,8 @@
 #define MESH__GLOBALMESHINGHEAP_H
 
 #include <algorithm>
+#include <mutex>
+#include <shared_mutex>
 
 #include "heaplayers.h"
 
@@ -39,6 +41,8 @@ public:
   }
 
   inline MiniHeap *allocMiniheap(size_t objectSize) {
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+
     d_assert(objectSize <= _maxObjectSize);
 
     const int sizeClass = getSizeClass(objectSize);
@@ -80,10 +84,13 @@ public:
     if (unlikely(sizeMax <= _maxObjectSize))
       abort();
 
+    std::lock_guard<std::mutex> lock(_bigMutex);
     return _bigheap.malloc(sz);
   }
 
   inline MiniHeap *miniheapFor(void *const ptr) const {
+    std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     auto it = greatest_leq(_miniheaps, ptrval);
     if (likely(it != _miniheaps.end())) {
@@ -95,6 +102,7 @@ public:
     return nullptr;
   }
 
+  // called with lock held
   void freeMiniheapAfterMesh(MiniHeap *mh) {
     // removing the miniheap from the vector of same-sized heaps is
     // sort of annoying, look into using a doubly-linked list instead.
@@ -109,6 +117,8 @@ public:
   }
 
   void freeMiniheap(MiniHeap *&mh) {
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+
     const auto spans = mh->spans();
     const auto spanSize = mh->spanSize();
 
@@ -131,10 +141,12 @@ public:
       mh->free(ptr);
       if (unlikely(mh->isDone() && mh->isEmpty())) {
         freeMiniheap(mh);
-      } else if (unlikely(shouldMesh())) {
-        meshAllSizeClasses();
       }
+      //  else if (unlikely(shouldMesh())) {
+      //   meshAllSizeClasses();
+      // }
     } else {
+      std::lock_guard<std::mutex> lock(_bigMutex);
       _bigheap.free(ptr);
     }
   }
@@ -147,6 +159,7 @@ public:
     if (mh) {
       return mh->getSize(ptr);
     } else {
+      std::lock_guard<std::mutex> lock(_bigMutex);
       return _bigheap.getSize(ptr);
     }
   }
@@ -172,6 +185,8 @@ public:
 
     dst->meshedSpan(srcSpan);
     Super::mesh(reinterpret_cast<void *>(dst->getSpanStart()), reinterpret_cast<void *>(src->getSpanStart()), sz);
+
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
     freeMiniheapAfterMesh(src);
     src = nullptr;
 
@@ -180,6 +195,16 @@ public:
 
   size_t getAllocatedMiniheapCount() const {
     return Super::bitmap().inUseCount();
+  }
+
+  void lock() {
+    _mhRWLock.lock();
+    _bigMutex.lock();
+  }
+
+  void unlock() {
+    _bigMutex.unlock();
+    _mhRWLock.unlock();
   }
 
 protected:
@@ -240,6 +265,9 @@ protected:
 
   internal::vector<MiniHeap *> _littleheaps[NumBins]{};
   internal::map<uintptr_t, MiniHeap *> _miniheaps{};
+
+  mutable std::mutex _bigMutex{};
+  mutable std::shared_timed_mutex _mhRWLock{};
 };
 }
 

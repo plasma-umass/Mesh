@@ -35,8 +35,7 @@ static const int MeshPeriod = 1000;
 
 // The global heap manages the spans that back MiniHeaps as well as
 // large allocations.
-class GlobalHeap : public mesh::LockedHeap<
-                       GlobalMeshingHeap<mesh::MmapHeap, NBins, mesh::size2Class, mesh::class2Size, MeshPeriod>> {};
+class GlobalHeap : public GlobalMeshingHeap<mesh::MmapHeap, NBins, mesh::size2Class, mesh::class2Size, MeshPeriod> {};
 
 // Fewer buckets than regular KingsleyHeap (to ensure multiple objects
 // fit in the 128Kb spans used by MiniHeaps).

@@ -5,8 +5,8 @@
 #ifndef MESH__MESHING_H
 #define MESH__MESHING_H
 
-#include <atomic>
 #include <algorithm>
+#include <atomic>
 
 #include "common.h"
 
