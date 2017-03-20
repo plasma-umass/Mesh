@@ -120,7 +120,10 @@ public:
     // modification between the loop above and the one below.
     for (size_t i = 1; i < pageCount; i++) {
       bool ok = _bitmap.tryToSet(firstPage + i);
-      d_assert(ok);
+      if (!ok) {
+        debug("hard assertion failue");
+        abort();
+      }
     }
 
     _offMap[CPUInfo::PageSize * firstPage] = internal::PageType::Identity;

@@ -100,9 +100,7 @@ public:
     // d_assert(sizeClass < NumBins);
 
     if (unlikely(_current[sizeClass] == nullptr)) {
-      _global->lock();
       MiniHeap *mh = _global->allocMiniheap(sizeMax);
-      _global->unlock();
       if (unlikely(mh == nullptr))
         abort();
 
