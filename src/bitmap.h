@@ -10,6 +10,7 @@
 #ifndef MESH__BITMAP_H
 #define MESH__BITMAP_H
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -19,6 +20,8 @@
 #include "static/staticlog.h"
 
 namespace mesh {
+
+using std::atomic_size_t;
 
 template <typename Container, typename size_t>
 class BitmapIter : public std::iterator<std::forward_iterator_tag, size_t> {
@@ -60,11 +63,12 @@ class Bitmap : private Heap {
 private:
   DISALLOW_COPY_AND_ASSIGN(Bitmap);
 
+  static_assert(sizeof(size_t) == sizeof(atomic_size_t), "no overhead atomics");
+
   /// A synonym for the datatype corresponding to a word.
-  typedef size_t word_t;
-  enum { WORDBITS = sizeof(word_t) * 8 };
-  enum { WORDBYTES = sizeof(word_t) };
-  /// The log of the number of bits in a word_t, for shifting.
+  enum { WORDBITS = sizeof(size_t) * 8 };
+  enum { WORDBYTES = sizeof(size_t) };
+  /// The log of the number of bits in a size_t, for shifting.
   enum { WORDBITSHIFT = staticlog(WORDBITS) };
 
   explicit Bitmap() {
@@ -125,7 +129,7 @@ public:
     // Round up the number of elements.
     _elements = nelts;
     // Allocate the right number of bytes.
-    _bitarray = reinterpret_cast<word_t *>(Heap::malloc(wordCount()));
+    _bitarray = reinterpret_cast<atomic_size_t *>(Heap::malloc(wordCount()));
     d_assert(_bitarray != nullptr);
 
     clear();
@@ -141,7 +145,7 @@ public:
     return _elements;
   }
 
-  const word_t *bitmap() const {
+  const atomic_size_t *bitmap() const {
     return _bitarray;
   }
 
@@ -158,14 +162,14 @@ public:
 
     const size_t words = wordCount();
     for (size_t i = startWord; i < words; i++) {
-      const auto bits = _bitarray[i];
+      const size_t bits = _bitarray[i];
       if (bits == ~0UL) {
         off = 0;
         continue;
       }
 
       d_assert(off <= 63U);
-      word_t unsetBits = ~bits;
+      size_t unsetBits = ~bits;
       d_assert(unsetBits != 0);
 
       // if the offset is 3, we want to mark the first 3 bits as 'set'
@@ -183,7 +187,11 @@ public:
 
       size_t off = __builtin_ffsll(unsetBits) - 1;
       const bool ok = tryToSetAt(i, off);
-      d_assert(ok);
+      // if we couldn't set the bit, we raced with a different thread.  try again.
+      if (!ok) {
+        off++;
+        continue;
+      }
 
       return WORDBITS * i + off;
     }
@@ -203,17 +211,22 @@ public:
   inline bool unset(uint64_t index) {
     uint32_t item, position;
     computeItemPosition(index, item, position);
-    word_t oldvalue = _bitarray[item];
-    word_t newvalue = oldvalue & ~(getMask(position));
-    _bitarray[item] = newvalue;
-    return (oldvalue != newvalue);
+
+    const auto mask = getMask(position);
+    size_t oldValue = _bitarray[item];
+    while (!std::atomic_compare_exchange_weak(&_bitarray[item],  // address of word
+                                              &oldValue,         // old val
+                                              oldValue & ~mask)) {
+    }
+
+    return !(oldValue & mask);
   }
 
+  // FIXME: who uses this? bad idea with atomics
   inline bool isSet(uint64_t index) const {
     uint32_t item, position;
     computeItemPosition(index, item, position);
-    bool result = _bitarray[item] & getMask(position);
-    return result;
+    return _bitarray[item] & getMask(position);
   }
 
   inline uint64_t inUseCount() const {
@@ -249,13 +262,14 @@ public:
 
     const size_t words = wordCount();
     for (size_t i = startWord; i < words; i++) {
-      const auto bits = _bitarray[i] & ~((1UL << startOff) - 1);
+      const auto mask = ~((1UL << startOff) - 1);
+      const auto bits = _bitarray[i] & mask;
       startOff = 0;
 
       if (bits == 0ULL)
         continue;
 
-      const size_t off = __builtin_ffsll(bits) - 1;
+      const size_t off = __builtin_ffsl(bits) - 1;
 
       const auto bit = WORDBITS * i + off;
       return bit < bitCount() ? bit : bitCount();
@@ -263,13 +277,18 @@ public:
 
     return bitCount();
   }
-private:
 
+private:
   inline bool tryToSetAt(uint32_t item, uint32_t position) {
-    const word_t mask = getMask(position);
-    word_t oldvalue = _bitarray[item];
-    _bitarray[item] |= mask;
-    return !(oldvalue & mask);
+    const auto mask = getMask(position);
+    size_t oldValue = _bitarray[item];
+
+    while (!std::atomic_compare_exchange_weak(&_bitarray[item],  // address of word
+                                              &oldValue,         // old val
+                                              oldValue | mask)) {
+    }
+
+    return !(oldValue & mask);
   }
 
   /// Given an index, compute its item (word) and position within the word.
@@ -283,12 +302,12 @@ private:
 
   /// To find the bit in a word, do this: word & getMask(bitPosition)
   /// @return a "mask" for the given position.
-  inline static word_t getMask(uint64_t pos) {
-    return ((word_t)1) << pos;
+  inline static size_t getMask(uint64_t pos) {
+    return 1UL << pos;
   }
 
   /// The bit array itself.
-  word_t *_bitarray{nullptr};
+  atomic_size_t *_bitarray{nullptr};
 
   /// The number of elements (bits) in the array.
   size_t _elements{0};
