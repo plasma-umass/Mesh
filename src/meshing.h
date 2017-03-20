@@ -5,6 +5,7 @@
 #ifndef MESH__MESHING_H
 #define MESH__MESHING_H
 
+#include <atomic>
 #include <algorithm>
 
 #include "common.h"
@@ -16,7 +17,10 @@
 
 namespace mesh {
 
-bool bitmapsMeshable(const uint64_t *__restrict__ bitmap1, const uint64_t *__restrict__ bitmap2, size_t len) noexcept;
+using std::atomic_size_t;
+
+bool bitmapsMeshable(const atomic_size_t *__restrict__ bitmap1, const atomic_size_t *__restrict__ bitmap2,
+                     size_t len) noexcept;
 
 namespace method {
 
@@ -26,7 +30,7 @@ inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) noexcept {
     return 0;
 
   auto meshes = 0;
-  const auto len = bitmaps[0].wordCount() / 8;  // 8 words per 64-bit int
+  const auto len = bitmaps[0].wordCount() / sizeof(size_t);
 
   for (size_t i = 0; i + 1 < bitmaps.size(); i += 2) {
     const auto bitmap1 = bitmaps[i].bitmap();
