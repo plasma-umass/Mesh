@@ -26,15 +26,12 @@ public:
   BitmapIter(const Container &a, const size_t i) : _i(i), _cont(a) {
   }
   BitmapIter &operator++() {
-    auto next = _i + 1;
-    for (; next < _cont.bitCount() && !_cont.isSet(next); ++next) {
+    if (unlikely(_i + 1 >= _cont.bitCount())) {
+      _i = _cont.bitCount();
+      return *this;
     }
-    // if we stopped at the last element and its not set, bump one
-    if (next == _cont.bitCount() - 1 && !_cont.isSet(next)) {
-      next++;
-      d_assert(next == _cont.bitCount());
-    }
-    _i = next;
+
+    _i = _cont.lowestSetBitAt(_i + 1);
     return *this;
   }
   bool operator==(const BitmapIter &rhs) const {
@@ -228,38 +225,45 @@ public:
   }
 
   iterator begin() {
-    return iterator(*this, lowestSetBit());
+    return iterator(*this, lowestSetBitAt(0));
   }
   iterator end() {
     return iterator(*this, bitCount());
   }
   const_iterator begin() const {
-    return iterator(*this, lowestSetBit());
+    return iterator(*this, lowestSetBitAt(0));
   }
   const_iterator end() const {
     return iterator(*this, bitCount());
   }
   const_iterator cbegin() const {
-    return iterator(*this, lowestSetBit());
+    return iterator(*this, lowestSetBitAt(0));
   }
   const_iterator cend() const {
     return iterator(*this, bitCount());
   }
 
-private:
-  size_t lowestSetBit() const {
+  size_t lowestSetBitAt(uint64_t startingAt) const {
+    uint32_t startWord, startOff;
+    computeItemPosition(startingAt, startWord, startOff);
+
     const size_t words = wordCount();
-    for (size_t i = 0; i < words; i++) {
-      if (_bitarray[i] == 0ULL)
+    for (size_t i = startWord; i < words; i++) {
+      const auto bits = _bitarray[i] & ~((1UL << startOff) - 1);
+      startOff = 0;
+
+      if (bits == 0ULL)
         continue;
 
-      const size_t off = __builtin_ffsll(_bitarray[i]) - 1;
+      const size_t off = __builtin_ffsll(bits) - 1;
 
-      return WORDBITS * i + off;
+      const auto bit = WORDBITS * i + off;
+      return bit < bitCount() ? bit : bitCount();
     }
 
     return bitCount();
   }
+private:
 
   inline bool tryToSetAt(uint32_t item, uint32_t position) {
     const word_t mask = getMask(position);
