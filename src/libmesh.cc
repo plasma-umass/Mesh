@@ -5,43 +5,25 @@
 
 #include "wrappers/gnuwrapper.cpp"
 
-using mesh::LocalHeap;
-
-static __thread LocalHeap *localHeap;
-
-static void allocLocalHeap() {
-  d_assert(localHeap == nullptr);
-
-  void *buf = mesh::internal::Heap().malloc(sizeof(LocalHeap));
-  if (buf == nullptr) {
-    mesh::debug("mesh: unable to allocate LocalHeap, aborting.\n");
-    abort();
-  }
-  localHeap = new (buf) LocalHeap(&mesh::runtime().heap());
-}
+using namespace mesh;
 
 static __attribute__((constructor)) void libmesh_init() {
-  if (localHeap == nullptr)
-    allocLocalHeap();
+  static volatile auto lh = runtime().localHeap();
+
+  (void)lh;
 }
 
 extern "C" {
 void *xxmalloc(size_t sz) {
-  if (unlikely(localHeap == nullptr))
-    allocLocalHeap();
-  return localHeap->malloc(sz);
+  return runtime().localHeap()->malloc(sz);
 }
 
 void xxfree(void *ptr) {
-  if (unlikely(localHeap == nullptr))
-    allocLocalHeap();
-  localHeap->free(ptr);
+  runtime().localHeap()->free(ptr);
 }
 
 size_t xxmalloc_usable_size(void *ptr) {
-  if (unlikely(localHeap == nullptr))
-    allocLocalHeap();
-  return localHeap->getSize(ptr);
+  return runtime().localHeap()->getSize(ptr);
 }
 
 // ensure we don't concurrently allocate/mess with internal heap data

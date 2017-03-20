@@ -5,9 +5,10 @@
 #ifndef MESH__RUNTIME_H
 #define MESH__RUNTIME_H
 
-#include <condition_variable>
 #include <pthread.h>
 #include <signal.h>  // for stack_t
+
+#include <condition_variable>
 
 #include "internal.h"
 
@@ -15,6 +16,7 @@
 #include "localmeshingheap.h"
 #include "lockedheap.h"
 #include "mmapheap.h"
+#include "semiansiheap.h"
 
 #include "heaplayers.h"
 
@@ -28,88 +30,30 @@ typedef void *(*PthreadFn)(void *);
 // signature of pthread_create itself
 typedef int (*PthreadCreateFn)(pthread_t *thread, const pthread_attr_t *attr, PthreadFn start_routine, void *arg);
 
-static const int N_BINS = 12;  // 16Kb max object size
-static const int MESH_PERIOD = 100;
+static const int NBins = 12;  // 16Kb max object size
+static const int MeshPeriod = 1000;
 
 // The global heap manages the spans that back MiniHeaps as well as
 // large allocations.
-class GlobalHeap
-    : public mesh::LockedHeap<
-          mesh::GlobalMeshingHeap<mesh::MmapHeap, N_BINS, mesh::size2Class, mesh::class2Size, MESH_PERIOD>> {};
+class GlobalHeap : public mesh::LockedHeap<
+                       GlobalMeshingHeap<mesh::MmapHeap, NBins, mesh::size2Class, mesh::class2Size, MeshPeriod>> {};
 
 // Fewer buckets than regular KingsleyHeap (to ensure multiple objects
 // fit in the 128Kb spans used by MiniHeaps).
-class LocalHeap : public mesh::LocalMeshingHeap<N_BINS, mesh::size2Class, mesh::class2Size, MESH_PERIOD, GlobalHeap> {
+class LocalHeap
+    : public SemiANSIHeap<LocalMeshingHeap<NBins, mesh::size2Class, mesh::class2Size, MeshPeriod, GlobalHeap>,
+                          GlobalHeap> {
 private:
   DISALLOW_COPY_AND_ASSIGN(LocalHeap);
-  typedef mesh::LocalMeshingHeap<N_BINS, mesh::size2Class, mesh::class2Size, MESH_PERIOD, GlobalHeap> SuperHeap;
+  typedef SemiANSIHeap<LocalMeshingHeap<NBins, mesh::size2Class, mesh::class2Size, MeshPeriod, GlobalHeap>, GlobalHeap>
+      SuperHeap;
 
 public:
   explicit LocalHeap(GlobalHeap *global) : SuperHeap(global) {
   }
-
-  // from ANSIHeap
-  inline void *calloc(size_t s1, size_t s2) {
-    auto *ptr = (char *)malloc(s1 * s2);
-    if (ptr) {
-      memset(ptr, 0, s1 * s2);
-    }
-    return (void *)ptr;
-  }
-
-  // from ANSIHeap
-  inline void *realloc(void *ptr, const size_t sz) {
-    if (ptr == 0) {
-      return malloc(sz);
-    }
-    if (sz == 0) {
-      free(ptr);
-      return 0;
-    }
-
-    auto objSize = getSize(ptr);
-    if (objSize == sz) {
-      return ptr;
-    }
-
-    // Allocate a new block of size sz.
-    auto *buf = malloc(sz);
-
-    // Copy the contents of the original object
-    // up to the size of the new block.
-
-    auto minSize = (objSize < sz) ? objSize : sz;
-    if (buf) {
-      memcpy(buf, ptr, minSize);
-    }
-
-    // Free the old block.
-    free(ptr);
-    return buf;
-  }
 };
 
-// forward declaration of runtime so we can declare it a friend
 class Runtime;
-class StopTheWorld;
-
-class ThreadCache {
-private:
-  DISALLOW_COPY_AND_ASSIGN(ThreadCache);
-
-public:
-  explicit ThreadCache();
-
-private:
-  friend Runtime;
-  friend StopTheWorld;
-
-  atomic_bool _waiting{false};
-  atomic_int64_t _shutdownEpoch{-1};
-  pthread_t _tid;
-  ThreadCache *_prev{nullptr};
-  ThreadCache *_next{nullptr};
-};
 
 class StopTheWorld {
 private:
@@ -160,6 +104,12 @@ public:
 
   int createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg);
 
+  static inline LocalHeap *localHeap() __attribute__((always_inline)) {
+    if (unlikely(_localHeap == nullptr))
+      allocLocalHeap();
+    return _localHeap;
+  }
+
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
   // happens lazily, as the dynamic linker's dlopen calls into malloc
@@ -180,8 +130,8 @@ private:
   static void *startThread(StartThreadArgs *threadArgs);
   static void sigQuiesceHandler(int sig, siginfo_t *info, void *uctx);
 
-  void registerThread(ThreadCache *tc);
-  void unregisterThread(ThreadCache *tc);
+  void registerThread(STWThreadState *tc);
+  void unregisterThread(STWThreadState *tc);
 
   void installSigHandlers();
   void installSigAltStack();
@@ -189,8 +139,12 @@ private:
 
   void quiesceSelf();
 
+  static void allocLocalHeap();
+
+  // allocated inside LocalMeshingHeap, passed to runtime through registerThread
+  static __thread STWThreadState *_stwState;
   static __thread stack_t _altStack;
-  static __thread ThreadCache *_threadCache;
+  static __thread LocalHeap *_localHeap;
 
   friend Runtime &runtime();
   friend StopTheWorld;
@@ -199,8 +153,7 @@ private:
   GlobalHeap _heap{};
   mutex _mutex{};
   StopTheWorld _stw{};
-  ThreadCache _mainCache{};
-  ThreadCache *_caches{nullptr};
+  STWThreadState *_threads{nullptr};
 };
 
 // get a reference to the Runtime singleton
