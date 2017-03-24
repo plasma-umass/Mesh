@@ -312,6 +312,6 @@ private:
   /// The number of elements (bits) in the array.
   size_t _elements{0};
 };
-}
+}  // namespace mesh
 
 #endif  // MESH__BITMAP_H

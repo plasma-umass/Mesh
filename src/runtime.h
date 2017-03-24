@@ -162,6 +162,6 @@ inline Runtime &runtime() {
   static Runtime *runtimePtr = new (buf) Runtime{};
   return *runtimePtr;
 }
-}
+}  // namespace mesh
 
 #endif  // MESH__RUNTIME_H

@@ -65,6 +65,12 @@ private:
   STWThreadState *_next{nullptr};
 };
 
+class LocalHeapStats {
+public:
+  atomic_size_t allocCount;
+  atomic_size_t freeCount;
+};
+
 template <int NumBins,                           // number of size classes
           int (*getSizeClass)(const size_t),     // same as for global
           size_t (*getClassMaxSize)(const int),  // same as for global
@@ -153,7 +159,8 @@ protected:
   mt19937_64 _prng;
   GlobalHeap *_global;
   STWThreadState _stwState{};
+  LocalHeapStats _stats{};
 };
-}
+}  // namespace mesh
 
 #endif  // MESH__LOCALMESHINGHEAP_H

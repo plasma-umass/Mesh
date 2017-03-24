@@ -19,4 +19,4 @@ bool bitmapsMeshable(const atomic_size_t *__restrict__ bitmap1, const atomic_siz
   }
   return true;
 }
-}
+}  // namespace mesh

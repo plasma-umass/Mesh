@@ -118,6 +118,6 @@ public:
     }
   }
 };
-}
+}  // namespace mesh
 
 #endif

@@ -19,6 +19,15 @@ using namespace HL;
 
 namespace mesh {
 
+template <int NumBins>
+class GlobalHeapStats {
+public:
+  atomic_size_t mhFreeCount;
+  atomic_size_t mhAllocCount;
+  atomic_size_t mhHighWaterMark;
+  atomic_size_t mhClassHWM[NumBins];
+};
+
 template <typename BigHeap,                      // for large allocations
           int NumBins,                           // number of size classes
           int (*getSizeClass)(const size_t),     // same as for local
@@ -31,7 +40,8 @@ private:
   typedef MeshableArena Super;
 
   static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
-  static_assert(gcd<BigHeap::Alignment, Alignment>::value == Alignment, "expected BigHeap to have 16-byte alignment");
+  static_assert(HL::gcd<BigHeap::Alignment, Alignment>::value == Alignment,
+                "expected BigHeap to have 16-byte alignment");
 
 public:
   enum { Alignment = 16 };
@@ -40,8 +50,21 @@ public:
     resetNextMeshCheck();
   }
 
+  inline void dumpStats(int level) const {
+    if (level < 1)
+      return;
+
+    debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
+    debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
+    debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
+    for (size_t i = 0; i < NumBins; i++) {
+      auto size = getClassMaxSize(i);
+      debug("MH HWM (%5zu):     %zu\n", size, (size_t)_stats.mhClassHWM[i]);
+    }
+  }
+
   inline MiniHeap *allocMiniheap(size_t objectSize) {
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    std::unique_lock<std::shared_mutex> exclusiveLock(_mhRWLock);
 
     d_assert(objectSize <= _maxObjectSize);
 
@@ -74,6 +97,10 @@ public:
     _littleheaps[sizeClass].push_back(mh);
     _miniheaps[mh->getSpanStart()] = mh;
 
+    _stats.mhAllocCount++;
+    _stats.mhHighWaterMark = max(_miniheaps.size(), _stats.mhHighWaterMark.load());
+    _stats.mhClassHWM[sizeClass] = max(_littleheaps[sizeClass].size(), _stats.mhClassHWM[sizeClass].load());
+
     return mh;
   }
 
@@ -89,7 +116,7 @@ public:
   }
 
   inline MiniHeap *miniheapFor(void *const ptr) const {
-    std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+    std::shared_lock<std::shared_mutex> sharedLock(_mhRWLock);
 
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     auto it = greatest_leq(_miniheaps, ptrval);
@@ -117,7 +144,7 @@ public:
   }
 
   void freeMiniheap(MiniHeap *&mh) {
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    std::unique_lock<std::shared_mutex> exclusiveLock(_mhRWLock);
 
     const auto spans = mh->spans();
     const auto spanSize = mh->spanSize();
@@ -127,6 +154,8 @@ public:
       Super::free(reinterpret_cast<void *>(spans[i]), spanSize);
       _miniheaps.erase(reinterpret_cast<uintptr_t>(spans[i]));
     }
+
+    _stats.mhFreeCount++;
 
     freeMiniheapAfterMesh(mh);
     mh = nullptr;
@@ -186,7 +215,7 @@ public:
     dst->meshedSpan(srcSpan);
     Super::mesh(reinterpret_cast<void *>(dst->getSpanStart()), reinterpret_cast<void *>(src->getSpanStart()), sz);
 
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    std::unique_lock<std::shared_mutex> exclusiveLock(_mhRWLock);
     freeMiniheapAfterMesh(src);
     src = nullptr;
 
@@ -267,8 +296,10 @@ protected:
   internal::map<uintptr_t, MiniHeap *> _miniheaps{};
 
   mutable std::mutex _bigMutex{};
-  mutable std::shared_timed_mutex _mhRWLock{};
+  mutable std::shared_mutex _mhRWLock{};
+
+  GlobalHeapStats<NumBins> _stats{};
 };
-}
+}  // namespace mesh
 
 #endif  // MESH__GLOBALMESHINGHEAP_H

@@ -239,4 +239,4 @@ void MeshableArena::afterForkChild() {
   _forkPipe[0] = -1;
   _forkPipe[1] = -1;
 }
-}
+}  // namespace mesh

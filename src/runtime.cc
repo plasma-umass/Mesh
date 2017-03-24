@@ -285,4 +285,4 @@ void Runtime::removeSigAltStack() {
   _altStack.ss_sp = nullptr;
   _altStack.ss_size = 0;
 }
-}
+}  // namespace mesh
