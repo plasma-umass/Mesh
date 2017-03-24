@@ -42,7 +42,7 @@ inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) noexcept {
 
   return meshes;
 }
-}
+}  // namespace method
 
 template <typename T>
 inline void randomSort(mt19937_64 &prng, const internal::vector<T *> &miniheaps,
@@ -86,6 +86,6 @@ inline void randomSort(mt19937_64 &prng, const internal::vector<T *> &miniheaps,
     }
   }
 }
-}
+}  // namespace mesh
 
 #endif  // MESH__MESHING_H

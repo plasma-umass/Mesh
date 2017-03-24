@@ -62,7 +62,7 @@ enum PageType {
   Identity,
   Meshed,
 };
-}
+}  // namespace internal
 
 class MeshableArena : public mesh::MmapHeap {
 private:
@@ -221,6 +221,6 @@ private:
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
   char *_spanDir{nullptr};
 };
-}
+}  // namespace mesh
 
 #endif  // MESH__MESHABLE_ARENA_H

@@ -117,6 +117,6 @@ public:
 protected:
   internal::unordered_map<void *, size_t> _vmaMap{};
 };
-}
+}  // namespace mesh
 
 #endif  // MESH__MESH_MMAP_H

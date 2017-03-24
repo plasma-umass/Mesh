@@ -199,6 +199,6 @@ private:
 };
 
 typedef MiniHeapBase<> MiniHeap;
-}
+}  // namespace mesh
 
 #endif  // MESH__MINIHEAP_H

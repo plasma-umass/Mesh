@@ -96,7 +96,7 @@ inline uint64_t seed() {
 // assertions that don't attempt to recursively malloc
 void __attribute__((noreturn))
 __mesh_assert_fail(const char *assertion, const char *file, const char *func, int line, const char *fmt, ...);
-}
-}
+}  // namespace internal
+}  // namespace mesh
 
 #endif  // MESH__COMMON_H

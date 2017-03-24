@@ -64,6 +64,6 @@ private:
   //    char dummy[128]; // an effort to avoid false sharing.
   mutable std::mutex _mutex;
 };
-}
+}  // namespace mesh
 
 #endif

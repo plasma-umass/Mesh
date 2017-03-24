@@ -20,7 +20,8 @@
 namespace mesh {
 namespace internal {
 
-static constexpr size_t ArenaSize = 1UL << 35;        // 32 GB
+// static constexpr size_t ArenaSize = 1UL << 35;        // 32 GB
+static constexpr size_t ArenaSize = 1UL << 32;        // 32 GB
 static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 

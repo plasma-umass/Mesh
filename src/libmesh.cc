@@ -13,6 +13,20 @@ static __attribute__((constructor)) void libmesh_init() {
   (void)lh;
 }
 
+static __attribute__((destructor)) void libmesh_fini() {
+  char *mstats = getenv("MALLOCSTATS");
+  if (!mstats)
+    return;
+
+  int mlevel = atoi(mstats);
+  if (mlevel < 0)
+    mlevel = 0;
+  else if (mlevel > 2)
+    mlevel = 2;
+
+  runtime().heap().dumpStats(mlevel);
+}
+
 extern "C" {
 void *xxmalloc(size_t sz) {
   return runtime().localHeap()->malloc(sz);
