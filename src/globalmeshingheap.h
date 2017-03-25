@@ -22,6 +22,7 @@ namespace mesh {
 template <int NumBins>
 class GlobalHeapStats {
 public:
+  atomic_size_t meshCount;
   atomic_size_t mhFreeCount;
   atomic_size_t mhAllocCount;
   atomic_size_t mhHighWaterMark;
@@ -54,12 +55,22 @@ public:
     if (level < 1)
       return;
 
+    debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
     debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
     debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
     debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
     for (size_t i = 0; i < NumBins; i++) {
       auto size = getClassMaxSize(i);
-      debug("MH HWM (%5zu):     %zu\n", size, (size_t)_stats.mhClassHWM[i]);
+      if (_littleheaps[i].size() == 0) {
+        debug("MH HWM (%5zu):     %zu\n", size, (size_t)_stats.mhClassHWM[i]);
+        continue;
+      }
+      auto objectCount = _littleheaps[i][0]->maxCount() * _littleheaps[i].size();
+      double inUseCount = 0;
+      for (const auto &mh : _littleheaps[i]) {
+        inUseCount += mh->inUseCount();
+      }
+      debug("MH HWM (%5zu):     %zu (occ: %f)\n", size, (size_t)_stats.mhClassHWM[i], inUseCount / objectCount);
     }
   }
 
@@ -163,7 +174,8 @@ public:
 
   inline void free(void *ptr) {
     if (unlikely(internal::isMeshMarker(ptr))) {
-      for (size_t i = 0; i < 1024; i++)
+      dumpStats(2);
+      for (size_t i = 0; i < 32; i++)
         meshAllSizeClasses();
       return;
     }
@@ -273,7 +285,7 @@ protected:
     if (mergeSets.size() == 0)
       return;
 
-    debug("found something to merge!\n");
+    _stats.meshCount += mergeSets.size();
 
     internal::StopTheWorld();
 

@@ -21,9 +21,9 @@ namespace mesh {
 namespace internal {
 
 static constexpr size_t MeshMarker = 7305126540297948313;
-  static inline bool isMeshMarker(void *ptr) {
-    return reinterpret_cast<size_t>(ptr) == internal::MeshMarker;
-  }
+static inline bool isMeshMarker(void *ptr) {
+  return reinterpret_cast<size_t>(ptr) == internal::MeshMarker;
+}
 
 // static constexpr size_t ArenaSize = 1UL << 35;        // 32 GB
 static constexpr size_t ArenaSize = 1UL << 32;        // 32 GB

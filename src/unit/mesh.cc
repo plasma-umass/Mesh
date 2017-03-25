@@ -63,6 +63,13 @@ static inline void meshTest(bool invert) {
     mh2 = tmp;
   }
 
+  const auto bitmap1 = mh1->bitmap().bitmap();
+  const auto bitmap2 = mh2->bitmap().bitmap();
+  const auto len = mh1->bitmap().byteCount();
+  ASSERT_EQ(len, mh2->bitmap().byteCount());
+
+  ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2, len));
+
   note("ABOUT TO MESH");
   // mesh the two miniheaps together
   gheap.mesh(mh1, mh2);
