@@ -177,6 +177,7 @@ public:
       dumpStats(2);
       for (size_t i = 0; i < 128; i++)
         meshAllSizeClasses();
+      dumpStats(2);
       return;
     }
 
