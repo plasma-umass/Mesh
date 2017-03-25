@@ -17,8 +17,8 @@ c.config('package-bugreport', 'bpowers@cs.umass.edu')
 
 if c.debug_build:
     c.append('cflags', '-g')
-else:
-    c.append('cflags', '-DNDEBUG')
+#else:
+#    c.append('cflags', '-DNDEBUG')
 
 if c.optimize_build:
     c.append('cflags', '-O3 -flto')
@@ -70,7 +70,7 @@ c.append('ldflags', '-ftls-model=initial-exec')
 c.append('libs', '-lm -lpthread')
 c.append('libs', '-ldl')
 
-c.append('cxxflags', '-std=c++1z -I src')
+c.append('cxxflags', '-std=c++14 -I src')
 c.append('cxxflags', '$(CFLAGS)')
 
 # for development work, clang has much, much nicer error messages
