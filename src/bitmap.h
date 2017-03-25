@@ -129,15 +129,14 @@ public:
     // Round up the number of elements.
     _elements = nelts;
     // Allocate the right number of bytes.
-    _bitarray = reinterpret_cast<atomic_size_t *>(Heap::malloc(wordCount()));
+    _bitarray = reinterpret_cast<atomic_size_t *>(Heap::malloc(byteCount()));
     d_assert(_bitarray != nullptr);
 
     clear();
   }
 
-  // number of machine words (4-byte on 32-bit systems, 8-byte on
-  // 64-bit) used to store the bitmap
-  inline size_t wordCount() const {
+  // number of bytes used to store the bitmap
+  inline size_t byteCount() const {
     return WORDBITS * ((_elements + WORDBITS - 1) / WORDBITS) / 8;
   }
 
@@ -152,7 +151,7 @@ public:
   /// Clears out the bitmap array.
   void clear(void) {
     if (_bitarray != nullptr) {
-      memset(_bitarray, 0, wordCount());  // 0 = false
+      memset(_bitarray, 0, byteCount());  // 0 = false
     }
   }
 
@@ -160,7 +159,7 @@ public:
     uint32_t startWord, off;
     computeItemPosition(startingAt, startWord, off);
 
-    const size_t words = wordCount();
+    const size_t words = byteCount();
     for (size_t i = startWord; i < words; i++) {
       const size_t bits = _bitarray[i];
       if (bits == ~0UL) {
@@ -260,8 +259,8 @@ public:
     uint32_t startWord, startOff;
     computeItemPosition(startingAt, startWord, startOff);
 
-    const size_t words = wordCount();
-    for (size_t i = startWord; i < words; i++) {
+    const size_t nBytes = byteCount();
+    for (size_t i = startWord; i < nBytes; i++) {
       const auto mask = ~((1UL << startOff) - 1);
       const auto bits = _bitarray[i] & mask;
       startOff = 0;

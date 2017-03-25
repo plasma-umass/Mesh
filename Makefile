@@ -29,6 +29,9 @@ BENCH_SRCS       = src/meshing_benchmark.cc $(COMMON_SRCS)
 BENCH_OBJS       = $(addprefix build/,$(BENCH_SRCS:.cc=.o))
 BENCH_BIN        = meshing-benchmark
 
+FRAG_SRCS        = src/fragmenter.c
+FRAG_BIN         = fragmenter
+
 ALL_OBJS         = $(LIB_OBJS) $(UNIT_OBJS) $(BENCH_OBJS)
 
 # reference files in each subproject to ensure git fully checks the project out
@@ -54,11 +57,17 @@ endif
 .SUFFIXES:
 .SUFFIXES: .cc .cpp .c .o .d .test
 
-all: test $(BENCH_BIN) $(LIB)
+all: test $(BENCH_BIN) $(LIB) $(FRAG_BIN)
 
 build:
 	mkdir -p build
 	mkdir -p $(basename $(ALL_OBJS))
+
+test_frag: $(FRAG_BIN) $(LIB)
+	@echo "  GLIBC MALLOC"
+	./$(FRAG_BIN)
+	@echo "  MESH MALLOC"
+	LD_PRELOAD=./$(LIB) ./$(FRAG_BIN)
 
 $(ALL_SUBMODULES):
 	@echo "  GIT   $@"
@@ -95,6 +104,10 @@ $(LIB): $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
 $(BENCH_BIN): $(HEAP_LAYERS) $(GFLAGS_LIB) $(BENCH_OBJS) $(CONFIG)
 	@echo "  LD    $@"
 	$(CXX) $(LDFLAGS) -o $@ $(BENCH_OBJS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
+
+$(FRAG_BIN): $(GFLAGS_LIB) $(FRAG_SRCS) $(CONFIG)
+	@echo "  LD    $@"
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FRAG_SRCS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
 
 $(UNIT_BIN): $(CONFIG) $(UNIT_OBJS)
 	@echo "  LD    $@"
@@ -142,4 +155,4 @@ TAGS:
 
 -include $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean distclean format test check install paper run TAGS
+.PHONY: all clean distclean format test test_frag check install paper run TAGS

@@ -11,3 +11,4 @@ TAGS
 config.mk
 /build
 /doc
+/fragmenter

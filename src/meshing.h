@@ -30,7 +30,7 @@ inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) noexcept {
     return 0;
 
   auto meshes = 0;
-  const auto len = bitmaps[0].wordCount() / sizeof(size_t);
+  const auto len = bitmaps[0].byteCount();
 
   for (size_t i = 0; i + 1 < bitmaps.size(); i += 2) {
     const auto bitmap1 = bitmaps[i].bitmap();
@@ -62,27 +62,28 @@ inline void randomSort(mt19937_64 &prng, const internal::vector<T *> &miniheaps,
 
   // chose a random permutation of same-sized MiniHeaps
   std::shuffle(begin, end, prng);
-  for (auto it1 = begin, it2 = ++begin; it2 != end; ++it1, ++it2) {
+  for (auto it1 = begin, it2 = ++begin; it1 != end && it2 != end; ++++it1, ++++it2) {
     T *h1 = *it1;
     T *h2 = *it2;
 
-    if (h1->isDone() || h2->isDone())
+    if (!h1->isDone() || !h2->isDone())
       continue;
 
-    const auto len = h1->bitmap().wordCount();
+    const auto len = h1->bitmap().byteCount();
     const auto bitmap1 = h1->bitmap().bitmap();
     const auto bitmap2 = h2->bitmap().bitmap();
-    d_assert(len == h2->bitmap().wordCount());
+    d_assert(len == h2->bitmap().byteCount());
 
     if (mesh::bitmapsMeshable(bitmap1, bitmap2, len)) {
       internal::vector<T *> heaps{h1, h2};
-      debug("----\n2 MESHABLE HEAPS!\n");
+      // debug("----\n2 MESHABLE HEAPS!\n");
 
+      meshFound(std::move(heaps));
+    } else {
+      // debug("----\n2 UNMESHABLE HEAPS!\n");
       // h1->dumpDebug();
       // h2->dumpDebug();
       // debug("----\n");
-
-      meshFound(std::move(heaps));
     }
   }
 }
