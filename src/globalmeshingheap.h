@@ -162,6 +162,12 @@ public:
   }
 
   inline void free(void *ptr) {
+    if (unlikely(internal::isMeshMarker(ptr))) {
+      for (size_t i = 0; i < 1024; i++)
+        meshAllSizeClasses();
+      return;
+    }
+
     // two possibilities: most likely the ptr is small (and therefor
     // owned by a miniheap), or is a large allocation
 
@@ -181,7 +187,7 @@ public:
   }
 
   inline size_t getSize(void *ptr) const {
-    if (ptr == nullptr)
+    if (ptr == nullptr || internal::isMeshMarker(ptr))
       return 0;
 
     auto mh = miniheapFor(ptr);
