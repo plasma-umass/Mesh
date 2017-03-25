@@ -33,10 +33,15 @@ static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
 // efficiently copy data from srcFd to dstFd
 int copyFile(int dstFd, int srcFd, off_t off, size_t sz);
 
+class InternalTopHeap : public SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>> {};
+
 // for mesh-internal data structures, like heap metadata
-class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>>> {
+class Heap : public ExactlyOneHeap<
+                 LockedHeap<PosixLockType, DebugHeap<KingsleyHeap<FreelistHeap<InternalTopHeap>, InternalTopHeap>>>> {
 protected:
-  typedef ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>>>>> SuperHeap;
+  typedef ExactlyOneHeap<
+      LockedHeap<PosixLockType, DebugHeap<KingsleyHeap<FreelistHeap<InternalTopHeap>, InternalTopHeap>>>>
+      SuperHeap;
 
 public:
   Heap() : SuperHeap() {
