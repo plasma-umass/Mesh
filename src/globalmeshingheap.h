@@ -175,7 +175,7 @@ public:
   inline void free(void *ptr) {
     if (unlikely(internal::isMeshMarker(ptr))) {
       dumpStats(2);
-      for (size_t i = 0; i < 32; i++)
+      for (size_t i = 0; i < 128; i++)
         meshAllSizeClasses();
       return;
     }
