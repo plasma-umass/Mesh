@@ -421,22 +421,25 @@ void NOINLINE bench_free(void *ptr) {
 // Fig 4. "A Basic Strategy" from http://www.ece.iastate.edu/~morris/papers/10/ieeetc10.pdf
 void NOINLINE basic_fragment(int64_t n, size_t m_total) {
   int64_t ci = 1;
-  const size_t ptr_table_len = m_total / (ci * n);
   int64_t m_avail = m_total;
   size_t m_usage = 0;  // S_t in the paper
 
+  const size_t ptr_table_len = m_total / (ci * n);
   fprintf(stderr, "ptr_table_len: %zu\n", ptr_table_len);
   volatile char *volatile *ptr_table = bench_alloc(ptr_table_len * sizeof(char *));
 
+  // show how much RSS we just burned through for the table of
+  // pointers we just allocated
   print_rss(false, true);
 
   for (int64_t i = 1; m_avail >= 2 * ci * n; i++) {
     ci = i;
-    // number of allocation pairs
+    // number of allocation pairs in this iteration
     const size_t pi = m_avail / (2 * ci * n);
 
     fprintf(stderr, "i:%4zu, ci:%5zu, n:%5zu, pi:%7zu (osize:%5zu)\n", i, ci, n, pi, ci * n);
 
+    // allocate two objects
     for (size_t k = 0; k < pi; k++) {
       ptr_table[2 * k + 0] = bench_alloc(ci * n);
       ptr_table[2 * k + 1] = bench_alloc(ci * n);
@@ -444,6 +447,7 @@ void NOINLINE basic_fragment(int64_t n, size_t m_total) {
 
     m_usage += ci * n * pi;
 
+    // now free every other object
     for (size_t k = 0; k < pi; k++) {
       bench_free((voidptr)ptr_table[2 * k + 0]);
     }
