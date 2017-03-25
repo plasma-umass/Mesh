@@ -75,7 +75,7 @@ public:
   }
 
   inline MiniHeap *allocMiniheap(size_t objectSize) {
-    std::unique_lock<std::shared_mutex> exclusiveLock(_mhRWLock);
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
     d_assert(objectSize <= _maxObjectSize);
 
@@ -127,7 +127,7 @@ public:
   }
 
   inline MiniHeap *miniheapFor(void *const ptr) const {
-    std::shared_lock<std::shared_mutex> sharedLock(_mhRWLock);
+    std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
 
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     auto it = greatest_leq(_miniheaps, ptrval);
@@ -155,7 +155,7 @@ public:
   }
 
   void freeMiniheap(MiniHeap *&mh) {
-    std::unique_lock<std::shared_mutex> exclusiveLock(_mhRWLock);
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
     const auto spans = mh->spans();
     const auto spanSize = mh->spanSize();
@@ -233,7 +233,7 @@ public:
     dst->meshedSpan(srcSpan);
     Super::mesh(reinterpret_cast<void *>(dst->getSpanStart()), reinterpret_cast<void *>(src->getSpanStart()), sz);
 
-    std::unique_lock<std::shared_mutex> exclusiveLock(_mhRWLock);
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
     freeMiniheapAfterMesh(src);
     src = nullptr;
 
@@ -314,7 +314,7 @@ protected:
   internal::map<uintptr_t, MiniHeap *> _miniheaps{};
 
   mutable std::mutex _bigMutex{};
-  mutable std::shared_mutex _mhRWLock{};
+  mutable std::shared_timed_mutex _mhRWLock{};
 
   GlobalHeapStats<NumBins> _stats{};
 };
