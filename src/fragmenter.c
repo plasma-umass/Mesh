@@ -451,10 +451,10 @@ int main(int argc, char *const argv[]) {
   print_rss();
 
   char *env = getenv("LD_PRELOAD");
-  /* if (env && strstr(env, "libmesh.so") != NULL) { */
-  /*   fprintf(stderr, "meshing stuff\n"); */
-  /*   free((void *)MESH_MARKER); */
-  /* } */
+  if (env && strstr(env, "libmesh.so") != NULL) {
+    fprintf(stderr, "meshing stuff\n");
+    free((void *)MESH_MARKER);
+  }
 
   print_rss();
 
