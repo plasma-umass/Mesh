@@ -18,7 +18,7 @@
 #include <unistd.h>   // for ssize_t, geteuid
 
 #define MESH_MARKER (7305126540297948313)
-// use as (VOID)ptr -- disgusting, but useful to minimize the clutter
+// use as (voidptr)ptr -- disgusting, but useful to minimize the clutter
 // around using volatile.
 #define voidptr void *)(intptr_t
 #define NOINLINE __attribute__((noinline))
@@ -27,9 +27,6 @@
 #define COMM_MAX 16
 #define CMD_DISPLAY_MAX 32
 #define PAGE_SIZE 4096
-// from ps_mem - average error due to truncation in the kernel pss
-// calculations
-#define PSS_ADJUST .5
 #define MAP_DETAIL_LEN sizeof("Size:                  4 kB") - 1
 #define MAP_DETAIL_OFF 16
 
@@ -45,6 +42,8 @@
 typedef struct {
   int npids;
   char *name;
+  size_t rss;
+  size_t dirty;
   float pss;
   float shared;
   float heap;
@@ -66,9 +65,8 @@ static int proc_mem(CmdInfo *, int, size_t, char *);
 static int proc_cmdline(int, char *buf, size_t len);
 
 static void usage(void);
-static void print_results(CmdInfo **, size_t, bool, bool, char *);
 
-static void print_rss(bool show_heap, bool quiet);
+static void print_rss(void);
 
 static char *argv0;
 
@@ -235,6 +233,7 @@ out:
 int proc_mem(CmdInfo *ci, int pid, size_t details_len, char *details_buf) {
   float priv;
   FILE *f;
+  size_t kb, kb2;
   bool skip_read;
   char path[32];
 
@@ -247,8 +246,8 @@ int proc_mem(CmdInfo *ci, int pid, size_t details_len, char *details_buf) {
 
   while (true) {
     size_t len;
-    float m;
     bool is_heap = false;
+    float m;
     char *ok;
     char *line = details_buf;
 
@@ -277,10 +276,16 @@ int proc_mem(CmdInfo *ci, int pid, size_t details_len, char *details_buf) {
       die("couldn't read details of %d (%zu != %zu) - out of sync?:\n%s", pid, len, details_len, line);
     line[details_len] = '\0';
 
+    // Rss - line 2
+    kb = smap_read_int(line, 2);
+    ci->rss += kb;
     // Pss - line 3
-    m = smap_read_int(line, 3);
-    // printf("%f\n", m);
-    ci->pss += m + PSS_ADJUST;
+    kb2 = smap_read_int(line, 3);
+    if (kb < kb2)
+      fprintf(stderr, "ERROR\n");
+    //fprintf(stderr, "\t\t\t%zu/%f\n", kb, m);
+    m = kb2;
+    ci->pss += m + .5;
     // we don't need PSS_ADJUST for heap because
     // the heap is private and anonymous.
     if (is_heap)
@@ -288,7 +293,9 @@ int proc_mem(CmdInfo *ci, int pid, size_t details_len, char *details_buf) {
 
     // Private_Clean & Private_Dirty are lines 6 and 7
     priv += smap_read_int(line, 6);
-    priv += smap_read_int(line, 7);
+    kb = smap_read_int(line, 7);
+    ci->dirty += kb;
+    priv += kb;
 
     ci->swap += smap_read_int(line, 11);
 
@@ -320,57 +327,6 @@ end:
   return 0;
 }
 
-void print_results(CmdInfo **cmds, size_t count, bool show_heap, bool quiet, char *filter) {
-  float tot_pss, tot_swap;
-  const char *tot_fmt;
-
-  tot_pss = 0;
-  tot_swap = 0;
-
-  if (show_heap) {
-    tot_fmt = "#%9.1f%30.1f\tTOTAL USED BY PROCESSES\n";
-    if (!quiet)
-      printf("%10s%10s%10s%10s\t%s\n", "MB RAM", "SHARED", "HEAP", "SWAPPED", "PROCESS (COUNT)");
-  } else {
-    tot_fmt = "#%9.1f%20.1f\tTOTAL USED BY PROCESSES\n";
-    if (!quiet)
-      printf("%10s%10s%10s\t%s\n", "MB RAM", "SHARED", "SWAPPED", "PROCESS (COUNT)");
-  }
-
-  for (size_t i = 0; i < count; i++) {
-    char sbuf[16];
-    CmdInfo *c = cmds[i];
-    char *n = c->name;
-    float pss;
-
-    if (filter && !strstr(n, filter))
-      continue;
-
-    if (strlen(n) > CMD_DISPLAY_MAX) {
-      if (n[0] == '[' && strchr(n, ']'))
-        strchr(n, ']')[1] = '\0';
-      else
-        n[CMD_DISPLAY_MAX] = '\0';
-    }
-    sbuf[0] = '\0';
-    if (c->swap > 0) {
-      float swap = c->swap / 1024.;
-      tot_swap += swap;
-      snprintf(sbuf, sizeof(sbuf), "%10.1f", swap);
-    }
-    pss = c->pss / 1024.;
-    tot_pss += pss;
-    if (show_heap)
-      printf("%10.3f%10.3f%10.3f%10s\t%s (%d)\n", pss, c->shared / 1024., c->heap / 1024., sbuf, n, c->npids);
-    else
-      printf("%10.3f%10.3f%10s\t%s (%d)\n", pss, c->shared / 1024., sbuf, n, c->npids);
-  }
-
-  if (!quiet)
-    printf(tot_fmt, tot_pss, tot_swap);
-  fflush(stdout);
-}
-
 void usage(void) {
   die("Usage: %s [OPTION...]\n"
       "Simple, accurate RAM and swap reporting.\n\n"
@@ -381,7 +337,8 @@ void usage(void) {
       argv0);
 }
 
-void print_rss(bool show_heap, bool quiet) {
+// RSS in kilobytes
+size_t get_rss(void) {
   size_t details_len;
   CmdInfo *ci;
   char *filter, *details_buf;
@@ -400,11 +357,21 @@ void print_rss(bool show_heap, bool quiet) {
 
   free(details_buf);
 
-  CmdInfo *cmds[1] = {ci};
+  //size_t rss = ci->rss;
+  size_t dirty = ci->dirty;
 
-  print_results(cmds, 1, show_heap, quiet, filter);
+  //printf("\tRss: %10.3f\tPss: %10.3f\tDirty: %10.3f\n", ci->rss/1024.0, ci->pss/1024.0, ci->dirty/1024.0);
 
   free(ci);
+
+  return dirty;
+}
+
+void print_rss(void) {
+
+  const size_t rss = get_rss();
+
+  printf("\tRSS:\t%10.3f MB\n", rss/1024.0);
 }
 
 void *NOINLINE bench_alloc(size_t n) {
@@ -430,7 +397,7 @@ void NOINLINE basic_fragment(int64_t n, size_t m_total) {
 
   // show how much RSS we just burned through for the table of
   // pointers we just allocated
-  print_rss(false, true);
+  print_rss();
 
   for (int64_t i = 1; m_avail >= 2 * ci * n; i++) {
     ci = i;
@@ -477,19 +444,19 @@ int main(int argc, char *const argv[]) {
     }
   }
 
-  print_rss(show_heap, quiet);
+  print_rss();
 
-  basic_fragment(512, 128 * MB);
+  basic_fragment(512, 64 * MB);
 
-  print_rss(show_heap, quiet);
+  print_rss();
 
   char *env = getenv("LD_PRELOAD");
-  if (env && strstr(env, "libmesh.so") != NULL) {
-    fprintf(stderr, "meshing stuff\n");
-    free((void *)MESH_MARKER);
-  }
+  /* if (env && strstr(env, "libmesh.so") != NULL) { */
+  /*   fprintf(stderr, "meshing stuff\n"); */
+  /*   free((void *)MESH_MARKER); */
+  /* } */
 
-  print_rss(show_heap, quiet);
+  print_rss();
 
   return 0;
 }
