@@ -34,30 +34,6 @@
 namespace mesh {
 
 namespace internal {
-// wraps an integer file descriptor to provide close-on-destruct
-// semantics (so that we can use a shared_ptr to refcount a FD)
-class FD {
-private:
-  DISALLOW_COPY_AND_ASSIGN(FD);
-
-public:
-  explicit FD(int fd) : _fd{fd} {
-  }
-
-  ~FD() {
-    if (_fd >= 0)
-      close(_fd);
-    _fd = -2;
-  }
-
-  operator int() const {
-    return _fd;
-  }
-
-protected:
-  int _fd;
-};
-
 enum PageType {
   Identity,
   Meshed,
@@ -138,7 +114,7 @@ public:
     d_assert(sz % CPUInfo::PageSize == 0);
 
     const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
-    int result = fallocate(*_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
+    int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
     d_assert(result == 0);
   }
 
@@ -157,7 +133,7 @@ public:
       freePhys(ptr, sz);
     } else {
       // restore identity mapping
-      mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, *_fd, off);
+      mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, off);
     }
 
     _offMap.erase(offIt);
@@ -217,7 +193,7 @@ private:
   // indexed by offset
   internal::unordered_map<off_t, internal::PageType> _offMap{};
 
-  shared_ptr<internal::FD> _fd;
+  int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
   char *_spanDir{nullptr};
 };
