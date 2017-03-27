@@ -42,7 +42,7 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUI
     debug("mesh: opening arena file failed.\n");
     abort();
   }
-  _fd = internal::make_shared<internal::FD>(fd);
+  _fd = fd;
   _arenaBegin = SuperHeap::map(internal::ArenaSize, MAP_SHARED, fd);
   d_assert(_arenaBegin != nullptr);
 
@@ -63,7 +63,7 @@ void MeshableArena::mesh(void *keep, void *remove, size_t sz) {
 
   _offMap[removeOff] = internal::PageType::Meshed;
 
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, *_fd, keepOff);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff);
   freePhys(remove, sz);
   d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 }
@@ -217,7 +217,7 @@ void MeshableArena::afterForkChild() {
   fstat(newFd, &fileinfo);
   d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == internal::ArenaSize);
 
-  const int oldFd = *_fd;
+  const int oldFd = _fd;
 
   for (auto const &i : _bitmap) {
     int result = internal::copyFile(newFd, oldFd, i * CPUInfo::PageSize, CPUInfo::PageSize);
@@ -228,7 +228,7 @@ void MeshableArena::afterForkChild() {
   void *ptr = mmap(_arenaBegin, internal::ArenaSize, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
   d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
-  _fd = internal::make_shared<internal::FD>(newFd);
+  _fd = newFd;
 
   internal::Heap().free(oldSpanDir);
 
