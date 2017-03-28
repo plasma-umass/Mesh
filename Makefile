@@ -29,10 +29,11 @@ BENCH_SRCS       = src/meshing_benchmark.cc $(COMMON_SRCS)
 BENCH_OBJS       = $(addprefix build/,$(BENCH_SRCS:.cc=.o))
 BENCH_BIN        = meshing-benchmark
 
-FRAG_SRCS        = src/fragmenter.c
+FRAG_SRCS        = src/fragmenter.cc src/measure_rss.c
+FRAG_OBJS        = $(addprefix build/,$(patsubst %.c,%.o,$(FRAG_SRCS:.cc=.o)))
 FRAG_BIN         = fragmenter
 
-ALL_OBJS         = $(LIB_OBJS) $(UNIT_OBJS) $(BENCH_OBJS)
+ALL_OBJS         = $(LIB_OBJS) $(UNIT_OBJS) $(BENCH_OBJS) $(FRAG_OBJS)
 
 # reference files in each subproject to ensure git fully checks the project out
 HEAP_LAYERS      = src/vendor/Heap-Layers/heaplayers.h
@@ -89,6 +90,10 @@ build/src/vendor/googletest/%.o: src/vendor/googletest/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
 
+build/src/%.o: src/%.c build $(CONFIG)
+	@echo "  CC    $@"
+	$(CC) $(CFLAGS) -MMD -o $@ -c $<
+
 build/src/%.o: src/%.cc build $(CONFIG) $(GFLAGS_LIB)
 	@echo "  CXX   $@"
 	$(CXX) $(CXXFLAGS) -MMD -o $@ -c $<
@@ -105,9 +110,9 @@ $(BENCH_BIN): $(HEAP_LAYERS) $(GFLAGS_LIB) $(BENCH_OBJS) $(CONFIG)
 	@echo "  LD    $@"
 	$(CXX) $(LDFLAGS) -o $@ $(BENCH_OBJS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
 
-$(FRAG_BIN): $(GFLAGS_LIB) $(FRAG_SRCS) $(CONFIG)
-	@echo "  LD    $@"
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FRAG_SRCS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
+$(FRAG_BIN): $(GFLAGS_LIB) $(FRAG_OBJS) $(CONFIG)
+	@echo "  LD    $@ $(FRAG_OBJS)"
+	$(CXX) $(LDFLAGS) -o $@ $(FRAG_OBJS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
 
 $(UNIT_BIN): $(CONFIG) $(UNIT_OBJS)
 	@echo "  LD    $@"
