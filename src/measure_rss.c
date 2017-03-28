@@ -17,13 +17,9 @@
 #include <string.h>   // for strcmp, strdup, strncmp, strncpy
 #include <unistd.h>   // for ssize_t, geteuid
 
-#define MESH_MARKER (7305126540297948313)
-// use as (voidptr)ptr -- disgusting, but useful to minimize the clutter
-// around using volatile.
-#define voidptr void *)(intptr_t
+#include "measure_rss.h"
+
 #define NOINLINE __attribute__((noinline))
-#define MB (1024 * 1024)
-#define GB (1024 * 1024 * 1024)
 #define COMM_MAX 16
 #define CMD_DISPLAY_MAX 32
 #define PAGE_SIZE 4096
@@ -39,17 +35,6 @@
 
 #define OFF_NAME 73
 
-typedef struct {
-  int npids;
-  char *name;
-  size_t rss;
-  size_t dirty;
-  float pss;
-  float shared;
-  float heap;
-  float swap;
-} CmdInfo;
-
 static void die(const char *, ...);
 
 static char *_readlink(char *);
@@ -64,11 +49,6 @@ static int proc_name(CmdInfo *, int);
 static int proc_mem(CmdInfo *, int, size_t, char *);
 static int proc_cmdline(int, char *buf, size_t len);
 
-static void usage(void);
-
-static void print_rss(void);
-
-static char *argv0;
 
 void __attribute__((noreturn)) die(const char *fmt, ...) {
   va_list args;
@@ -283,7 +263,7 @@ int proc_mem(CmdInfo *ci, int pid, size_t details_len, char *details_buf) {
     kb2 = smap_read_int(line, 3);
     if (kb < kb2)
       fprintf(stderr, "ERROR\n");
-    //fprintf(stderr, "\t\t\t%zu/%f\n", kb, m);
+    // fprintf(stderr, "\t\t\t%zu/%f\n", kb, m);
     m = kb2;
     ci->pss += m + .5;
     // we don't need PSS_ADJUST for heap because
@@ -327,21 +307,10 @@ end:
   return 0;
 }
 
-void usage(void) {
-  die("Usage: %s [OPTION...]\n"
-      "Simple, accurate RAM and swap reporting.\n\n"
-      "Options:\n"
-      "\t-q\tquiet - supress column header + total footer\n"
-      "\t-heap\tshow heap column\n"
-      "\t-filter=''\tsimple string to test process names against\n",
-      argv0);
-}
-
-// RSS in kilobytes
-size_t get_rss(void) {
+int get_self_rss(CmdInfo *ci) {
   size_t details_len;
-  CmdInfo *ci;
   char *filter, *details_buf;
+  CmdInfo *ci2;
 
   filter = NULL;
 
@@ -351,112 +320,25 @@ size_t get_rss(void) {
     die("malloc(details_len+1 failed\n");
   details_buf[details_len] = 0;
 
-  ci = cmdinfo_new(getpid(), details_len, details_buf);
-  if (!ci)
+  ci2 = cmdinfo_new(getpid(), details_len, details_buf);
+  if (!ci2)
     die("cmdinfo_new failed\n");
+  *ci = *ci2;
 
+  free(ci2);
   free(details_buf);
 
-  //size_t rss = ci->rss;
-  size_t dirty = ci->dirty;
-
-  //printf("\tRss: %10.3f\tPss: %10.3f\tDirty: %10.3f\n", ci->rss/1024.0, ci->pss/1024.0, ci->dirty/1024.0);
-
-  free(ci);
-
-  return dirty;
-}
-
-void print_rss(void) {
-
-  const size_t rss = get_rss();
-
-  printf("\tRSS:\t%10.3f MB\n", rss/1024.0);
-}
-
-void *NOINLINE bench_alloc(size_t n) {
-  volatile void *ptr = malloc(n);
-  memset((voidptr)ptr, 0, n);
-
-  return (voidptr)ptr;
-}
-
-void NOINLINE bench_free(void *ptr) {
-  free(ptr);
-}
-
-// Fig 4. "A Basic Strategy" from http://www.ece.iastate.edu/~morris/papers/10/ieeetc10.pdf
-void NOINLINE basic_fragment(int64_t n, size_t m_total) {
-  int64_t ci = 1;
-  int64_t m_avail = m_total;
-  size_t m_usage = 0;  // S_t in the paper
-
-  const size_t ptr_table_len = m_total / (ci * n);
-  fprintf(stderr, "ptr_table_len: %zu\n", ptr_table_len);
-  volatile char *volatile *ptr_table = bench_alloc(ptr_table_len * sizeof(char *));
-
-  // show how much RSS we just burned through for the table of
-  // pointers we just allocated
-  print_rss();
-
-  for (int64_t i = 1; m_avail >= 2 * ci * n; i++) {
-    ci = i;
-    // number of allocation pairs in this iteration
-    const size_t pi = m_avail / (2 * ci * n);
-
-    fprintf(stderr, "i:%4zu, ci:%5zu, n:%5zu, pi:%7zu (osize:%5zu)\n", i, ci, n, pi, ci * n);
-
-    // allocate two objects
-    for (size_t k = 0; k < pi; k++) {
-      ptr_table[2 * k + 0] = bench_alloc(ci * n);
-      ptr_table[2 * k + 1] = bench_alloc(ci * n);
-    }
-
-    m_usage += ci * n * pi;
-
-    // now free every other object
-    for (size_t k = 0; k < pi; k++) {
-      bench_free((voidptr)ptr_table[2 * k + 0]);
-    }
-
-    m_avail -= ci * n * pi;
-  }
-
-  fprintf(stderr, "allocated (and not freed) %f MB\n", ((double)m_usage) / MB);
-}
-
-int main(int argc, char *const argv[]) {
-  bool show_heap, quiet;
-
-  show_heap = false;
-  quiet = true;
-
-  for (argv0 = argv[0], argv++, argc--; argc > 0; argv++, argc--) {
-    char const *arg = argv[0];
-    if (strcmp("-help", arg) == 0) {
-      usage();
-    } else if (arg[0] == '-') {
-      fprintf(stderr, "unknown arg '%s'\n", arg);
-      usage();
-    } else {
-      fprintf(stderr, "unknown arg '%s'\n", arg);
-      usage();
-    }
-  }
-
-  print_rss();
-
-  basic_fragment(512, 64 * MB);
-
-  print_rss();
-
-  char *env = getenv("LD_PRELOAD");
-  if (env && strstr(env, "libmesh.so") != NULL) {
-    fprintf(stderr, "meshing stuff\n");
-    free((void *)MESH_MARKER);
-  }
-
-  print_rss();
-
   return 0;
+}
+
+void print_self_rss(void) {
+  CmdInfo ci;
+
+  memset(&ci, 0, sizeof(ci));
+
+  if (get_self_rss(&ci) != 0)
+    die("self_rss failed\n");
+
+  // printf("\tRss: %10.3f\tPss: %10.3f\tDirty: %10.3f\n", ci->rss/1024.0, ci->pss/1024.0, ci->dirty/1024.0);
+  printf("\tRSS:\t%10.3f MB\n", ci.dirty / 1024.0);
 }
