@@ -51,14 +51,14 @@
 
 namespace mesh {
 
-class MmapHeap {
+class OneWayMmapHeap {
 private:
-  DISALLOW_COPY_AND_ASSIGN(MmapHeap);
+  DISALLOW_COPY_AND_ASSIGN(OneWayMmapHeap);
 
 public:
   enum { Alignment = MmapWrapper::Alignment };
 
-  MmapHeap() {
+  OneWayMmapHeap() {
   }
 
   inline void *map(size_t sz, int flags, int fd) {
@@ -72,11 +72,6 @@ public:
     if (ptr == MAP_FAILED)
       abort();
 
-    d_assert(_vmaMap.find(ptr) == _vmaMap.end());
-    _vmaMap[ptr] = sz;
-    d_assert(_vmaMap.find(ptr) != _vmaMap.end());
-    d_assert(_vmaMap[ptr] == sz);
-
     d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
 
     return ptr;
@@ -84,6 +79,36 @@ public:
 
   inline void *malloc(size_t sz) {
     return map(sz, MAP_PRIVATE | MAP_ANONYMOUS, -1);
+  }
+
+  inline size_t getSize(void *ptr) const {
+    return 0;
+  }
+
+  inline void free(void *ptr) {
+  }
+};
+
+class MmapHeap : public OneWayMmapHeap {
+private:
+  DISALLOW_COPY_AND_ASSIGN(MmapHeap);
+  typedef OneWayMmapHeap SuperHeap;
+
+public:
+  enum { Alignment = MmapWrapper::Alignment };
+
+  MmapHeap() : SuperHeap() {
+  }
+
+  inline void *malloc(size_t sz) {
+    auto ptr = map(sz, MAP_PRIVATE | MAP_ANONYMOUS, -1);
+
+    d_assert(_vmaMap.find(ptr) == _vmaMap.end());
+    _vmaMap[ptr] = sz;
+    d_assert(_vmaMap.find(ptr) != _vmaMap.end());
+    d_assert(_vmaMap[ptr] == sz);
+
+    return ptr;
   }
 
   inline size_t getSize(void *ptr) const {
