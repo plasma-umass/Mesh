@@ -40,10 +40,10 @@ enum PageType {
 };
 }  // namespace internal
 
-class MeshableArena : public mesh::MmapHeap {
+class MeshableArena : public mesh::OneWayMmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MeshableArena);
-  typedef MmapHeap SuperHeap;
+  typedef OneWayMmapHeap SuperHeap;
 
 public:
   enum { Alignment = MmapWrapper::Alignment };
