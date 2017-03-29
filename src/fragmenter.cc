@@ -43,7 +43,8 @@ void NOINLINE basic_fragment(int64_t n, size_t m_total) {
 
   const size_t ptr_table_len = m_total / (ci * n);
   fprintf(stderr, "ptr_table_len: %zu\n", ptr_table_len);
-  volatile char *volatile *ptr_table = reinterpret_cast<volatile char *volatile *>(bench_alloc(ptr_table_len * sizeof(char *)));
+  volatile char *volatile *ptr_table =
+      reinterpret_cast<volatile char *volatile *>(bench_alloc(ptr_table_len * sizeof(char *)));
 
   // show how much RSS we just burned through for the table of
   // pointers we just allocated
@@ -84,7 +85,7 @@ int main(int argc, char *argv[]) {
 
   print_self_rss();
 
-  basic_fragment(512, 64 * MB);
+  basic_fragment(64, 128 * MB);
 
   print_self_rss();
 
@@ -95,7 +96,6 @@ int main(int argc, char *argv[]) {
   }
 
   print_self_rss();
-  
 
   return 0;
 }

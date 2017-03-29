@@ -111,7 +111,7 @@ $(BENCH_BIN): $(HEAP_LAYERS) $(GFLAGS_LIB) $(BENCH_OBJS) $(CONFIG)
 	$(CXX) $(LDFLAGS) -o $@ $(BENCH_OBJS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
 
 $(FRAG_BIN): $(GFLAGS_LIB) $(FRAG_OBJS) $(CONFIG)
-	@echo "  LD    $@ $(FRAG_OBJS)"
+	@echo "  LD    $@"
 	$(CXX) $(LDFLAGS) -o $@ $(FRAG_OBJS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
 
 $(UNIT_BIN): $(CONFIG) $(UNIT_OBJS)
