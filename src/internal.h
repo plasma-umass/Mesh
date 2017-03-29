@@ -33,20 +33,33 @@ static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
 // efficiently copy data from srcFd to dstFd
 int copyFile(int dstFd, int srcFd, off_t off, size_t sz);
 
-class InternalTopHeap : public SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>> {};
+class InternalTopHeap : public SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>> {
+private:
+  typedef SizeHeap<BumpAlloc<16384 * 8, MmapHeap, 16>> SuperHeap;
+
+public:
+  // inline void *malloc(size_t sz) {
+  //   debug("internal::Heap(%p)::malloc(%zu)\n", this, sz);
+  //   return SuperHeap::malloc(sz);
+  // }
+};
 
 // for mesh-internal data structures, like heap metadata
 class Heap : public ExactlyOneHeap<
-                 LockedHeap<PosixLockType, DebugHeap<KingsleyHeap<FreelistHeap<InternalTopHeap>, InternalTopHeap>>>> {
+                 LockedHeap<PosixLockType, DebugHeap<KingsleyHeap<FreelistHeap<InternalTopHeap>, MmapHeap>>>> {
 protected:
-  typedef ExactlyOneHeap<
-      LockedHeap<PosixLockType, DebugHeap<KingsleyHeap<FreelistHeap<InternalTopHeap>, InternalTopHeap>>>>
+  typedef ExactlyOneHeap<LockedHeap<PosixLockType, DebugHeap<KingsleyHeap<FreelistHeap<InternalTopHeap>, MmapHeap>>>>
       SuperHeap;
 
 public:
   Heap() : SuperHeap() {
     static_assert(Alignment % 16 == 0, "16-byte alignment");
   }
+
+  // inline void *malloc(size_t sz) {
+  //   debug("internal::Heap(%p)::malloc(%zu)\n", this, sz);
+  //   return SuperHeap::malloc(sz);
+  // }
 };
 
 // make a shared pointer allocated from our internal heap that will
