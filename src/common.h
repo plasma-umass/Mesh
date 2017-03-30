@@ -48,7 +48,7 @@ namespace mesh {
 
 void debug(const char *fmt, ...);
 
-static constexpr size_t MinObjectSize = 8;
+static constexpr size_t MinObjectSize = 16;
 
 inline constexpr size_t class2Size(const int i) {
   return static_cast<size_t>(1ULL << (i + staticlog(MinObjectSize)));

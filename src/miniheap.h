@@ -17,15 +17,16 @@ namespace mesh {
 
 using std::atomic_size_t;
 
-template <unsigned int FullNumerator = 3,    // for free threshold
-          unsigned int FullDenominator = 4,  // for free threshold
-          size_t MaxMeshes = 8>              // maximum number of VM spans we can track
+template <unsigned int FullNumerator = 3,                // for free threshold
+          unsigned int FullDenominator = 4,              // for free threshold
+          size_t MaxFreelistLen = sizeof(uint8_t) << 8,  // AKA max # of objects per miniheap
+          size_t MaxMeshes = 8>                          // maximum number of VM spans we can track
 class MiniHeapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
 
 public:
-  MiniHeapBase(void *span, size_t spanSize, size_t objectSize)
+  MiniHeapBase(void *span, size_t spanSize, size_t objectSize, mt19937_64 &prng)
       : _span{reinterpret_cast<char *>(span)},
         _meshCount{1},
         _spanSize(spanSize),
@@ -34,9 +35,22 @@ public:
     if (!_span[0])
       abort();
 
+    d_assert(maxCount() <= MaxFreelistLen);
     d_assert(_span[1] == nullptr);
 
+    _freeList = reinterpret_cast<uint8_t *>(internal::Heap().malloc(maxCount()));
+
+    const auto maxCount = maxCount();
+    for (size_t i = 0; i < maxCount; i++) {
+      _freeList[i] = i;
+    }
+
     // dumpDebug();
+  }
+
+  ~MiniHeapBase() {
+    internal::Heap().free(_freeList);
+    _freeList = nullptr;
   }
 
   void dumpDebug() const {
@@ -196,6 +210,7 @@ private:
   atomic_size_t _inUseCount{0};
   internal::Bitmap _bitmap;
   bool _done{false};
+  uint8_t *_freeList;
 };
 
 typedef MiniHeapBase<> MiniHeap;

@@ -5,8 +5,8 @@
 #define MESH__SEMIANSIHEAP_H
 
 #include <stdalign.h>
-#include <stddef.h>
-#include <string.h>
+#include <cstddef>
+#include <cstring>
 
 #include "common.h"
 
@@ -22,7 +22,9 @@
 
 namespace mesh {
 
-template <typename SuperHeap, typename ConstructorHeap>
+template <typename SuperHeap,                       // Heap we are wrapping
+          typename ConstructorHeap,                 // Allocator to pass through
+          size_t Alignment = alignof(max_align_t)>  // 32-bytes on amd64?!
 class SemiANSIHeap : public SuperHeap {
 private:
   static constexpr int gcd(int a, int b) {
@@ -34,7 +36,7 @@ private:
 
 public:
   SemiANSIHeap(ConstructorHeap *h) : SuperHeap(h) {
-    static_assert(gcd(SuperHeap::Alignment, alignof(max_align_t)) == alignof(max_align_t), "Alignment mismatch");
+    static_assert(gcd(SuperHeap::Alignment, Alignment) == Alignment, "Alignment mismatch");
   }
 
   inline void *malloc(size_t sz) {
@@ -45,22 +47,23 @@ public:
       return 0;
     }
 
-    if (sz <= 8) {
-      sz = 8;
-    } else if (sz < alignof(max_align_t)) {
-      sz = alignof(max_align_t);
+    // if (sz <= 8) {
+    //   sz = 8;
+    // } else
+    if (sz < Alignment) {
+      sz = Alignment;
     } else {
       // Enforce alignment requirements: round up allocation sizes if
       // needed.  NOTE: Alignment needs to be a power of two.
-      static_assert((alignof(max_align_t) & (alignof(max_align_t) - 1)) == 0, "Alignment not a power of two.");
+      static_assert((Alignment & (Alignment - 1)) == 0, "Alignment not a power of two.");
 
       // Enforce alignment.
-      sz = (sz + alignof(max_align_t) - 1UL) & ~(alignof(max_align_t) - 1UL);
+      sz = (sz + Alignment - 1UL) & ~(Alignment - 1UL);
     }
 
     auto *ptr = SuperHeap::malloc(sz);
     if (sz > 8)
-      d_assert(reinterpret_cast<size_t>(ptr) % alignof(max_align_t) == 0);
+      d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
 
     return ptr;
   }
