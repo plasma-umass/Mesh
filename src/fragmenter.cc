@@ -51,7 +51,7 @@ void NOINLINE basic_fragment(int64_t n, size_t m_total) {
   print_self_rss();
 
   for (int64_t i = 1; m_avail >= 2 * ci * n; i++) {
-    ci = i;
+    ci *= 2;
     // number of allocation pairs in this iteration
     const size_t pi = m_avail / (2 * ci * n);
 
