@@ -13,14 +13,12 @@
 
 #include "heaplayers.h"
 
-namespace mesh {
+// namespace mesh {
 
 using std::atomic_size_t;
 
-template <unsigned int FullNumerator = 3,                // for free threshold
-          unsigned int FullDenominator = 4,              // for free threshold
-          size_t MaxFreelistLen = sizeof(uint8_t) << 8,  // AKA max # of objects per miniheap
-          size_t MaxMeshes = 8>                          // maximum number of VM spans we can track
+template <size_t MaxFreelistLen = sizeof(uint8_t) << 8,  // AKA max # of objects per miniheap
+          size_t MaxMeshes = 4>                          // maximum number of VM spans we can track
 class MiniHeapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
@@ -28,9 +26,9 @@ private:
 public:
   MiniHeapBase(void *span, size_t spanSize, size_t objectSize, mt19937_64 &prng)
       : _span{reinterpret_cast<char *>(span)},
-        _meshCount{1},
         _spanSize(spanSize),
         _objectSize(objectSize),
+        _meshCount{1},
         _bitmap(maxCount()) {
     if (!_span[0])
       abort();
@@ -38,27 +36,28 @@ public:
     d_assert(maxCount() <= MaxFreelistLen);
     d_assert(_span[1] == nullptr);
 
-    _freeList = reinterpret_cast<uint8_t *>(internal::Heap().malloc(maxCount()));
+    _freeList = reinterpret_cast<uint8_t *>(mesh::internal::Heap().malloc(maxCount()));
 
-    const auto maxCount = maxCount();
-    for (size_t i = 0; i < maxCount; i++) {
+    const auto objCount = maxCount();
+    for (size_t i = 0; i < objCount; i++) {
       _freeList[i] = i;
     }
+
+    std::shuffle(&_freeList[0], &_freeList[maxCount()], prng);
 
     // dumpDebug();
   }
 
   ~MiniHeapBase() {
-    internal::Heap().free(_freeList);
+    mesh::internal::Heap().free(_freeList);
     _freeList = nullptr;
   }
 
   void dumpDebug() const {
     const auto heapPages = _spanSize / HL::CPUInfo::PageSize;
     const size_t inUseCount = _inUseCount;
-    debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (%u/%u full: %zu/%d inUse: %zu)\t%p-%p\n", this, _objectSize,
-          maxCount(), heapPages, FullNumerator, FullDenominator, fullCount(), this->isFull(), inUseCount, _span[0],
-          reinterpret_cast<uintptr_t>(_span) + _spanSize);
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu)\t%p-%p\n", this, _objectSize,
+          maxCount(), heapPages, this->isFull(), inUseCount, _span[0], reinterpret_cast<uintptr_t>(_span) + _spanSize);
   }
 
   inline void *mallocAt(size_t off) {
@@ -71,7 +70,7 @@ public:
   }
 
   inline void *malloc(mt19937_64 &prng, size_t sz) {
-    d_assert(!_done && !isFull());
+    d_assert_msg(!_done && !isFull(), "done: %d, full: %d", _done, isFull());
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
     // endpoint is _inclusive_, so we subtract 1 from maxCount since
@@ -98,12 +97,12 @@ public:
 
     const auto off = (ptrval - span) / _objectSize;
     if (span > ptrval || off >= maxCount()) {
-      debug("MiniHeap(%p): invalid free of %p", this, ptr);
+      mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
       return;
     }
 
     if (unlikely(!_bitmap.isSet(off))) {
-      debug("MiniHeap(%p): double free of %p", this, ptr);
+      mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
       return;
     }
 
@@ -140,10 +139,6 @@ public:
     return _spanSize / _objectSize;
   }
 
-  inline size_t fullCount() const {
-    return FullNumerator * maxCount() / FullDenominator;
-  }
-
   inline size_t objectSize() const {
     return _objectSize;
   }
@@ -156,7 +151,7 @@ public:
   }
 
   inline bool isFull() const {
-    return _inUseCount >= fullCount();
+    return _inUseCount >= maxCount();
   }
 
   inline uintptr_t getSpanStart() const {
@@ -164,6 +159,8 @@ public:
   }
 
   inline void setDone() {
+    mesh::internal::Heap().free(_freeList);
+    _freeList = nullptr;
     _done = true;
   }
 
@@ -179,13 +176,13 @@ public:
     return _inUseCount;
   }
 
-  const internal::Bitmap &bitmap() const {
+  const mesh::internal::Bitmap &bitmap() const {
     return _bitmap;
   }
 
   void meshedSpan(uintptr_t spanStart) {
     if (_meshCount >= MaxMeshes) {
-      debug("fatal: too many meshes for one miniheap");
+      mesh::debug("fatal: too many meshes for one miniheap");
       dumpDebug();
       abort();
     }
@@ -204,16 +201,17 @@ public:
 
 private:
   char *_span[MaxMeshes];
-  size_t _meshCount;
-  const size_t _spanSize;
-  const size_t _objectSize;
-  atomic_size_t _inUseCount{0};
-  internal::Bitmap _bitmap;
-  bool _done{false};
   uint8_t *_freeList;
+  const uint16_t _spanSize;
+  const uint16_t _objectSize;
+  uint8_t _meshCount;
+  atomic_uint8_t _inUseCount{0};
+  uint8_t _freeListOff;
+  bool _done{false};
+  mesh::internal::Bitmap _bitmap;
 };
 
 typedef MiniHeapBase<> MiniHeap;
-}  // namespace mesh
+//}  // namespace mesh
 
 #endif  // MESH__MINIHEAP_H

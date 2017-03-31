@@ -85,7 +85,7 @@ int main(int argc, char *argv[]) {
 
   print_self_rss();
 
-  basic_fragment(64, 128 * MB);
+  basic_fragment(512, 128 * MB);
 
   print_self_rss();
 
