@@ -103,7 +103,7 @@ public:
     void *buf = internal::Heap().malloc(sizeof(MiniHeap));
     if (unlikely(buf == nullptr))
       abort();
-    MiniHeap *mh = new (buf) MiniHeap(span, spanSize, sizeMax);
+    MiniHeap *mh = new (buf) MiniHeap(span, spanSize, sizeMax, _prng);
 
     _littleheaps[sizeClass].push_back(mh);
     _miniheaps[mh->getSpanStart()] = mh;

@@ -1,6 +1,8 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
+#include <execinfo.h>
+
 #include <cstdarg>
 #include <cstdio>   // for sprintf
 #include <cstdlib>  // for abort
@@ -63,6 +65,10 @@ void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file,
   if (len > 0) {
     (void)write(STDERR_FILENO, buf, len);
   }
+
+  void *array[32];
+  size_t size = backtrace(array, 10);
+  backtrace_symbols_fd(array, size, STDERR_FILENO);
 
   abort();
 }
