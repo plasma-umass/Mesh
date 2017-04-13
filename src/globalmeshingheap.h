@@ -92,7 +92,7 @@ public:
     // miniheap/globally locking the heap.
     size_t nObjects = max(HL::CPUInfo::PageSize / sizeMax, MinStringLen);
 
-    const size_t nPages = (sizeMax * nObjects + (HL::CPUInfo::PageSize - 1)) / HL::CPUInfo::PageSize;
+    const size_t nPages = RoundUpToPage(sizeMax * nObjects);
     const size_t spanSize = HL::CPUInfo::PageSize * nPages;
     d_assert(0 < spanSize);
 
@@ -103,7 +103,7 @@ public:
     void *buf = internal::Heap().malloc(sizeof(MiniHeap));
     if (unlikely(buf == nullptr))
       abort();
-    MiniHeap *mh = new (buf) MiniHeap(span, spanSize, sizeMax, _prng);
+    MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _prng);
 
     _littleheaps[sizeClass].push_back(mh);
     _miniheaps[mh->getSpanStart()] = mh;

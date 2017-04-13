@@ -18,6 +18,11 @@
 #include "heaplayers.h"
 
 namespace mesh {
+
+static inline size_t RoundUpToPage(size_t sz) {
+  return (sz + (HL::CPUInfo::PageSize - 1)) / HL::CPUInfo::PageSize;
+}
+
 namespace internal {
 
 static constexpr size_t MeshMarker = 7305126540297948313;
@@ -26,7 +31,7 @@ static inline bool isMeshMarker(void *ptr) {
 }
 
 // static constexpr size_t ArenaSize = 1UL << 35;        // 32 GB
-static constexpr size_t ArenaSize = 1UL << 32;        // 32 GB
+static constexpr size_t ArenaSize = 1UL << 30;        // 32 GB
 static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 

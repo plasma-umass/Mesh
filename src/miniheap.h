@@ -24,14 +24,16 @@ private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
 
 public:
-  MiniHeapBase(void *span, size_t spanSize, size_t objectSize, mt19937_64 &prng)
-      : _span{reinterpret_cast<char *>(span)},
-        _spanSize(spanSize),
-        _objectSize(objectSize),
-        _meshCount{1},
-        _bitmap(maxCount()) {
+  MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng)
+      : _span{reinterpret_cast<char *>(span)}, _maxCount(objectCount), _objectSize(objectSize), _bitmap(maxCount()) {
     if (!_span[0])
       abort();
+
+    d_assert(_maxCount == objectCount);
+    // d_assert(_objectSize == objectSize);
+
+    // d_assert_msg(spanSize == static_cast<size_t>(_spanSize), "%zu != %hu", spanSize, _spanSize);
+    d_assert_msg(objectSize == static_cast<size_t>(_objectSize), "%zu != %hu", objectSize, _objectSize);
 
     d_assert(maxCount() <= MaxFreelistLen);
     d_assert(_span[1] == nullptr);
@@ -54,10 +56,11 @@ public:
   }
 
   void dumpDebug() const {
-    const auto heapPages = _spanSize / HL::CPUInfo::PageSize;
+    const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = _inUseCount;
     mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu)\t%p-%p\n", this, _objectSize,
-          maxCount(), heapPages, this->isFull(), inUseCount, _span[0], reinterpret_cast<uintptr_t>(_span) + _spanSize);
+                maxCount(), heapPages, this->isFull(), inUseCount, _span[0],
+                reinterpret_cast<uintptr_t>(_span) + spanSize());
   }
 
   inline void *mallocAt(size_t off) {
@@ -120,7 +123,7 @@ public:
     for (size_t i = 0; i < _meshCount; ++i) {
       d_assert(_span[i] != nullptr);
       const auto span = reinterpret_cast<uintptr_t>(_span[i]);
-      if (span <= ptrval && ptrval < span + _spanSize)
+      if (span <= ptrval && ptrval < span + spanSize())
         return span;
     }
 
@@ -132,11 +135,11 @@ public:
   }
 
   inline size_t spanSize() const {
-    return _spanSize;
+    return mesh::RoundUpToPage(_objectSize * _maxCount);
   }
 
   inline size_t maxCount() const {
-    return _spanSize / _objectSize;
+    return _maxCount;
   }
 
   inline size_t objectSize() const {
@@ -145,7 +148,7 @@ public:
 
   inline size_t getSize(void *ptr) const {
     d_assert_msg(contains(ptr), "span(%p) <= %p < %p", _span[0], ptr,
-                 reinterpret_cast<uintptr_t>(_span[0]) + _spanSize);
+                 reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
 
     return objectSize();
   }
@@ -202,9 +205,9 @@ public:
 private:
   char *_span[MaxMeshes];
   uint8_t *_freeList;
-  const uint16_t _spanSize;
+  const uint16_t _maxCount;
   const uint16_t _objectSize;
-  uint8_t _meshCount;
+  uint8_t _meshCount{1};
   atomic_uint8_t _inUseCount{0};
   uint8_t _freeListOff;
   bool _done{false};
