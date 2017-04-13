@@ -10,10 +10,12 @@
 #include <algorithm>
 #include <atomic>
 
-#include "heaplayers.h"
-
 #include "internal.h"
 #include "miniheap.h"
+
+#include "rng/mwc.h"
+
+#include "heaplayers.h"
 
 using namespace HL;
 
@@ -84,7 +86,11 @@ public:
   enum { Alignment = 16 };
 
   LocalMeshingHeap(GlobalHeap *global)
-      : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()), _global(global) {
+      : _maxObjectSize(getClassMaxSize(NumBins - 1)),
+        _prng(internal::seed()),
+        _mwc(internal::seed(), internal::seed()),
+        _global(global) {
+
     static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
     for (auto i = 0; i < NumBins; i++) {
       _current[i] = nullptr;
@@ -130,7 +136,7 @@ public:
     for (size_t i = 0; i < NumBins; i++) {
       const auto curr = _current[i];
       if (curr && curr->contains(ptr)) {
-        curr->localFree(ptr, _prng);
+        curr->localFree(ptr, _prng, _mwc);
         return;
       }
     }
@@ -157,6 +163,7 @@ protected:
   const size_t _maxObjectSize;
   MiniHeap *_current[NumBins];
   mt19937_64 _prng;
+  MWC _mwc;
   GlobalHeap *_global;
   STWThreadState _stwState{};
   LocalHeapStats _stats{};

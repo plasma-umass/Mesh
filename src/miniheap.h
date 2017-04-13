@@ -11,6 +11,8 @@
 #include "bitmap.h"
 #include "internal.h"
 
+#include "rng/mwc.h"
+
 #include "heaplayers.h"
 
 // namespace mesh {
@@ -125,7 +127,7 @@ public:
     return off;
   }
 
-  inline void localFree(void *ptr, mt19937_64 &prng) {
+  inline void localFree(void *ptr, mt19937_64 &prng, MWC &mwc) {
     const ssize_t freedOff = getOff(ptr);
     if (freedOff < 0)
       return;
@@ -137,11 +139,17 @@ public:
     _bitmap.unset(freedOff);
     _inUseCount--;
 
-    // endpoint is _inclusive_, so we subtract 1 from maxCount since
-    // we're dealing with 0-indexed offsets
-    std::uniform_int_distribution<size_t> distribution(_freeListOff, maxCount() - 1);
+    size_t swapOff;
 
-    const size_t swapOff = distribution(prng);
+    if (mesh::internal::SlowButAccurateRandom) {
+      // endpoint is _inclusive_, so we subtract 1 from maxCount since
+      // we're dealing with 0-indexed offsets
+      std::uniform_int_distribution<size_t> distribution(_freeListOff, maxCount() - 1);
+
+      swapOff = distribution(prng);
+    } else {
+      swapOff = mwc.inRange(_freeListOff, maxCount() - 1);
+    }
 
     const uint8_t swapped = _freeList[swapOff];
     _freeList[swapOff] = _freeList[_freeListOff];

@@ -29,6 +29,7 @@ static inline size_t RoundUpToPage(size_t sz) {
 
 namespace internal {
 
+static constexpr bool SlowButAccurateRandom = false;
 static constexpr size_t MeshMarker = 7305126540297948313;
 static inline bool isMeshMarker(void *ptr) {
   return reinterpret_cast<size_t>(ptr) == internal::MeshMarker;
