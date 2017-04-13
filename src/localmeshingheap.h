@@ -117,7 +117,7 @@ public:
 
     MiniHeap *mh = _current[sizeClass];
 
-    void *ptr = mh->malloc(_prng, sizeMax);
+    void *ptr = mh->malloc(sizeMax);
     if (unlikely(mh->isFull())) {
       mh->setDone();
       _current[sizeClass] = nullptr;
@@ -130,7 +130,7 @@ public:
     for (size_t i = 0; i < NumBins; i++) {
       const auto curr = _current[i];
       if (curr && curr->contains(ptr)) {
-        curr->free(ptr);
+        curr->localFree(ptr, _prng);
         return;
       }
     }
