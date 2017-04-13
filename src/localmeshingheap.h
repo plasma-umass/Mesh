@@ -90,7 +90,6 @@ public:
         _prng(internal::seed()),
         _mwc(internal::seed(), internal::seed()),
         _global(global) {
-
     static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
     for (auto i = 0; i < NumBins; i++) {
       _current[i] = nullptr;

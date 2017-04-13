@@ -40,11 +40,17 @@ private:
 
 public:
   MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, size_t expectedSpanSize)
-    : _span{reinterpret_cast<char *>(span)}, _maxCount(objectCount), _objectSize(objectSize), _meshCount(1), _done(false), _bitmap(maxCount()) {
+      : _span{reinterpret_cast<char *>(span)},
+        _maxCount(objectCount),
+        _objectSize(objectSize),
+        _meshCount(1),
+        _done(false),
+        _bitmap(maxCount()) {
     if (!_span[0])
       abort();
 
-    d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(), _maxCount, _objectSize);
+    d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
+                 _maxCount, _objectSize);
 
     d_assert(_maxCount == objectCount);
     // d_assert(_objectSize == objectSize);
@@ -98,7 +104,7 @@ public:
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
     auto off = _freeList[_freeListOff++];
-    //mesh::debug("%p: ma %u", this, off);
+    // mesh::debug("%p: ma %u", this, off);
 
     auto ptr = mallocAt(off);
     d_assert(ptr != nullptr);
@@ -255,6 +261,26 @@ public:
     return _span;
   }
 
+  void insertPrev(MiniHeapBase<MaxFreelistLen, MaxMeshes> *mh) {
+  }
+
+  void insertNext(MiniHeapBase<MaxFreelistLen, MaxMeshes> *mh) {
+  }
+
+  MiniHeapBase<MaxFreelistLen, MaxMeshes> *next() {
+    return _next;
+  }
+
+  MiniHeapBase<MaxFreelistLen, MaxMeshes> *remove() {
+    if (_prev != nullptr)
+      _prev->_next = _next;
+
+    if (_next != nullptr)
+      _next->_prev = _prev;
+
+    return _next;
+  }
+
 private:
   char *_span[MaxMeshes];
   uint8_t *_freeList;
@@ -265,14 +291,14 @@ private:
   uint8_t _meshCount : 7;
   uint8_t _done : 1;
   mesh::internal::Bitmap _bitmap;
-  MiniHeapBase<MaxFreelistLen, MaxMeshes> *prev;
-  MiniHeapBase<MaxFreelistLen, MaxMeshes> *next;
+  MiniHeapBase<MaxFreelistLen, MaxMeshes> *_prev{nullptr};
+  MiniHeapBase<MaxFreelistLen, MaxMeshes> *_next{nullptr};
 };
 
 typedef MiniHeapBase<> MiniHeap;
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
-//static_assert(sizeof(MiniHeap) <= 64, "MiniHeap too big!");
+// static_assert(sizeof(MiniHeap) <= 64, "MiniHeap too big!");
 
 //}  // namespace mesh
 
