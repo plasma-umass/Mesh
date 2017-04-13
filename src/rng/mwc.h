@@ -17,8 +17,8 @@
 class MWC {
 public:
   explicit MWC(unsigned int seed1, unsigned int seed2) : z(seed1), w(seed2) {
-    assert(seed1 != 0);
-    assert(seed2 != 0);
+    d_assert(seed1 != 0);
+    d_assert(seed2 != 0);
     //debug("MWC seed1: %u seed2: %u\n", seed1, seed2);
   }
 
@@ -35,6 +35,13 @@ public:
     w = wnew;
     z = znew;
     return x;
+  }
+
+  // returns a number between min and max (inclusive)
+  inline unsigned int inRange(size_t min, size_t max) {
+    size_t range = 1 + max - min;
+
+    return min + next() % range;
   }
 
 private:
