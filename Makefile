@@ -67,6 +67,12 @@ build:
 test_frag: $(FRAG_BIN) $(LIB)
 	@echo "  GLIBC MALLOC"
 	./$(FRAG_BIN)
+	@echo ""
+	@echo ""
+	@echo "  TCMALLOC MALLOC"
+	LD_PRELOAD=libtcmalloc_minimal.so ./$(FRAG_BIN)
+	@echo ""
+	@echo ""
 	@echo "  MESH MALLOC"
 	LD_PRELOAD=./$(LIB) ./$(FRAG_BIN)
 
