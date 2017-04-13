@@ -265,12 +265,14 @@ private:
   uint8_t _meshCount : 7;
   uint8_t _done : 1;
   mesh::internal::Bitmap _bitmap;
+  MiniHeapBase<MaxFreelistLen, MaxMeshes> *prev;
+  MiniHeapBase<MaxFreelistLen, MaxMeshes> *next;
 };
 
 typedef MiniHeapBase<> MiniHeap;
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
-static_assert(sizeof(MiniHeap) <= 64, "MiniHeap too big!");
+//static_assert(sizeof(MiniHeap) <= 64, "MiniHeap too big!");
 
 //}  // namespace mesh
 

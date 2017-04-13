@@ -105,7 +105,7 @@ public:
       abort();
     MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _prng, spanSize);
 
-    _littleheaps[sizeClass].push_back(mh);
+    trackMiniheap(sizeClass, mh);
     _miniheaps[mh->getSpanStart()] = mh;
 
     _stats.mhAllocCount++;
@@ -140,15 +140,23 @@ public:
     return nullptr;
   }
 
-  // called with lock held
-  void freeMiniheapAfterMesh(MiniHeap *mh) {
+  void trackMiniheap(size_t sizeClass, MiniHeap *mh) {
+    _littleheaps[sizeClass].push_back(mh);
+  }
+
+  void untrackMiniheap(size_t sizeClass, MiniHeap *mh) {
     // removing the miniheap from the vector of same-sized heaps is
     // sort of annoying, look into using a doubly-linked list instead.
-    const auto sizeClass = getSizeClass(mh->objectSize());
     const auto it = std::find(_littleheaps[sizeClass].begin(), _littleheaps[sizeClass].end(), mh);
     d_assert(it != _littleheaps[sizeClass].end());
     std::swap(*it, _littleheaps[sizeClass].back());
     _littleheaps[sizeClass].pop_back();
+  }
+
+  // called with lock held
+  void freeMiniheapAfterMesh(MiniHeap *mh) {
+    const auto sizeClass = getSizeClass(mh->objectSize());
+    untrackMiniheap(sizeClass, mh);
 
     mh->MiniHeap::~MiniHeap();
     internal::Heap().free(mh);
@@ -311,6 +319,7 @@ protected:
 
   mt19937_64 _prng;
 
+  internal::vector<size_t> _littleheapCounts[NumBins]{};
   internal::vector<MiniHeap *> _littleheaps[NumBins]{};
   internal::map<uintptr_t, MiniHeap *> _miniheaps{};
 
