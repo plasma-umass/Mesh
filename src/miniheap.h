@@ -38,7 +38,7 @@ private:
 
 public:
   MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, size_t expectedSpanSize)
-      : _span{reinterpret_cast<char *>(span)}, _maxCount(objectCount), _objectSize(objectSize), _bitmap(maxCount()) {
+    : _span{reinterpret_cast<char *>(span)}, _maxCount(objectCount), _objectSize(objectSize), _meshCount(1), _done(false), _bitmap(maxCount()) {
     if (!_span[0])
       abort();
 
@@ -76,37 +76,35 @@ public:
     mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu)\t%p-%p\n", this, _objectSize,
                 maxCount(), heapPages, this->isFull(), inUseCount, _span[0],
                 reinterpret_cast<uintptr_t>(_span) + spanSize());
+    mesh::debug("\t%s\n", _bitmap.to_string().c_str());
   }
 
   inline void *mallocAt(size_t off) {
-    if (!_bitmap.tryToSet(off))
+    if (!_bitmap.tryToSet(off)) {
+      mesh::debug("%p: MA %u", this, off);
+      dumpDebug();
       return nullptr;
+    }
 
     _inUseCount++;
 
     return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
   }
 
-  inline void *malloc(mt19937_64 &prng, size_t sz) {
+  inline void *malloc(size_t sz) {
     d_assert_msg(!_done && !isFull(), "done: %d, full: %d", _done, isFull());
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
-    // endpoint is _inclusive_, so we subtract 1 from maxCount since
-    // we're dealing with 0-indexed offsets
-    std::uniform_int_distribution<size_t> distribution(0, maxCount() - 1);
+    auto off = _freeList[_freeListOff++];
+    //mesh::debug("%p: ma %u", this, off);
 
-    // because our span is not full and no other malloc is running
-    // concurrently on this span, this is guaranteed to terminate
-    while (true) {
-      size_t off = distribution(prng);
+    auto ptr = mallocAt(off);
+    d_assert(ptr != nullptr);
 
-      void *ptr = mallocAt(off);
-      if (ptr)
-        return ptr;
-    }
+    return ptr;
   }
 
-  inline void free(void *ptr) {
+  inline ssize_t getOff(void *ptr) const {
     d_assert(getSize(ptr) == _objectSize);
 
     const auto span = spanStart(ptr);
@@ -116,13 +114,44 @@ public:
     const auto off = (ptrval - span) / _objectSize;
     if (span > ptrval || off >= maxCount()) {
       mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
-      return;
+      return -1;
     }
 
     if (unlikely(!_bitmap.isSet(off))) {
       mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
-      return;
+      return -1;
     }
+
+    return off;
+  }
+
+  inline void localFree(void *ptr, mt19937_64 &prng) {
+    const ssize_t freedOff = getOff(ptr);
+    if (freedOff < 0)
+      return;
+
+    d_assert(_freeListOff > 0);
+    _freeListOff--;
+    _freeList[_freeListOff] = freedOff;
+
+    _bitmap.unset(freedOff);
+    _inUseCount--;
+
+    // endpoint is _inclusive_, so we subtract 1 from maxCount since
+    // we're dealing with 0-indexed offsets
+    std::uniform_int_distribution<size_t> distribution(_freeListOff, maxCount() - 1);
+
+    const size_t swapOff = distribution(prng);
+
+    const uint8_t swapped = _freeList[swapOff];
+    _freeList[swapOff] = _freeList[_freeListOff];
+    _freeList[_freeListOff] = swapped;
+  }
+
+  inline void free(void *ptr) {
+    const size_t off = getOff(ptr);
+    if (off < 0)
+      return;
 
     _bitmap.unset(off);
     _inUseCount--;
@@ -223,14 +252,18 @@ private:
   uint8_t *_freeList;
   const uint16_t _maxCount;
   const uint16_t _objectSize;
-  uint8_t _meshCount{1};
-  atomic_uint8_t _inUseCount{0};
-  uint8_t _freeListOff;
-  bool _done{false};
+  atomic_uint16_t _inUseCount{0};
+  uint8_t _freeListOff{0};
+  uint8_t _meshCount : 7;
+  uint8_t _done : 1;
   mesh::internal::Bitmap _bitmap;
 };
 
 typedef MiniHeapBase<> MiniHeap;
+
+static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
+static_assert(sizeof(MiniHeap) <= 64, "MiniHeap too big!");
+
 //}  // namespace mesh
 
 #endif  // MESH__MINIHEAP_H
