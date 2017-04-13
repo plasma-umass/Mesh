@@ -17,6 +17,19 @@
 
 using std::atomic_size_t;
 
+// class Freelist {
+// private:
+//   DISALLOW_COPY_AND_ASSIGN(Freelist);
+//
+// public:
+//   Freelist(maxCount) : _list() {
+//     _list = reinterpret_cast<uint8_t *>(mesh::internal::Heap().malloc(maxCount));
+//   }
+//
+// private:
+//   uint8_t *_list;
+// }
+
 template <size_t MaxFreelistLen = sizeof(uint8_t) << 8,  // AKA max # of objects per miniheap
           size_t MaxMeshes = 4>                          // maximum number of VM spans we can track
 class MiniHeapBase {
@@ -24,10 +37,12 @@ private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
 
 public:
-  MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng)
+  MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, size_t expectedSpanSize)
       : _span{reinterpret_cast<char *>(span)}, _maxCount(objectCount), _objectSize(objectSize), _bitmap(maxCount()) {
     if (!_span[0])
       abort();
+
+    d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(), _maxCount, _objectSize);
 
     d_assert(_maxCount == objectCount);
     // d_assert(_objectSize == objectSize);
@@ -135,7 +150,8 @@ public:
   }
 
   inline size_t spanSize() const {
-    return mesh::RoundUpToPage(_objectSize * _maxCount);
+    size_t bytesNeeded = static_cast<size_t>(_objectSize) * static_cast<size_t>(_maxCount);
+    return mesh::RoundUpToPage(bytesNeeded);
   }
 
   inline size_t maxCount() const {

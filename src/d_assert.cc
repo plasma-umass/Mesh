@@ -66,9 +66,9 @@ void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file,
     (void)write(STDERR_FILENO, buf, len);
   }
 
-  void *array[32];
-  size_t size = backtrace(array, 10);
-  backtrace_symbols_fd(array, size, STDERR_FILENO);
+  // void *array[32];
+  // size_t size = backtrace(array, 10);
+  // backtrace_symbols_fd(array, size, STDERR_FILENO);
 
   abort();
 }
