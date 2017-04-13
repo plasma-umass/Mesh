@@ -61,13 +61,13 @@ public:
     debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
     for (size_t i = 0; i < NumBins; i++) {
       auto size = getClassMaxSize(i);
-      if (_littleheaps[i].size() == 0) {
+      if (_littleheapCounts[i] == 0) {
         debug("MH HWM (%5zu):     %zu\n", size, (size_t)_stats.mhClassHWM[i]);
         continue;
       }
-      auto objectCount = _littleheaps[i][0]->maxCount() * _littleheaps[i].size();
+      auto objectCount = _littleheaps[i]->maxCount() * _littleheapCounts[i];
       double inUseCount = 0;
-      for (const auto &mh : _littleheaps[i]) {
+      for (auto mh = _littleheaps[i]; mh != nullptr; mh = mh->next()) {
         inUseCount += mh->inUseCount();
       }
       debug("MH HWM (%5zu):     %zu (occ: %f)\n", size, (size_t)_stats.mhClassHWM[i], inUseCount / objectCount);
@@ -110,7 +110,7 @@ public:
 
     _stats.mhAllocCount++;
     _stats.mhHighWaterMark = max(_miniheaps.size(), _stats.mhHighWaterMark.load());
-    _stats.mhClassHWM[sizeClass] = max(_littleheaps[sizeClass].size(), _stats.mhClassHWM[sizeClass].load());
+    _stats.mhClassHWM[sizeClass] = max(_littleheapCounts[sizeClass], _stats.mhClassHWM[sizeClass].load());
 
     return mh;
   }
@@ -141,16 +141,19 @@ public:
   }
 
   void trackMiniheap(size_t sizeClass, MiniHeap *mh) {
-    _littleheaps[sizeClass].push_back(mh);
+    _littleheapCounts[sizeClass] += 1;
+    if (_littleheaps[sizeClass] == nullptr)
+      _littleheaps[sizeClass] = mh;
+    else
+      _littleheaps[sizeClass]->insertNext(mh);
   }
 
   void untrackMiniheap(size_t sizeClass, MiniHeap *mh) {
-    // removing the miniheap from the vector of same-sized heaps is
-    // sort of annoying, look into using a doubly-linked list instead.
-    const auto it = std::find(_littleheaps[sizeClass].begin(), _littleheaps[sizeClass].end(), mh);
-    d_assert(it != _littleheaps[sizeClass].end());
-    std::swap(*it, _littleheaps[sizeClass].back());
-    _littleheaps[sizeClass].pop_back();
+    _littleheapCounts[sizeClass] -= 1;
+
+    auto next = mh->remove();
+    if (_littleheaps[sizeClass] == mh)
+      _littleheaps[sizeClass] = next;
   }
 
   // called with lock held
@@ -287,9 +290,10 @@ protected:
         // std::allocator_arg, internal::allocator,
         [&](internal::vector<MiniHeap *> &&mesh) { mergeSets.push_back(std::move(mesh)); });
 
-    for (const auto &miniheaps : _littleheaps) {
-      randomSort(_prng, miniheaps, meshFound);
-    }
+    debug("TODO: re-enable meshing");
+    // for (const auto &miniheaps : _littleheaps) {
+    //   randomSort(_prng, miniheaps, meshFound);
+    // }
 
     if (mergeSets.size() == 0)
       return;
@@ -319,8 +323,8 @@ protected:
 
   mt19937_64 _prng;
 
-  internal::vector<size_t> _littleheapCounts[NumBins]{};
-  internal::vector<MiniHeap *> _littleheaps[NumBins]{};
+  size_t _littleheapCounts[NumBins]{};
+  MiniHeap *_littleheaps[NumBins]{};
   internal::map<uintptr_t, MiniHeap *> _miniheaps{};
 
   mutable std::mutex _bigMutex{};
