@@ -48,6 +48,10 @@ public:
   enum { Alignment = 16 };
 
   GlobalMeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()) {
+    for (size_t i = 0; i < NumBins; ++i) {
+      _littleheapCounts[i] = 0;
+      _littleheaps[i] = nullptr;
+    }
     resetNextMeshCheck();
   }
 
@@ -323,8 +327,8 @@ protected:
 
   mt19937_64 _prng;
 
-  size_t _littleheapCounts[NumBins]{};
-  MiniHeap *_littleheaps[NumBins]{};
+  size_t _littleheapCounts[NumBins];
+  MiniHeap *_littleheaps[NumBins];
   internal::map<uintptr_t, MiniHeap *> _miniheaps{};
 
   mutable std::mutex _bigMutex{};

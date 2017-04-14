@@ -265,6 +265,12 @@ public:
   }
 
   void insertNext(MiniHeapBase<MaxFreelistLen, MaxMeshes> *mh) {
+    auto nextNext = _next;
+    mh->_next = nextNext;
+    mh->_prev = this;
+    _next = mh;
+    if (nextNext)
+      nextNext->_prev = mh;
   }
 
   MiniHeapBase<MaxFreelistLen, MaxMeshes> *next() {
