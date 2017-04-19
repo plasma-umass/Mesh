@@ -2,6 +2,7 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
 #include <dirent.h>
+#include <sys/signalfd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 
@@ -144,6 +145,53 @@ void StopTheWorld::resume() {
 Runtime::Runtime() {
   installSigAltStack();
   installSigHandlers();
+  createSignalFd();
+  startBgThread();
+}
+
+void Runtime::createSignalFd() {
+  sigset_t mask;
+
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGUSR2);
+
+  /* Block signals so that they aren't handled
+     according to their default dispositions */
+
+  if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1) {
+    debug("failed to block signal mask for BG thread");
+    abort();
+  }
+
+  _signalFd = signalfd(-1, &mask, 0);
+  if (_signalFd == -1) {
+    debug("failed to create signal FD");
+    abort();
+  }
+}
+
+void Runtime::startBgThread() {
+  // start pthread for bgThread
+}
+
+void *Runtime::bgThread(void *arg) {
+  auto &rt = mesh::runtime();
+
+  while (true) {
+    struct signalfd_siginfo siginfo;
+
+    ssize_t s = read(rt._signalFd, &siginfo, sizeof(struct signalfd_siginfo));
+    if (s != sizeof(struct signalfd_siginfo)) {
+      debug("bad read size");
+      abort();
+    }
+
+    if (siginfo.ssi_signo == SIGUSR2) {
+      printf("DUMPING STUFF\n");
+    } else {
+      printf("Read unexpected signal\n");
+    }
+  }
 }
 
 void Runtime::lock() {
