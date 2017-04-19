@@ -48,8 +48,10 @@ $ ./run
 TODO
 ----
 
-- dump out strings
 - bg thread
+- dump out strings
+- interpose sig* functions and make sure application doesn't override our handlers
+- merge adjacent mappings
 - matching algorithm
 - keep more stats; clock_gettime(CLOCK_MONOTONIC) of last free time
 - some sort of LRU sorting of miniheaps -- when freeing move to end

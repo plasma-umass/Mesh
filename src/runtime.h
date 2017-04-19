@@ -130,6 +130,10 @@ private:
   static void *startThread(StartThreadArgs *threadArgs);
   static void sigQuiesceHandler(int sig, siginfo_t *info, void *uctx);
 
+  void createSignalFd();
+  void startBgThread();
+  static void *bgThread(void *arg);
+
   void unregisterThread(STWThreadState *tc);
 
   void installSigHandlers();
@@ -153,6 +157,7 @@ private:
   mutex _mutex{};
   StopTheWorld _stw{};
   STWThreadState *_threads{nullptr};
+  int _signalFd{-2};
 };
 
 // get a reference to the Runtime singleton
