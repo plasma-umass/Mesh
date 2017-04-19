@@ -24,17 +24,16 @@ namespace mesh {
 
 static void *arenaInstance;
 
-static const char *const TMP_DIRS[] = {
-    "/dev/shm", "/tmp",
-};
+// static const char *const TMP_DIRS[] = {
+//     "/dev/shm", "/tmp",
+// };
 
 MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUInfo::PageSize} {
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
 #ifndef USE_MEMFD
-  _spanDir = openSpanDir(getpid());
-  d_assert(_spanDir != nullptr);
+#error Put _spanDir back in
 #endif
 
   int fd = openSpanFile(internal::ArenaSize);
@@ -126,27 +125,6 @@ int MeshableArena::openSpanFile(size_t sz) {
 }
 #endif  // USE_MEMFD
 
-char *MeshableArena::openSpanDir(int pid) {
-  constexpr size_t buf_len = 64;
-
-  for (auto tmpDir : TMP_DIRS) {
-    char buf[buf_len];
-    memset(buf, 0, buf_len);
-
-    snprintf(buf, buf_len - 1, "%s/alloc-mesh-%d", tmpDir, pid);
-    int result = mkdir(buf, 0755);
-    // we will get EEXIST if we have re-execed
-    if (result != 0 && errno != EEXIST)
-      continue;
-
-    char *spanDir = reinterpret_cast<char *>(internal::Heap().malloc(strlen(buf) + 1));
-    strcpy(spanDir, buf);
-    return spanDir;
-  }
-
-  return nullptr;
-}
-
 void MeshableArena::staticOnExit(int code, void *data) {
   reinterpret_cast<MeshableArena *>(data)->exit();
 }
@@ -203,12 +181,6 @@ void MeshableArena::afterForkChild() {
 
   close(_forkPipe[0]);
 
-  char *oldSpanDir = _spanDir;
-
-  // update our pid + spanDir
-  _spanDir = openSpanDir(getpid());
-  d_assert(_spanDir != nullptr);
-
   // open new file for the arena
   int newFd = openSpanFile(internal::ArenaSize);
 
@@ -229,8 +201,6 @@ void MeshableArena::afterForkChild() {
   d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
   _fd = newFd;
-
-  internal::Heap().free(oldSpanDir);
 
   while (write(_forkPipe[1], "ok", strlen("ok")) == EAGAIN) {
   }
