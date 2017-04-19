@@ -238,6 +238,10 @@ public:
     return _inUseCount;
   }
 
+  inline double capacity() const {
+    return static_cast<double>(_inUseCount) / static_cast<double>(_maxCount);
+  }
+
   const mesh::internal::Bitmap &bitmap() const {
     return _bitmap;
   }
@@ -273,7 +277,7 @@ public:
       nextNext->_prev = mh;
   }
 
-  MiniHeapBase<MaxFreelistLen, MaxMeshes> *next() {
+  MiniHeapBase<MaxFreelistLen, MaxMeshes> *next() const {
     return _next;
   }
 

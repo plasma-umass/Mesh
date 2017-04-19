@@ -294,10 +294,9 @@ protected:
         // std::allocator_arg, internal::allocator,
         [&](internal::vector<MiniHeap *> &&mesh) { mergeSets.push_back(std::move(mesh)); });
 
-    debug("TODO: re-enable meshing");
-    // for (const auto &miniheaps : _littleheaps) {
-    //   randomSort(_prng, miniheaps, meshFound);
-    // }
+    for (size_t i = 0; i < NumBins; i++) {
+      randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
+    }
 
     if (mergeSets.size() == 0)
       return;

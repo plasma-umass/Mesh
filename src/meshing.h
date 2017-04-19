@@ -45,17 +45,19 @@ inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) noexcept {
 }  // namespace method
 
 template <typename T>
-inline void randomSort(mt19937_64 &prng, const internal::vector<T *> &miniheaps,
+inline void randomSort(mt19937_64 &prng, size_t count, T *miniheaps,
                        const function<void(internal::vector<T *> &&)> &meshFound) noexcept {
-  // TODO: filter miniheaps by occupancy
-  auto heaps(miniheaps);  // mutable copy
+  constexpr double OccupancyMaxThreshold = .9;
+
+  internal::vector<T *> heaps{};  // mutable copy
+
+  for (auto mh = miniheaps; mh != nullptr; mh = mh->next()) {
+    if (mh->isDone() && mh->capacity() < OccupancyMaxThreshold)
+      heaps.push_back(mh);
+  }
+
   auto begin = heaps.begin();
   auto end = heaps.end();
-
-  // if the current heap (the one we are allocating out of) isn't
-  // done, exclude it from meshing
-  if (heaps.size() > 1 && !heaps.back()->isDone())
-    --end;
 
   if (std::distance(begin, end) <= 1)
     return;

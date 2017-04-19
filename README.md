@@ -34,15 +34,24 @@ DEFINITIONS
 BUILDING
 --------
 
-Running `make` will build the library and run a simple test of
-executing `git status` with `libmesh` as the allocator:
+Running `make` will build the library and run unit tests.  Executing
+`./run` after that will run `git status` with `libmesh` as the
+allocator:
 
 ```
 $ ./configure
 $ make
+$ ./run
 ```
 
 
 TODO
 ----
 
+- dump out strings
+- bg thread
+- matching algorithm
+- keep more stats; clock_gettime(CLOCK_MONOTONIC) of last free time
+- some sort of LRU sorting of miniheaps -- when freeing move to end
+  (don't consider meshing heaps that have been active in the last... 5
+  ms or something)
