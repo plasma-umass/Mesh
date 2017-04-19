@@ -2,6 +2,8 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
 #include <dirent.h>
+#include <pthread.h>
+#include <sched.h>
 #include <sys/signalfd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -146,7 +148,6 @@ Runtime::Runtime() {
   installSigAltStack();
   installSigHandlers();
   createSignalFd();
-  startBgThread();
 }
 
 void Runtime::createSignalFd() {
@@ -171,7 +172,26 @@ void Runtime::createSignalFd() {
 }
 
 void Runtime::startBgThread() {
-  // start pthread for bgThread
+  constexpr int MaxRetries = 20;
+
+  initThreads();
+
+  pthread_t bgPthread;
+  int retryCount = 0;
+  int ret = 0;
+
+  while ((ret = _pthreadCreate(&bgPthread, nullptr, Runtime::bgThread, nullptr))) {
+    retryCount++;
+    sched_yield();
+
+    if (retryCount % 10)
+      debug("background thread creation failed, retrying.\n");
+
+    if (retryCount >= MaxRetries) {
+      debug("max retries exceded: couldn't create bg thread, exiting.\n");
+      abort();
+    }
+  }
 }
 
 void *Runtime::bgThread(void *arg) {
@@ -217,8 +237,11 @@ int Runtime::createThread(pthread_t *thread, const pthread_attr_t *attr, Pthread
 }
 
 void Runtime::initThreads() {
+  if (_pthreadCreate != nullptr)
+    return;
+
   // FIXME: this assumes glibc
-  void *pthreadHandle = dlopen("libpthread.so.0", RTLD_NOW | RTLD_GLOBAL | RTLD_NOLOAD);
+  void *pthreadHandle = dlopen("libpthread.so.0", RTLD_LAZY | RTLD_NOLOAD);
   d_assert(pthreadHandle != nullptr);
 
   auto createFn = dlsym(pthreadHandle, "pthread_create");

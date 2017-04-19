@@ -8,9 +8,7 @@
 using namespace mesh;
 
 static __attribute__((constructor)) void libmesh_init() {
-  static volatile auto lh = runtime().localHeap();
-
-  (void)lh;
+  runtime().startBgThread();
 }
 
 static __attribute__((destructor)) void libmesh_fini() {

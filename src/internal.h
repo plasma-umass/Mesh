@@ -5,6 +5,8 @@
 #ifndef MESH__INTERNAL_H
 #define MESH__INTERNAL_H
 
+#include <atomic>
+
 #include <signal.h>
 
 #include "common.h"
