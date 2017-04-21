@@ -22,7 +22,7 @@ static __attribute__((destructor)) void libmesh_fini() {
   else if (mlevel > 2)
     mlevel = 2;
 
-  runtime().heap().dumpStats(mlevel);
+  runtime().heap().dumpStats(mlevel, false);
 }
 
 extern "C" {

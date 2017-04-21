@@ -87,6 +87,10 @@ public:
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
   }
 
+  void printOccupancy() const {
+    mesh::debug("{\"name\": \"%p\", \"size\": %d, \"bitmap\": \"%s\"}\n", this, maxCount(), _bitmap.to_string().c_str());
+  }
+
   inline void *mallocAt(size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);

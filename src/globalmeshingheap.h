@@ -55,9 +55,25 @@ public:
     resetNextMeshCheck();
   }
 
-  inline void dumpStats(int level) const {
+  inline void dumpStrings() const {
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+
+    for (size_t i = 0; i < NumBins; i++) {
+      if (_littleheapCounts[i] == 0) {
+        continue;
+      }
+      for (auto mh = _littleheaps[i]; mh != nullptr; mh = mh->next()) {
+        if (mh->isDone())
+          mh->printOccupancy();
+      }
+    }
+  }
+
+  inline void dumpStats(int level, bool beDetailed) const {
     if (level < 1)
       return;
+
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
     debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
     debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
@@ -66,15 +82,18 @@ public:
     for (size_t i = 0; i < NumBins; i++) {
       auto size = getClassMaxSize(i);
       if (_littleheapCounts[i] == 0) {
-        debug("MH HWM (%5zu):     %zu\n", size, (size_t)_stats.mhClassHWM[i]);
+        debug("MH HWM (%5zu : %3zu):     %6zu/%6zu\n", size, 0, _littleheapCounts[i], (size_t)_stats.mhClassHWM[i]);
         continue;
       }
+      auto objectSize = _littleheaps[i]->maxCount();
       auto objectCount = _littleheaps[i]->maxCount() * _littleheapCounts[i];
       double inUseCount = 0;
       for (auto mh = _littleheaps[i]; mh != nullptr; mh = mh->next()) {
         inUseCount += mh->inUseCount();
+        if (beDetailed && size == 4096)
+          debug("\t%5.2f\t%s\n", mh->capacity(), mh->bitmap().to_string().c_str());
       }
-      debug("MH HWM (%5zu):     %zu (occ: %f)\n", size, (size_t)_stats.mhClassHWM[i], inUseCount / objectCount);
+      debug("MH HWM (%5zu : %3zu):     %6zu/%6zu (occ: %f)\n", size, objectSize, _littleheapCounts[i], (size_t)_stats.mhClassHWM[i], inUseCount / objectCount);
     }
   }
 
@@ -153,6 +172,7 @@ public:
   }
 
   void untrackMiniheap(size_t sizeClass, MiniHeap *mh) {
+    _stats.mhAllocCount -= 1;
     _littleheapCounts[sizeClass] -= 1;
 
     auto next = mh->remove();
@@ -189,10 +209,10 @@ public:
 
   inline void free(void *ptr) {
     if (unlikely(internal::isMeshMarker(ptr))) {
-      dumpStats(2);
+      dumpStats(2, false);
       for (size_t i = 0; i < 128; i++)
         meshAllSizeClasses();
-      dumpStats(2);
+      dumpStats(2, false);
       return;
     }
 
