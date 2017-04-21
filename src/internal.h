@@ -41,6 +41,7 @@ static inline bool isMeshMarker(void *ptr) {
 static constexpr size_t ArenaSize = 1UL << 30;        // 32 GB
 static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
+#define SIGDUMP (SIGRTMIN + 8)
 
 // efficiently copy data from srcFd to dstFd
 int copyFile(int dstFd, int srcFd, off_t off, size_t sz);

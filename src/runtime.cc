@@ -154,7 +154,7 @@ void Runtime::createSignalFd() {
   sigset_t mask;
 
   sigemptyset(&mask);
-  sigaddset(&mask, SIGUSR2);
+  sigaddset(&mask, SIGDUMP);
 
   /* Block signals so that they aren't handled
      according to their default dispositions */
@@ -197,6 +197,8 @@ void Runtime::startBgThread() {
 void *Runtime::bgThread(void *arg) {
   auto &rt = mesh::runtime();
 
+  debug("libmesh: background thread started\n");
+
   while (true) {
     struct signalfd_siginfo siginfo;
 
@@ -206,8 +208,11 @@ void *Runtime::bgThread(void *arg) {
       abort();
     }
 
-    if (siginfo.ssi_signo == SIGUSR2) {
+    if (static_cast<int>(siginfo.ssi_signo) == SIGDUMP) {
+      debug("libmesh: background thread received SIGDUMP, starting dump\n");
+      debug(">>>>>>>>>>\n");
       rt.heap().dumpStrings();
+      debug("<<<<<<<<<<\n");
     } else {
       printf("Read unexpected signal\n");
     }
