@@ -5,7 +5,7 @@
 
 #include <stdio.h>
 
-#include "internal.h"
+#include "common.h"
 
 /**
  * @class MWC

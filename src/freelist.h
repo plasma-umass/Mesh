@@ -5,19 +5,15 @@
 #ifndef MESH__FREELIST_H
 #define MESH__FREELIST_H
 
-#include <atomic>
 #include <random>
-
-#include "bitmap.h"
-#include "internal.h"
 
 #include "rng/mwc.h"
 
 using mesh::debug;
 
-// namespace mesh {
+namespace mesh {
 
-template <size_t MaxFreelistLen = sizeof(uint8_t) << 8>
+template <size_t MaxFreelistLen = sizeof(uint8_t) << 8, typename fl_off_t = int>
 class Freelist {
 private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
@@ -27,7 +23,9 @@ public:
     d_assert(objectCount <= MaxFreelistLen);
     d_assert(_maxCount == objectCount);
 
-    _list = reinterpret_cast<uint8_t *>(mesh::internal::Heap().malloc(objectCount));
+    size_t listSize = objectCount * sizeof(fl_off_t);
+
+    _list = reinterpret_cast<fl_off_t *>(mesh::internal::Heap().malloc(listSize));
     for (size_t i = 0; i < objectCount; i++) {
       _list[i] = i;
     }
@@ -65,25 +63,29 @@ public:
       swapOff = mwc.inRange(_off, maxCount() - 1);
     }
 
-    const uint8_t a = _list[_off];
-    const uint8_t b = _list[swapOff];
+    const fl_off_t a = _list[_off];
+    const fl_off_t b = _list[swapOff];
 
     _list[_off] = b;
     _list[swapOff] = a;
   }
 
   inline size_t pop() {
+    d_assert(_off >= 0 && _off < static_cast<fl_off_t>(_maxCount));
     auto allocOff = _list[_off];
+
+    _list[_off] = -0x1000;
+
     _off += 1;
 
     return allocOff;
   }
 
 private:
-  uint8_t *_list;
+  fl_off_t *_list;
   const uint16_t _maxCount;
-  uint8_t _off{0};
+  fl_off_t _off{0};
 };
-//}  // namespace mesh
+}  // namespace mesh
 
 #endif  // MESH__FREELIST_H
