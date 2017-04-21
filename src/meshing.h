@@ -42,7 +42,6 @@ inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) noexcept {
 
   return meshes;
 }
-}  // namespace method
 
 template <typename T>
 inline void randomSort(mt19937_64 &prng, size_t count, T *miniheaps,
@@ -52,7 +51,7 @@ inline void randomSort(mt19937_64 &prng, size_t count, T *miniheaps,
   internal::vector<T *> heaps{};  // mutable copy
 
   for (auto mh = miniheaps; mh != nullptr; mh = mh->next()) {
-    if (mh->isDone() && mh->capacity() < OccupancyMaxThreshold)
+    if (!mh->isAttached() && mh->fullness() < OccupancyMaxThreshold)
       heaps.push_back(mh);
   }
 
@@ -68,8 +67,8 @@ inline void randomSort(mt19937_64 &prng, size_t count, T *miniheaps,
     T *h1 = *it1;
     T *h2 = *it2;
 
-    if (!h1->isDone() || !h2->isDone())
-      continue;
+    d_assert(!h1->isAttached());
+    d_assert(!h2->isAttached());
 
     const auto len = h1->bitmap().byteCount();
     const auto bitmap1 = h1->bitmap().bitmap();
@@ -89,6 +88,7 @@ inline void randomSort(mt19937_64 &prng, size_t count, T *miniheaps,
     }
   }
 }
+}  // namespace method
 }  // namespace mesh
 
 #endif  // MESH__MESHING_H

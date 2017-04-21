@@ -19,7 +19,7 @@ static inline void note(const char *note) {
   write(-1, note, strlen(note));
 }
 
-static inline void meshTest(bool invert) {
+static void meshTest(bool invert) {
   GlobalHeap &gheap = runtime().heap();
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0);

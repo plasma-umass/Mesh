@@ -19,9 +19,19 @@ private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
 
 public:
-  Freelist(size_t objectCount, mt19937_64 &prng) : _list(), _maxCount(objectCount) {
+  Freelist(size_t objectCount, mt19937_64 &prng) : _maxCount(objectCount) {
     d_assert(objectCount <= MaxFreelistLen);
     d_assert(_maxCount == objectCount);
+
+    init(prng);
+  }
+
+  ~Freelist() {
+    detach();
+  }
+
+  void init(mt19937_64 &prng) {
+    const auto objectCount = maxCount();
 
     size_t listSize = objectCount * sizeof(fl_off_t);
 
@@ -38,8 +48,8 @@ public:
     _list = nullptr;
   }
 
-  ~Freelist() {
-    detach();
+  inline bool isExhausted() const {
+    return _list == nullptr || _off >= _maxCount;
   }
 
   inline size_t maxCount() const {
@@ -82,9 +92,10 @@ public:
   }
 
 private:
-  fl_off_t *_list;
+  fl_off_t *_list{nullptr};
   const uint16_t _maxCount;
-  fl_off_t _off{0};
+  // FIXME: we can use a uint8_t here if we encode "overflowed" as _list == nullptr
+  uint16_t _off{0};
 };
 }  // namespace mesh
 

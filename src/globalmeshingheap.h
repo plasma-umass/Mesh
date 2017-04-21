@@ -63,7 +63,7 @@ public:
         continue;
       }
       for (auto mh = _littleheaps[i]; mh != nullptr; mh = mh->next()) {
-        if (mh->isDone())
+        if (!mh->isAttached())
           mh->printOccupancy();
       }
     }
@@ -91,7 +91,7 @@ public:
       for (auto mh = _littleheaps[i]; mh != nullptr; mh = mh->next()) {
         inUseCount += mh->inUseCount();
         if (beDetailed && size == 4096)
-          debug("\t%5.2f\t%s\n", mh->capacity(), mh->bitmap().to_string().c_str());
+          debug("\t%5.2f\t%s\n", mh->fullness(), mh->bitmap().to_string().c_str());
       }
       debug("MH HWM (%5zu : %3zu):     %6zu/%6zu (occ: %f)\n", size, objectSize, _littleheapCounts[i],
             (size_t)_stats.mhClassHWM[i], inUseCount / objectCount);
@@ -186,7 +186,7 @@ public:
     const auto sizeClass = getSizeClass(mh->objectSize());
     untrackMiniheap(sizeClass, mh);
 
-    mh->MiniHeap::~MiniHeap();
+    mh->MiniHeapBase::~MiniHeapBase();
     internal::Heap().free(mh);
   }
 
@@ -223,7 +223,7 @@ public:
     auto mh = miniheapFor(ptr);
     if (likely(mh)) {
       mh->free(ptr);
-      if (unlikely(mh->isDone() && mh->isEmpty())) {
+      if (unlikely(!mh->isAttached() && mh->isEmpty())) {
         freeMiniheap(mh);
       }
       //  else if (unlikely(shouldMesh())) {
@@ -251,23 +251,11 @@ public:
   // must be called with the world stopped, after call to mesh()
   // completes src is a nullptr
   void mesh(MiniHeap *dst, MiniHeap *&src) {
-    // FIXME: dst might have a few spans
     const auto srcSpan = src->getSpanStart();
-    auto objectSize = dst->objectSize();
 
-    size_t sz = dst->spanSize();
+    dst->consume(src);
 
-    // for each object in src, copy it to dst + update dst's bitmap
-    // and in-use count
-    for (auto const &off : src->bitmap()) {
-      d_assert(!dst->bitmap().isSet(off));
-      void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize);
-      void *dstObject = dst->mallocAt(off);
-      d_assert(dstObject != nullptr);
-      memcpy(dstObject, srcObject, objectSize);
-    }
-
-    dst->meshedSpan(srcSpan);
+    const size_t sz = dst->spanSize();
     Super::mesh(reinterpret_cast<void *>(dst->getSpanStart()), reinterpret_cast<void *>(src->getSpanStart()), sz);
 
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
@@ -316,7 +304,7 @@ protected:
         [&](internal::vector<MiniHeap *> &&mesh) { mergeSets.push_back(std::move(mesh)); });
 
     for (size_t i = 0; i < NumBins; i++) {
-      randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
+      method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
     }
 
     if (mergeSets.size() == 0)
