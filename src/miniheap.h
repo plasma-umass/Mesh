@@ -23,6 +23,7 @@ template <size_t MaxFreelistLen = sizeof(uint8_t) << 8,  // AKA max # of objects
 class MiniHeapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
+  typedef MiniHeapBase<MaxFreelistLen, MaxMeshes> MiniHeap;
 
 public:
   MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, size_t expectedSpanSize)
@@ -30,7 +31,7 @@ public:
         _freelist{objectCount, prng},
         _objectSize(objectSize),
         _meshCount(1),
-        _done(false),
+        _attached(true),
         _bitmap(maxCount()) {
     if (!_span[0])
       abort();
@@ -49,34 +50,13 @@ public:
   ~MiniHeapBase() {
   }
 
-  void dumpDebug() const {
-    const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
-    const size_t inUseCount = _inUseCount;
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu)\t%p-%p\n", this, _objectSize,
-                maxCount(), heapPages, this->isFull(), inUseCount, _span[0],
-                reinterpret_cast<uintptr_t>(_span) + spanSize());
-    mesh::debug("\t%s\n", _bitmap.to_string().c_str());
-  }
-
   void printOccupancy() const {
     mesh::debug("{\"name\": \"%p\", \"size\": %d, \"bitmap\": \"%s\"}\n", this, maxCount(),
                 _bitmap.to_string().c_str());
   }
 
-  inline void *mallocAt(size_t off) {
-    if (!_bitmap.tryToSet(off)) {
-      mesh::debug("%p: MA %u", this, off);
-      dumpDebug();
-      return nullptr;
-    }
-
-    _inUseCount++;
-
-    return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
-  }
-
   inline void *malloc(size_t sz) {
-    d_assert_msg(!_done && !isFull(), "done: %d, full: %d", _done, isFull());
+    d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached, isExhausted());
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
     auto off = _freelist.pop();
@@ -86,27 +66,6 @@ public:
     d_assert(ptr != nullptr);
 
     return ptr;
-  }
-
-  inline ssize_t getOff(void *ptr) const {
-    d_assert(getSize(ptr) == _objectSize);
-
-    const auto span = spanStart(ptr);
-    d_assert(span != 0);
-    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-
-    const auto off = (ptrval - span) / _objectSize;
-    if (span > ptrval || off >= maxCount()) {
-      mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
-      return -1;
-    }
-
-    if (unlikely(!_bitmap.isSet(off))) {
-      mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
-      return -1;
-    }
-
-    return off;
   }
 
   inline void localFree(void *ptr, mt19937_64 &prng, MWC &mwc) {
@@ -128,21 +87,22 @@ public:
     _inUseCount--;
   }
 
-  inline bool shouldReclaim() const {
-    return _inUseCount == 0 && _done;
-  }
+  /// Copies (for meshing) the contents of src into our span.
+  inline void consume(const MiniHeap *src) {
+    const auto srcSpan = src->getSpanStart();
 
-  inline uintptr_t spanStart(void *ptr) const {
-    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-
-    for (size_t i = 0; i < _meshCount; ++i) {
-      d_assert(_span[i] != nullptr);
-      const auto span = reinterpret_cast<uintptr_t>(_span[i]);
-      if (span <= ptrval && ptrval < span + spanSize())
-        return span;
+    // for each object in src, copy it to our backing span + update
+    // our bitmap and in-use count
+    for (auto const &off : src->bitmap()) {
+      d_assert(!_bitmap.isSet(off));
+      void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize());
+      void *dstObject = mallocAt(off);
+      d_assert(dstObject != nullptr);
+      memcpy(dstObject, srcObject, objectSize());
     }
 
-    return 0;
+    // FIXME: src might have several spans
+    trackMeshedSpan(srcSpan);
   }
 
   inline bool contains(void *ptr) const {
@@ -169,21 +129,30 @@ public:
     return objectSize();
   }
 
-  inline bool isFull() const {
-    return _inUseCount >= maxCount();
+  /// Whether we can still locally allocate out of this MiniHeap, or
+  /// if our freelist has been exhausted.  This is NOT necessarily the
+  /// same as whether our bitmap is full -- if an object is allocated
+  /// on one thread, passed to another, and a non-local free happens
+  /// from that other thread, we might end up with the case that our
+  /// bitmap is non-full, but the freelist is empty (as non-local
+  /// frees don't touch the bitmap).
+  inline bool isExhausted() const {
+    return _freelist.isExhausted();
   }
 
   inline uintptr_t getSpanStart() const {
     return reinterpret_cast<uintptr_t>(_span[0]);
   }
 
-  inline void setDone() {
+  /// called when a LocalHeap is done with a MiniHeap (it is
+  /// "detaching" it and releasing it back to the global heap)
+  inline void detach() {
     _freelist.detach();
-    _done = true;
+    _attached = false;
   }
 
-  inline bool isDone() const {
-    return _done;
+  inline bool isAttached() const {
+    return _attached;
   }
 
   inline bool isEmpty() const {
@@ -194,7 +163,8 @@ public:
     return _inUseCount;
   }
 
-  inline double capacity() const {
+  /// Returns the fraction full (in the range [0, 1]) that this miniheap is.
+  inline double fullness() const {
     return static_cast<double>(_inUseCount) / static_cast<double>(maxCount());
   }
 
@@ -202,7 +172,7 @@ public:
     return _bitmap;
   }
 
-  void meshedSpan(uintptr_t spanStart) {
+  void trackMeshedSpan(uintptr_t spanStart) {
     if (_meshCount >= MaxMeshes) {
       mesh::debug("fatal: too many meshes for one miniheap");
       dumpDebug();
@@ -221,10 +191,8 @@ public:
     return _span;
   }
 
-  void insertPrev(MiniHeapBase<MaxFreelistLen, MaxMeshes> *mh) {
-  }
-
-  void insertNext(MiniHeapBase<MaxFreelistLen, MaxMeshes> *mh) {
+  /// Insert the given MiniHeap into our embedded linked list in the 'next' position.
+  void insertNext(MiniHeap *mh) {
     auto nextNext = _next;
     mh->_next = nextNext;
     mh->_prev = this;
@@ -233,11 +201,12 @@ public:
       nextNext->_prev = mh;
   }
 
-  MiniHeapBase<MaxFreelistLen, MaxMeshes> *next() const {
+  MiniHeap *next() const {
     return _next;
   }
 
-  MiniHeapBase<MaxFreelistLen, MaxMeshes> *remove() {
+  /// Remove this MiniHeap from the list of all miniheaps of this size class
+  MiniHeap *remove() {
     if (_prev != nullptr)
       _prev->_next = _next;
 
@@ -247,16 +216,72 @@ public:
     return _next;
   }
 
-private:
+  /// public for meshTest only
+  inline void *mallocAt(size_t off) {
+    if (!_bitmap.tryToSet(off)) {
+      mesh::debug("%p: MA %u", this, off);
+      dumpDebug();
+      return nullptr;
+    }
+
+    _inUseCount++;
+
+    return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
+  }
+
+protected:
+  inline uintptr_t spanStart(void *ptr) const {
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+
+    for (size_t i = 0; i < _meshCount; ++i) {
+      d_assert(_span[i] != nullptr);
+      const auto span = reinterpret_cast<uintptr_t>(_span[i]);
+      if (span <= ptrval && ptrval < span + spanSize())
+        return span;
+    }
+
+    return 0;
+  }
+
+  void dumpDebug() const {
+    const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
+    const size_t inUseCount = _inUseCount;
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu)\t%p-%p\n", this, _objectSize,
+                maxCount(), heapPages, this->isExhausted(), inUseCount, _span[0],
+                reinterpret_cast<uintptr_t>(_span) + spanSize());
+    mesh::debug("\t%s\n", _bitmap.to_string().c_str());
+  }
+
+  inline ssize_t getOff(void *ptr) const {
+    d_assert(getSize(ptr) == _objectSize);
+
+    const auto span = spanStart(ptr);
+    d_assert(span != 0);
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+
+    const auto off = (ptrval - span) / _objectSize;
+    if (span > ptrval || off >= maxCount()) {
+      mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
+      return -1;
+    }
+
+    if (unlikely(!_bitmap.isSet(off))) {
+      mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
+      return -1;
+    }
+
+    return off;
+  }
+
   char *_span[MaxMeshes];
   Freelist<MaxFreelistLen> _freelist;
   const uint16_t _objectSize;
   atomic_uint16_t _inUseCount{0};
   uint8_t _meshCount : 7;
-  uint8_t _done : 1;
+  uint8_t _attached : 1;
   mesh::internal::Bitmap _bitmap;
-  MiniHeapBase<MaxFreelistLen, MaxMeshes> *_prev{nullptr};
-  MiniHeapBase<MaxFreelistLen, MaxMeshes> *_next{nullptr};
+  MiniHeap *_prev{nullptr};
+  MiniHeap *_next{nullptr};
 };
 
 typedef MiniHeapBase<> MiniHeap;

@@ -123,8 +123,8 @@ public:
     MiniHeap *mh = _current[sizeClass];
 
     void *ptr = mh->malloc(sizeMax);
-    if (unlikely(mh->isFull())) {
-      mh->setDone();
+    if (unlikely(mh->isExhausted())) {
+      mh->detach();
       _current[sizeClass] = nullptr;
     }
 
