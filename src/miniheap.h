@@ -9,6 +9,7 @@
 #include <random>
 
 #include "bitmap.h"
+#include "freelist.h"
 #include "internal.h"
 
 #include "rng/mwc.h"
@@ -41,7 +42,7 @@ private:
 public:
   MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, size_t expectedSpanSize)
       : _span{reinterpret_cast<char *>(span)},
-        _maxCount(objectCount),
+        _freelist{objectCount, prng},
         _objectSize(objectSize),
         _meshCount(1),
         _done(false),
@@ -50,32 +51,17 @@ public:
       abort();
 
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
-                 _maxCount, _objectSize);
-
-    d_assert(_maxCount == objectCount);
-    // d_assert(_objectSize == objectSize);
+                 maxCount(), _objectSize);
 
     // d_assert_msg(spanSize == static_cast<size_t>(_spanSize), "%zu != %hu", spanSize, _spanSize);
     d_assert_msg(objectSize == static_cast<size_t>(_objectSize), "%zu != %hu", objectSize, _objectSize);
 
-    d_assert(maxCount() <= MaxFreelistLen);
     d_assert(_span[1] == nullptr);
-
-    _freeList = reinterpret_cast<uint8_t *>(mesh::internal::Heap().malloc(maxCount()));
-
-    const auto objCount = maxCount();
-    for (size_t i = 0; i < objCount; i++) {
-      _freeList[i] = i;
-    }
-
-    std::shuffle(&_freeList[0], &_freeList[maxCount()], prng);
 
     // dumpDebug();
   }
 
   ~MiniHeapBase() {
-    mesh::internal::Heap().free(_freeList);
-    _freeList = nullptr;
   }
 
   void dumpDebug() const {
@@ -88,7 +74,8 @@ public:
   }
 
   void printOccupancy() const {
-    mesh::debug("{\"name\": \"%p\", \"size\": %d, \"bitmap\": \"%s\"}\n", this, maxCount(), _bitmap.to_string().c_str());
+    mesh::debug("{\"name\": \"%p\", \"size\": %d, \"bitmap\": \"%s\"}\n", this, maxCount(),
+                _bitmap.to_string().c_str());
   }
 
   inline void *mallocAt(size_t off) {
@@ -107,7 +94,7 @@ public:
     d_assert_msg(!_done && !isFull(), "done: %d, full: %d", _done, isFull());
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
-    auto off = _freeList[_freeListOff++];
+    auto off = _freelist.pop();
     // mesh::debug("%p: ma %u", this, off);
 
     auto ptr = mallocAt(off);
@@ -142,28 +129,9 @@ public:
     if (freedOff < 0)
       return;
 
-    d_assert(_freeListOff > 0);
-    _freeListOff--;
-    _freeList[_freeListOff] = freedOff;
-
+    _freelist.push(freedOff, prng, mwc);
     _bitmap.unset(freedOff);
     _inUseCount--;
-
-    size_t swapOff;
-
-    if (mesh::internal::SlowButAccurateRandom) {
-      // endpoint is _inclusive_, so we subtract 1 from maxCount since
-      // we're dealing with 0-indexed offsets
-      std::uniform_int_distribution<size_t> distribution(_freeListOff, maxCount() - 1);
-
-      swapOff = distribution(prng);
-    } else {
-      swapOff = mwc.inRange(_freeListOff, maxCount() - 1);
-    }
-
-    const uint8_t swapped = _freeList[swapOff];
-    _freeList[swapOff] = _freeList[_freeListOff];
-    _freeList[_freeListOff] = swapped;
   }
 
   inline void free(void *ptr) {
@@ -197,12 +165,12 @@ public:
   }
 
   inline size_t spanSize() const {
-    size_t bytesNeeded = static_cast<size_t>(_objectSize) * static_cast<size_t>(_maxCount);
+    size_t bytesNeeded = static_cast<size_t>(_objectSize) * maxCount();
     return mesh::RoundUpToPage(bytesNeeded);
   }
 
   inline size_t maxCount() const {
-    return _maxCount;
+    return _freelist.maxCount();
   }
 
   inline size_t objectSize() const {
@@ -225,8 +193,7 @@ public:
   }
 
   inline void setDone() {
-    mesh::internal::Heap().free(_freeList);
-    _freeList = nullptr;
+    _freelist.detach();
     _done = true;
   }
 
@@ -243,7 +210,7 @@ public:
   }
 
   inline double capacity() const {
-    return static_cast<double>(_inUseCount) / static_cast<double>(_maxCount);
+    return static_cast<double>(_inUseCount) / static_cast<double>(maxCount());
   }
 
   const mesh::internal::Bitmap &bitmap() const {
@@ -297,11 +264,9 @@ public:
 
 private:
   char *_span[MaxMeshes];
-  uint8_t *_freeList;
-  const uint16_t _maxCount;
+  Freelist<MaxFreelistLen> _freelist;
   const uint16_t _objectSize;
   atomic_uint16_t _inUseCount{0};
-  uint8_t _freeListOff{0};
   uint8_t _meshCount : 7;
   uint8_t _done : 1;
   mesh::internal::Bitmap _bitmap;
