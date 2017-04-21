@@ -207,7 +207,7 @@ void *Runtime::bgThread(void *arg) {
     }
 
     if (siginfo.ssi_signo == SIGUSR2) {
-      printf("DUMPING STUFF\n");
+      rt.heap().dumpStrings();
     } else {
       printf("Read unexpected signal\n");
     }
