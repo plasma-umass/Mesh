@@ -93,7 +93,8 @@ public:
         if (beDetailed && size == 4096)
           debug("\t%5.2f\t%s\n", mh->capacity(), mh->bitmap().to_string().c_str());
       }
-      debug("MH HWM (%5zu : %3zu):     %6zu/%6zu (occ: %f)\n", size, objectSize, _littleheapCounts[i], (size_t)_stats.mhClassHWM[i], inUseCount / objectCount);
+      debug("MH HWM (%5zu : %3zu):     %6zu/%6zu (occ: %f)\n", size, objectSize, _littleheapCounts[i],
+            (size_t)_stats.mhClassHWM[i], inUseCount / objectCount);
     }
   }
 

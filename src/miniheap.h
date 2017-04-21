@@ -16,22 +16,7 @@
 
 #include "heaplayers.h"
 
-// namespace mesh {
-
-using std::atomic_size_t;
-
-// class Freelist {
-// private:
-//   DISALLOW_COPY_AND_ASSIGN(Freelist);
-//
-// public:
-//   Freelist(maxCount) : _list() {
-//     _list = reinterpret_cast<uint8_t *>(mesh::internal::Heap().malloc(maxCount));
-//   }
-//
-// private:
-//   uint8_t *_list;
-// }
+namespace mesh {
 
 template <size_t MaxFreelistLen = sizeof(uint8_t) << 8,  // AKA max # of objects per miniheap
           size_t MaxMeshes = 4>                          // maximum number of VM spans we can track
@@ -279,6 +264,6 @@ typedef MiniHeapBase<> MiniHeap;
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
 // static_assert(sizeof(MiniHeap) <= 64, "MiniHeap too big!");
 
-//}  // namespace mesh
+}  // namespace mesh
 
 #endif  // MESH__MINIHEAP_H
