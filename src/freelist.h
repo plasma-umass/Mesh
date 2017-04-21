@@ -13,7 +13,7 @@ using mesh::debug;
 
 namespace mesh {
 
-template <size_t MaxFreelistLen = sizeof(uint8_t) << 8, typename fl_off_t = int>
+template <size_t MaxFreelistLen = sizeof(uint8_t) << 8, typename fl_off_t = uint8_t>
 class Freelist {
 private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
@@ -83,8 +83,6 @@ public:
   inline size_t pop() {
     d_assert(_off >= 0 && _off < static_cast<fl_off_t>(_maxCount));
     auto allocOff = _list[_off];
-
-    _list[_off] = -0x1000;
 
     _off += 1;
 
