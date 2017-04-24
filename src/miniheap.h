@@ -51,8 +51,8 @@ public:
   }
 
   void printOccupancy() const {
-    mesh::debug("{\"name\": \"%p\", \"size\": %d, \"bitmap\": \"%s\"}\n", this, maxCount(),
-                _bitmap.to_string().c_str());
+    mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"bitmap\": \"%s\"}\n", this, objectSize(),
+                maxCount(), _bitmap.to_string().c_str());
   }
 
   inline void *malloc(size_t sz) {
