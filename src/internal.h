@@ -11,13 +11,13 @@
 
 #include "common.h"
 
-#include "bitmap.h"
-
 // never allocate exeecutable heap
 #define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)
 #define MALLOC_TRACE 0
 
 #include "heaplayers.h"
+
+#include "bitmap.h"
 
 namespace mesh {
 
@@ -92,6 +92,8 @@ using unordered_map = std::unordered_map<K, V, hash<K>, equal_to<K>, STLAllocato
 
 template <typename K, typename V>
 using map = std::map<K, V, std::less<K>, STLAllocator<pair<const K, V>, Heap>>;
+
+typedef std::basic_string<char, std::char_traits<char>, STLAllocator<char, Heap>> string;
 
 template <typename T>
 using vector = std::vector<T, STLAllocator<T, Heap>>;
