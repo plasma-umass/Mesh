@@ -31,10 +31,9 @@ using std::function;
 
 // dynamic (runtime) assert
 #ifndef NDEBUG
-#define d_assert_msg(expr, fmt, ...) \
-  ((likely(expr))                    \
-       ? static_cast<void>(0)        \
-       : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, __LINE__, fmt, __VA_ARGS__))
+#define d_assert_msg(expr, fmt, ...)                                                                                \
+  ((likely(expr)) ? static_cast<void>(0) : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, \
+                                                                              __LINE__, fmt, __VA_ARGS__))
 
 #define d_assert(expr)                   \
   ((likely(expr)) ? static_cast<void>(0) \

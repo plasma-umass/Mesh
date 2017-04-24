@@ -10,9 +10,9 @@
 
 #include <gflags/gflags.h>
 
-#include "bitmap.h"
-
 #include "internal.h"
+
+#include "bitmap.h"
 #include "meshing.h"
 
 using std::vector;
@@ -21,6 +21,8 @@ using std::unique_ptr;
 using std::make_unique;
 using mesh::Bitmap;
 using std::stoi;
+
+typedef std::basic_string<char, std::char_traits<char>, STLAllocator<char, MallocHeap>> internal_string;
 
 DEFINE_bool(v, false, "verbose debugging output");
 
@@ -54,7 +56,7 @@ public:
     d_assert(nStrings > 0);
   }
   vector<Bitmap<MallocHeap>> bitmaps{};
-  vector<string> strings{};
+  vector<internal_string> strings{};
 
   size_t length;  // string length
   size_t occupancy;
@@ -120,7 +122,7 @@ unique_ptr<MeshTestcase> openTestcase(const char *path) {
       testcase->expectedResult = stoi(&line[1]);
       loop = false;
     } else {
-      string sline{line};
+      internal_string sline{line};
       d_assert(sline.length() == testcase->length);
 
       testcase->bitmaps.emplace_back(sline);

@@ -19,6 +19,8 @@
 #include "common.h"
 #include "static/staticlog.h"
 
+#include "heaplayers.h"
+
 namespace mesh {
 
 using std::atomic_size_t;
@@ -75,6 +77,11 @@ private:
   }
 
 public:
+  template <typename T>
+  using InternalAllocator = STLAllocator<T, Heap>;
+
+  typedef std::basic_string<char, std::char_traits<char>, InternalAllocator<char>> internal_string;
+
   typedef BitmapIter<Bitmap, size_t> iterator;
   typedef BitmapIter<Bitmap, size_t> const const_iterator;
 
@@ -83,6 +90,17 @@ public:
   }
 
   explicit Bitmap(const std::string &str) : Bitmap() {
+    reserve(str.length());
+
+    for (size_t i = 0; i < str.length(); ++i) {
+      char c = str[i];
+      d_assert_msg(c == '0' || c == '1', "expected 0 or 1 in bitstring, not %c ('%s')", c, str.c_str());
+      if (c == '1')
+        tryToSet(i);
+    }
+  }
+
+  explicit Bitmap(const internal_string &str) : Bitmap() {
     reserve(str.length());
 
     for (size_t i = 0; i < str.length(); ++i) {
@@ -105,12 +123,13 @@ public:
     _bitarray = nullptr;
   }
 
-  std::string to_string(ssize_t nElements = -1) const {
+  // FIXME: should return an internal_string
+  internal_string to_string(ssize_t nElements = -1) const {
     if (nElements == -1)
       nElements = _elements;
     d_assert(0 <= nElements && static_cast<size_t>(nElements) <= _elements);
 
-    std::string s(nElements, '0');
+    internal_string s(nElements, '0');
 
     for (ssize_t i = 0; i < nElements; i++) {
       if (isSet(i))

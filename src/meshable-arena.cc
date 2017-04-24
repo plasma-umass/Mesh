@@ -145,8 +145,9 @@ void MeshableArena::staticAfterForkChild() {
 }
 
 void MeshableArena::prepareForFork() {
+  debug("%d: prepare fork", getpid());
   runtime().lock();
-  runtime().heap().lock();
+  // runtime().heap().lock();
 
   int err = pipe(_forkPipe);
   if (err == -1)
@@ -154,7 +155,8 @@ void MeshableArena::prepareForFork() {
 }
 
 void MeshableArena::afterForkParent() {
-  runtime().heap().unlock();
+  debug("%d: after fork parent", getpid());
+  // runtime().heap().unlock();
   runtime().unlock();
 
   close(_forkPipe[1]);
@@ -176,7 +178,8 @@ void MeshableArena::afterForkParent() {
 }
 
 void MeshableArena::afterForkChild() {
-  runtime().heap().unlock();
+  debug("%d: after fork child", getpid());
+  // runtime().heap().unlock();
   runtime().unlock();
 
   close(_forkPipe[0]);
