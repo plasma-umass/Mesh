@@ -8,7 +8,7 @@ Created on Tue Jan 31 19:49:02 2017
 from __future__ import division
 from createRandomString import *
 from makeGraph import *
-from greedyMesher import *
+#from greedyMesher import *
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import networkx as nx
@@ -47,7 +47,8 @@ def experiment(length, ones_range_min, ones_range_max, reps, numStrings):
             freed_pages_constant.append(perc)
             
 #include only q or numOnes by name to choose which version of indep random strings you want            
-            independent_strings = createIndependentRandomStrings(length, numStrings, q, numOnes)
+#            independent_strings = createIndependentRandomStrings(length, numStrings, q, numOnes)
+            independent_strings = createIndependentRandomStrings(length, numStrings, numOnes = numOnes)
             graph = makeGraph(independent_strings)
             indep_edges.append(graph.number_of_edges())
             frdpgs_indep = len(nx.max_weight_matching(graph))/2
@@ -108,7 +109,7 @@ def plot_it(length, ones_range_min, ones_range_max, reps, numStrings):
         
 if __name__ == '__main__':        
     #length = [32,64]
-    length = [32]
+    length = [64]
     ones_range_min = 1
     ones_range_max = 32
     reps = 10

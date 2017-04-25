@@ -27,7 +27,7 @@ def createIndependentRandomStrings(length, numStrings, q = -1, numOnes = -1):
     randomly 0 or 1 with probability s.t. the probability of 2 strings meshing
     is q."""
     if q >= 0:
-#        print 'q = (1-p^2)^n'
+#        print 'q = (1-p^2)^b'
         p = math.sqrt(1 - (q**(1.0/length)))
     elif numOnes > 0:
 #        print 'p = n/b'

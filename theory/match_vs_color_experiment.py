@@ -36,6 +36,7 @@ def experiment(length, ones_range_min, ones_range_max, reps, numStrings):
         for iterations in range (reps):
             for i in range(numStrings):
                strings.append(createRandomString(length, numOnes))
+#            strings = createIndependentRandomStrings(length, numStrings, numOnes = numOnes)
                
             graph = makeGraph(strings)
             frdpgs_matching = len(nx.max_weight_matching(graph))/2
@@ -72,14 +73,14 @@ def plot_it(length, ones_range_min, ones_range_max, reps, numStrings):
     plt.ylabel('Percentage of pages freed')
     plt.xlabel('Number of objects per page')
     blue_patch = mpatches.Patch(color='blue', label='matching')
-    green_patch = mpatches.Patch(color = 'green', label = 'coloring')
+    green_patch = mpatches.Patch(color = 'green', label = 'clique')
     plt.legend(handles=[blue_patch, green_patch])
-    plt.title('MAX MATCHING VS MIN COLORING MESHING RESULTS \n{}-object pages, {} pages'.format(length, numStrings))
-    plt.show()
-#    plt.savefig('{}m{}'.format(length, numStrings) + '.png', dpi = 1000)
+    plt.title('MAX MATCHING VS MIN CLIQUE COVER MESHING RESULTS \n{}-object pages, {} pages'.format(length, numStrings))
+#    plt.show()
+    plt.savefig('{}m{}ind'.format(length, numStrings) + '.png', dpi = 1000)
 #    plt.close()
 
-length = [32,64]
+length = [64]
 ones_range_min = 1
 ones_range_max = 32
 reps = 10
