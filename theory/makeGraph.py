@@ -9,15 +9,17 @@ from scipy.sparse import csr_matrix
 import networkx as nx
 
 def makeAdjacencyMatrix(strings, sparse):
+    nums = [long(s, base=2) for s in strings]
     dim = len(strings)
     graph = np.zeros((dim,dim))
     for i in range(dim):
         for j in range(dim):
-            if i != j:
-                num = [int(x) for x in list(strings[i])]
-                num2 = [int(x) for x in list(strings[j])]
-                if np.dot(num, num2) == 0:
-                    graph[i,j] = 1
+            if i == j:
+                continue
+            num = nums[i]
+            num2 = nums[j]
+            if num & num2 == 0:
+                graph[i,j] = 1
     if sparse:
         graph = csr_matrix(graph)
     return graph
@@ -26,15 +28,17 @@ def makeAdjacencyMatrix(strings, sparse):
 
 
 def makeGraph(strings):
+    nums = [long(s, base=2) for s in strings]
     dim = len(strings)
     g = np.zeros((dim,dim))
     for i in range(dim):
         for j in range(dim):
-            if i != j:
-                num = [int(x) for x in list(strings[i])]
-                num2 = [int(x) for x in list(strings[j])]
-                if np.dot(num, num2) == 0:
-                    g[i,j] = 1
+            if i == j:
+                continue
+            num = nums[i]
+            num2 = nums[j]
+            if num & num2 == 0:
+                g[i,j] = 1
     graph = nx.Graph(g)
     return graph
     

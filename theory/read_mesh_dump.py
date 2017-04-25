@@ -6,6 +6,8 @@ import sys
 import argparse
 from collections import defaultdict
 
+import meshers
+
 MB = 1/1024.0/1024.0
 
 class Span(object):
@@ -31,8 +33,12 @@ def read_data(json_path):
     return size_classes
 
 
-def print_graph(size, spans):
-    print('%d SPANZ' % (len(spans),))
+def count_meshes(mesher, spans):
+    bitmaps = [s.bitmap for s in spans]
+    if len(bitmaps) % 2 == 1:
+        bitmaps.append('1' * len(s.bitmap))
+
+    return mesher(bitmaps)
 
 
 def main():
@@ -47,7 +53,7 @@ def main():
 
     size_classes = read_data(args.json_file[0])
 
-    sizes = sorted(size_classes.keys())
+    sizes = sorted(size_classes.keys(), reverse=True)
 
     total_size = 0
     for size in sizes:
@@ -56,12 +62,15 @@ def main():
 
     print('Total heap size: %.1f MiB' % (total_size * MB,))
 
+    saved = 0
     for size in sizes:
         spans = size_classes[size]
-        print('\t%5d: %d spans' % (size, len(spans)))
+        # n = count_meshes(meshers.optimalMesher, spans)
+        n = count_meshes(meshers.optimalMesher, spans)
+        print('\t%5d: %d spans (%d meshes)' % (size, len(spans), n))
+        saved += (size * spans[0].length) * n
 
-    if args.size:
-        print_graph(args.size, size_classes[args.size])
+    print('Saved size: %.1f MiB' % (saved * MB,))
 
     return 0
 
