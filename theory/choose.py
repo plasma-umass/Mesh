@@ -40,4 +40,4 @@ if __name__ == '__main__':
         print 'q val for {}: {}\n'.format(i,compute_q(32,i))    
     #print compute_q(32,13)
     
-#print compute_q(64, 15)
+print compute_q(32, 6)

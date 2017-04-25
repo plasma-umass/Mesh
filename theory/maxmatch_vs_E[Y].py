@@ -31,12 +31,15 @@ def experiment(length, ones_range_min, ones_range_max, reps, numStrings):
 
     for numOnes in range(ones_range_min, ones_range_max+1):
         ones.append(numOnes)
-        qs.append(compute_q(length, numOnes)*100)
+        q = compute_q(length, numOnes)
+        qs.append(q*100)
+#        qs.append(compute_q(length, numOnes)*100)
         freed_pages_maxmatching = []
         freed_pages_greedymatching = []
         for iterations in range (reps):
             for i in range(numStrings):
                strings.append(createRandomString(length, numOnes))
+#            strings = createIndependentRandomStrings(length = length, numStrings = numStrings, q = q)
                
             graph = makeGraph(strings)
             frdpgs_maxmatching = len(nx.max_weight_matching(graph))/2
@@ -127,14 +130,14 @@ def plot_it(length, ones_range_min, ones_range_max, reps, numStrings):
     plt.ylabel('Percentage of pages freed')
     plt.xlabel('Number of objects per page')
     blue_patch = mpatches.Patch(color='blue', label='max matching')
-    green_patch = mpatches.Patch(color = 'green', label = 'E[Y] bound')
+    green_patch = mpatches.Patch(color = 'green', label = 'lower bound')
     red_patch = mpatches.Patch(color = 'red', label = 'q')
     plt.legend(handles=[blue_patch, green_patch])
 #    plt.legend(handles=[blue_patch, green_patch, red_patch])
-    plt.title('MAX MATCHING VS E[Y] BOUND RESULTS \n{}-object pages, {} pages'.format(length, numStrings))
-    plt.show()
+    plt.title('MAX MATCHING VS LOWER BOUND \n{}-object pages, {} pages'.format(length, numStrings))
+#    plt.show()
 #    plt.savefig('maxvE[Y]{},{}'.format(length, numStrings) + '.png', dpi = 1000)
-#    plt.savefig('maxvdeg+1{},{}'.format(length, numStrings) + '.png', dpi = 1000)
+    plt.savefig('maxvdeg+1imp++{},{}'.format(length, numStrings) + '.png', dpi = 1000)
 #    plt.savefig('manystrings.png', dpi = 1000)
     plt.close()
 
@@ -144,7 +147,7 @@ if __name__ == '__main__':
     length = [32]
     ones_range_min = 1
     ones_range_max = 32
-    reps = 100
+    reps = 10
 #    numStrings = [80,100,150,200]
     numStrings= [80]
     

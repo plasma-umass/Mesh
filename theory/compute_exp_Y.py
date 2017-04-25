@@ -61,7 +61,8 @@ def compute_degreeplusone_bound(length, numOnes, numStrings):
     for a in range(numStrings-2+1):
         for b in range(numStrings-2-a+1):
             for c in range(numStrings-2-a-b+1):
-                add = .5*(1/(a+c+2) + 1/(b+c+2))*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
+                add = min(1/(a+c+2), 1/(b+c+2))*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
+#                add = .5*(1/(a+c+2) + 1/(b+c+2))*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
                 sum += add
     sum *= q
     return sum*nCr(numStrings,2)
@@ -80,14 +81,19 @@ def compute_improved_degreeplusone_bound(length, numOnes, numStrings):
             for c in range(numStrings-2-a-b+1):
                 if a+c+1==1 and b+c+1==1:
                     add = 1*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
-                elif a+c+1==1 or b+c+1==1:
-                    add = .5*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
-#                elif a+c+1==2 and b+c+1==2:
-#                    add = .5*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
+#                elif a+c+1==1:
+#                    add = (1/(b+c+1))*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
+#                elif b+c+1==1:
+#                    add = (1/(a+c+1))*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
+##                elif a+c+1==2 and b+c+1==2:
+##                    add = .5*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
 #                elif (a+c+1==2 and b+c+1==3) or (a+c+1==3 and b+c+1==2): 
-#                    add = .33*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
+#                    add = prob(a,b,c,numStrings, numOnes,p1,p2,p3)/3.0
+                elif a+c+1 != b+c+1:
+                    add = min(1/(a+c+1), 1/(b+c+1))*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
                 else:
-                    add = .5*(1/(a+c+2) + 1/(b+c+2))*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
+                    add = min(1/(a+c+2), 1/(b+c+2))*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
+#                add = .5*(1/(a+c+2) + 1/(b+c+2))*prob(a,b,c,numStrings, numOnes,p1,p2,p3)
                 sum += add
     sum *= q
     return sum*nCr(numStrings,2)
