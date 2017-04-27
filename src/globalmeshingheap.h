@@ -331,8 +331,6 @@ protected:
   // are allocated from the arena)
   BigHeap _bigheap{};
 
-  MiniHeap *_current[NumBins];
-
   mt19937_64 _prng;
 
   size_t _littleheapCounts[NumBins];
