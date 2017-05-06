@@ -287,7 +287,7 @@ protected:
 typedef MiniHeapBase<> MiniHeap;
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
-// static_assert(sizeof(MiniHeap) <= 64, "MiniHeap too big!");
+//static_assert(sizeof(MiniHeap) <= 64, "MiniHeap too big!");
 
 }  // namespace mesh
 

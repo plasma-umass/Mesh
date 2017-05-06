@@ -82,9 +82,7 @@ public:
 
   inline size_t pop() {
     d_assert(_off >= 0 && static_cast<uint16_t>(_off) < _maxCount);
-    auto allocOff = _list[_off];
-
-    _off += 1;
+    auto allocOff = _list[_off++];
 
     return allocOff;
   }
