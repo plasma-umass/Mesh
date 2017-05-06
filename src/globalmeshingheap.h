@@ -225,10 +225,9 @@ public:
       mh->free(ptr);
       if (unlikely(!mh->isAttached() && mh->isEmpty())) {
         freeMiniheap(mh);
+      } else if (unlikely(shouldMesh())) {
+        meshAllSizeClasses();
       }
-      //  else if (unlikely(shouldMesh())) {
-      //   meshAllSizeClasses();
-      // }
     } else {
       std::lock_guard<std::mutex> lock(_bigMutex);
       _bigheap.free(ptr);
