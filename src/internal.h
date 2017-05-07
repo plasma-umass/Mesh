@@ -31,6 +31,7 @@ static inline size_t RoundUpToPage(size_t sz) {
 
 namespace internal {
 
+static constexpr size_t MaxMeshes = 4;
 static constexpr bool SlowButAccurateRandom = false;
 static constexpr size_t MeshMarker = 7305126540297948313;
 static inline bool isMeshMarker(void *ptr) {
