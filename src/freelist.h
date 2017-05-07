@@ -6,6 +6,7 @@
 #define MESH__FREELIST_H
 
 #include <random>
+#include <utility>
 
 #include "rng/mwc.h"
 
@@ -73,11 +74,7 @@ public:
       swapOff = mwc.inRange(_off, maxCount() - 1);
     }
 
-    const fl_off_t a = _list[_off];
-    const fl_off_t b = _list[swapOff];
-
-    _list[_off] = b;
-    _list[swapOff] = a;
+    std::swap(_list[_off], _list[swapOff]);
   }
 
   inline size_t pop() {
