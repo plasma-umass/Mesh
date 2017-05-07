@@ -197,7 +197,7 @@ void Runtime::startBgThread() {
 void *Runtime::bgThread(void *arg) {
   auto &rt = mesh::runtime();
 
-  debug("libmesh: background thread started\n");
+  // debug("libmesh: background thread started\n");
 
   while (true) {
     struct signalfd_siginfo siginfo;

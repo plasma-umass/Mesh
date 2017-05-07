@@ -19,7 +19,7 @@
 namespace mesh {
 
 template <size_t MaxFreelistLen = sizeof(uint8_t) << 8,  // AKA max # of objects per miniheap
-          size_t MaxMeshes = 4>                          // maximum number of VM spans we can track
+          size_t MaxMeshes = internal::MaxMeshes>        // maximum number of VM spans we can track
 class MiniHeapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
@@ -287,7 +287,7 @@ protected:
 typedef MiniHeapBase<> MiniHeap;
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
-//static_assert(sizeof(MiniHeap) <= 64, "MiniHeap too big!");
+// static_assert(sizeof(MiniHeap) <= 64, "MiniHeap too big!");
 
 }  // namespace mesh
 
