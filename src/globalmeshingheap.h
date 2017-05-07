@@ -252,6 +252,9 @@ public:
   void mesh(MiniHeap *dst, MiniHeap *&src) {
     const auto srcSpan = src->getSpanStart();
 
+    if (dst->meshCount() + src->meshCount() > internal::MaxMeshes)
+      return;
+
     dst->consume(src);
 
     const size_t sz = dst->spanSize();
