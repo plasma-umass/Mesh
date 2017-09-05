@@ -257,8 +257,6 @@ public:
   // must be called with the world stopped, after call to mesh()
   // completes src is a nullptr
   void mesh(MiniHeap *dst, MiniHeap *&src) {
-    const auto srcSpan = src->getSpanStart();
-
     if (dst->meshCount() + src->meshCount() > internal::MaxMeshes)
       return;
 
@@ -267,11 +265,14 @@ public:
     const size_t sz = dst->spanSize();
     Super::mesh(reinterpret_cast<void *>(dst->getSpanStart()), reinterpret_cast<void *>(src->getSpanStart()), sz);
 
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    const auto srcSpans = src->spans();
+    const auto srcMeshCount = src->meshCount();
+    for (size_t i = 0; i < srcMeshCount; i++) {
+      _miniheaps[reinterpret_cast<uintptr_t>(srcSpans[i])] = dst;
+    }
+
     freeMiniheapAfterMesh(src);
     src = nullptr;
-
-    _miniheaps[srcSpan] = dst;
   }
 
   size_t getAllocatedMiniheapCount() const {
@@ -308,6 +309,11 @@ protected:
 
     for (auto &mergeSet : args->mergeSets) {
       d_assert(mergeSet.size() == 2);  // FIXME
+
+      // merge into the one with a larger mesh count
+      if (mergeSet[0]->meshCount() < mergeSet[1]->meshCount())
+        std::swap(mergeSet[0], mergeSet[1]);
+
       args->instance->mesh(mergeSet[0], mergeSet[1]);
     }
   }

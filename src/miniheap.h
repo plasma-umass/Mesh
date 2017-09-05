@@ -48,6 +48,8 @@ public:
   }
 
   ~MiniHeapBase() {
+    // if (_meshCount > 1)
+    //   dumpDebug();
   }
 
   void printOccupancy() const {
@@ -91,6 +93,9 @@ public:
   inline void consume(const MiniHeap *src) {
     const auto srcSpan = src->getSpanStart();
 
+    // this would be bad
+    d_assert(src != this);
+
     // for each object in src, copy it to our backing span + update
     // our bitmap and in-use count
     for (auto const &off : src->bitmap()) {
@@ -101,8 +106,11 @@ public:
       memcpy(dstObject, srcObject, objectSize());
     }
 
-    // FIXME: src might have several spans
-    trackMeshedSpan(srcSpan);
+    const auto srcSpans = src->spans();
+    const auto srcMeshCount = src->meshCount();
+    for (size_t i = 0; i < srcMeshCount; i++) {
+      trackMeshedSpan(reinterpret_cast<uintptr_t>(srcSpans[i]));
+    }
   }
 
   inline bool contains(void *ptr) const {
@@ -234,7 +242,11 @@ protected:
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
     for (size_t i = 0; i < _meshCount; ++i) {
-      d_assert(_span[i] != nullptr);
+      if (_span[i] == nullptr) {
+        mesh::debug("_span[%d] should be non-null", i);
+        dumpDebug();
+        d_assert(false);
+      }
       const auto span = reinterpret_cast<uintptr_t>(_span[i]);
       if (span <= ptrval && ptrval < span + spanSize())
         return span;
@@ -246,9 +258,9 @@ protected:
   void dumpDebug() const {
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = _inUseCount;
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu)\t%p-%p\n", this, _objectSize,
-                maxCount(), heapPages, this->isExhausted(), inUseCount, _span[0],
-                reinterpret_cast<uintptr_t>(_span) + spanSize());
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu, mesh: %zu)\t%p-%p\n", this, _objectSize,
+                maxCount(), heapPages, this->isExhausted(), inUseCount, _meshCount, _span[0],
+                reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
   }
 

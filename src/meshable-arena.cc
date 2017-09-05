@@ -53,6 +53,7 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUI
 }
 
 void MeshableArena::mesh(void *keep, void *remove, size_t sz) {
+  //debug("keep: %p, remove: %p\n", keep, remove);
   const auto keepOff = reinterpret_cast<uintptr_t>(keep) - reinterpret_cast<uintptr_t>(_arenaBegin);
   const auto removeOff = reinterpret_cast<uintptr_t>(remove) - reinterpret_cast<uintptr_t>(_arenaBegin);
   d_assert(_offMap.find(keepOff) != _offMap.end());
@@ -64,6 +65,8 @@ void MeshableArena::mesh(void *keep, void *remove, size_t sz) {
 
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff);
   freePhys(remove, sz);
+  if (*(char *)remove == 0 || *(char *)((char *)remove+sz-1))
+    write(-2, "mmap was OK", 11);
   d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 }
 
