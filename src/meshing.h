@@ -73,7 +73,8 @@ inline void randomSort(mt19937_64 &prng, size_t count, T *miniheaps,
     const auto len = h1->bitmap().byteCount();
     const auto bitmap1 = h1->bitmap().bitmap();
     const auto bitmap2 = h2->bitmap().bitmap();
-    d_assert(len == h2->bitmap().byteCount());
+    const auto len2 = h2->bitmap().byteCount();
+    d_assert_msg(len == h2->bitmap().byteCount(), "mismatched lengths? %zu != %zu", len, len2);
 
     if (mesh::bitmapsMeshable(bitmap1, bitmap2, len)) {
       internal::vector<T *> heaps{h1, h2};
