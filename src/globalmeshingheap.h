@@ -326,7 +326,10 @@ protected:
     // FIXME: is it safe to have this function not use internal::allocator?
     auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
         // std::allocator_arg, internal::allocator,
-        [&](internal::vector<MiniHeap *> &&mesh) { args.mergeSets.push_back(std::move(mesh)); });
+        [&](internal::vector<MiniHeap *> &&mesh) {
+          if (!mesh[0]->isAttached() && !mesh[1]->isAttached())
+            args.mergeSets.push_back(std::move(mesh));
+        });
 
     for (size_t i = 0; i < NumBins; i++) {
       method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
