@@ -10,6 +10,8 @@ else
 
 PREFIX = /usr/local
 
+ARCH             = x86_64
+
 COMMON_SRCS      = src/runtime.cc src/meshing.cc src/meshable-arena.cc src/d_assert.cc \
                    src/sanitizer_stubs.cc \
                    src/sanitizer_stoptheworld_linux_libcdep.cc \
@@ -37,8 +39,8 @@ COMMON_SRCS      = src/runtime.cc src/meshing.cc src/meshable-arena.cc src/d_ass
                    src/sanitizer_termination.cc \
                    src/sanitizer_unwind_linux_libcdep.cc
 
-LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc
-LIB_OBJS         = $(addprefix build/,$(LIB_SRCS:.cc=.o))
+LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc src/sanitizer_linux_$(ARCH).S
+LIB_OBJS         = $(addprefix build/,$(patsubst %.S,%.o,$(LIB_SRCS:.cc=.o)))
 LIB              = libmesh.so
 
 GTEST_SRCS       = src/vendor/googletest/googletest/src/gtest-all.cc \
@@ -81,7 +83,7 @@ MAKEFLAGS       += -s
 endif
 
 .SUFFIXES:
-.SUFFIXES: .cc .cpp .c .o .d .test
+.SUFFIXES: .cc .cpp .S .c .o .d .test
 
 all: test $(BENCH_BIN) $(LIB) $(FRAG_BIN)
 
@@ -120,6 +122,10 @@ $(GFLAGS_LIB): $(GFLAGS_BUILD) $(CONFIG)
 build/src/vendor/googletest/%.o: src/vendor/googletest/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
+
+build/src/%.o: src/%.S build $(CONFIG)
+	@echo "  AS    $@"
+	$(CC) -O$(O) $(ASFLAGS) -o $@ -c $<
 
 build/src/%.o: src/%.c build $(CONFIG)
 	@echo "  CC    $@"

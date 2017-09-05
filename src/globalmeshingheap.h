@@ -8,6 +8,8 @@
 #include <mutex>
 #include <shared_mutex>
 
+#include "sanitizer_stoptheworld.h"
+
 #include "heaplayers.h"
 
 #include "internal.h"
@@ -43,6 +45,11 @@ private:
   static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
   static_assert(HL::gcd<BigHeap::Alignment, Alignment>::value == Alignment,
                 "expected BigHeap to have 16-byte alignment");
+
+  struct MeshArguments {
+    GlobalMeshingHeap *instance;
+    internal::vector<internal::vector<MiniHeap *>> mergeSets;
+  };
 
 public:
   enum { Alignment = 16 };
@@ -296,32 +303,35 @@ protected:
     return shouldMesh;
   }
 
+  static void performMeshing(const __sanitizer::SuspendedThreadsList &suspendedThreads, void *argument) {
+    MeshArguments *args = (MeshArguments *)argument;
+
+    for (auto &mergeSet : args->mergeSets) {
+      d_assert(mergeSet.size() == 2);  // FIXME
+      args->instance->mesh(mergeSet[0], mergeSet[1]);
+    }
+  }
+
   // check for meshes in all size classes
   void meshAllSizeClasses() {
-    internal::vector<internal::vector<MiniHeap *>> mergeSets;
+    MeshArguments args;
 
     // FIXME: is it safe to have this function not use internal::allocator?
     auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
         // std::allocator_arg, internal::allocator,
-        [&](internal::vector<MiniHeap *> &&mesh) { mergeSets.push_back(std::move(mesh)); });
+        [&](internal::vector<MiniHeap *> &&mesh) { args.mergeSets.push_back(std::move(mesh)); });
 
     for (size_t i = 0; i < NumBins; i++) {
       method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
     }
 
-    if (mergeSets.size() == 0)
+    if (args.mergeSets.size() == 0)
       return;
 
-    _stats.meshCount += mergeSets.size();
+    _stats.meshCount += args.mergeSets.size();
 
-    internal::StopTheWorld();
-
-    for (auto &mergeSet : mergeSets) {
-      d_assert(mergeSet.size() == 2);  // FIXME
-      mesh(mergeSet[0], mergeSet[1]);
-    }
-
-    internal::StartTheWorld();
+    // run the actual meshing with the world stopped
+    __sanitizer::StopTheWorld(performMeshing, &args);
   }
 
   const size_t _maxObjectSize;
