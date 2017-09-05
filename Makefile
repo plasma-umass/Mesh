@@ -11,20 +11,31 @@ else
 PREFIX = /usr/local
 
 COMMON_SRCS      = src/runtime.cc src/meshing.cc src/meshable-arena.cc src/d_assert.cc \
-                   src/sanitizer_stoptheworld_linux_libcdep.cc src/sanitizer_linux.cc \
+                   src/sanitizer_stubs.cc \
+                   src/sanitizer_stoptheworld_linux_libcdep.cc \
                    src/sanitizer_libc.cc \
-                   src/sanitizer_common.cc src/sanitizer_common_libcdep.cc \
+                   src/sanitizer_linux.cc \
+                   src/sanitizer_linux_libcdep.cc \
                    src/sanitizer_posix.cc \
-                   src/sanitizer_termination.cc src/sanitizer_flags.cc \
-                   src/sanitizer_procmaps_common.cc src/sanitizer_procmaps_linux.cc \
-                   src/sanitizer_posix_libcdep.cc src/sanitizer_file.cc src/sanitizer_printf.cc \
-                   src/sanitizer_flag_parser.cc src/sanitizer_linux_libcdep.cc \
+                   src/sanitizer_posix_libcdep.cc \
+                   src/sanitizer_procmaps_common.cc \
+                   src/sanitizer_procmaps_linux.cc \
                    src/sanitizer_symbolizer.cc \
+                   src/sanitizer_symbolizer_libbacktrace.cc \
                    src/sanitizer_symbolizer_libcdep.cc \
                    src/sanitizer_symbolizer_posix_libcdep.cc \
-                   src/sanitizer_stackdepot.cc src/sanitizer_stacktrace_libcdep.cc \
-                   src/sanitizer_stacktrace_printer.cc src/sanitizer_symbolizer_libbacktrace.cc \
-                   src/sanitizer_stacktrace.cc src/sanitizer_unwind_linux_libcdep.cc
+                   src/sanitizer_common.cc \
+                   src/sanitizer_common_libcdep.cc \
+                   src/sanitizer_file.cc \
+                   src/sanitizer_flag_parser.cc \
+                   src/sanitizer_flags.cc \
+                   src/sanitizer_printf.cc \
+                   src/sanitizer_stackdepot.cc \
+                   src/sanitizer_stacktrace.cc \
+                   src/sanitizer_stacktrace_libcdep.cc \
+                   src/sanitizer_stacktrace_printer.cc \
+                   src/sanitizer_termination.cc \
+                   src/sanitizer_unwind_linux_libcdep.cc
 
 LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc
 LIB_OBJS         = $(addprefix build/,$(LIB_SRCS:.cc=.o))
