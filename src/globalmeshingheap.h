@@ -315,6 +315,7 @@ protected:
   // check for meshes in all size classes
   void meshAllSizeClasses() {
     MeshArguments args;
+    args.instance = this;
 
     // FIXME: is it safe to have this function not use internal::allocator?
     auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
