@@ -168,21 +168,21 @@ class InternalScopedString : public InternalScopedBuffer<char> {
   uptr length_;
 };
 
-// Simple low-level (mmap-based) allocator for internal use. Doesn't have
-// constructor, so all instances of LowLevelAllocator should be
-// linker initialized.
-class LowLevelAllocator {
- public:
-  // Requires an external lock.
-  void *Allocate(uptr size);
- private:
-  char *allocated_end_;
-  char *allocated_current_;
-};
-typedef void (*LowLevelAllocateCallback)(uptr ptr, uptr size);
-// Allows to register tool-specific callbacks for LowLevelAllocator.
-// Passing NULL removes the callback.
-void SetLowLevelAllocateCallback(LowLevelAllocateCallback callback);
+// // Simple low-level (mmap-based) allocator for internal use. Doesn't have
+// // constructor, so all instances of LowLevelAllocator should be
+// // linker initialized.
+// class LowLevelAllocator {
+//  public:
+//   // Requires an external lock.
+//   void *Allocate(uptr size);
+//  private:
+//   char *allocated_end_;
+//   char *allocated_current_;
+// };
+// typedef void (*LowLevelAllocateCallback)(uptr ptr, uptr size);
+// // Allows to register tool-specific callbacks for LowLevelAllocator.
+// // Passing NULL removes the callback.
+// void SetLowLevelAllocateCallback(LowLevelAllocateCallback callback);
 
 // IO
 void CatastrophicErrorWrite(const char *buffer, uptr length);
