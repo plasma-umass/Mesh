@@ -28,6 +28,8 @@ if c.optimize_build:
 else:
     c.append('cflags', '-O0')
 
+c.append('cflags', '-DSANITIZER_GO=0')
+
 c.append('cflags', '-fPIC')
 c.append('cflags', '-pipe')
 c.append('cflags', '-fno-builtin-malloc')
