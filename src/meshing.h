@@ -51,7 +51,7 @@ inline void randomSort(mt19937_64 &prng, size_t count, T *miniheaps,
   internal::vector<T *> heaps{};  // mutable copy
 
   for (auto mh = miniheaps; mh != nullptr; mh = mh->next()) {
-    if (!mh->isAttached() && mh->fullness() < OccupancyMaxThreshold)
+    if (mh->isMeshingCandidate() && mh->fullness() < OccupancyMaxThreshold)
       heaps.push_back(mh);
   }
 
