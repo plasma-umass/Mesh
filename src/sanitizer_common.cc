@@ -24,7 +24,7 @@ namespace __sanitizer {
 
 const char *SanitizerToolName = "SanitizerTool";
 
-atomic_uint32_t current_verbosity;
+atomic_uint32_t current_verbosity{1};
 uptr PageSizeCached;
 
 // PID of the tracer task in StopTheWorld. It shares the address space with the
