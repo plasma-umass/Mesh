@@ -8,7 +8,7 @@
 using namespace mesh;
 
 static __attribute__((constructor)) void libmesh_init() {
-  runtime().startBgThread();
+  //runtime().startBgThread();
 }
 
 static __attribute__((destructor)) void libmesh_fini() {
