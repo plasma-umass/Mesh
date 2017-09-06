@@ -171,6 +171,20 @@ public:
     return _inUseCount;
   }
 
+  inline void ref() const {
+    ++_refCount;
+  }
+
+  inline void unref() const {
+    --_refCount;
+  }
+
+  inline bool isMeshingCandidate() const {
+    if (_refCount > 0)
+      mesh::debug("skipping due to MH reference");
+    return !isAttached() && _refCount == 0;
+  }
+
   /// Returns the fraction full (in the range [0, 1]) that this miniheap is.
   inline double fullness() const {
     return static_cast<double>(_inUseCount) / static_cast<double>(maxCount());
@@ -289,6 +303,7 @@ protected:
   Freelist<MaxFreelistLen> _freelist;
   const uint16_t _objectSize;
   atomic_uint16_t _inUseCount{0};
+  mutable atomic_uint16_t _refCount{0};
   uint8_t _meshCount : 7;
   uint8_t _attached : 1;
   mesh::internal::Bitmap _bitmap;
