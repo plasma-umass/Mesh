@@ -157,6 +157,7 @@ public:
     return _bigheap.malloc(sz);
   }
 
+  // if the MiniHeap is non-null, its reference count is increased by one
   inline MiniHeap *miniheapFor(void *const ptr) const {
     std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
 
@@ -164,8 +165,10 @@ public:
     auto it = greatest_leq(_miniheaps, ptrval);
     if (likely(it != _miniheaps.end())) {
       auto candidate = it->second;
-      if (likely(candidate->contains(ptr)))
+      if (likely(candidate->contains(ptr))) {
+        candidate->ref();
         return candidate;
+      }
     }
 
     return nullptr;
@@ -232,7 +235,11 @@ public:
       mh->free(ptr);
       if (unlikely(!mh->isAttached() && mh->isEmpty())) {
         freeMiniheap(mh);
-      } else if (unlikely(shouldMesh())) {
+      } else {
+        mh->unref();
+      }
+
+      if (unlikely(shouldMesh())) {
         meshAllSizeClasses();
       }
     } else {
@@ -247,7 +254,9 @@ public:
 
     auto mh = miniheapFor(ptr);
     if (mh) {
-      return mh->getSize(ptr);
+      auto size = mh->getSize(ptr);
+      mh->unref();
+      return size;
     } else {
       std::lock_guard<std::mutex> lock(_bigMutex);
       return _bigheap.getSize(ptr);
@@ -304,6 +313,7 @@ protected:
     return shouldMesh;
   }
 
+  //static void performMeshing(void *argument) {
   static void performMeshing(const __sanitizer::SuspendedThreadsList &suspendedThreads, void *argument) {
     MeshArguments *args = (MeshArguments *)argument;
 
@@ -323,12 +333,15 @@ protected:
     MeshArguments args;
     args.instance = this;
 
+    // XXX: can we get away with using shared at first, then upgrading to exclusive?
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+
     // FIXME: is it safe to have this function not use internal::allocator?
     auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
         // std::allocator_arg, internal::allocator,
-        [&](internal::vector<MiniHeap *> &&mesh) {
-          if (!mesh[0]->isAttached() && !mesh[1]->isAttached())
-            args.mergeSets.push_back(std::move(mesh));
+        [&](internal::vector<MiniHeap *> &&miniheaps) {
+          if (miniheaps[0]->isMeshingCandidate() && miniheaps[1]->isMeshingCandidate())
+            args.mergeSets.push_back(std::move(miniheaps));
         });
 
     for (size_t i = 0; i < NumBins; i++) {
@@ -342,6 +355,9 @@ protected:
 
     // run the actual meshing with the world stopped
     __sanitizer::StopTheWorld(performMeshing, &args);
+    //internal::StopTheWorld();
+    //performMeshing(&args);
+    //internal::StartTheWorld();
   }
 
   const size_t _maxObjectSize;
