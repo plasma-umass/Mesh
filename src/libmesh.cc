@@ -27,7 +27,10 @@ static __attribute__((destructor)) void libmesh_fini() {
 
 extern "C" {
 void *xxmalloc(size_t sz) {
-  return runtime().localHeap()->malloc(sz);
+  void *p = runtime().localHeap()->malloc(sz);
+  if (p == nullptr)
+    mesh::debug("malloc returning null");
+  return p;
 }
 
 void xxfree(void *ptr) {
