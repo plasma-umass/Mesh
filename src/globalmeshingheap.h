@@ -271,12 +271,14 @@ public:
 
     dst->consume(src);
 
-    const size_t sz = dst->spanSize();
-    Super::mesh(reinterpret_cast<void *>(dst->getSpanStart()), reinterpret_cast<void *>(src->getSpanStart()), sz);
+    const size_t dstSpanSize = dst->spanSize();
+    const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart());
 
     const auto srcSpans = src->spans();
     const auto srcMeshCount = src->meshCount();
+
     for (size_t i = 0; i < srcMeshCount; i++) {
+      Super::mesh(dstSpanStart, srcSpans[i], dstSpanSize);
       _miniheaps[reinterpret_cast<uintptr_t>(srcSpans[i])] = dst;
     }
 
@@ -355,6 +357,7 @@ protected:
 
     // run the actual meshing with the world stopped
     __sanitizer::StopTheWorld(performMeshing, &args);
+
     //internal::StopTheWorld();
     //performMeshing(&args);
     //internal::StartTheWorld();
