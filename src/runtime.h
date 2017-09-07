@@ -40,11 +40,11 @@ class GlobalHeap : public GlobalMeshingHeap<mesh::MmapHeap, NBins, mesh::size2Cl
 // Fewer buckets than regular KingsleyHeap (to ensure multiple objects
 // fit in the 128Kb spans used by MiniHeaps).
 class LocalHeap
-    : public DebugHeap<SemiANSIHeap<LocalMeshingHeap<NBins, mesh::size2Class, mesh::class2Size, MeshPeriod, GlobalHeap>,
-                                    GlobalHeap>, 'F', GlobalHeap> {
+    : public SemiANSIHeap<LocalMeshingHeap<NBins, mesh::size2Class, mesh::class2Size, MeshPeriod, GlobalHeap>,
+                          GlobalHeap> {
 private:
   DISALLOW_COPY_AND_ASSIGN(LocalHeap);
-  typedef DebugHeap<SemiANSIHeap<LocalMeshingHeap<NBins, mesh::size2Class, mesh::class2Size, MeshPeriod, GlobalHeap>, GlobalHeap>, 'F', GlobalHeap>
+  typedef SemiANSIHeap<LocalMeshingHeap<NBins, mesh::size2Class, mesh::class2Size, MeshPeriod, GlobalHeap>, GlobalHeap>
       SuperHeap;
 
 public:
