@@ -52,23 +52,12 @@ public:
     //   dumpDebug();
   }
 
-  void markFree() {
-    //d_assert(!_attached);
-    _freed = true;
-  }
-
-  inline void assertNotFreed() const {
-    d_assert_msg(!_freed, "MiniHeap(%p:%5zu): Use After Free!\n", this, _objectSize);
-  }
-
   void printOccupancy() const {
     mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"bitmap\": \"%s\"}\n", this, objectSize(),
                 maxCount(), _bitmap.to_string().c_str());
   }
 
   inline void *malloc(size_t sz) {
-    assertNotFreed();
-
     d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached, isExhausted());
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
@@ -82,8 +71,6 @@ public:
   }
 
   inline void localFree(void *ptr, mt19937_64 &prng, MWC &mwc) {
-    assertNotFreed();
-
     const ssize_t freedOff = getOff(ptr);
     if (freedOff < 0)
       return;
@@ -94,8 +81,6 @@ public:
   }
 
   inline void free(void *ptr) {
-    assertNotFreed();
-
     const size_t off = getOff(ptr);
     if (off < 0)
       return;
@@ -106,8 +91,6 @@ public:
 
   /// Copies (for meshing) the contents of src into our span.
   inline void consume(const MiniHeap *src) {
-    assertNotFreed();
-
     const auto srcSpan = src->getSpanStart();
 
     // this would be bad
@@ -131,33 +114,23 @@ public:
   }
 
   inline bool contains(void *ptr) const {
-    assertNotFreed();
-
     return spanStart(ptr) != 0;
   }
 
   inline size_t spanSize() const {
-    assertNotFreed();
-
     size_t bytesNeeded = static_cast<size_t>(_objectSize) * maxCount();
     return mesh::RoundUpToPage(bytesNeeded);
   }
 
   inline size_t maxCount() const {
-    assertNotFreed();
-
     return _freelist.maxCount();
   }
 
   inline size_t objectSize() const {
-    assertNotFreed();
-
     return _objectSize;
   }
 
   inline size_t getSize(void *ptr) const {
-    assertNotFreed();
-
     d_assert_msg(contains(ptr), "span(%p) <= %p < %p", _span[0], ptr,
                  reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
 
@@ -172,59 +145,41 @@ public:
   /// bitmap is non-full, but the freelist is empty (as non-local
   /// frees don't touch the bitmap).
   inline bool isExhausted() const {
-    assertNotFreed();
-
     return _freelist.isExhausted();
   }
 
   inline uintptr_t getSpanStart() const {
-    assertNotFreed();
-
     return reinterpret_cast<uintptr_t>(_span[0]);
   }
 
   /// called when a LocalHeap is done with a MiniHeap (it is
   /// "detaching" it and releasing it back to the global heap)
   inline void detach() {
-    assertNotFreed();
-
     _freelist.detach();
     _attached = false;
   }
 
   inline bool isAttached() const {
-    assertNotFreed();
-
     return _attached;
   }
 
   inline bool isEmpty() const {
-    assertNotFreed();
-
     return _inUseCount == 0;
   }
 
   inline size_t inUseCount() const {
-    assertNotFreed();
-
     return _inUseCount;
   }
 
   inline void ref() const {
-    assertNotFreed();
-
     ++_refCount;
   }
 
   inline void unref() const {
-    assertNotFreed();
-
     --_refCount;
   }
 
   inline bool isMeshingCandidate() const {
-    assertNotFreed();
-
     if (_refCount > 0)
       mesh::debug("skipping due to MH reference");
     return !isAttached() && _refCount == 0;
@@ -232,20 +187,14 @@ public:
 
   /// Returns the fraction full (in the range [0, 1]) that this miniheap is.
   inline double fullness() const {
-    assertNotFreed();
-
     return static_cast<double>(_inUseCount) / static_cast<double>(maxCount());
   }
 
   const mesh::internal::Bitmap &bitmap() const {
-    assertNotFreed();
-
     return _bitmap;
   }
 
   void trackMeshedSpan(uintptr_t spanStart) {
-    assertNotFreed();
-
     if (_meshCount >= MaxMeshes) {
       mesh::debug("fatal: too many meshes for one miniheap");
       dumpDebug();
@@ -257,21 +206,15 @@ public:
   }
 
   size_t meshCount() const {
-    assertNotFreed();
-
     return _meshCount;
   }
 
   char *const *spans() const {
-    assertNotFreed();
-
     return _span;
   }
 
   /// Insert the given MiniHeap into our embedded linked list in the 'next' position.
   void insertNext(MiniHeap *mh) {
-    assertNotFreed();
-
     auto nextNext = _next;
     mh->_next = nextNext;
     mh->_prev = this;
@@ -281,15 +224,11 @@ public:
   }
 
   MiniHeap *next() const {
-    assertNotFreed();
-
     return _next;
   }
 
   /// Remove this MiniHeap from the list of all miniheaps of this size class
   MiniHeap *remove() {
-    assertNotFreed();
-
     if (_prev != nullptr)
       _prev->_next = _next;
 
@@ -301,8 +240,6 @@ public:
 
   /// public for meshTest only
   inline void *mallocAt(size_t off) {
-    assertNotFreed();
-
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
@@ -316,8 +253,6 @@ public:
 
 protected:
   inline uintptr_t spanStart(void *ptr) const {
-    assertNotFreed();
-
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
     for (size_t i = 0; i < _meshCount; ++i) {
@@ -335,8 +270,6 @@ protected:
   }
 
   void dumpDebug() const {
-    assertNotFreed();
-
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = _inUseCount;
     mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu, mesh: %zu)\t%p-%p\n", this, _objectSize,
@@ -346,8 +279,6 @@ protected:
   }
 
   inline ssize_t getOff(void *ptr) const {
-    assertNotFreed();
-
     d_assert(getSize(ptr) == _objectSize);
 
     const auto span = spanStart(ptr);
@@ -378,7 +309,6 @@ protected:
   mesh::internal::Bitmap _bitmap;
   MiniHeap *_prev{nullptr};
   MiniHeap *_next{nullptr};
-  bool _freed{false};
 };
 
 typedef MiniHeapBase<> MiniHeap;

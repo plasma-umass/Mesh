@@ -196,8 +196,7 @@ public:
     const auto sizeClass = getSizeClass(mh->objectSize());
     untrackMiniheap(sizeClass, mh);
 
-    mh->markFree();
-    // mh->MiniHeapBase::~MiniHeapBase();
+    mh->MiniHeapBase::~MiniHeapBase();
     internal::Heap().free(mh);
   }
 
