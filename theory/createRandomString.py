@@ -21,6 +21,13 @@ def createRandomString(length, numOnes):
         string = string[:loc] + '1' + string[loc+1:]
         counter -= 1
     return string
+
+def createConstRandomStrings(length, numStrings, numOnes):
+    """Returns a list of random binary strings, each with exactly numOnes ones."""
+    strings = []
+    for i in range(numStrings):
+        strings.append(createRandomString(length, numOnes))
+    return strings
     
 def createIndependentRandomStrings(length, numStrings, q = -1, numOnes = -1):
     """Returns a set (size numStrings) of binary strings where each bit is
@@ -32,6 +39,9 @@ def createIndependentRandomStrings(length, numStrings, q = -1, numOnes = -1):
     elif numOnes > 0:
 #        print 'p = n/b'
         p = float(numOnes)/length
+#        print "q = {}".format(((1 - (p)**2)**length))
+    elif numOnes == 0:
+        raise Exception("numOnes should not be 0.")
     else: 
          raise Exception('must specify q or numOnes')   
 #    print "q = {}".format(q)
@@ -49,6 +59,10 @@ def createIndependentRandomStrings(length, numStrings, q = -1, numOnes = -1):
         string = ''            
         
     return all_strings
+
+def providedStrings(filename):
+    """not yet implemented.  will return the list of strings from some location."""
+    return None
     
 
 #print createRandomString(32, 16)
