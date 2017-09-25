@@ -43,7 +43,8 @@ def experiment(length, ones_range_min, ones_range_max, reps, numStrings, attempt
             rstart = time.time()
             
             s = [x for x in strings]
-            frdpgs_randmatching = len(randomMesher(s,attempts))/2
+#            frdpgs_randmatching = len(randomMesher(s,attempts))/2
+            frdpgs_randmatching = randomMesher(s,attempts)
             perc = (frdpgs_randmatching/numStrings)*100
             freed_pages_randmatching.append(perc)
             

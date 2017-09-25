@@ -46,8 +46,8 @@ def plot_it(length, ones_range_min, ones_range_max, reps, numStrings):
     green_patch = mpatches.Patch(color = 'green', label = 'deg+1 bound')
     plt.legend(handles=[blue_patch, green_patch])
     plt.title('E[Y] vs DEG+1 BOUND RESULTS \n{}-object pages, {} pages'.format(length, numStrings))
-#    plt.show()
-    plt.savefig('E[Y]vsdeg{},{}'.format(length, numStrings) + '.png', dpi = 1000)
+    plt.show()
+#    plt.savefig('E[Y]vsdeg{},{}'.format(length, numStrings) + '.png', dpi = 1000)
     plt.close()
     
 if __name__ == '__main__':    

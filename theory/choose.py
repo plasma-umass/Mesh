@@ -39,5 +39,5 @@ if __name__ == '__main__':
     for i in range(9,16):
         print 'q val for {}: {}\n'.format(i,compute_q(32,i))    
     #print compute_q(32,13)
-    
-print compute_q(32, 6)
+if __name__ == "__main__":    
+    print compute_q(32, 6)
