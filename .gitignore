@@ -12,3 +12,4 @@ config.mk
 /build
 /doc
 /fragmenter
+/theory/env
