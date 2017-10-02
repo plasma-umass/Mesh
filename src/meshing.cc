@@ -38,7 +38,7 @@ size_t hammingDistance(const atomic_size_t *__restrict__ bitmap1, const atomic_s
   size_t result = 0;
 
   for (size_t i = 0; i < len / 8; i++) {
-    result += bitmap1[i] & bitmap2[i];
+    result += __builtin_popcountl(bitmap1[i] ^ bitmap2[i]);
   }
 
   return result;
