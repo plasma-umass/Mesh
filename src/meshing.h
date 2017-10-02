@@ -108,7 +108,7 @@ inline internal::Bitmap splitString(const size_t nBits) noexcept {
 // left-heavy or right-heavy
 template <typename T>
 inline void unbalancedSplit(mt19937_64 &prng, T *miniheaps,
-                      internal::vector<T *> left, internal::vector<T *> right) noexcept {
+                      internal::vector<T *> &left, internal::vector<T *> &right) noexcept {
   constexpr double OccupancyCutoff = .8;
 
   const size_t nBits = miniheaps->maxCount();
@@ -118,7 +118,7 @@ inline void unbalancedSplit(mt19937_64 &prng, T *miniheaps,
   const auto splitBitmap = splitStr.bitmap();
 
   for (auto mh = miniheaps; mh != nullptr; mh = mh->next()) {
-    if (!mh->isMeshingCandidate() || mh->fullness() < OccupancyCutoff)
+    if (!mh->isMeshingCandidate() || mh->fullness() >= OccupancyCutoff)
       continue;
 
     const auto mhBitmap = mh->bitmap().bitmap();
