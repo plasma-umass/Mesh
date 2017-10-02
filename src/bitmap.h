@@ -147,6 +147,7 @@ public:
     }
     // Round up the number of elements.
     _elements = nelts;
+    //mesh::debug("Bitmap(%zu): %zu bytes", nelts, byteCount());
     // Allocate the right number of bytes.
     _bitarray = reinterpret_cast<atomic_size_t *>(Heap::malloc(byteCount()));
     d_assert(_bitarray != nullptr);

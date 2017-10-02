@@ -14,7 +14,7 @@
 TEST(BitmapTest, SetGet) {
   const int NTRIALS = 1000;
 
-  for (int n = 100; n < 10000; n *= 2) {
+  for (int n = 10; n < 10000; n *= 2) {
     mesh::Bitmap<MallocHeap> b{static_cast<size_t>(n)};
 
     for (int k = 0; k < NTRIALS; k++) {
@@ -31,6 +31,7 @@ TEST(BitmapTest, SetGet) {
           bool r = b.tryToSet(i);
           ASSERT_TRUE(r);
         } else {
+          ASSERT_FALSE(b.isSet(i));
           b.unset(i);
         }
       }
@@ -128,3 +129,20 @@ TEST(BitmapTest, Iter2) {
 
   ASSERT_EQ(bits.find(0), bits.end());
 }
+
+TEST(BitmapTest, SetLoop) {
+  const auto nBits = 32;
+
+  mesh::Bitmap<MallocHeap> bitmap{nBits};
+  
+  for (size_t i = 0; i < nBits/2; i++) {
+    bitmap.tryToSet(i);
+    ASSERT_TRUE(bitmap.isSet(i));
+    ASSERT_TRUE(bitmap.inUseCount() == i+1);
+  }
+
+  ASSERT_TRUE(bitmap.isSet(0));
+
+  ASSERT_TRUE(bitmap.inUseCount() == nBits/2);
+}
+

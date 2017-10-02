@@ -251,6 +251,10 @@ public:
     return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
   }
 
+  inline bool operator<(MiniHeap *&rhs) noexcept {
+    return this->inUseCount() < rhs->inUseCount();
+  }
+
 protected:
   inline uintptr_t spanStart(void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
