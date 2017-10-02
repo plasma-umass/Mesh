@@ -130,19 +130,22 @@ TEST(BitmapTest, Iter2) {
   ASSERT_EQ(bits.find(0), bits.end());
 }
 
-TEST(BitmapTest, SetLoop) {
-  const auto nBits = 32;
+TEST(BitmapTest, SetHalf) {
+  for (size_t i = 2; i <= 2048; i *= 2) {
+    const auto nBits = i;
 
-  mesh::Bitmap<MallocHeap> bitmap{nBits};
-  
-  for (size_t i = 0; i < nBits/2; i++) {
-    bitmap.tryToSet(i);
-    ASSERT_TRUE(bitmap.isSet(i));
-    ASSERT_TRUE(bitmap.inUseCount() == i+1);
+    mesh::Bitmap<MallocHeap> bitmap{nBits};
+
+    ASSERT_TRUE(bitmap.byteCount() >= nBits / 8);
+
+    for (size_t i = 0; i < nBits / 2; i++) {
+      bitmap.tryToSet(i);
+      ASSERT_TRUE(bitmap.isSet(i));
+      ASSERT_TRUE(bitmap.inUseCount() == i + 1);
+    }
+
+    ASSERT_TRUE(bitmap.isSet(0));
+
+    ASSERT_TRUE(bitmap.inUseCount() == nBits / 2);
   }
-
-  ASSERT_TRUE(bitmap.isSet(0));
-
-  ASSERT_TRUE(bitmap.inUseCount() == nBits/2);
 }
-
