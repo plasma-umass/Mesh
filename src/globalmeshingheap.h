@@ -347,7 +347,8 @@ protected:
         });
 
     for (size_t i = 0; i < NumBins; i++) {
-      method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
+      //method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
+      method::greedySplitting(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
     }
 
     if (args.mergeSets.size() == 0)
