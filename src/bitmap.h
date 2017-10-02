@@ -147,7 +147,7 @@ public:
     }
     // Round up the number of elements.
     _elements = nelts;
-    //mesh::debug("Bitmap(%zu): %zu bytes", nelts, byteCount());
+    // mesh::debug("Bitmap(%zu): %zu bytes", nelts, byteCount());
     // Allocate the right number of bytes.
     _bitarray = reinterpret_cast<atomic_size_t *>(Heap::malloc(byteCount()));
     d_assert(_bitarray != nullptr);
@@ -249,8 +249,9 @@ public:
   }
 
   inline uint64_t inUseCount() const {
+    const auto wordCount = byteCount() / 8;
     uint64_t count = 0;
-    for (size_t i = 0; i < _elements / WORDBITS; i++) {
+    for (size_t i = 0; i < wordCount; i++) {
       count += __builtin_popcountl(_bitarray[i]);
     }
     return count;
@@ -316,7 +317,7 @@ private:
     item = index >> WORDBITSHIFT;
     position = index & (WORDBITS - 1);
     d_assert(position == index - (item << WORDBITSHIFT));
-    d_assert(item < _elements / WORDBYTES);
+    d_assert(item < byteCount() / 8);
   }
 
   /// To find the bit in a word, do this: word & getMask(bitPosition)

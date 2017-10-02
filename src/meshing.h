@@ -99,15 +99,7 @@ inline internal::Bitmap splitString(const size_t nBits) noexcept {
   // set the bottom half of the bits to true
   for (size_t i = 0; i < nBits/2; i++) {
     bitmap.tryToSet(i);
-    d_assert(bitmap.isSet(i));
-    d_assert(bitmap.inUseCount() == i+1);
   }
-
-  d_assert(bitmap.isSet(0));
-
-  mesh::debug("n bits: %zu/%zu\n", bitmap.inUseCount(), nBits);
-  if (bitmap.inUseCount() != nBits/2)
-    mesh::debug("\tsomething FUNkY is going down\n");
 
   return bitmap;
 }
