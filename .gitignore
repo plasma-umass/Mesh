@@ -13,3 +13,5 @@ config.mk
 /doc
 /fragmenter
 /theory/env
+/frag.pdf
+/data
