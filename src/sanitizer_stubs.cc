@@ -20,10 +20,12 @@ void InternalFree(void *ptr, InternalAllocatorCache *cache) {
 }
 
 void *InternalAlloc(size_t sz, InternalAllocatorCache *cache, uptr alignment) {
-  if (alignment == 0 || alignment <= mesh::internal::Heap().Alignment)
-    return mesh::internal::Heap().malloc(sz);
-  else
+  if (unlikely(!(alignment == 0 || alignment <= mesh::internal::Heap().Alignment))) {
     d_assert(false);
+    abort();
+  }
+
+  return mesh::internal::Heap().malloc(sz);
 }
 
 void *PersistentAlloc(uptr sz) {
