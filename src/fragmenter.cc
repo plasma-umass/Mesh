@@ -92,13 +92,13 @@ int main(int argc, char *argv[]) {
 
   print_self_rss();
 
-  char *env = getenv("LD_PRELOAD");
-  if (env && strstr(env, "libmesh.so") != NULL) {
-    fprintf(stderr, "meshing stuff\n");
-    free((void *)MESH_MARKER);
-  }
+  // char *env = getenv("LD_PRELOAD");
+  // if (env && strstr(env, "libmesh.so") != NULL) {
+  //   fprintf(stderr, "meshing stuff\n");
+  //   free((void *)MESH_MARKER);
+  // }
 
-  print_self_rss();
+  // print_self_rss();
 
   //sleep(700);
 
