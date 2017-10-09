@@ -240,7 +240,8 @@ public:
       }
 
       if (unlikely(shouldMesh())) {
-        meshAllSizeClasses();
+        meshSizeClass(getSizeClass(mh->objectSize()));
+        // meshAllSizeClasses();
       }
     } else {
       std::lock_guard<std::mutex> lock(_bigMutex);
@@ -350,6 +351,37 @@ protected:
       //method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
       method::greedySplitting(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
     }
+
+    if (args.mergeSets.size() == 0)
+      return;
+
+    _stats.meshCount += args.mergeSets.size();
+
+    // run the actual meshing with the world stopped
+    __sanitizer::StopTheWorld(performMeshing, &args);
+
+    //internal::StopTheWorld();
+    //performMeshing(&args);
+    //internal::StartTheWorld();
+  }
+
+  void meshSizeClass(size_t sizeClass) {
+    MeshArguments args;
+    args.instance = this;
+
+    // XXX: can we get away with using shared at first, then upgrading to exclusive?
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+
+    // FIXME: is it safe to have this function not use internal::allocator?
+    auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
+        // std::allocator_arg, internal::allocator,
+        [&](internal::vector<MiniHeap *> &&miniheaps) {
+          if (miniheaps[0]->isMeshingCandidate() && miniheaps[1]->isMeshingCandidate())
+            args.mergeSets.push_back(std::move(miniheaps));
+        });
+
+
+    method::greedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
 
     if (args.mergeSets.size() == 0)
       return;
