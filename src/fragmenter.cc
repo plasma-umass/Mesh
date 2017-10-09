@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 #include <gflags/gflags.h>
 
@@ -26,7 +27,9 @@ DEFINE_bool(v, false, "verbose debugging output");
 
 void *NOINLINE bench_alloc(size_t n) {
   volatile void *ptr = malloc(n);
-  memset((voidptr)ptr, 0, n);
+  for (size_t i = 0; i < n; i++) {
+    ((char *)ptr)[i] = lrand48() & 0xff;
+  }
 
   return (voidptr)ptr;
 }
@@ -96,6 +99,8 @@ int main(int argc, char *argv[]) {
   }
 
   print_self_rss();
+
+  //sleep(700);
 
   return 0;
 }

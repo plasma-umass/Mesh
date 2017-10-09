@@ -248,7 +248,7 @@ int proc_mem(CmdInfo *ci, int pid, size_t details_len, char *details_buf) {
     if (!len)
       break;
     //*strstr(&line[OFF_NAME], "\n") = '\0';
-    // printf("NAME: %50s: ", &line[OFF_NAME]);
+    //printf("NAME: %50s: ", &line[OFF_NAME]);
 
     // memset(line, 0, details_len+1);
     len = fread(line, 1, details_len, f);
@@ -265,11 +265,15 @@ int proc_mem(CmdInfo *ci, int pid, size_t details_len, char *details_buf) {
       fprintf(stderr, "ERROR\n");
     // fprintf(stderr, "\t\t\t%zu/%f\n", kb, m);
     m = kb2;
-    ci->pss += m + .5;
+    ci->pss += m;
     // we don't need PSS_ADJUST for heap because
     // the heap is private and anonymous.
     if (is_heap)
       ci->heap += m;
+
+    // Shared_Dirty, is meshed
+    kb = smap_read_int(line, 5);
+    ci->dirty += kb;
 
     // Private_Clean & Private_Dirty are lines 6 and 7
     priv += smap_read_int(line, 6);
@@ -340,5 +344,5 @@ void print_self_rss(void) {
     die("self_rss failed\n");
 
   // printf("\tRss: %10.3f\tPss: %10.3f\tDirty: %10.3f\n", ci->rss/1024.0, ci->pss/1024.0, ci->dirty/1024.0);
-  printf("\tRSS:\t%10.3f MB\n", ci.dirty / 1024.0);
+  printf("\tRSS:\t%10.3f MB\n", ci.pss / 1024.0);
 }
