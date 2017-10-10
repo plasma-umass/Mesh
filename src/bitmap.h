@@ -148,6 +148,7 @@ public:
     // Round up the number of elements.
     _elements = nelts;
     // mesh::debug("Bitmap(%zu): %zu bytes", nelts, byteCount());
+
     // Allocate the right number of bytes.
     _bitarray = reinterpret_cast<atomic_size_t *>(Heap::malloc(byteCount()));
     d_assert(_bitarray != nullptr);
@@ -226,6 +227,13 @@ public:
     return tryToSetAt(item, position);
   }
 
+  /// @return true iff the bit was not set (but it is now).
+  inline bool tryToSetRelaxed(uint64_t index) {
+    uint32_t item, position;
+    computeItemPosition(index, item, position);
+    return tryToSetAtRelaxed(item, position);
+  }
+
   /// Clears the bit at the given index.
   inline bool unset(uint64_t index) {
     uint32_t item, position;
@@ -237,6 +245,18 @@ public:
                                               &oldValue,         // old val
                                               oldValue & ~mask)) {
     }
+
+    return !(oldValue & mask);
+  }
+
+  /// Clears the bit at the given index.
+  inline bool unsetRelaxed(uint64_t index) {
+    uint32_t item, position;
+    computeItemPosition(index, item, position);
+
+    const auto mask = getMask(position);
+    size_t oldValue = _bitarray[item];
+    _bitarray[item] = oldValue & ~mask;
 
     return !(oldValue & mask);
   }
@@ -307,6 +327,15 @@ private:
                                               &oldValue,         // old val
                                               oldValue | mask)) {
     }
+
+    return !(oldValue & mask);
+  }
+
+  inline bool tryToSetAtRelaxed(uint32_t item, uint32_t position) {
+    const auto mask = getMask(position);
+    size_t oldValue = _bitarray[item];
+
+    _bitarray[item] = oldValue | mask;
 
     return !(oldValue & mask);
   }
