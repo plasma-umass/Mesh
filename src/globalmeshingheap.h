@@ -219,34 +219,35 @@ public:
   }
 
   inline void free(void *ptr) {
-    if (unlikely(internal::isMeshMarker(ptr))) {
-      dumpStats(2, false);
-      for (size_t i = 0; i < 128; i++)
-        meshAllSizeClasses();
-      dumpStats(2, false);
-      return;
-    }
+    // if (unlikely(internal::isMeshMarker(ptr))) {
+    //   dumpStats(2, false);
+    //   for (size_t i = 0; i < 128; i++)
+    //     meshAllSizeClasses();
+    //   dumpStats(2, false);
+    //   return;
+    // }
 
     // two possibilities: most likely the ptr is small (and therefor
     // owned by a miniheap), or is a large allocation
 
     auto mh = miniheapFor(ptr);
-    if (likely(mh)) {
-      mh->free(ptr);
-      if (unlikely(!mh->isAttached() && mh->isEmpty())) {
-        freeMiniheap(mh);
-      } else {
-        mh->unref();
-      }
-
-      if (unlikely(shouldMesh())) {
-        meshSizeClass(getSizeClass(mh->objectSize()));
-        // meshAllSizeClasses();
-      }
-    } else {
+    if (unlikely(!mh)) {
       std::lock_guard<std::mutex> lock(_bigMutex);
       _bigheap.free(ptr);
+      return;
     }
+
+    mh->free(ptr);
+    if (unlikely(!mh->isAttached() && mh->isEmpty())) {
+      freeMiniheap(mh);
+    } else {
+      mh->unref();
+    }
+
+    // if (unlikely(shouldMesh())) {
+    //   //meshSizeClass(getSizeClass(mh->objectSize()));
+    //   // meshAllSizeClasses();
+    // }
   }
 
   inline size_t getSize(void *ptr) const {
