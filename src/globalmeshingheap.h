@@ -244,10 +244,9 @@ public:
       mh->unref();
     }
 
-    // if (unlikely(shouldMesh())) {
-    //   //meshSizeClass(getSizeClass(mh->objectSize()));
-    //   // meshAllSizeClasses();
-    // }
+    if (unlikely(shouldMesh())) {
+      meshSizeClass(getSizeClass(mh->objectSize()));
+    }
   }
 
   inline size_t getSize(void *ptr) const {
