@@ -21,11 +21,11 @@
 
 namespace mesh {
 
-static inline size_t PageCount(size_t sz) {
+static inline constexpr size_t PageCount(size_t sz) {
   return (sz + (HL::CPUInfo::PageSize - 1)) / HL::CPUInfo::PageSize;
 }
 
-static inline size_t RoundUpToPage(size_t sz) {
+static inline constexpr size_t RoundUpToPage(size_t sz) {
   return HL::CPUInfo::PageSize * PageCount(sz);
 }
 
