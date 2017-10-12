@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <limits>
 
 #include "common.h"
 
@@ -97,22 +98,79 @@ inline internal::Bitmap splitString(const size_t nBits) noexcept {
   internal::Bitmap bitmap{nBits};
 
   // set the bottom half of the bits to true
-  for (size_t i = 0; i < nBits/2; i++) {
+  for (size_t i = 0; i < nBits / 2; i++) {
     bitmap.tryToSet(i);
   }
 
   return bitmap;
 }
 
+class CutoffTable {
+private:
+  DISALLOW_COPY_AND_ASSIGN(CutoffTable);
+
+public:
+  CutoffTable(size_t len, double cutoffPercent) : _len(len), _cutoffPercent(cutoffPercent) {
+    d_assert(len <= 256);
+    d_assert(cutoffPercent > 0 && cutoffPercent <= 1);
+
+    //size_t cutoff = (size_t)ceil(cutoffPercent * len);
+
+    for (size_t i = 0; i < len; i++) {
+      _table[i] = len-1;
+
+      // TODO: could make this len/2, becuase choose is symmetric
+      for (size_t j = 0; j < len; j++) {
+        if (CutoffTable::fasterQ(len, i, j) < cutoffPercent) {
+          _table[i] = j;
+          break;
+        }
+      }
+    }
+  }
+
+  size_t get(size_t n) const {
+    return _table[n];
+  }
+
+private:
+  static constexpr double fasterQ(const size_t len, const size_t occ1, const size_t occ2) noexcept {
+    size_t numerator = 1;
+    for (size_t i = len - occ1; i > len - occ1 - occ2; --i) {
+      numerator *= i;
+    }
+
+    size_t denominator = 1;
+    for (size_t i = len; i > len - occ2; --i) {
+      denominator *= i;
+    }
+
+    return static_cast<double>(numerator)/static_cast<double>(denominator);
+  }
+
+  size_t _len;
+  double _cutoffPercent;
+  uint8_t _table[];
+};
+
+inline CutoffTable *generateCutoffs(const size_t len, const double cutoffPercent) noexcept {
+  d_assert(len <= 256);
+  static_assert(sizeof(CutoffTable) == sizeof(double) + sizeof(size_t), "CutoffTable: expected packed size");
+
+  void *buf = internal::Heap().malloc(sizeof(CutoffTable) + len * sizeof(uint8_t));
+
+  return new (buf) CutoffTable(len, cutoffPercent);
+}
+
 // split miniheaps into two lists depending on if their bitmaps are
 // left-heavy or right-heavy
 template <typename T>
-inline void unbalancedSplit(mt19937_64 &prng, T *miniheaps,
-                      internal::vector<T *> &left, internal::vector<T *> &right) noexcept {
+inline void unbalancedSplit(mt19937_64 &prng, T *miniheaps, internal::vector<T *> &left,
+                            internal::vector<T *> &right) noexcept {
   constexpr double OccupancyCutoff = .8;
 
   const size_t nBits = miniheaps->maxCount();
-  const size_t halfBits = nBits/2;
+  const size_t halfBits = nBits / 2;
 
   const auto splitStr = splitString(nBits);
   const auto splitBitmap = splitStr.bitmap();
@@ -146,7 +204,7 @@ inline void greedySplitting(mt19937_64 &prng, size_t count, T *miniheaps,
 
   const size_t nBits = miniheaps->maxCount();
 
-  internal::vector<T *> leftBucket{};  // mutable copy
+  internal::vector<T *> leftBucket{};   // mutable copy
   internal::vector<T *> rightBucket{};  // mutable copy
 
   unbalancedSplit(prng, miniheaps, leftBucket, rightBucket);
@@ -171,7 +229,7 @@ inline void greedySplitting(mt19937_64 &prng, size_t count, T *miniheaps,
         internal::vector<T *> heaps{h1, h2};
         meshFound(std::move(heaps));
         rightBucket[j] = nullptr;
-        break; // break after finding a mesh
+        break;  // break after finding a mesh
       }
     }
   }
