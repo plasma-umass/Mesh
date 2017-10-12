@@ -240,6 +240,7 @@ public:
     mh->free(ptr);
     if (unlikely(!mh->isAttached() && mh->isEmpty())) {
       freeMiniheap(mh);
+      return;
     } else {
       mh->unref();
     }
