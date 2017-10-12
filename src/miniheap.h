@@ -258,15 +258,22 @@ public:
 protected:
   inline uintptr_t spanStart(void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+    const auto len = spanSize();
 
-    for (size_t i = 0; i < _meshCount; ++i) {
+    // manually unroll loop once to capture the common case of
+    // un-meshed miniheaps
+    auto span = reinterpret_cast<uintptr_t>(_span[0]);
+    if (likely(span <= ptrval && ptrval < span + len))
+      return span;
+
+    for (size_t i = 1; i < _meshCount; ++i) {
       if (_span[i] == nullptr) {
         mesh::debug("_span[%d] should be non-null", i);
         dumpDebug();
         d_assert(false);
       }
-      const auto span = reinterpret_cast<uintptr_t>(_span[i]);
-      if (span <= ptrval && ptrval < span + spanSize())
+      span = reinterpret_cast<uintptr_t>(_span[i]);
+      if (span <= ptrval && ptrval < span + len)
         return span;
     }
 
