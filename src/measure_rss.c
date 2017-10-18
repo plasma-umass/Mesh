@@ -257,10 +257,10 @@ int proc_mem(CmdInfo *ci, int pid, size_t details_len, char *details_buf) {
     line[details_len] = '\0';
 
     // Rss - line 2
-    kb = smap_read_int(line, 2);
+    kb = smap_read_int(line, 4);
     ci->rss += kb;
     // Pss - line 3
-    kb2 = smap_read_int(line, 3);
+    kb2 = smap_read_int(line, 5);
     if (kb < kb2)
       fprintf(stderr, "ERROR\n");
     // fprintf(stderr, "\t\t\t%zu/%f\n", kb, m);
@@ -272,16 +272,16 @@ int proc_mem(CmdInfo *ci, int pid, size_t details_len, char *details_buf) {
       ci->heap += m;
 
     // Shared_Dirty, is meshed
-    kb = smap_read_int(line, 5);
+    kb = smap_read_int(line, 7);
     ci->dirty += kb;
 
     // Private_Clean & Private_Dirty are lines 6 and 7
-    priv += smap_read_int(line, 6);
-    kb = smap_read_int(line, 7);
+    priv += smap_read_int(line, 8);
+    kb = smap_read_int(line, 9);
     ci->dirty += kb;
     priv += kb;
 
-    ci->swap += smap_read_int(line, 11);
+    ci->swap += smap_read_int(line, 13);
 
     // after the constant-sized smap details, there is an
     // optional Nonlinear line, followed by the final
