@@ -54,7 +54,7 @@ private:
 public:
   enum { Alignment = 16 };
 
-  GlobalMeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()) {
+  GlobalMeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()), _fastPrng(internal::seed(), internal::seed()) {
     for (size_t i = 0; i < NumBins; ++i) {
       _littleheapCounts[i] = 0;
       _littleheaps[i] = nullptr;
@@ -134,7 +134,7 @@ public:
     void *buf = internal::Heap().malloc(sizeof(MiniHeap));
     if (unlikely(buf == nullptr))
       abort();
-    MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _prng, spanSize);
+    MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _prng, _fastPrng, spanSize);
 
     trackMiniheap(sizeClass, mh);
     _miniheaps[mh->getSpanStart()] = mh;
@@ -407,6 +407,7 @@ protected:
   BigHeap _bigheap{};
 
   mt19937_64 _prng;
+  MWC _fastPrng;
 
   size_t _littleheapCounts[NumBins];
   MiniHeap *_littleheaps[NumBins];

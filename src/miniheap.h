@@ -26,9 +26,9 @@ private:
   typedef MiniHeapBase<MaxFreelistLen, MaxMeshes> MiniHeap;
 
 public:
-  MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, size_t expectedSpanSize)
+  MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng, size_t expectedSpanSize)
       : _span{reinterpret_cast<char *>(span)},
-        _freelist{objectCount, prng},
+        _freelist{objectCount, prng, fastPrng},
         _objectSize(objectSize),
         _meshCount(1),
         _attached(true),
