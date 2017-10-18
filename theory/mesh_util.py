@@ -44,6 +44,7 @@ def fast_q(length, occ1, occ2):
 def faster_q(length, occ1, occ2):
     numerator = 1
     for i in range(length - occ1, length - occ1 - occ2, -1):
+        print(i)
         numerator *= i
     denominator = 1
     for i in range(length, length - occ2, -1):

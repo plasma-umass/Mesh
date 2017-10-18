@@ -5,6 +5,7 @@
 #ifndef MESH__FREELIST_H
 #define MESH__FREELIST_H
 
+#include <iterator>
 #include <random>
 #include <utility>
 
@@ -14,24 +15,39 @@ using mesh::debug;
 
 namespace mesh {
 
+// based on LLVM's libcxx std::shuffle
+template <class _RandomAccessIterator, class _RNG>
+void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RNG &__rng) {
+  typedef typename iterator_traits<_RandomAccessIterator>::difference_type difference_type;
+
+  difference_type __d = __last - __first;
+  if (__d > 1) {
+    for (--__last, --__d; __first < __last; ++__first, --__d) {
+      difference_type __i = __rng.inRange(0, __d);
+      if (__i != difference_type(0))
+        swap(*__first, *(__first + __i));
+    }
+  }
+}
+
 template <size_t MaxFreelistLen = sizeof(uint8_t) << 8, typename fl_off_t = uint8_t>
 class Freelist {
 private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
 
 public:
-  Freelist(size_t objectCount, mt19937_64 &prng) : _maxCount(objectCount) {
+  Freelist(size_t objectCount, mt19937_64 &prng, MWC &fastPrng) : _maxCount(objectCount) {
     d_assert(objectCount <= MaxFreelistLen);
     d_assert(_maxCount == objectCount);
 
-    init(prng);
+    init(prng, fastPrng);
   }
 
   ~Freelist() {
     detach();
   }
 
-  void init(mt19937_64 &prng) {
+  void init(mt19937_64 &prng, MWC &fastPrng) {
     const auto objectCount = maxCount();
 
     size_t listSize = objectCount * sizeof(fl_off_t);
@@ -41,6 +57,7 @@ public:
       _list[i] = i;
     }
 
+    // mwcShuffle(&_list[0], &_list[objectCount], fastPrng);
     std::shuffle(&_list[0], &_list[objectCount], prng);
   }
 
