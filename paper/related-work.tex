@@ -1,0 +1,34 @@
+\section{Related Work}
+\label{sec:related-work}
+
+Significant prior work exists attempting to bring managed language
+techniques, like garbage collection to C and C++.  Boehm introduced a
+conservative garbage collector~\cite{boehm:1988:uncooperative} that
+works with unmodified C and C++ binaries.  Baker et al. showed that
+with compiler support you could achieve accurate GC for C and
+C++~\cite{baker:2009:accurategc}.  Google's Chrome now uses a GC for
+C++ objects called Oilpan~\cite{google:oilpan}.  Retrofitting this GC
+(which uses explicit C++ templates to wrap all object references) took
+years to implement and integrate into their existing code base.
+
+Robson identified the worst case fragmentation for allocators was
+$(O(\lg{M/m})$, where $M$ was the size of the largest object and $m$
+the size of the smallest object~\cite{robson:1977:worstcasefrag}.
+Segregated fit allocators, like Hoard~\cite{379232}, jemalloc, and
+TCMalloc, reduce but do not eliminate worst-case fragmentation.
+
+Virtual memory operations have been use for compaction in the
+past~\cite{wegiel:2008:mapping-collector} in a novel Java garbage
+collector, as well as in a C allocator that traded address space usage
+for reliability and security~\cite{1346296}.
+
+%Microsoft's C++/CLI? C++ with GC'ed, moveable objects.
+
+
+% http://www.filpizlo.com/papers/baker-ccpe09-accurate.pdf
+
+
+%Theory?
+
+%% Objects with similar lifetimes tend to appear
+%% together~\cite{wilson:1995:survey}.

@@ -1,0 +1,21 @@
+Because heap-allocated objects in C and C++ cannot be relocated,
+memory allocators for these languages can suffer from
+fragmentation. Existing techniques like segregated-fit allocators work
+well in practice to reduce fragmentation, but they can not eliminate
+it, especially under adversarial or worst-case workloads. Managed
+languages minimize fragmentation through compacting garbage
+collection, where live objects are relocated adjacent to each other.
+
+We introduce meshing: a technique that can perform compaction without
+object relocation for unmanaged languages. By remapping virtual pages
+to point to the same physical page, we mesh objects on those pages
+provided their virtual offsets do not overlap. This allows us to store
+objects from several virtual pages on a single physical page, freeing
+the other physical pages and increasing usable memory.  We present a
+suite of practical algorithms for memory compaction through meshing,
+and develop new theoretical results which guide the design of these
+algorithms and probabilistically guarantee their efficacy.  We
+implement meshing in libmesh, a memory allocator that works with
+unmodified C and C++ programs.  We show that meshing introduces low
+time overhead in practice, and is able to reduce memory usage by XX
+percent over a set of representative benchmarks.

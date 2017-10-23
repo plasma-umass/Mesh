@@ -1,0 +1,70 @@
+\section{Overview}
+\label{sec:meshing}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=.3\textwidth]{figures/bitmap_bitstring}
+\caption{The bitmaps managing the allocated space in a span
+  (visualized as allocated objects in the span, top) can be
+  represented as bitstrings of 0s and 1s (bottom), where a 1
+  corresponds to an allocated object and 0 to free space.}
+\label{fig:bitmap-bitstring}
+\end{figure}
+
+Meshing is the problem and process of minimizing physical memory use
+(measured as resident-set size, or RSS) without modifying allocated
+virtual addresses.
+
+A \textit{span} is a contiguous region of memory, and the size of a
+span is a multiple of the page size between 4 KiB and 128 KiB.  Each
+span allocates objects of a single-size only, for example a 4 KiB span
+might hold 32 objects of size 128 bytes.  We can represent a span by a
+\textit{bitstring}, a string with a 1 for an allocated object at that
+offset from the start of the span and 0 otherwise.  The length of the
+bitstring is the number of objects that span holds.
+
+We say $t$ spans \textit{mesh} if the logical-AND of their bitstrings
+($s_i$) of length $t$ is zero.  Formally:
+
+\begin{align}
+  \forall k \in [0, b-1]. \sum_{0 \leq i \leq t} s_i[k] \leq 1
+\end{align}
+
+The layout and management of a program's heap guide how we consider
+meshing.  In a running program, the heap is managed as a number of
+different \textit{size classes} along with a region consisting of
+large allocations.  Allocations are fulfilled from the smallest size
+class they fit in (e.g. an allocation request for 50 bytes is
+satisfied by the 64-byte size class), and objects larger than 16 KiB
+are individually served from the large allocation region.
+
+We treat each size class as an independent instance of the meshing
+problem, and large allocations are not meshed.  As large allocations
+are all many multiples of the page size significant fragmentation
+between them does not exist.  The number of size-classes is fixed at
+compilation time and constant during the execution of a program.
+
+From here, we consider meshing as dealing with a single size-class,
+and refer to all spans within this size class as $S$.  If we want to
+mesh the entire heap, this means solving $n$ instances of the meshing
+problem, where $n$ is the number of size classes.
+
+Finally, meshing relies on the fact that there are two types of spans,
+virtual and physical.  A \textit{virtual} span refers to the memory
+addresses visible to the program being executed, while a
+\textit{physical} span corresponds to the area in memory where
+allocated objects live.  Meshing is concerned with minimizing the
+count of in-use physical spans without modifying or moving virtual
+spans.  As noted in Section~\ref{sec:introduction}, we cannot change
+or modify virtual address returned from the allocator, as the we do
+not have a way to enumerate and update all references the program has
+stored.
+
+Allocated objects and free space within a span are tracked by the
+memory allocator as a bitmap (see Section~\ref{sec:allocator}) -- the
+in-memory representation of a bitstring.  For example, for objects of
+size 32 and a span size of 4 KiB, the span can hold 128 32-byte
+objects, so allocated objects are be tracked with a 128-bit bitmap.
+Each allocated object in a running program has a unique
+\textit{(bitmap, offset)} tuple.  Bitmaps are between 8 and 256-bits
+in length.
