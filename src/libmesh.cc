@@ -8,7 +8,7 @@
 using namespace mesh;
 
 static __attribute__((constructor)) void libmesh_init() {
-  //runtime().startBgThread();
+  // runtime().startBgThread();
 }
 
 static __attribute__((destructor)) void libmesh_fini() {
@@ -57,5 +57,9 @@ void xxmalloc_unlock(void) {
 // meshing
 int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg) {
   return mesh::runtime().createThread(thread, attr, startRoutine, arg);
+}
+
+int je_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+  return mesh::runtime().heap().mallctl(name, oldp, oldlenp, newp, newlen);
 }
 }
