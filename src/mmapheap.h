@@ -51,6 +51,8 @@
 
 namespace mesh {
 
+// OneWayMmapHeap allocates address space through calls to mmap and
+// will never unmap address space.
 class OneWayMmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(OneWayMmapHeap);
@@ -89,6 +91,8 @@ public:
   }
 };
 
+// MmapHeap extends OneWayMmapHeap to track allocated address space
+// and will free memory with calls to munmap.
 class MmapHeap : public OneWayMmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MmapHeap);
