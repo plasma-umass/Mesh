@@ -288,6 +288,19 @@ public:
     src = nullptr;
   }
 
+  int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+    if (strcmp(name, "arena") == 0) {
+      // not sure what this should do
+    } else if (strcmp(name, "stats.resident") == 0) {
+      
+    } else if (strcmp(name, "stats.active") == 0) {
+      
+    } else if (strcmp(name, "stats.allocated") == 0) {
+      
+    }
+    return 0;
+  }
+
   size_t getAllocatedMiniheapCount() const {
     return Super::bitmap().inUseCount();
   }
@@ -382,7 +395,8 @@ protected:
         });
 
 
-    method::greedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
+    //method::greedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
+    method::simpleGreedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
 
     if (args.mergeSets.size() == 0)
       return;
