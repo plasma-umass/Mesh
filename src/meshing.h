@@ -26,6 +26,8 @@ bool bitmapsMeshable(const atomic_size_t *__restrict__ bitmap1, const atomic_siz
 size_t hammingDistance(const atomic_size_t *__restrict__ bitmap1, const atomic_size_t *__restrict__ bitmap2,
                        size_t len) noexcept;
 
+static constexpr double OccupancyCutoff = .8;
+
 namespace method {
 
 template <typename Heap, typename T>
@@ -167,8 +169,6 @@ inline CutoffTable *generateCutoffs(const size_t len, const double cutoffPercent
 template <typename T>
 inline void unbalancedSplit(mt19937_64 &prng, T *miniheaps, internal::vector<T *> &left,
                             internal::vector<T *> &right) noexcept {
-  constexpr double OccupancyCutoff = .8;
-
   const size_t nBits = miniheaps->maxCount();
   const size_t halfBits = nBits / 2;
 
@@ -191,6 +191,52 @@ inline void unbalancedSplit(mt19937_64 &prng, T *miniheaps, internal::vector<T *
         left.push_back(mh);
     } else {
       left.push_back(mh);
+    }
+  }
+}
+
+template <typename T>
+inline void simpleGreedySplitting(mt19937_64 &prng, size_t count, T *miniheaps,
+                            const function<void(internal::vector<T *> &&)> &meshFound) noexcept {
+  // ensure we have a non-zero count
+  if (count == 0)
+    return;
+
+  const size_t nBits = miniheaps->maxCount();
+
+  internal::vector<T *> bucket{};   // mutable copy
+
+  // pull our linked-list of miniheaps into a vector
+  for (auto mh = miniheaps; mh != nullptr; mh = mh->next()) {
+    if (!mh->isMeshingCandidate() || mh->fullness() >= OccupancyCutoff)
+      continue;
+    bucket.push_back(mh);
+  }
+
+  std::sort(bucket.begin(), bucket.end());
+
+  for (size_t i = 0; i < bucket.size(); i++) {
+    if (bucket[i] == nullptr)
+      continue;
+
+    for (size_t j = i+1; j < bucket.size(); j++) {
+      // if we've already meshed a miniheap at this position in the
+      // list, this will be null.
+      if (bucket[j] == nullptr)
+        continue;
+
+      auto h1 = bucket[i];
+      auto h2 = bucket[j];
+
+      const auto bitmap1 = h1->bitmap().bitmap();
+      const auto bitmap2 = h2->bitmap().bitmap();
+
+      if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBits)) {
+        internal::vector<T *> heaps{h1, h2};
+        meshFound(std::move(heaps));
+        bucket[j] = nullptr;
+        break;  // break after finding a mesh
+      }
     }
   }
 }
