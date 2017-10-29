@@ -11,6 +11,7 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
+%\usepackage{minted}
 \RequirePackage[outputdir=latex.out,cache=false]{minted}
 \usepackage{microtype}
 \usepackage{hyperref}
@@ -20,6 +21,7 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{amsthm}
+\usepackage{relsize}
 
 %% \setmonofont[Scale=MatchLowercase]{DejaVu Sans Mono}
 %% \setmonofont{DejaVu Sans Mono}
@@ -89,11 +91,15 @@
 \usepackage{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
 
+\usepackage{color}
+%\newcommand{\comment}[1]{{\color{red} [#1]} \marginpar{!!!}}
+
 
 \begin{document}
 
 %% Title information
-\title[Mesh]{Immovable Objects Meet An Irresistible Force: Meshing Memory Management for Compaction without Relocation}         %% [Short Title] is optional;
+\title[Mesh]{Immovable Objects Meet An Irresistible Force: 
+Compacting Memory in Unsafe Languages with \sc{Mesh}}         %% [Short Title] is optional;
                                         %% when present, will be used in
                                         %% header instead of Full Title.
 %\titlenote{with title note}             %% \titlenote is optional;
@@ -197,21 +203,21 @@
 \maketitle
 
 
-\input{introduction}
+\input{./introduction.tex}
 
-\input{overview}
+\input{./overview.tex}
 
-\input{system}
+\input{./system.tex}
 
-\input{theory}
+\input{./theory.tex}
 
-\input{evaluation}
+\input{./evaluation.tex}
 
-\input{discussion}
+\input{./discussion.tex}
 
-\input{related-work}
+\input{./related-work.tex}
 
-\input{conclusion}
+\input{./conclusion.tex}
 
 %% contents suppressed with 'anonymous'
 \begin{acks}

@@ -1,27 +1,7 @@
 \section{The \Mesh Allocator}
 \label{sec:allocator}
 
-\begin{figure}[!t]
-  \centering
-  \begin{subfigure}[t]{.5\textwidth}
-    \centering
-    \includegraphics[width=\textwidth]{figures/before_meshing}
-    \caption{Two adjacent spans that are candidates for meshing.}
-  \end{subfigure}%
-  ~
 
-  \begin{subfigure}[t]{.5\textwidth}
-    \centering
-    \includegraphics[width=\textwidth]{figures/after_meshing}
-    \caption{After meshing, both virtual spans refer to the same
-      physical \newline span, with live objects interleaved.}
-  \end{subfigure}
-  \caption{Virtual and physical memory layout before and after
-    meshing.  After meshing, physical span occupancy has increased
-    from 37.5\% to 75\% and one physical span has been returned to the
-    OS for reuse.}
-  \label{fig:meshing}
-\end{figure}
 
 \Mesh is a memory allocator and runtime system for Linux that provides
 a drop in replacement for the standard C/C++ and POSIX allocation
@@ -84,10 +64,10 @@ freelists that is used to ensure fast randomized allocation.
 \subsubsection{Shuffle Freelists}
 
 \begin{figure}[!ht]
-  \input{local-malloc.cc}
-  \input{miniheap-malloc.cc}
-  \input{local-free.cc}
-  \input{miniheap-free.cc}
+  \input{./local-malloc.cc}
+  \input{./miniheap-malloc.cc}
+  \input{./local-free.cc}
+  \input{./miniheap-free.cc}
   \caption{Pseudocode for mesh allocation and deallocation routines.}
   \label{fig:malloc}
 \end{figure}
