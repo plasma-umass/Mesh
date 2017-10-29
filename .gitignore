@@ -15,3 +15,5 @@ config.mk
 /theory/env
 /frag.pdf
 /data
+/paper/latex.out/
+/paper/mesh.pdf
