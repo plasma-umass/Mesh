@@ -19,9 +19,9 @@ if c.debug_build:
     c.append('cflags', '-g')
     c.append('ldflags', '-g')
 #else:
-#    c.append('cflags', '-DNDEBUG')
 
 if c.optimize_build:
+    c.append('cflags', '-DNDEBUG')
     c.append('cflags', '-O3 -flto')
     c.append('ldflags', '-O3 -flto')
     c.append('cflags', '-pthread -D_FORTIFY_SOURCE=2')
