@@ -7,3 +7,6 @@
 [submodule "src/vendor/googletest"]
 	path = src/vendor/googletest
 	url = https://github.com/google/googletest.git
+[submodule "test/atsy/atsy"]
+	path = test/atsy/atsy
+	url = https://github.com/EricRahm/atsy
