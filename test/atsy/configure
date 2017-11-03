@@ -1,0 +1,37 @@
+#!/usr/bin/bash
+set -e
+
+virtualenv env
+. env/bin/activate
+
+git submodule update --init
+
+(cd atsy && python ./setup.py install)
+
+CHROMEDRIVER_VERSION="`curl https://chromedriver.storage.googleapis.com/LATEST_RELEASE`"
+
+echo "version: $CHROMEDRIVER_VERSION"
+
+wget "https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip"
+
+rm -f ./chromedriver
+unzip chromedriver_linux64.zip
+rm chromedriver_linux64.zip
+
+# Download the tp5 pageset and setup a webroot
+mkdir nginx_root
+cd nginx_root
+
+wget https://s3.amazonaws.com/bpowers/tp5n.zip
+sha512sum --check ../tp5n.manifest
+
+unzip tp5n.zip
+mkdir html/
+mv tp5n html/tp5
+rm tp5n.zip
+
+mkdir logs
+
+mkdir conf
+cp ../atsy/example/comp_analysis_nginx.conf conf/nginx.conf
+cd ..
