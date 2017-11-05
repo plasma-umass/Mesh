@@ -59,7 +59,9 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadF
   return mesh::runtime().createThread(thread, attr, startRoutine, arg);
 }
 
-int je_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+// Same API as je_mallctl, allows a program to query stats and set
+// allocator-related options.
+int mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
   return mesh::runtime().heap().mallctl(name, oldp, oldlenp, newp, newlen);
 }
 }
