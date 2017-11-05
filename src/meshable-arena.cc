@@ -65,8 +65,8 @@ void MeshableArena::mesh(void *keep, void *remove, size_t sz) {
 
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff);
   freePhys(remove, sz);
-  if (*(char *)remove == 0 || *(char *)((char *)remove+sz-1))
-    write(-2, "mmap was OK", 11);
+  // if (*(char *)remove == 0 || *(char *)((char *)remove+sz-1))
+  //   write(-2, "mmap was OK", 11);
   d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 }
 
