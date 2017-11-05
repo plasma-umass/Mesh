@@ -303,6 +303,7 @@ public:
         return -1;
       auto newVal = reinterpret_cast<size_t *>(newp);
       _meshPeriod = *newVal;
+      resetNextMeshCheck();
     } else if (strcmp(name, "mesh.compact") == 0) {
       sharedLock.unlock();
       meshAllSizeClasses();
