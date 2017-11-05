@@ -16,7 +16,7 @@ static constexpr size_t ObjCount = 32;
 
 // shows up in strace logs, but otherwise does nothing
 static inline void note(const char *note) {
-  write(-1, note, strlen(note));
+  (void)write(-1, note, strlen(note));
 }
 
 static void meshTest(bool invert) {
