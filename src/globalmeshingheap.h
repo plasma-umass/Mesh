@@ -35,7 +35,7 @@ template <typename BigHeap,                      // for large allocations
           int NumBins,                           // number of size classes
           int (*getSizeClass)(const size_t),     // same as for local
           size_t (*getClassMaxSize)(const int),  // same as for local
-          int MeshPeriod,                        // perform meshing on average once every MeshPeriod frees
+          int DefaultMeshPeriod,                 // perform meshing on average once every MeshPeriod frees
           size_t MinStringLen = 8UL>
 class GlobalMeshingHeap : public MeshableArena {
 private:
@@ -290,14 +290,48 @@ public:
   }
 
   int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (strcmp(name, "arena") == 0) {
+    std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+
+    if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
+      return -1;
+
+    auto statp = reinterpret_cast<size_t *>(oldp);
+
+    if (strcmp(name, "mesh.check_period") == 0) {
+      *statp = _meshPeriod;
+      if (!newp || newlen < sizeof(size_t))
+        return -1;
+      auto newVal = reinterpret_cast<size_t *>(newp);
+      _meshPeriod = *newVal;
+    } else if (strcmp(name, "mesh.compact") == 0) {
+      sharedLock.unlock();
+      meshAllSizeClasses();
+      sharedLock.lock();
+    } else if (strcmp(name, "arena") == 0) {
       // not sure what this should do
     } else if (strcmp(name, "stats.resident") == 0) {
-      
+      // Unlike RSS, this does not include RSS from shared libraries and other non
+      // heap mappings.
+      // iterate over miniheaps, report resident
+      size_t sz = 0;
+      for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
+        sz += it->second->inUseCount() * it->second->objectSize();
+      }
+      *statp = sz;
     } else if (strcmp(name, "stats.active") == 0) {
-      
+      // all miniheaps at least partially full
+      size_t sz = 0;
+      for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
+        sz += it->second->spanSize();
+      }
+      *statp = sz;
     } else if (strcmp(name, "stats.allocated") == 0) {
-      
+      // same as active for us, for now -- memory not returned to the OS
+      size_t sz = 0;
+      for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
+        sz += it->second->spanSize();
+      }
+      *statp = sz;
     }
     return 0;
   }
@@ -318,20 +352,23 @@ public:
 
 protected:
   inline void resetNextMeshCheck() {
-    uniform_int_distribution<size_t> distribution(1, MeshPeriod);
+    // a period of 0 means do not mesh.
+    if (_meshPeriod == 0)
+      return;
+
+    uniform_int_distribution<size_t> distribution(1, _meshPeriod);
     _nextMeshCheck = distribution(_prng);
   }
 
   inline bool shouldMesh() {
     _nextMeshCheck--;
-    bool shouldMesh = _nextMeshCheck == 0;
+    bool shouldMesh = _meshPeriod > 0 && _nextMeshCheck == 0;
     if (unlikely(shouldMesh))
       resetNextMeshCheck();
 
     return shouldMesh;
   }
 
-  //static void performMeshing(void *argument) {
   static void performMeshing(const __sanitizer::SuspendedThreadsList &suspendedThreads, void *argument) {
     MeshArguments *args = (MeshArguments *)argument;
 
@@ -415,6 +452,7 @@ protected:
 
   const size_t _maxObjectSize;
   size_t _nextMeshCheck{0};
+  atomic_size_t _meshPeriod{DefaultMeshPeriod};
 
   // The big heap is handles malloc requests for large objects.  We
   // define a separate class to handle these to segregate bookkeeping
