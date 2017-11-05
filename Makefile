@@ -161,6 +161,8 @@ test check: $(UNIT_BIN)
 install: $(LIB)
 	install -c -m 0755 $(LIB) $(PREFIX)/lib/$(LIB)
 	ldconfig
+	mkdir -p $(PREFIX)/include/plasma
+	install -c -m 0755 src/plasma/mesh.h $(PREFIX)/include/plasma/mesh.h
 
 paper:
 	$(MAKE) -C paper
