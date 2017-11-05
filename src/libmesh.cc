@@ -38,6 +38,10 @@ size_t xxmalloc_usable_size(void *ptr) {
   return runtime().localHeap()->getSize(ptr);
 }
 
+size_t mesh_usable_size(void *ptr) {
+  return xxmalloc_usable_size(ptr);
+}
+
 // ensure we don't concurrently allocate/mess with internal heap data
 // structures while forking.  This is not normally invoked when
 // libmesh is dynamically linked or LD_PRELOADed into a binary.
