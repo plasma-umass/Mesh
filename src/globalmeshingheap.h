@@ -16,6 +16,7 @@
 #include "meshable-arena.h"
 #include "meshing.h"
 #include "miniheap.h"
+#include "measure_rss.h"
 
 using namespace HL;
 
@@ -54,7 +55,10 @@ private:
 public:
   enum { Alignment = 16 };
 
-  GlobalMeshingHeap() : _maxObjectSize(getClassMaxSize(NumBins - 1)), _prng(internal::seed()), _fastPrng(internal::seed(), internal::seed()) {
+  GlobalMeshingHeap()
+      : _maxObjectSize(getClassMaxSize(NumBins - 1)),
+        _prng(internal::seed()),
+        _fastPrng(internal::seed(), internal::seed()) {
     for (size_t i = 0; i < NumBins; ++i) {
       _littleheapCounts[i] = 0;
       _littleheaps[i] = nullptr;
@@ -306,19 +310,27 @@ public:
       resetNextMeshCheck();
     } else if (strcmp(name, "mesh.compact") == 0) {
       sharedLock.unlock();
+      mesh::debug("mesh.compact invoking meshAllSizeClasses()");
       meshAllSizeClasses();
       sharedLock.lock();
     } else if (strcmp(name, "arena") == 0) {
       // not sure what this should do
     } else if (strcmp(name, "stats.resident") == 0) {
-      // Unlike RSS, this does not include RSS from shared libraries and other non
-      // heap mappings.
-      // iterate over miniheaps, report resident
-      size_t sz = 0;
-      for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
-        sz += it->second->inUseCount() * it->second->objectSize();
-      }
-      *statp = sz;
+      CmdInfo ci;
+      memset(&ci, 0, sizeof(ci));
+
+      get_self_rss(&ci);
+
+      // originally in KB
+      *statp = ci.pss * 1024;
+      // // Unlike RSS, this does not include RSS from shared libraries and other non
+      // // heap mappings.
+      // // iterate over miniheaps, report resident
+      // size_t sz = 0;
+      // for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
+      //   sz += it->second->spanSize();
+      // }
+      // *statp = sz;
     } else if (strcmp(name, "stats.active") == 0) {
       // all miniheaps at least partially full
       size_t sz = 0;
@@ -330,7 +342,7 @@ public:
       // same as active for us, for now -- memory not returned to the OS
       size_t sz = 0;
       for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
-        sz += it->second->spanSize();
+        sz += it->second->inUseCount() * it->second->objectSize();
       }
       *statp = sz;
     }
@@ -401,8 +413,8 @@ protected:
         });
 
     for (size_t i = 0; i < NumBins; i++) {
-      //method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
-      //method::greedySplitting(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
+      // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
+      // method::greedySplitting(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
       method::simpleGreedySplitting(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
     }
 
@@ -414,9 +426,9 @@ protected:
     // run the actual meshing with the world stopped
     __sanitizer::StopTheWorld(performMeshing, &args);
 
-    //internal::StopTheWorld();
-    //performMeshing(&args);
-    //internal::StartTheWorld();
+    // internal::StopTheWorld();
+    // performMeshing(&args);
+    // internal::StartTheWorld();
   }
 
   void meshSizeClass(size_t sizeClass) {
@@ -434,8 +446,7 @@ protected:
             args.mergeSets.push_back(std::move(miniheaps));
         });
 
-
-    //method::greedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
+    // method::greedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
     method::simpleGreedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
 
     if (args.mergeSets.size() == 0)
@@ -446,9 +457,9 @@ protected:
     // run the actual meshing with the world stopped
     __sanitizer::StopTheWorld(performMeshing, &args);
 
-    //internal::StopTheWorld();
-    //performMeshing(&args);
-    //internal::StartTheWorld();
+    // internal::StopTheWorld();
+    // performMeshing(&args);
+    // internal::StartTheWorld();
   }
 
   const size_t _maxObjectSize;
