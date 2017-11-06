@@ -319,7 +319,9 @@ public:
       CmdInfo ci;
       memset(&ci, 0, sizeof(ci));
 
+      sharedLock.unlock();
       get_self_rss(&ci);
+      sharedLock.lock();
 
       // originally in KB
       *statp = ci.pss * 1024;
