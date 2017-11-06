@@ -13,6 +13,7 @@ PREFIX = /usr/local
 ARCH             = x86_64
 
 COMMON_SRCS      = src/runtime.cc src/meshing.cc src/meshable-arena.cc src/d_assert.cc \
+                   src/measure_rss.c \
                    src/sanitizer_stubs.cc \
                    src/sanitizer_stoptheworld_linux_libcdep.cc \
                    src/sanitizer_libc.cc \
@@ -40,20 +41,20 @@ COMMON_SRCS      = src/runtime.cc src/meshing.cc src/meshable-arena.cc src/d_ass
                    src/sanitizer_unwind_linux_libcdep.cc
 
 LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc src/sanitizer_linux_$(ARCH).S
-LIB_OBJS         = $(addprefix build/,$(patsubst %.S,%.o,$(LIB_SRCS:.cc=.o)))
+LIB_OBJS         = $(addprefix build/,$(patsubst %.c,%.o,$(patsubst %.S,%.o,$(LIB_SRCS:.cc=.o))))
 LIB              = libmesh.so
 
 GTEST_SRCS       = src/vendor/googletest/googletest/src/gtest-all.cc \
                    src/vendor/googletest/googletest/src/gtest_main.cc
 
 UNIT_SRCS        = $(wildcard src/unit/*.cc) $(GTEST_SRCS) $(COMMON_SRCS)
-UNIT_OBJS        = $(addprefix build/,$(UNIT_SRCS:.cc=.o))
+UNIT_OBJS        = $(addprefix build/,$(patsubst %.c,%.o,$(UNIT_SRCS:.cc=.o)))
 UNIT_CXXFLAGS    = -isystem src/vendor/googletest/googletest/include -Isrc/vendor/googletest/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
 UNIT_LDFLAGS     = $(LIBS)
 UNIT_BIN         = unit.test
 
 BENCH_SRCS       = src/meshing_benchmark.cc $(COMMON_SRCS)
-BENCH_OBJS       = $(addprefix build/,$(BENCH_SRCS:.cc=.o))
+BENCH_OBJS       = $(addprefix build/,$(patsubst %.c,%.o,$(BENCH_SRCS:.cc=.o)))
 BENCH_BIN        = meshing-benchmark
 
 FRAG_SRCS        = src/fragmenter.cc src/measure_rss.c
