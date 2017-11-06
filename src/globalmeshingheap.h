@@ -335,14 +335,14 @@ public:
       // *statp = sz;
     } else if (strcmp(name, "stats.active") == 0) {
       // all miniheaps at least partially full
-      size_t sz = 0;
+      size_t sz = _bigheap.arenaSize();
       for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
         sz += it->second->spanSize();
       }
       *statp = sz;
     } else if (strcmp(name, "stats.allocated") == 0) {
       // same as active for us, for now -- memory not returned to the OS
-      size_t sz = 0;
+      size_t sz = _bigheap.arenaSize();
       for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
         sz += it->second->inUseCount() * it->second->objectSize();
       }

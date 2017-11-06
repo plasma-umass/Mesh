@@ -143,6 +143,15 @@ public:
     d_assert(_vmaMap.find(ptr) == _vmaMap.end());
   }
 
+  // return the sum of the sizes of all large allocations
+  size_t arenaSize() const {
+    size_t sz = 0;
+    for (auto it = _vmaMap.begin(); it != _vmaMap.end(); it++) {
+      sz += it->second;
+    }
+    return sz;
+  }
+
 protected:
   internal::unordered_map<void *, size_t> _vmaMap{};
 };
