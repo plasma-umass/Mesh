@@ -16,7 +16,6 @@
 #include "meshable-arena.h"
 #include "meshing.h"
 #include "miniheap.h"
-#include "measure_rss.h"
 
 using namespace HL;
 
@@ -316,23 +315,10 @@ public:
     } else if (strcmp(name, "arena") == 0) {
       // not sure what this should do
     } else if (strcmp(name, "stats.resident") == 0) {
-      CmdInfo ci;
-      memset(&ci, 0, sizeof(ci));
+      auto pss = internal::measurePssKiB();
+      // mesh::debug("measurePssKiB: %zu KiB", pss);
 
-      sharedLock.unlock();
-      get_self_rss(&ci);
-      sharedLock.lock();
-
-      // originally in KB
-      *statp = ci.pss * 1024;
-      // // Unlike RSS, this does not include RSS from shared libraries and other non
-      // // heap mappings.
-      // // iterate over miniheaps, report resident
-      // size_t sz = 0;
-      // for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
-      //   sz += it->second->spanSize();
-      // }
-      // *statp = sz;
+      *statp = pss * 1024;  // originally in KB
     } else if (strcmp(name, "stats.active") == 0) {
       // all miniheaps at least partially full
       size_t sz = _bigheap.arenaSize();

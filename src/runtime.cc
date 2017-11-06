@@ -18,6 +18,30 @@ __thread LocalHeap *Runtime::_localHeap;
 
 STLAllocator<char, internal::Heap> internal::allocator{};
 
+size_t internal::measurePssKiB() {
+  size_t sz = 0;
+  auto fd = open("/proc/self/smaps_rollup", O_RDONLY | O_CLOEXEC);
+  if (unlikely(fd < 0)) {
+    mesh::debug("measurePssKiB: no smaps_rollup");
+    return 0;
+  }
+
+  static constexpr size_t BUF_LEN = 1024;
+  char buf[BUF_LEN];
+  memset(buf, 0, BUF_LEN);
+
+  (void)read(fd, buf, BUF_LEN - 1);
+  close(fd);
+
+  auto start = strstr(buf, "\nPss: ");
+  if (unlikely(start == nullptr)) {
+    mesh::debug("measurePssKiB: no Pss");
+    return 0;
+  }
+
+  return atoi(&start[6]);
+}
+
 int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 #if defined(__APPLE__) || defined(__FreeBSD__)
 #error FIXME: use off

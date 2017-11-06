@@ -44,6 +44,9 @@ static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 #define SIGDUMP (SIGRTMIN + 8)
 
+// return the kernel's perspective on our proportional set size
+size_t measurePssKiB();
+
 // efficiently copy data from srcFd to dstFd
 int copyFile(int dstFd, int srcFd, off_t off, size_t sz);
 

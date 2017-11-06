@@ -13,7 +13,6 @@ PREFIX = /usr/local
 ARCH             = x86_64
 
 COMMON_SRCS      = src/runtime.cc src/meshing.cc src/meshable-arena.cc src/d_assert.cc \
-                   src/measure_rss.c \
                    src/sanitizer_stubs.cc \
                    src/sanitizer_stoptheworld_linux_libcdep.cc \
                    src/sanitizer_libc.cc \
