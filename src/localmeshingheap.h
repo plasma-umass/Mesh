@@ -21,56 +21,10 @@ using namespace HL;
 
 namespace mesh {
 
-// forward declaration of StopTheWorld so we can declare it a friend
-class StopTheWorld;
-
-class STWThreadState {
-private:
-  DISALLOW_COPY_AND_ASSIGN(STWThreadState);
-
-public:
-  explicit STWThreadState();
-
-  void insert(STWThreadState *head) {
-    d_assert(head != nullptr);
-
-    auto next = head->_next;
-    head->_next = this;
-    _next = next;
-    _prev = head;
-    next->_prev = this;
-  }
-
-  void unregister(int64_t currEpoch) {
-    _shutdownEpoch.exchange(currEpoch);
-
-    // TODO: do this asynchronously in a subsequent epoch.  We can't
-    // free this here, because the thread cache structure may be used
-    // when destroying thread-local storage (which happens after this
-    // function is called)
-
-    // auto prev = tc->_prev;
-    // auto next = tc->_next;
-    // prev->_next = next;
-    // next->_prev = prev;
-    // tc->_next = tc;
-    // tc->_prev = tc;
-  }
-
-private:
-  friend StopTheWorld;
-
-  atomic_bool _waiting{false};
-  atomic_int64_t _shutdownEpoch{-1};
-  pthread_t _tid;
-  STWThreadState *_prev{nullptr};
-  STWThreadState *_next{nullptr};
-};
-
 class LocalHeapStats {
 public:
-  atomic_size_t allocCount;
-  atomic_size_t freeCount;
+  atomic_size_t allocCount{0};
+  atomic_size_t freeCount{0};
 };
 
 template <int NumBins,                           // number of size classes
@@ -154,17 +108,12 @@ public:
     return _global->getSize(ptr);
   }
 
-  STWThreadState *stwState() {
-    return &_stwState;
-  }
-
 protected:
   const size_t _maxObjectSize;
   MiniHeap *_current[NumBins];
   mt19937_64 _prng;
   MWC _mwc;
   GlobalHeap *_global;
-  STWThreadState _stwState{};
   LocalHeapStats _stats{};
 };
 }  // namespace mesh
