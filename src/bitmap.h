@@ -123,7 +123,6 @@ public:
     _bitarray = nullptr;
   }
 
-  // FIXME: should return an internal_string
   internal_string to_string(ssize_t nElements = -1) const {
     if (nElements == -1)
       nElements = _elements;
