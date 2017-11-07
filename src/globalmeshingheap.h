@@ -8,7 +8,7 @@
 #include <mutex>
 #include <shared_mutex>
 
-#include "sanitizer_stoptheworld.h"
+#include "sanitizer/sanitizer_stoptheworld.h"
 
 #include "heaplayers.h"
 
