@@ -16,6 +16,7 @@
 #include "meshable-arena.h"
 #include "meshing.h"
 #include "miniheap.h"
+#include "binnedtracker.h"
 
 using namespace HL;
 
@@ -28,7 +29,6 @@ public:
   atomic_size_t mhFreeCount;
   atomic_size_t mhAllocCount;
   atomic_size_t mhHighWaterMark;
-  atomic_size_t mhClassHWM[NumBins];
 };
 
 template <typename BigHeap,                      // for large allocations
@@ -58,10 +58,6 @@ public:
       : _maxObjectSize(getClassMaxSize(NumBins - 1)),
         _prng(internal::seed()),
         _fastPrng(internal::seed(), internal::seed()) {
-    for (size_t i = 0; i < NumBins; ++i) {
-      _littleheapCounts[i] = 0;
-      _littleheaps[i] = nullptr;
-    }
     resetNextMeshCheck();
   }
 
@@ -69,13 +65,7 @@ public:
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
     for (size_t i = 0; i < NumBins; i++) {
-      if (_littleheapCounts[i] == 0) {
-        continue;
-      }
-      for (auto mh = _littleheaps[i]; mh != nullptr; mh = mh->next()) {
-        if (!mh->isAttached())
-          mh->printOccupancy();
-      }
+      _littleheaps[i].printOccupancy();
     }
   }
 
@@ -89,23 +79,8 @@ public:
     debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
     debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
     debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
-    for (size_t i = 0; i < NumBins; i++) {
-      auto size = getClassMaxSize(i);
-      if (_littleheapCounts[i] == 0) {
-        debug("MH HWM (%5zu : %3zu):     %6zu/%6zu\n", size, 0, _littleheapCounts[i], (size_t)_stats.mhClassHWM[i]);
-        continue;
-      }
-      auto objectSize = _littleheaps[i]->maxCount();
-      auto objectCount = _littleheaps[i]->maxCount() * _littleheapCounts[i];
-      double inUseCount = 0;
-      for (auto mh = _littleheaps[i]; mh != nullptr; mh = mh->next()) {
-        inUseCount += mh->inUseCount();
-        if (beDetailed && size == 4096)
-          debug("\t%5.2f\t%s\n", mh->fullness(), mh->bitmap().to_string().c_str());
-      }
-      debug("MH HWM (%5zu : %3zu):     %6zu/%6zu (occ: %f)\n", size, objectSize, _littleheapCounts[i],
-            (size_t)_stats.mhClassHWM[i], inUseCount / objectCount);
-    }
+    for (size_t i = 0; i < NumBins; i++)
+      _littleheaps[i].dumpStats(beDetailed);
   }
 
   inline MiniHeap *allocMiniheap(size_t objectSize) {
@@ -144,7 +119,7 @@ public:
 
     _stats.mhAllocCount++;
     _stats.mhHighWaterMark = max(_miniheaps.size(), _stats.mhHighWaterMark.load());
-    _stats.mhClassHWM[sizeClass] = max(_littleheapCounts[sizeClass], _stats.mhClassHWM[sizeClass].load());
+    //_stats.mhClassHWM[sizeClass] = max(_littleheapCounts[sizeClass], _stats.mhClassHWM[sizeClass].load());
 
     return mh;
   }
@@ -178,20 +153,12 @@ public:
   }
 
   void trackMiniheap(size_t sizeClass, MiniHeap *mh) {
-    _littleheapCounts[sizeClass] += 1;
-    if (_littleheaps[sizeClass] == nullptr)
-      _littleheaps[sizeClass] = mh;
-    else
-      _littleheaps[sizeClass]->insertNext(mh);
+    _littleheaps[sizeClass].add(mh);
   }
 
   void untrackMiniheap(size_t sizeClass, MiniHeap *mh) {
     _stats.mhAllocCount -= 1;
-    _littleheapCounts[sizeClass] -= 1;
-
-    auto next = mh->remove();
-    if (_littleheaps[sizeClass] == mh)
-      _littleheaps[sizeClass] = next;
+    _littleheaps[sizeClass].remove(mh);
   }
 
   // called with lock held
@@ -403,7 +370,7 @@ protected:
     for (size_t i = 0; i < NumBins; i++) {
       // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
       // method::greedySplitting(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
-      method::simpleGreedySplitting(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
+      //method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
     }
 
     if (args.mergeSets.size() == 0)
@@ -435,7 +402,7 @@ protected:
         });
 
     // method::greedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
-    method::simpleGreedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
+    // method::simpleGreedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
 
     if (args.mergeSets.size() == 0)
       return;
@@ -463,8 +430,7 @@ protected:
   mt19937_64 _prng;
   MWC _fastPrng;
 
-  size_t _littleheapCounts[NumBins];
-  MiniHeap *_littleheaps[NumBins];
+  BinnedTracker<MiniHeap, 4> _littleheaps[NumBins];
   internal::map<uintptr_t, MiniHeap *> _miniheaps{};
 
   mutable std::mutex _bigMutex{};

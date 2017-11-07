@@ -213,29 +213,12 @@ public:
     return _span;
   }
 
-  /// Insert the given MiniHeap into our embedded linked list in the 'next' position.
-  void insertNext(MiniHeap *mh) {
-    auto nextNext = _next;
-    mh->_next = nextNext;
-    mh->_prev = this;
-    _next = mh;
-    if (nextNext)
-      nextNext->_prev = mh;
+  internal::BinToken getBinToken() const {
+    return _token;
   }
 
-  MiniHeap *next() const {
-    return _next;
-  }
-
-  /// Remove this MiniHeap from the list of all miniheaps of this size class
-  MiniHeap *remove() {
-    if (_prev != nullptr)
-      _prev->_next = _next;
-
-    if (_next != nullptr)
-      _next->_prev = _prev;
-
-    return _next;
+  void setBinToken(internal::BinToken token) {
+    _token = token;
   }
 
   /// public for meshTest only
@@ -311,6 +294,7 @@ protected:
   }
 
   char *_span[MaxMeshes];
+  internal::BinToken _token;
   Freelist<MaxFreelistLen> _freelist;
   const uint16_t _objectSize;
   atomic_uint16_t _inUseCount{0};
@@ -318,14 +302,12 @@ protected:
   uint8_t _meshCount : 7;
   uint8_t _attached : 1;
   mesh::internal::Bitmap _bitmap;
-  MiniHeap *_prev{nullptr};
-  MiniHeap *_next{nullptr};
 };
 
 typedef MiniHeapBase<> MiniHeap;
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
-static_assert(sizeof(MiniHeap) == 88, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 
 }  // namespace mesh
 

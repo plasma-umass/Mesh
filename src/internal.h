@@ -8,6 +8,7 @@
 #include <atomic>
 
 #include <signal.h>
+#include <stdint.h>
 
 #include "common.h"
 
@@ -123,6 +124,33 @@ typename Map::iterator greatest_leq(Map &m, typename Map::key_type const &k) {
 }
 
 typedef Bitmap<Heap> Bitmap;
+
+class BinnedTracker;
+
+class BinToken {
+public:
+  typedef uint32_t Size;
+  static constexpr Size Max = numeric_limits<uint32_t>::max();
+
+  BinToken() : bin(Max), off(Max) {
+  }
+
+  BinToken(Size bin, Size off) : bin(bin), off(off) {
+  }
+
+  // whether this is a valid token, or just a default initialized one
+  bool valid() const {
+    return bin < Max && off < Max;
+  }
+
+private:
+  friend BinnedTracker;
+
+  const Size bin;
+  const Size off;
+};
+
+static_assert(sizeof(BinToken) == 8, "BinToken too big!");
 
 }  // namespace internal
 }  // namespace mesh
