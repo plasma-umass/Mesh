@@ -115,8 +115,13 @@ void *Runtime::bgThread(void *arg) {
 
     ssize_t s = read(rt._signalFd, &siginfo, sizeof(struct signalfd_siginfo));
     if (s != sizeof(struct signalfd_siginfo)) {
-      debug("bad read size");
-      abort();
+      if (s >= 0) {
+        debug("bad read size: %lld\n", s);
+        abort();
+      } else {
+        // read returns -1 if the program gets a process-killing signal
+        return nullptr;
+      }
     }
 
     if (static_cast<int>(siginfo.ssi_signo) == SIGDUMP) {
