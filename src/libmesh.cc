@@ -56,13 +56,6 @@ void xxmalloc_unlock(void) {
   mesh::runtime().unlock();
 }
 
-// we need to wrap pthread_create so that we can safely implement a
-// stop-the-world quiescent period for the copy/mremap phase of
-// meshing
-int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg) {
-  return mesh::runtime().createThread(thread, attr, startRoutine, arg);
-}
-
 // Same API as je_mallctl, allows a program to query stats and set
 // allocator-related options.
 int mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {

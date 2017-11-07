@@ -24,12 +24,6 @@ using std::condition_variable;
 
 namespace mesh {
 
-// function passed to pthread_create
-typedef void *(*PthreadFn)(void *);
-
-// signature of pthread_create itself
-typedef int (*PthreadCreateFn)(pthread_t *thread, const pthread_attr_t *attr, PthreadFn start_routine, void *arg);
-
 static const int NBins = 11;  // 16Kb max object size
 static const int MeshPeriod = 2000;
 
@@ -52,36 +46,6 @@ public:
   }
 };
 
-class Runtime;
-
-class StopTheWorld {
-private:
-  DISALLOW_COPY_AND_ASSIGN(StopTheWorld);
-
-  // ensure we don't mistakenly create additional STW instances
-  explicit StopTheWorld() {
-  }
-
-public:
-  friend Runtime;
-
-  void lock();
-  void unlock();
-
-private:
-  void quiesceOthers();
-  void quiesceSelf();
-  void resume();
-
-  mutex _sharedMu{};
-
-  atomic_int _waiters{0};
-  condition_variable _waitersCv{};
-
-  atomic_int64_t _resumeEpoch{0};
-  condition_variable _resumeCv{};
-};
-
 class Runtime {
 private:
   DISALLOW_COPY_AND_ASSIGN(Runtime);
@@ -93,22 +57,15 @@ public:
   void lock();
   void unlock();
 
-  inline StopTheWorld &stopTheWorld() {
-    return _stw;
-  }
-
   inline GlobalHeap &heap() {
     return _heap;
   }
-
-  int createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg);
 
   static inline LocalHeap *localHeap() __attribute__((always_inline)) {
     if (unlikely(_localHeap == nullptr))
       allocLocalHeap();
     return _localHeap;
   }
-  void registerThread(STWThreadState *stwState);
   void startBgThread();
 
 private:
@@ -118,45 +75,17 @@ private:
   // constructor we deadlock before main even runs.
   void initThreads();
 
-  struct StartThreadArgs {
-    explicit StartThreadArgs(Runtime *runtime_, PthreadFn startRoutine_, void *arg_)
-        : runtime(runtime_), startRoutine(startRoutine_), arg(arg_) {
-    }
-
-    Runtime *runtime;
-    PthreadFn startRoutine;
-    void *arg;
-  };
-
-  static void *startThread(StartThreadArgs *threadArgs);
-  static void sigQuiesceHandler(int sig, siginfo_t *info, void *uctx);
-
   void createSignalFd();
   static void *bgThread(void *arg);
 
-  void unregisterThread(STWThreadState *tc);
-
-  void installSigHandlers();
-  void installSigAltStack();
-  void removeSigAltStack();
-
-  void quiesceSelf();
-
   static void allocLocalHeap();
 
-  // allocated inside LocalMeshingHeap, passed to runtime through registerThread
-  static __thread STWThreadState *_stwState;
-  static __thread stack_t _altStack;
   static __thread LocalHeap *_localHeap;
 
   friend Runtime &runtime();
-  friend StopTheWorld;
 
-  PthreadCreateFn _pthreadCreate{nullptr};
   GlobalHeap _heap{};
   mutex _mutex{};
-  StopTheWorld _stw{};
-  STWThreadState *_threads{nullptr};
   int _signalFd{-2};
 };
 
