@@ -1,6 +1,7 @@
-/* -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*- */
+/* -*- mode: c; c-basic-offset: 2; indent-tabs-mode: nil -*- */
 /* Copyright 2017 University of Massachusetts, Amherst */
 
+#pragma once
 #ifndef MESH__MESH_H
 #define MESH__MESH_H
 
