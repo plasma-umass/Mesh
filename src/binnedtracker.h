@@ -60,26 +60,6 @@ public:
     return bucket;
   }
 
-  uint32_t getBinId(uint32_t inUseCount) const {
-    if (inUseCount == _objectCount) {
-      return internal::BinToken::FlagFull;
-    } else if (inUseCount == 0) {
-      return internal::BinToken::FlagEmpty;
-    } else {
-      return inUseCount / BinCount;
-    }
-  }
-
-  internal::vector<MiniHeap *> &getBin(const uint32_t bin) {
-    if (bin == internal::BinToken::FlagFull) {
-      return _full;
-    } else if (bin == internal::BinToken::FlagEmpty) {
-      return _empty;
-    } else {
-      return _partial[bin];
-    }
-  }
-
   // called after a free through the global heap has happened
   void postFree(MiniHeap *mh) {
     const auto inUseCount = mh->inUseCount();
@@ -251,6 +231,26 @@ private:
 
     // update the miniheap's token
     mh->setBinToken(mh->getBinToken().newOff(internal::BinToken::FlagNoOff));
+  }
+
+  uint32_t getBinId(uint32_t inUseCount) const {
+    if (inUseCount == _objectCount) {
+      return internal::BinToken::FlagFull;
+    } else if (inUseCount == 0) {
+      return internal::BinToken::FlagEmpty;
+    } else {
+      return inUseCount / BinCount;
+    }
+  }
+
+  internal::vector<MiniHeap *> &getBin(const uint32_t bin) {
+    if (bin == internal::BinToken::FlagFull) {
+      return _full;
+    } else if (bin == internal::BinToken::FlagEmpty) {
+      return _empty;
+    } else {
+      return _partial[bin];
+    }
   }
 
   internal::vector<MiniHeap *> _full;
