@@ -402,8 +402,8 @@ protected:
             args.mergeSets.push_back(std::move(miniheaps));
         });
 
-    // method::greedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
-    // method::simpleGreedySplitting(_prng, _littleheapCounts[sizeClass], _littleheaps[sizeClass], meshFound);
+    // method::greedySplitting(_prng, _littleheaps[sizeClass], meshFound);
+    // method::simpleGreedySplitting(_prng, _littleheaps[sizeClass], meshFound);
 
     if (args.mergeSets.size() == 0)
       return;
