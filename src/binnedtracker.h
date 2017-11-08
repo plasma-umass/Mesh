@@ -17,7 +17,6 @@
 
 // TODO:
 // - track _highWaterMark
-// - on global free, call into here so we can transfer bins
 
 namespace mesh {
 
@@ -198,9 +197,8 @@ private:
   // must be called with _mutex held
   void addTo(internal::vector<MiniHeap *> &vec, MiniHeap *mh) {
     const size_t endOff = vec.size();
-    const auto tok = mh->getBinToken().newOff(endOff);
 
-    mh->setBinToken(tok);
+    mh->setBinToken(mh->getBinToken().newOff(endOff));
     vec.push_back(mh);
 
     // endpoint is _inclusive_, so we subtract 1 from size since we're
@@ -218,8 +216,11 @@ private:
     const size_t off = mh->getBinToken().off();
     const size_t endOff = vec.size() - 1;
 
+    vec[endOff]->setBinToken(mh->getBinToken());
+
     // move our miniheap to the last element, then pop that last element
     std::swap(vec[off], vec[endOff]);
+
     vec[endOff] = nullptr;
     vec.pop_back();
 
