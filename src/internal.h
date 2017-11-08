@@ -131,9 +131,9 @@ public:
   static constexpr Size Max = numeric_limits<uint32_t>::max();
   static constexpr Size MinFlags = numeric_limits<uint32_t>::max() - 4;
 
-  static constexpr Size FlagFull = numeric_limits<uint32_t>::max() - 1;
-  static constexpr Size FlagEmpty = numeric_limits<uint32_t>::max() - 2;
-  static constexpr Size FlagNoOff = numeric_limits<uint32_t>::max();
+  static inline constexpr Size FlagFull = numeric_limits<uint32_t>::max() - 1;
+  static inline constexpr Size FlagEmpty = numeric_limits<uint32_t>::max() - 2;
+  static inline constexpr Size FlagNoOff = numeric_limits<uint32_t>::max();
 
   BinToken() : _bin(Max), _off(Max) {
   }

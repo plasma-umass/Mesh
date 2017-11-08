@@ -16,9 +16,7 @@
 // - $BinCount partially full bins
 
 // TODO:
-// - setMetadata
 // - track _highWaterMark
-// - integrate into meshing methods
 // - on global free, call into here so we can transfer bins
 
 namespace mesh {
@@ -61,6 +59,30 @@ public:
     }
 
     return bucket;
+  }
+
+  // called after a free through the global heap has happened
+  void postFree(MiniHeap *mh) {
+    const auto inUseCount = mh->inUseCount();
+    const auto maxCount = mh->maxCount();
+    if (unlikely(inUseCount == maxCount))
+      return;
+
+    // FIXME: does this matter
+    // if (mh->isAttached())
+    //   return;
+
+    // FIXME: this is maybe more heavyweight than necessary
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    // different states: transition from full to not full
+
+    if (mh->getBinToken().bin() == internal::BinToken::FlagFull) {
+      d_assert(_full.size() != 0);
+      removeFrom(_full, mh);
+      mh->setBinToken(internal::BinToken(0, internal::BinToken::FlagNoOff));
+      addTo(_partial[0], mh);
+    }
   }
 
   void add(MiniHeap *mh) {
@@ -198,6 +220,7 @@ private:
 
     // move our miniheap to the last element, then pop that last element
     std::swap(vec[off], vec[endOff]);
+    vec[endOff] = nullptr;
     vec.pop_back();
 
     // update the miniheap's token
