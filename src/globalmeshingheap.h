@@ -212,6 +212,7 @@ public:
       freeMiniheap(mh);
       return;
     } else {
+      _littleheaps[getSizeClass(mh->objectSize())].postFree(mh);
       mh->unref();
     }
 
