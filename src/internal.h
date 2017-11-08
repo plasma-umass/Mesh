@@ -125,29 +125,54 @@ typename Map::iterator greatest_leq(Map &m, typename Map::key_type const &k) {
 
 typedef Bitmap<Heap> Bitmap;
 
-class BinnedTracker;
-
 class BinToken {
 public:
   typedef uint32_t Size;
   static constexpr Size Max = numeric_limits<uint32_t>::max();
+  static constexpr Size MinFlags = numeric_limits<uint32_t>::max() - 4;
 
-  BinToken() : bin(Max), off(Max) {
+  static constexpr Size FlagFull = numeric_limits<uint32_t>::max() - 1;
+  static constexpr Size FlagEmpty = numeric_limits<uint32_t>::max() - 2;
+  static constexpr Size FlagNoOff = numeric_limits<uint32_t>::max();
+
+  BinToken() : _bin(Max), _off(Max) {
   }
 
-  BinToken(Size bin, Size off) : bin(bin), off(off) {
+  BinToken(Size bin, Size off) : _bin(bin), _off(off) {
   }
 
   // whether this is a valid token, or just a default initialized one
   bool valid() const {
-    return bin < Max && off < Max;
+    return _bin < Max && _off < Max;
+  }
+
+  bool flagOk() const {
+    return _off < MinFlags;
+  }
+
+  static BinToken Full() {
+    return BinToken{FlagFull, FlagNoOff};
+  }
+
+  static BinToken Empty() {
+    return BinToken{FlagEmpty, FlagNoOff};
+  }
+
+  BinToken newOff(Size newOff) const {
+    return BinToken{_bin, newOff};
+  }
+
+  Size bin() const {
+    return _bin;
+  }
+
+  Size off() const {
+    return _off;
   }
 
 private:
-  friend BinnedTracker;
-
-  const Size bin;
-  const Size off;
+  Size _bin;
+  Size _off;
 };
 
 static_assert(sizeof(BinToken) == 8, "BinToken too big!");
