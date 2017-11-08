@@ -62,8 +62,9 @@ public:
     }
 
     auto *ptr = SuperHeap::malloc(sz);
-    if (sz > 8)
+    if (sz > 8) {
       d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
+    }
 
     return ptr;
   }

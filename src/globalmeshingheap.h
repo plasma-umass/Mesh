@@ -369,8 +369,8 @@ protected:
 
     for (size_t i = 0; i < NumBins; i++) {
       // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
-      // method::greedySplitting(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
-      //method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
+      //method::greedySplitting(_prng, _littleheaps[i], meshFound);
+      method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
     }
 
     if (args.mergeSets.size() == 0)
@@ -430,7 +430,7 @@ protected:
   mt19937_64 _prng;
   MWC _fastPrng;
 
-  BinnedTracker<MiniHeap, 4> _littleheaps[NumBins];
+  BinnedTracker<MiniHeap> _littleheaps[NumBins];
   internal::map<uintptr_t, MiniHeap *> _miniheaps{};
 
   mutable std::mutex _bigMutex{};

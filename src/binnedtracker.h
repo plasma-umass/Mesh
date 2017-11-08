@@ -23,7 +23,7 @@
 
 namespace mesh {
 
-template <typename MiniHeap, size_t BinCount>
+template <typename MiniHeap, size_t BinCount = 4>
 class BinnedTracker {
 private:
   DISALLOW_COPY_AND_ASSIGN(BinnedTracker);
@@ -33,17 +33,43 @@ public:
   }
 
   size_t objectCount() const {
+    if (unlikely(!_hasMetadata))
+      mesh::debug("BinnedTracker.objectCount() called before set");
     return _objectCount;
   }
 
   size_t objectSize() const {
+    if (unlikely(!_hasMetadata))
+      mesh::debug("BinnedTracker.objectSize() called before set");
     return _objectSize;
+  }
+
+  internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    internal::vector<MiniHeap *> bucket;
+
+    // consider all of our partially filled miniheaps
+    for (size_t i = 0; i < BinCount; i++) {
+      const auto partial = _partial[i];
+      for (size_t j = 0; j < partial.size(); j++) {
+        const auto mh = partial[j];
+        if (!mh->isMeshingCandidate() || mh->fullness() >= occupancyCutoff)
+          continue;
+        bucket.push_back(mh);
+      }
+    }
+
+    return bucket;
   }
 
   void add(MiniHeap *mh) {
     std::lock_guard<std::mutex> lock(_mutex);
 
     d_assert(mh != nullptr);
+
+    if (unlikely(!_hasMetadata))
+      setMetadata(mh);
 
     mh->setBinToken(internal::BinToken::Full());
     addTo(_full, mh);
@@ -135,9 +161,10 @@ public:
   }
 
 private:
-  void setMetadata(size_t objectCount, size_t objectSize) {
-    _objectCount = objectCount;
-    _objectSize = objectSize;
+  void setMetadata(MiniHeap *mh) {
+    _objectCount = mh->maxCount();
+    _objectSize = mh->objectSize();
+    _hasMetadata = true;
   }
 
   void swapTokens(MiniHeap *mh1, MiniHeap *mh2) {
@@ -188,6 +215,8 @@ private:
 
   mt19937_64 _prng;
   mutable std::mutex _mutex{};
+
+  bool _hasMetadata{false};
 };
 }  // namespace mesh
 
