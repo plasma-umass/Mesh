@@ -60,28 +60,47 @@ public:
     return bucket;
   }
 
+  uint32_t getBinId(uint32_t inUseCount) const {
+    if (inUseCount == _objectCount) {
+      return internal::BinToken::FlagFull;
+    } else if (inUseCount == 0) {
+      return internal::BinToken::FlagEmpty;
+    } else {
+      return inUseCount / BinCount;
+    }
+  }
+
+  internal::vector<MiniHeap *> &getBin(const uint32_t bin) {
+    if (bin == internal::BinToken::FlagFull) {
+      return _full;
+    } else if (bin == internal::BinToken::FlagEmpty) {
+      return _empty;
+    } else {
+      return _partial[bin];
+    }
+  }
+
   // called after a free through the global heap has happened
   void postFree(MiniHeap *mh) {
     const auto inUseCount = mh->inUseCount();
-    const auto maxCount = mh->maxCount();
-    if (unlikely(inUseCount == maxCount))
+    if (unlikely(inUseCount == _objectCount))
       return;
 
     // FIXME: does this matter
-    // if (mh->isAttached())
-    //   return;
+    if (mh->isAttached())
+      return;
 
     // FIXME: this is maybe more heavyweight than necessary
     std::lock_guard<std::mutex> lock(_mutex);
 
     // different states: transition from full to not full
 
-    if (mh->getBinToken().bin() == internal::BinToken::FlagFull) {
-      d_assert(_full.size() != 0);
-      removeFrom(_full, mh);
-      mh->setBinToken(internal::BinToken(0, internal::BinToken::FlagNoOff));
-      addTo(_partial[0], mh);
-    }
+    const auto oldBinId = mh->getBinToken().bin();
+    const auto newBinId = getBinId(inUseCount);
+    if (likely(newBinId == oldBinId))
+      return;
+
+    move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
   }
 
   void add(MiniHeap *mh) {
@@ -192,6 +211,12 @@ private:
     const auto temp = mh1->getBinToken();
     mh1->setBinToken(mh2->getBinToken());
     mh2->setBinToken(temp);
+  }
+
+  void move(internal::vector<MiniHeap *> &to, internal::vector<MiniHeap *> &from, MiniHeap *mh, uint32_t size) {
+    removeFrom(from, mh);
+    mh->setBinToken(internal::BinToken(size, internal::BinToken::FlagNoOff));
+    addTo(to, mh);
   }
 
   // must be called with _mutex held
