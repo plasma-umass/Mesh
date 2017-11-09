@@ -1,6 +1,6 @@
 [submodule "Heap-Layers"]
 	path = src/vendor/Heap-Layers
-	url = https://github.com/emeryberger/Heap-Layers
+	url = https://github.com/bpowers/Heap-Layers
 [submodule "src/vendor/gflags"]
 	path = src/vendor/gflags
 	url = https://github.com/gflags/gflags.git
