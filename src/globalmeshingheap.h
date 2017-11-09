@@ -58,6 +58,10 @@ public:
       : _maxObjectSize(getClassMaxSize(NumBins - 1)),
         _prng(internal::seed()),
         _fastPrng(internal::seed(), internal::seed()) {
+    for (size_t i = 0; i < NumBins; i++) {
+      _littleheaps[i].init(this);
+    }
+
     resetNextMeshCheck();
   }
 
@@ -162,15 +166,16 @@ public:
   }
 
   // called with lock held
-  void freeMiniheapAfterMesh(MiniHeap *mh) {
+  void freeMiniheapAfterMesh(MiniHeap *mh, bool untrack = true) {
     const auto sizeClass = getSizeClass(mh->objectSize());
-    untrackMiniheap(sizeClass, mh);
+    if (untrack)
+      untrackMiniheap(sizeClass, mh);
 
     mh->MiniHeapBase::~MiniHeapBase();
     internal::Heap().free(mh);
   }
 
-  void freeMiniheap(MiniHeap *&mh) {
+  void freeMiniheap(MiniHeap *&mh, bool untrack = true) {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
     const auto spans = mh->spans();
@@ -184,7 +189,7 @@ public:
 
     _stats.mhFreeCount++;
 
-    freeMiniheapAfterMesh(mh);
+    freeMiniheapAfterMesh(mh, untrack);
     mh = nullptr;
   }
 
@@ -208,12 +213,16 @@ public:
     }
 
     mh->free(ptr);
-    if (unlikely(!mh->isAttached() && mh->isEmpty())) {
-      freeMiniheap(mh);
+    bool shouldConsiderMesh = !mh->isEmpty();
+    mh->unref();
+
+    // this may free the miniheap -- we can't safely access it after
+    // this point.
+    _littleheaps[getSizeClass(mh->objectSize())].postFree(mh);
+    mh = nullptr;
+
+    if (!shouldConsiderMesh) {
       return;
-    } else {
-      _littleheaps[getSizeClass(mh->objectSize())].postFree(mh);
-      mh->unref();
     }
 
     if (unlikely(shouldMesh())) {
@@ -357,6 +366,11 @@ protected:
     MeshArguments args;
     args.instance = this;
 
+    // first, clear out any free memory we might have
+    for (size_t i = 0; i < NumBins; i++) {
+      _littleheaps[i].flushFreeMiniHeaps();
+    }
+
     // XXX: can we get away with using shared at first, then upgrading to exclusive?
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
@@ -431,7 +445,7 @@ protected:
   mt19937_64 _prng;
   MWC _fastPrng;
 
-  BinnedTracker<MiniHeap> _littleheaps[NumBins];
+  BinnedTracker<MiniHeap, GlobalMeshingHeap> _littleheaps[NumBins];
   internal::map<uintptr_t, MiniHeap *> _miniheaps{};
 
   mutable std::mutex _bigMutex{};
