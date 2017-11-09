@@ -11,6 +11,8 @@
 
 #include "rng/mwc.h"
 
+#include "internal.h"
+
 using mesh::debug;
 
 namespace mesh {
@@ -47,13 +49,17 @@ public:
     detach();
   }
 
-  void init(mt19937_64 &prng, MWC &fastPrng) {
+  void init(mt19937_64 &prng, MWC &fastPrng, internal::Bitmap *bitmap = nullptr) {
     const auto objectCount = maxCount();
 
     size_t listSize = objectCount * sizeof(fl_off_t);
 
     _list = reinterpret_cast<fl_off_t *>(mesh::internal::Heap().malloc(listSize));
     for (size_t i = 0; i < objectCount; i++) {
+      // if we were passed in a bitmap and the current object is
+      // already allocated, don't add its offset to the freelist
+      if (bitmap != nullptr && bitmap->isSet(i))
+        continue;
       _list[i] = i;
     }
 
