@@ -12,6 +12,13 @@
 
 namespace mesh {
 
+// const internal::BinToken::Size internal::BinToken::Max = numeric_limits<uint32_t>::max();
+// const internal::BinToken::Size internal::BinToken::MinFlags = numeric_limits<uint32_t>::max() - 4;
+
+// const internal::BinToken::Size internal::BinToken::FlagFull = numeric_limits<uint32_t>::max() - 1;
+// const internal::BinToken::Size internal::BinToken::FlagEmpty = numeric_limits<uint32_t>::max() - 2;
+// const internal::BinToken::Size internal::BinToken::FlagNoOff = numeric_limits<uint32_t>::max();
+
 __thread LocalHeap *Runtime::_localHeap;
 
 STLAllocator<char, internal::Heap> internal::allocator{};
