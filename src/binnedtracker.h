@@ -189,6 +189,8 @@ public:
   }
 
   void printOccupancy() const {
+    std::lock_guard<std::mutex> lock(_mutex);
+
     for (size_t i = 0; i < _full.size(); i++) {
       if (_full[i] != nullptr)
         _full[i]->printOccupancy();
@@ -196,7 +198,7 @@ public:
 
     for (size_t i = 0; i < BinCount; i++) {
       auto partial = _partial[i];
-      for (size_t j = 0; i < partial.size(); j++) {
+      for (size_t j = 0; j < partial.size(); j++) {
         MiniHeap *mh = partial[j];
         if (mh != nullptr && !mh->isAttached())
           mh->printOccupancy();
@@ -207,6 +209,8 @@ public:
   }
 
   void dumpStats(bool beDetailed) const {
+    std::lock_guard<std::mutex> lock(_mutex);
+
     const auto mhCount = count();
 
     if (mhCount == 0) {
@@ -228,7 +232,7 @@ public:
 
     for (size_t i = 0; i < BinCount; i++) {
       auto partial = _partial[i];
-      for (size_t j = 0; i < partial.size(); j++) {
+      for (size_t j = 0; j < partial.size(); j++) {
         MiniHeap *mh = partial[j];
         if (mh != nullptr)
           inUseCount += mh->inUseCount();
@@ -289,10 +293,12 @@ private:
 
   // must be called with _mutex held
   void removeFrom(internal::vector<MiniHeap *> &vec, MiniHeap *mh) {
+    // a bug if we try to remove a miniheap from an empty vector
+    d_assert(vec.size() > 0);
+
     const size_t off = mh->getBinToken().off();
     const size_t endOff = vec.size() - 1;
 
-    d_assert(vec.size() > 0);
     vec[endOff]->setBinToken(mh->getBinToken());
 
     // move our miniheap to the last element, then pop that last element
@@ -311,7 +317,7 @@ private:
     } else if (inUseCount == 0) {
       return internal::BinToken::FlagEmpty;
     } else {
-      return inUseCount / BinCount;
+      return (inUseCount * BinCount)/_objectCount;
     }
   }
 
