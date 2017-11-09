@@ -100,6 +100,11 @@ public:
     d_assert(sizeClass >= 0);
     d_assert(sizeClass < NumBins);
 
+    // check our bins for a miniheap to reuse
+    MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
+    if (existing != nullptr)
+      return existing;
+
     // if we have objects bigger than the size of a page, allocate
     // multiple pages to amortize the cost of creating a
     // miniheap/globally locking the heap.

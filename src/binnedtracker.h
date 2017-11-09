@@ -46,6 +46,46 @@ public:
     return _objectSize;
   }
 
+private:
+  // remove and return a MiniHeap uniformly at random from the given vector
+  MiniHeap *popRandomLocked(internal::vector<MiniHeap *> &vec) {
+    std::uniform_int_distribution<size_t> distribution(0, vec.size() - 1);
+    const size_t off = distribution(_prng);
+
+    MiniHeap *mh = vec[off];
+    removeFrom(vec, mh);
+
+    return mh;
+  }
+
+public:
+  MiniHeap *selectForReuse() {
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    const auto partialCount = partialSize();
+
+    // no partial miniheaps means we should reuse an empty span
+    if (partialCount == 0) {
+      if (_empty.size() == 0)
+        return nullptr;
+
+      return popRandomLocked(_empty);
+    }
+
+    std::uniform_int_distribution<size_t> distribution(0, partialCount - 1);
+    const size_t off = distribution(_prng);
+
+    size_t count = 0;
+    for (size_t i = 0; i < BinCount; i++) {
+      count += _partial[i].size();
+      if (off < count)
+        return popRandomLocked(_partial[i]);
+    }
+
+    mesh::debug("selectForReuse: should be unreachable");
+    return nullptr;
+  }
+
   internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {
     std::lock_guard<std::mutex> lock(_mutex);
 
@@ -135,11 +175,14 @@ public:
   // number of MiniHeaps we are tracking
   size_t count() const {
     size_t sz = _full.size() + _empty.size();
+    return sz + partialSize();
+  }
 
+  size_t partialSize() const {
+    size_t sz = 0;
     for (size_t i = 0; i < BinCount; i++) {
       sz += _partial[i].size();
     }
-
     return sz;
   }
 
