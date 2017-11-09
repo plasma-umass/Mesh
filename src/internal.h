@@ -128,12 +128,12 @@ typedef Bitmap<Heap> Bitmap;
 class BinToken {
 public:
   typedef uint32_t Size;
-  static constexpr Size Max = numeric_limits<uint32_t>::max();
-  static constexpr Size MinFlags = numeric_limits<uint32_t>::max() - 4;
+  static constexpr inline Size Max = numeric_limits<uint32_t>::max();
+  static constexpr inline Size MinFlags = numeric_limits<uint32_t>::max() - 4;
 
-  static inline constexpr Size FlagFull = numeric_limits<uint32_t>::max() - 1;
-  static inline constexpr Size FlagEmpty = numeric_limits<uint32_t>::max() - 2;
-  static inline constexpr Size FlagNoOff = numeric_limits<uint32_t>::max();
+  static constexpr inline Size FlagFull = numeric_limits<uint32_t>::max() - 1;
+  static constexpr inline Size FlagEmpty = numeric_limits<uint32_t>::max() - 2;
+  static constexpr inline Size FlagNoOff = numeric_limits<uint32_t>::max();
 
   BinToken() : _bin(Max), _off(Max) {
   }
