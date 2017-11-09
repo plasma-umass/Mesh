@@ -57,6 +57,7 @@ public:
                 maxCount(), _bitmap.to_string().c_str());
   }
 
+  // always "localMalloc"
   inline void *malloc(size_t sz) {
     d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached, isExhausted());
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
