@@ -53,7 +53,9 @@ private:
     const size_t off = distribution(_prng);
 
     MiniHeap *mh = vec[off];
-    removeFrom(vec, mh);
+    // when we pop for reuse, we effectively "top off" a MiniHeap, so
+    // it moves into the full bin
+    move(_full, vec, mh, internal::BinToken::FlagFull);
 
     return mh;
   }
@@ -290,6 +292,7 @@ private:
     const size_t off = mh->getBinToken().off();
     const size_t endOff = vec.size() - 1;
 
+    d_assert(vec.size() > 0);
     vec[endOff]->setBinToken(mh->getBinToken());
 
     // move our miniheap to the last element, then pop that last element

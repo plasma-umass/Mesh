@@ -50,21 +50,29 @@ public:
   }
 
   void init(mt19937_64 &prng, MWC &fastPrng, internal::Bitmap *bitmap = nullptr) {
-    const auto objectCount = maxCount();
+    const size_t objectCount = maxCount();
+    const size_t listSize = objectCount * sizeof(fl_off_t);
 
-    size_t listSize = objectCount * sizeof(fl_off_t);
+    // account for in-use objects if passed a bitmap
+    if (bitmap == nullptr)
+      _off = 0;
+    else
+      _off = bitmap->inUseCount();
 
     _list = reinterpret_cast<fl_off_t *>(mesh::internal::Heap().malloc(listSize));
-    for (size_t i = 0; i < objectCount; i++) {
+
+    for (size_t i = 0, off = _off; i < objectCount; i++) {
       // if we were passed in a bitmap and the current object is
       // already allocated, don't add its offset to the freelist
       if (bitmap != nullptr && bitmap->isSet(i))
         continue;
-      _list[i] = i;
+
+      d_assert(off < objectCount);
+      _list[off++] = i;
     }
 
     // mwcShuffle(&_list[0], &_list[objectCount], fastPrng);
-    std::shuffle(&_list[0], &_list[objectCount], prng);
+    std::shuffle(&_list[_off], &_list[objectCount], prng);
   }
 
   void detach() {

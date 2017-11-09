@@ -26,7 +26,8 @@ private:
   typedef MiniHeapBase<MaxFreelistLen, MaxMeshes> MiniHeap;
 
 public:
-  MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng, size_t expectedSpanSize)
+  MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng,
+               size_t expectedSpanSize)
       : _span{reinterpret_cast<char *>(span)},
         _freelist{objectCount, prng, fastPrng},
         _objectSize(objectSize),
@@ -156,6 +157,8 @@ public:
   inline void reattach(mt19937_64 &prng, MWC &fastPrng) {
     _freelist.init(prng, fastPrng, &_bitmap);
     _attached = true;
+    // if (_meshCount > 1)
+    //   mesh::debug("fixme? un-mesh when reattaching");
   }
 
   /// called when a LocalHeap is done with a MiniHeap (it is
@@ -272,8 +275,8 @@ protected:
   void dumpDebug() const {
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = _inUseCount;
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu, mesh: %zu)\t%p-%p\n", this, _objectSize,
-                maxCount(), heapPages, this->isExhausted(), inUseCount, _meshCount, _span[0],
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu, mesh: %zu)\t%p-%p\n", this,
+                _objectSize, maxCount(), heapPages, this->isExhausted(), inUseCount, _meshCount, _span[0],
                 reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
   }
