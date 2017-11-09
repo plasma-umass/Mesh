@@ -153,6 +153,11 @@ public:
     return reinterpret_cast<uintptr_t>(_span[0]);
   }
 
+  inline void reattach(mt19937_64 &prng, MWC &fastPrng) {
+    _freelist.init(prng, fastPrng, &_bitmap);
+    _attached = true;
+  }
+
   /// called when a LocalHeap is done with a MiniHeap (it is
   /// "detaching" it and releasing it back to the global heap)
   inline void detach() {
@@ -302,7 +307,7 @@ protected:
   mutable atomic_uint16_t _refCount{0};
   uint8_t _meshCount : 7;
   uint8_t _attached : 1;
-  mesh::internal::Bitmap _bitmap;
+  internal::Bitmap _bitmap;
 };
 
 typedef MiniHeapBase<> MiniHeap;
