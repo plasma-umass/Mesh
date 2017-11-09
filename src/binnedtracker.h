@@ -20,13 +20,18 @@
 
 namespace mesh {
 
-template <typename MiniHeap, size_t BinCount = 4>
+template <typename MiniHeap, typename GlobalHeap, size_t BinCount = 4, size_t MaxEmpty = 64>
 class BinnedTracker {
 private:
   DISALLOW_COPY_AND_ASSIGN(BinnedTracker);
 
 public:
   BinnedTracker() : _prng(internal::seed()) {
+  }
+
+  // give the BinnedTracker a back-pointer to its owner, the global heap
+  void init(GlobalHeap *heap) {
+    _heap = heap;
   }
 
   size_t objectCount() const {
@@ -70,17 +75,26 @@ public:
     if (mh->isAttached())
       return;
 
-    // FIXME: this is maybe more heavyweight than necessary
-    std::lock_guard<std::mutex> lock(_mutex);
+    uint32_t oldBinId;
+    uint32_t newBinId;
 
-    // different states: transition from full to not full
+    {
+      std::lock_guard<std::mutex> lock(_mutex);
 
-    const auto oldBinId = mh->getBinToken().bin();
-    const auto newBinId = getBinId(inUseCount);
-    if (likely(newBinId == oldBinId))
-      return;
+      oldBinId = mh->getBinToken().bin();
+      newBinId = getBinId(inUseCount);
 
-    move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
+      if (likely(newBinId == oldBinId))
+        return;
+
+      move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
+
+      if (newBinId != internal::BinToken::FlagEmpty || _empty.size() < MaxEmpty)
+        return;
+    }
+
+    // must be called without lock held
+    flushFreeMiniHeaps();
   }
 
   void add(MiniHeap *mh) {
@@ -180,6 +194,18 @@ public:
           _highWaterMark.load(), inUseCount / totalObjects);
   }
 
+  void flushFreeMiniHeaps() {
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    d_assert(_heap != nullptr);
+
+    for (size_t i = 0; i < _empty.size(); i++) {
+      _heap->freeMiniheap(_empty[i], false);
+    }
+
+    _empty.clear();
+  }
+
 private:
   void setMetadata(MiniHeap *mh) {
     _objectCount = mh->maxCount();
@@ -252,6 +278,8 @@ private:
       return _partial[bin];
     }
   }
+
+  GlobalHeap *_heap;
 
   internal::vector<MiniHeap *> _full;
   internal::vector<MiniHeap *> _partial[BinCount];
