@@ -65,48 +65,51 @@ public:
     d_assert_msg(sz % HL::CPUInfo::PageSize == 0, "multiple-page allocs only, sz bad: %zu", sz);
 
     if (sz == HL::CPUInfo::PageSize) {
-      size_t page = _bitmap.setFirstEmpty();
-      setMetadata(page, internal::PageType::Identity);
-      return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * page;
+      size_t off = _bitmap.setFirstEmpty();
+      setMetadata(off, internal::PageType::Identity);
+      return ptrFromOffset(off);
     }
 
     const auto pageCount = sz / HL::CPUInfo::PageSize;
     d_assert(pageCount >= 2);
 
     // FIXME: we could be smarter here
-    size_t firstPage = 0;
+    size_t firstOff = 0;
     bool found = false;
     while (!found) {
-      firstPage = _bitmap.setFirstEmpty(firstPage);
+      firstOff = _bitmap.setFirstEmpty(firstOff);
       found = true;
       // check that enough pages after the first empty page are available.
       for (size_t i = 1; i < pageCount; i++) {
         // if one of the pages we need is already in use, bump our
         // offset into the page index up and try again
-        if (_bitmap.isSet(firstPage + i)) {
-          firstPage += i + 1;
+        if (_bitmap.isSet(firstOff + i)) {
+          _bitmap.unset(firstOff); // don't 'leak' this empty page
+          firstOff += i + 1;
           found = false;
           break;
         }
       }
     }
 
-    setMetadata(firstPage, internal::PageType::Identity);
+    d_assert(getMetadataFlags(firstOff) == 0 && getMetadataPtr(firstOff) == 0);
+    setMetadata(firstOff, internal::PageType::Identity);
 
     // now that we know they are available, set the empty pages to
     // in-use.  This is safe because this whole function is called
     // under the GlobalHeap lock, so there is no chance of concurrent
     // modification between the loop above and the one below.
     for (size_t i = 1; i < pageCount; i++) {
-      bool ok = _bitmap.tryToSet(firstPage + i);
+      bool ok = _bitmap.tryToSet(firstOff + i);
       if (!ok) {
         debug("hard assertion failue");
         abort();
       }
-      setMetadata(firstPage + i, internal::PageType::Identity);
+      d_assert(getMetadataFlags(firstOff+i) == 0 && getMetadataPtr(firstOff+i) == 0);
+      setMetadata(firstOff + i, internal::PageType::Identity);
     }
 
-    return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * firstPage;
+    return ptrFromOffset(firstOff);
   }
 
   inline void freePhys(void *ptr, size_t sz) {
@@ -122,8 +125,9 @@ public:
   }
 
   inline void free(void *ptr, size_t sz) {
-    if (unlikely(!contains(ptr)))
+    if (unlikely(!contains(ptr))) {
       return;
+    }
     d_assert(sz > 0);
 
     d_assert(sz / CPUInfo::PageSize > 0);
@@ -148,7 +152,7 @@ public:
     }
   }
 
-  inline void assoc(const void *span, void *miniheap) {
+  inline void assoc(const void *span, void *miniheap, size_t pageCount) {
     if (unlikely(!contains(span))) {
       mesh::debug("assoc failure %p", span);
       abort();
@@ -159,20 +163,21 @@ public:
     // this non-atomic update is safe because this is only called
     // under the MH writer-lock in global heap
     uintptr_t mh = reinterpret_cast<uintptr_t>(miniheap);
-    setMetadata(off, mh | getMetadataFlags(off));
+    for (size_t i = 0; i < pageCount; i++) {
+      setMetadata(off+i, mh | getMetadataFlags(off));
+    }
 
-    mesh::debug("assoc %p(%zu) %p | %u", span, off, miniheap, getMetadataFlags(off));
+    // mesh::debug("assoc %p(%zu) %p | %u", span, off, miniheap, getMetadataFlags(off));
   }
 
   inline void *lookup(const void *ptr) const {
     if (unlikely(!contains(ptr))) {
-      mesh::debug("lookup !contains %p", ptr);
       return nullptr;
     }
 
     const auto off = offsetFor(ptr);
     const auto result = reinterpret_cast<void *>(getMetadataPtr(off));
-    mesh::debug("lookup ok for %p(%zu) %p", ptr, off, result);
+    // mesh::debug("lookup ok for %p(%zu) %p", ptr, off, result);
 
     return result;
   }
@@ -197,6 +202,10 @@ private:
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     const auto arena = reinterpret_cast<uintptr_t>(_arenaBegin);
     return (ptrval - arena) / CPUInfo::PageSize;
+  }
+
+  void *ptrFromOffset(size_t off) const {
+    return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * off;
   }
 
   inline void setMetadata(size_t off, uintptr_t val) {
