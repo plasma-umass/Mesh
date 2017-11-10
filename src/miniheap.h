@@ -260,7 +260,7 @@ protected:
 
     for (size_t i = 1; i < _meshCount; ++i) {
       if (_span[i] == nullptr) {
-        mesh::debug("_span[%d] should be non-null", i);
+        mesh::debug("_span[%d] should be non-null (%zu)", i, _meshCount);
         dumpDebug();
         d_assert(false);
       }

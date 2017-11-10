@@ -48,6 +48,10 @@ static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
 // return the kernel's perspective on our proportional set size
 size_t measurePssKiB();
 
+inline void *MaskToPage(const void *ptr) {
+  return reinterpret_cast<void *const>(reinterpret_cast<uintptr_t>(ptr) & (uintptr_t) ~(CPUInfo::PageSize - 1));
+}
+
 // efficiently copy data from srcFd to dstFd
 int copyFile(int dstFd, int srcFd, off_t off, size_t sz);
 

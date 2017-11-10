@@ -43,7 +43,9 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUI
   }
   _fd = fd;
   _arenaBegin = SuperHeap::map(internal::ArenaSize, MAP_SHARED, fd);
-  d_assert(_arenaBegin != nullptr);
+  _metadata = reinterpret_cast<atomic<uintptr_t> *>(SuperHeap::map(metadataSize(), MAP_ANONYMOUS | MAP_PRIVATE));
+  if (unlikely(_arenaBegin == nullptr || _metadata == nullptr))
+    abort();
 
   // debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
 
@@ -53,17 +55,18 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUI
 }
 
 void MeshableArena::mesh(void *keep, void *remove, size_t sz) {
-  //debug("keep: %p, remove: %p\n", keep, remove);
-  const auto keepOff = reinterpret_cast<uintptr_t>(keep) - reinterpret_cast<uintptr_t>(_arenaBegin);
-  const auto removeOff = reinterpret_cast<uintptr_t>(remove) - reinterpret_cast<uintptr_t>(_arenaBegin);
-  d_assert(_offMap.find(keepOff) != _offMap.end());
-  d_assert(_offMap.find(removeOff) != _offMap.end());
+  // debug("keep: %p, remove: %p\n", keep, remove);
+  const auto keepOff = offsetFor(keep);
+  const auto removeOff = offsetFor(remove);
+  d_assert(getMetadataFlags(keepOff) == internal::PageType::Identity);
+  d_assert(getMetadataFlags(removeOff) != internal::PageType::Unallocated);
 
-  d_assert(_offMap[keepOff] == internal::PageType::Identity);
+  const auto pageCount = sz / CPUInfo::PageSize;
+  for (size_t i = 0; i < pageCount; i++) {
+    setMetadata(removeOff + i, internal::PageType::Meshed | getMetadataPtr(keepOff));
+  }
 
-  _offMap[removeOff] = internal::PageType::Meshed;
-
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * CPUInfo::PageSize);
   freePhys(remove, sz);
   // if (*(char *)remove == 0 || *(char *)((char *)remove+sz-1))
   //   write(-2, "mmap was OK", 11);

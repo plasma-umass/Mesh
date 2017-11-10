@@ -123,13 +123,15 @@ public:
     void *buf = internal::Heap().malloc(sizeof(MiniHeap));
     if (unlikely(buf == nullptr))
       abort();
+
+    // mesh::debug("spana %p(%zu) %p", span, 0, buf);
     MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _prng, _fastPrng, spanSize);
+    // Super::assoc(span, mh);
 
     trackMiniheap(sizeClass, mh);
-    _miniheaps[mh->getSpanStart()] = mh;
 
     _stats.mhAllocCount++;
-    _stats.mhHighWaterMark = max(_miniheaps.size(), _stats.mhHighWaterMark.load());
+    //_stats.mhHighWaterMark = max(_miniheaps.size(), _stats.mhHighWaterMark.load());
     //_stats.mhClassHWM[sizeClass] = max(_littleheapCounts[sizeClass], _stats.mhClassHWM[sizeClass].load());
 
     return mh;
@@ -147,20 +149,16 @@ public:
   }
 
   // if the MiniHeap is non-null, its reference count is increased by one
-  inline MiniHeap *miniheapFor(void *const ptr) const {
+  inline MiniHeap *miniheapFor(const void *ptr) const {
     std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
 
-    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    auto it = greatest_leq(_miniheaps, ptrval);
-    if (likely(it != _miniheaps.end())) {
-      auto candidate = it->second;
-      if (likely(candidate->contains(ptr))) {
-        candidate->ref();
-        return candidate;
-      }
-    }
+    // mask it so the pointer is page-aligned
+    auto pagePtr = internal::MaskToPage(ptr);
+    auto mh = reinterpret_cast<MiniHeap *>(Super::lookup(ptr));
+    if (mh != nullptr)
+      mh->ref();
 
-    return nullptr;
+    return mh;
   }
 
   void trackMiniheap(size_t sizeClass, MiniHeap *mh) {
@@ -191,7 +189,6 @@ public:
     const auto meshCount = mh->meshCount();
     for (size_t i = 0; i < meshCount; i++) {
       Super::free(reinterpret_cast<void *>(spans[i]), spanSize);
-      _miniheaps.erase(reinterpret_cast<uintptr_t>(spans[i]));
     }
 
     _stats.mhFreeCount++;
@@ -269,7 +266,6 @@ public:
 
     for (size_t i = 0; i < srcMeshCount; i++) {
       Super::mesh(dstSpanStart, srcSpans[i], dstSpanSize);
-      _miniheaps[reinterpret_cast<uintptr_t>(srcSpans[i])] = dst;
     }
 
     freeMiniheapAfterMesh(src);
@@ -306,16 +302,18 @@ public:
     } else if (strcmp(name, "stats.active") == 0) {
       // all miniheaps at least partially full
       size_t sz = _bigheap.arenaSize();
-      for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
-        sz += it->second->spanSize();
-      }
+      debug("FIXME: mallctl('stats.active')");
+      // for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
+      //   sz += it->second->spanSize();
+      // }
       *statp = sz;
     } else if (strcmp(name, "stats.allocated") == 0) {
       // same as active for us, for now -- memory not returned to the OS
       size_t sz = _bigheap.arenaSize();
-      for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
-        sz += it->second->inUseCount() * it->second->objectSize();
-      }
+      debug("FIXME: mallctl('stats.allocated')");
+      // for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
+      //   sz += it->second->inUseCount() * it->second->objectSize();
+      // }
       *statp = sz;
     }
     return 0;
@@ -453,7 +451,6 @@ protected:
   MWC _fastPrng;
 
   BinnedTracker<MiniHeap, GlobalMeshingHeap> _littleheaps[NumBins];
-  internal::map<uintptr_t, MiniHeap *> _miniheaps{};
 
   mutable std::mutex _bigMutex{};
   mutable std::shared_timed_mutex _mhRWLock{};
