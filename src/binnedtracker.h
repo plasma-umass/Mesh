@@ -61,6 +61,7 @@ private:
   }
 
 public:
+#if 0
   MiniHeap *selectForReuse() {
     std::lock_guard<std::mutex> lock(_mutex);
 
@@ -87,6 +88,18 @@ public:
     mesh::debug("selectForReuse: should be unreachable");
     return nullptr;
   }
+#else
+  MiniHeap *selectForReuse() {
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    for (size_t i = 0; i < BinCount; i++) {
+      if (_partial[i].size() > 0)
+        return popRandomLocked(_partial[i]);
+    }
+
+    return nullptr;
+  }
+#endif
 
   internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -174,10 +187,35 @@ public:
     }
   }
 
+  size_t allocatedObjectCount() const {
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    size_t sz = 0;
+
+    for (size_t i = 0; i < _full.size(); i++) {
+      if (_full[i] != nullptr)
+        sz += _full[i]->inUseCount();
+    }
+
+    for (size_t i = 0; i < BinCount; i++) {
+      auto partial = _partial[i];
+      for (size_t j = 0; j < partial.size(); j++) {
+        MiniHeap *mh = partial[j];
+        if (mh != nullptr && !mh->isAttached())
+          sz += mh->inUseCount();
+      }
+    }
+
+    return sz;
+  }
+
   // number of MiniHeaps we are tracking
   size_t count() const {
-    size_t sz = _full.size() + _empty.size();
-    return sz + partialSize();
+    return nonEmptyCount() + _empty.size();
+  }
+
+  size_t nonEmptyCount() const {
+    return _full.size() + partialSize();
   }
 
   size_t partialSize() const {
