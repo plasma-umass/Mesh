@@ -63,7 +63,7 @@ public:
   OneWayMmapHeap() {
   }
 
-  inline void *map(size_t sz, int flags, int fd) {
+  inline void *map(size_t sz, int flags, int fd = -1) {
     if (sz == 0)
       return nullptr;
 

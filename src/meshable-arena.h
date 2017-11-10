@@ -16,7 +16,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <map>
 #endif
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
@@ -34,9 +33,11 @@
 namespace mesh {
 
 namespace internal {
+
 enum PageType {
-  Identity,
-  Meshed,
+  Unallocated = 0,
+  Identity = 1,
+  Meshed = 2,
 };
 }  // namespace internal
 
@@ -50,7 +51,7 @@ public:
 
   explicit MeshableArena();
 
-  inline bool contains(void *ptr) const {
+  inline bool contains(const void *ptr) const {
     auto arena = reinterpret_cast<uintptr_t>(_arenaBegin);
     auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     return arena <= ptrval && ptrval < arena + internal::ArenaSize;
@@ -65,7 +66,7 @@ public:
 
     if (sz == HL::CPUInfo::PageSize) {
       size_t page = _bitmap.setFirstEmpty();
-      _offMap[CPUInfo::PageSize * page] = internal::PageType::Identity;
+      setMetadata(page, internal::PageType::Identity);
       return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * page;
     }
 
@@ -90,6 +91,8 @@ public:
       }
     }
 
+    setMetadata(firstPage, internal::PageType::Identity);
+
     // now that we know they are available, set the empty pages to
     // in-use.  This is safe because this whole function is called
     // under the GlobalHeap lock, so there is no chance of concurrent
@@ -100,9 +103,9 @@ public:
         debug("hard assertion failue");
         abort();
       }
+      setMetadata(firstPage + i, internal::PageType::Identity);
     }
 
-    _offMap[CPUInfo::PageSize * firstPage] = internal::PageType::Identity;
     return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * firstPage;
   }
 
@@ -119,30 +122,59 @@ public:
   }
 
   inline void free(void *ptr, size_t sz) {
-    d_assert(contains(ptr));
+    if (unlikely(!contains(ptr)))
+      return;
     d_assert(sz > 0);
 
     d_assert(sz / CPUInfo::PageSize > 0);
     d_assert(sz % CPUInfo::PageSize == 0);
 
     const auto off = offsetFor(ptr);
-    const auto offIt = _offMap.find(off);
-    d_assert(offIt != _offMap.end());
-    if (offIt->second == internal::PageType::Identity) {
+    const uint8_t flags = getMetadataFlags(off);
+    if (flags == internal::PageType::Identity) {
       madvise(ptr, sz, MADV_DONTNEED);
       freePhys(ptr, sz);
     } else {
       // restore identity mapping
-      mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, off);
+      mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, off * CPUInfo::PageSize);
     }
 
-    _offMap.erase(offIt);
-    const auto firstPage = off / CPUInfo::PageSize;
     const auto pageCount = sz / CPUInfo::PageSize;
     for (size_t i = 0; i < pageCount; i++) {
-      d_assert(_bitmap.isSet(firstPage + i));
-      _bitmap.unset(firstPage + i);
+      d_assert(_bitmap.isSet(off + i));
+      // clear the miniheap pointers we were tracking
+      setMetadata(off + i, 0);
+      _bitmap.unset(off + i);
     }
+  }
+
+  inline void assoc(const void *span, void *miniheap) {
+    if (unlikely(!contains(span))) {
+      mesh::debug("assoc failure %p", span);
+      abort();
+      return;
+    }
+
+    const auto off = offsetFor(span);
+    // this non-atomic update is safe because this is only called
+    // under the MH writer-lock in global heap
+    uintptr_t mh = reinterpret_cast<uintptr_t>(miniheap);
+    setMetadata(off, mh | getMetadataFlags(off));
+
+    mesh::debug("assoc %p(%zu) %p | %u", span, off, miniheap, getMetadataFlags(off));
+  }
+
+  inline void *lookup(const void *ptr) const {
+    if (unlikely(!contains(ptr))) {
+      mesh::debug("lookup !contains %p", ptr);
+      return nullptr;
+    }
+
+    const auto off = offsetFor(ptr);
+    const auto result = reinterpret_cast<void *>(getMetadataPtr(off));
+    mesh::debug("lookup ok for %p(%zu) %p", ptr, off, result);
+
+    return result;
   }
 
   // must be called with the world stopped
@@ -153,13 +185,34 @@ public:
   }
 
 private:
+  static constexpr inline size_t metadataSize() {
+    // one pointer per page in our arena
+    return sizeof(uintptr_t) * (internal::ArenaSize / CPUInfo::PageSize);
+  }
+
   int openSpanFile(size_t sz);
 
-  off_t offsetFor(const void *ptr) const {
+  // pointer must already have been checked by `contains()` for bounds
+  size_t offsetFor(const void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     const auto arena = reinterpret_cast<uintptr_t>(_arenaBegin);
-    d_assert(ptrval >= arena);
-    return ptrval - arena;
+    return (ptrval - arena) / CPUInfo::PageSize;
+  }
+
+  inline void setMetadata(size_t off, uintptr_t val) {
+    d_assert(off < metadataSize());
+    _metadata[off] = val;
+  }
+
+  inline uint8_t getMetadataFlags(size_t off) const {
+    // flags are stored in the bottom 3 bits of the metadata
+    uint8_t flags = _metadata[off] & 0x07;
+    return flags;
+  }
+
+  inline uintptr_t getMetadataPtr(size_t off) const {
+    // flags are stored in the bottom 3 bits of the metadata
+    return _metadata[off] & (uintptr_t)~0x07;
   }
 
   static void staticOnExit(int code, void *data);
@@ -184,7 +237,7 @@ private:
   internal::Bitmap _bitmap;
 
   // indexed by offset
-  internal::unordered_map<off_t, internal::PageType> _offMap{};
+  atomic<uintptr_t> *_metadata{nullptr};
 
   int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
