@@ -138,7 +138,7 @@ public:
     return mh;
   }
 
-  inline void *malloc(size_t sz) {
+  void *malloc(size_t sz) {
     const int sizeClass = getSizeClass(sz);
     const size_t sizeMax = getClassMaxSize(sizeClass);
 
@@ -198,7 +198,7 @@ public:
     mh = nullptr;
   }
 
-  inline void free(void *ptr) {
+  void free(void *ptr) {
     // if (unlikely(internal::isMeshMarker(ptr))) {
     //   dumpStats(2, false);
     //   for (size_t i = 0; i < 128; i++)
@@ -237,11 +237,11 @@ public:
   }
 
   inline size_t getSize(void *ptr) const {
-    if (ptr == nullptr || internal::isMeshMarker(ptr))
+    if (unlikely(ptr == nullptr))// || internal::isMeshMarker(ptr))
       return 0;
 
     auto mh = miniheapFor(ptr);
-    if (mh) {
+    if (likely(mh)) {
       auto size = mh->getSize(ptr);
       mh->unref();
       return size;
@@ -303,18 +303,23 @@ public:
     } else if (strcmp(name, "stats.active") == 0) {
       // all miniheaps at least partially full
       size_t sz = _bigheap.arenaSize();
-      debug("FIXME: mallctl('stats.active')");
-      // for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
-      //   sz += it->second->spanSize();
-      // }
+      for (size_t i = 0; i < NumBins; i++) {
+        const auto count = _littleheaps[i].nonEmptyCount();
+        if (count == 0)
+          continue;
+        sz += count * _littleheaps[i].objectSize() * _littleheaps[i].objectCount();
+      }
       *statp = sz;
     } else if (strcmp(name, "stats.allocated") == 0) {
       // same as active for us, for now -- memory not returned to the OS
       size_t sz = _bigheap.arenaSize();
-      debug("FIXME: mallctl('stats.allocated')");
-      // for (auto it = _miniheaps.begin(); it != _miniheaps.end(); it++) {
-      //   sz += it->second->inUseCount() * it->second->objectSize();
-      // }
+      for (size_t i = 0; i < NumBins; i++) {
+        const auto &bin = _littleheaps[i];
+        const auto count = bin.nonEmptyCount();
+        if (count == 0)
+          continue;
+        sz += bin.objectSize() * bin.allocatedObjectCount();
+      }
       *statp = sz;
     }
     return 0;
