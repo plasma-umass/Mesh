@@ -14,8 +14,8 @@
 #include "internal.h"
 #include "miniheap.h"
 
-#include "bitmap.h"
 #include "binnedtracker.h"
+#include "bitmap.h"
 
 namespace mesh {
 
@@ -117,10 +117,10 @@ public:
     d_assert(len <= 256);
     d_assert(cutoffPercent > 0 && cutoffPercent <= 1);
 
-    //size_t cutoff = (size_t)ceil(cutoffPercent * len);
+    // size_t cutoff = (size_t)ceil(cutoffPercent * len);
 
     for (size_t i = 0; i < len; i++) {
-      _table[i] = len-1;
+      _table[i] = len - 1;
 
       // TODO: could make this len/2, becuase choose is symmetric
       for (size_t j = 0; j < len; j++) {
@@ -148,7 +148,7 @@ private:
       denominator *= i;
     }
 
-    return static_cast<double>(numerator)/static_cast<double>(denominator);
+    return static_cast<double>(numerator) / static_cast<double>(denominator);
   }
 
   size_t _len;
@@ -200,22 +200,27 @@ inline void unbalancedSplit(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps, in
 
 template <typename T, typename U>
 inline void simpleGreedySplitting(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps,
-                            const function<void(internal::vector<T *> &&)> &meshFound) noexcept {
-  // ensure we have a non-zero count
-  if (miniheaps.count() == 0)
+                                  const function<void(internal::vector<T *> &&)> &meshFound) noexcept {
+  if (miniheaps.partialSize() == 0)
     return;
 
-  const size_t nBits = miniheaps.objectCount();
-
   internal::vector<T *> bucket = miniheaps.meshingCandidates(OccupancyCutoff);
+  // ensure we have a non-zero count
+  if (bucket.size() == 0)
+    return;
+
+  const size_t nBytes = bucket[0]->bitmap().byteCount();
 
   std::sort(bucket.begin(), bucket.end());
+  // mesh::debug("%zu looking for meshes in %zu MiniHeaps (first fullness %f)", nBytes, bucket.size(),
+  //             bucket[0]->fullness());
 
-  for (size_t i = 0; i < bucket.size(); i++) {
+  const auto candidateCount = bucket.size();
+  for (size_t i = 0; i < candidateCount; i++) {
     if (bucket[i] == nullptr)
       continue;
 
-    for (size_t j = i+1; j < bucket.size(); j++) {
+    for (size_t j = i + 1; j < candidateCount; j++) {
       // if we've already meshed a miniheap at this position in the
       // list, this will be null.
       if (bucket[j] == nullptr)
@@ -227,7 +232,7 @@ inline void simpleGreedySplitting(mt19937_64 &prng, BinnedTracker<T, U> &minihea
       const auto bitmap1 = h1->bitmap().bitmap();
       const auto bitmap2 = h2->bitmap().bitmap();
 
-      if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBits)) {
+      if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes)) {
         internal::vector<T *> heaps{h1, h2};
         meshFound(std::move(heaps));
         bucket[j] = nullptr;
@@ -240,11 +245,11 @@ inline void simpleGreedySplitting(mt19937_64 &prng, BinnedTracker<T, U> &minihea
 template <typename T, typename U>
 inline void greedySplitting(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps,
                             const function<void(internal::vector<T *> &&)> &meshFound) noexcept {
-  // ensure we have a non-zero count
-  if (miniheaps.count() == 0)
+  if (miniheaps.partialSize() == 0)
     return;
 
   const size_t nBits = miniheaps.objectCount();
+  const size_t nBytes = nBits / 8;
 
   internal::vector<T *> leftBucket{};   // mutable copy
   internal::vector<T *> rightBucket{};  // mutable copy
@@ -267,7 +272,7 @@ inline void greedySplitting(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps,
       const auto bitmap1 = h1->bitmap().bitmap();
       const auto bitmap2 = h2->bitmap().bitmap();
 
-      if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBits)) {
+      if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes)) {
         internal::vector<T *> heaps{h1, h2};
         meshFound(std::move(heaps));
         rightBucket[j] = nullptr;
