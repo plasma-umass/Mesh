@@ -200,7 +200,7 @@ inline void unbalancedSplit(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps, in
 
 template <typename T, typename U>
 inline void simpleGreedySplitting(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps,
-                                  const function<void(internal::vector<T *> &&)> &meshFound) noexcept {
+                                  const function<void(std::pair<T *, T *> &&)> &meshFound) noexcept {
   if (miniheaps.partialSize() == 0)
     return;
 
@@ -233,7 +233,7 @@ inline void simpleGreedySplitting(mt19937_64 &prng, BinnedTracker<T, U> &minihea
       const auto bitmap2 = h2->bitmap().bitmap();
 
       if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes)) {
-        internal::vector<T *> heaps{h1, h2};
+        std::pair<T *, T *> heaps{h1, h2};
         meshFound(std::move(heaps));
         bucket[j] = nullptr;
         break;  // break after finding a mesh

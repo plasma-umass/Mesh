@@ -48,7 +48,7 @@ private:
 
   struct MeshArguments {
     GlobalMeshingHeap *instance;
-    internal::vector<internal::vector<MiniHeap *>> mergeSets;
+    internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
   };
 
 public:
@@ -364,10 +364,10 @@ protected:
       d_assert(mergeSet.size() == 2);  // FIXME
 
       // merge into the one with a larger mesh count
-      if (mergeSet[0]->meshCount() < mergeSet[1]->meshCount())
-        std::swap(mergeSet[0], mergeSet[1]);
+      if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
+        mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
 
-      args->instance->mesh(mergeSet[0], mergeSet[1]);
+      args->instance->mesh(std::get<0>(mergeSet), std::get<1>(mergeSet));
     }
   }
 
@@ -389,10 +389,10 @@ protected:
       std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
       // FIXME: is it safe to have this function not use internal::allocator?
-      auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
+      auto meshFound = function<void(std::pair<MiniHeap *, MiniHeap *> &&)>(
           // std::allocator_arg, internal::allocator,
-          [&](internal::vector<MiniHeap *> &&miniheaps) {
-            if (miniheaps[0]->isMeshingCandidate() && miniheaps[1]->isMeshingCandidate())
+          [&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
+            if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<0>(miniheaps)->isMeshingCandidate())
               args.mergeSets.push_back(std::move(miniheaps));
           });
 
