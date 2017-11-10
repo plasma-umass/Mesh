@@ -64,11 +64,14 @@ def main():
 
     saved = 0
     for size in sizes:
+        if size >= 4096:
+            continue
         spans = size_classes[size]
         # n = count_meshes(meshers.optimalMesher, spans)
-        n = count_meshes(meshers.optimalMesher, spans)
-        print('\t%5d: %d spans (%d meshes)' % (size, len(spans), n))
-        saved += (size * spans[0].length) * n
+        # n = count_meshes(meshers.optimalMesher, spans)
+        n = count_meshes(meshers.greedyMesher, spans)
+        print('\t%5d: %d spans (%d meshes)' % (size, len(spans), len(n)))
+        saved += (size * spans[0].length) * len(n)
 
     print('Saved size: %.1f MiB' % (saved * MB,))
 
