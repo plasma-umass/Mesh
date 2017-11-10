@@ -124,9 +124,10 @@ public:
     if (unlikely(buf == nullptr))
       abort();
 
-    // mesh::debug("spana %p(%zu) %p", span, 0, buf);
+    // if (spanSize > 4096)
+    //   mesh::debug("spana %p(%zu) %p (%zu)", span, spanSize, buf, objectSize);
     MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _prng, _fastPrng, spanSize);
-    // Super::assoc(span, mh);
+    Super::assoc(span, mh, nPages);
 
     trackMiniheap(sizeClass, mh);
 
