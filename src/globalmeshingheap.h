@@ -381,7 +381,7 @@ protected:
       _littleheaps[i].flushFreeMiniHeaps();
     }
 
-    dumpStrings();
+    // dumpStrings();
     // debug("<<<<<<>pre");
 
     {
@@ -403,7 +403,7 @@ protected:
       }
 
       if (args.mergeSets.size() == 0) {
-        debug("nothing to mesh.");
+        // debug("nothing to mesh.");
         return;
       }
 
