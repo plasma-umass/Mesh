@@ -20,7 +20,7 @@
 
 namespace mesh {
 
-template <typename MiniHeap, typename GlobalHeap, size_t BinCount = 4, size_t MaxEmpty = 64>
+template <typename MiniHeap, typename GlobalHeap, size_t BinCount = 4, size_t MaxEmpty = 128>
 class BinnedTracker {
 private:
   DISALLOW_COPY_AND_ASSIGN(BinnedTracker);
@@ -92,7 +92,7 @@ public:
   MiniHeap *selectForReuse() {
     std::lock_guard<std::mutex> lock(_mutex);
 
-    for (size_t i = 0; i < BinCount; i++) {
+    for (int i = BinCount - 1; i >= 0; i--) {
       if (_partial[i].size() > 0)
         return popRandomLocked(_partial[i]);
     }
@@ -104,15 +104,21 @@ public:
   internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {
     std::lock_guard<std::mutex> lock(_mutex);
 
-    internal::vector<MiniHeap *> bucket;
+    internal::vector<MiniHeap *> bucket{};
 
     // consider all of our partially filled miniheaps
     for (size_t i = 0; i < BinCount; i++) {
       const auto partial = _partial[i];
       for (size_t j = 0; j < partial.size(); j++) {
         const auto mh = partial[j];
-        if (!mh->isMeshingCandidate() || mh->fullness() >= occupancyCutoff)
+        if (!mh->isMeshingCandidate() || (mh->fullness() >= occupancyCutoff)) {
+          // if (_objectSize < 4096)
+          //   mesh::debug("Bin(%zu): SKIP %d || %f >= %f (%d)", _objectSize.load(),
+          //               (int)!mh->isMeshingCandidate(),
+          //               mh->fullness(), occupancyCutoff,
+          //               (int)(mh->fullness() >= occupancyCutoff));
           continue;
+        }
         bucket.push_back(mh);
       }
     }
