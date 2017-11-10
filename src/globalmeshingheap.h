@@ -12,11 +12,11 @@
 
 #include "heaplayers.h"
 
+#include "binnedtracker.h"
 #include "internal.h"
 #include "meshable-arena.h"
 #include "meshing.h"
 #include "miniheap.h"
-#include "binnedtracker.h"
 
 using namespace HL;
 
@@ -103,7 +103,7 @@ public:
     // check our bins for a miniheap to reuse
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
     if (existing != nullptr) {
-      existing->reattach(_prng, _fastPrng); // populate freelist, set attached bit
+      existing->reattach(_prng, _fastPrng);  // populate freelist, set attached bit
       return existing;
     }
 
@@ -237,7 +237,7 @@ public:
   }
 
   inline size_t getSize(void *ptr) const {
-    if (unlikely(ptr == nullptr))// || internal::isMeshMarker(ptr))
+    if (unlikely(ptr == nullptr))  // || internal::isMeshMarker(ptr))
       return 0;
 
     auto mh = miniheapFor(ptr);
@@ -290,7 +290,6 @@ public:
       resetNextMeshCheck();
     } else if (strcmp(name, "mesh.compact") == 0) {
       sharedLock.unlock();
-      mesh::debug("mesh.compact invoking meshAllSizeClasses()");
       meshAllSizeClasses();
       sharedLock.lock();
     } else if (strcmp(name, "arena") == 0) {
@@ -382,34 +381,40 @@ protected:
       _littleheaps[i].flushFreeMiniHeaps();
     }
 
-    // XXX: can we get away with using shared at first, then upgrading to exclusive?
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    dumpStrings();
+    // debug("<<<<<<>pre");
 
-    // FIXME: is it safe to have this function not use internal::allocator?
-    auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
-        // std::allocator_arg, internal::allocator,
-        [&](internal::vector<MiniHeap *> &&miniheaps) {
-          if (miniheaps[0]->isMeshingCandidate() && miniheaps[1]->isMeshingCandidate())
-            args.mergeSets.push_back(std::move(miniheaps));
-        });
+    {
+      // XXX: can we get away with using shared at first, then upgrading to exclusive?
+      std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
-    for (size_t i = 0; i < NumBins; i++) {
-      // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
-      //method::greedySplitting(_prng, _littleheaps[i], meshFound);
-      method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
+      // FIXME: is it safe to have this function not use internal::allocator?
+      auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
+          // std::allocator_arg, internal::allocator,
+          [&](internal::vector<MiniHeap *> &&miniheaps) {
+            if (miniheaps[0]->isMeshingCandidate() && miniheaps[1]->isMeshingCandidate())
+              args.mergeSets.push_back(std::move(miniheaps));
+          });
+
+      for (size_t i = 0; i < NumBins; i++) {
+        // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
+        // method::greedySplitting(_prng, _littleheaps[i], meshFound);
+        method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
+      }
+
+      if (args.mergeSets.size() == 0) {
+        debug("nothing to mesh.");
+        return;
+      }
+
+      _stats.meshCount += args.mergeSets.size();
+
+      // run the actual meshing with the world stopped
+      __sanitizer::StopTheWorld(performMeshing, &args);
     }
 
-    if (args.mergeSets.size() == 0)
-      return;
-
-    _stats.meshCount += args.mergeSets.size();
-
-    // run the actual meshing with the world stopped
-    __sanitizer::StopTheWorld(performMeshing, &args);
-
-    // internal::StopTheWorld();
-    // performMeshing(&args);
-    // internal::StartTheWorld();
+    // dumpStrings();
+    // debug("<<<<<<>post");
   }
 
   void meshSizeClass(size_t sizeClass) {
