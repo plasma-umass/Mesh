@@ -132,10 +132,10 @@ void *Runtime::bgThread(void *arg) {
     }
 
     if (static_cast<int>(siginfo.ssi_signo) == SIGDUMP) {
-      debug("libmesh: background thread received SIGDUMP, starting dump\n");
-      debug(">>>>>>>>>>\n");
+      // debug("libmesh: background thread received SIGDUMP, starting dump\n");
+      // debug(">>>>>>>>>>\n");
       rt.heap().dumpStrings();
-      debug("<<<<<<<<<<\n");
+      // debug("<<<<<<<<<<\n");
     } else {
       printf("Read unexpected signal\n");
     }
