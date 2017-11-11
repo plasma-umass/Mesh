@@ -25,7 +25,7 @@ using std::condition_variable;
 namespace mesh {
 
 static const int NBins = 11;  // 16Kb max object size
-static const int MeshPeriod = 2000;
+static const int MeshPeriod = 20000;
 
 // The global heap manages the spans that back MiniHeaps as well as
 // large allocations.
