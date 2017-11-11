@@ -8,7 +8,13 @@
 using namespace mesh;
 
 static __attribute__((constructor)) void libmesh_init() {
-  runtime().startBgThread();
+  char *bgThread = getenv("MESH_BACKGROUND_THREAD");
+  if (!bgThread)
+    return;
+
+  int shouldThread = atoi(bgThread);
+  if (shouldThread)
+    runtime().startBgThread();
 }
 
 static __attribute__((destructor)) void libmesh_fini() {
