@@ -361,8 +361,6 @@ protected:
     MeshArguments *args = (MeshArguments *)argument;
 
     for (auto &mergeSet : args->mergeSets) {
-      d_assert(mergeSet.size() == 2);  // FIXME
-
       // merge into the one with a larger mesh count
       if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
         mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
