@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 #-*- mode: python; -*-
 from support.config import ConfigBuilder, slurp, exe_available
 from os import environ, curdir, listdir
@@ -45,6 +45,7 @@ c.append('cflags', '-D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700')
 
 c.append('cflags', '-Wall -Wextra -pedantic')
 c.append('cflags', '-Wundef')
+c.append('cflags', '-Wno-gnu-statement-expression')
 c.append('cflags', '-Wno-unused-parameter')
 c.append('cflags', '-Wno-unused-variable')
 c.append('cflags', '-Wno-c99-extensions')
