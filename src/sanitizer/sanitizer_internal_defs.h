@@ -35,6 +35,14 @@
 # define SANITIZER_WEAK_ATTRIBUTE  __attribute__((weak))
 #endif
 
+// TLS is handled differently on different platforms
+#if SANITIZER_LINUX || SANITIZER_NETBSD
+# define SANITIZER_TLS_INITIAL_EXEC_ATTRIBUTE \
+    __attribute__((tls_model("initial-exec"))) thread_local
+#else
+# define SANITIZER_TLS_INITIAL_EXEC_ATTRIBUTE
+#endif
+
 //--------------------------- WEAK FUNCTIONS ---------------------------------//
 // When working with weak functions, to simplify the code and make it more
 // portable, when possible define a default implementation using this macro:
@@ -56,11 +64,13 @@
 
 // SANITIZER_SUPPORTS_WEAK_HOOKS means that we support real weak functions that
 // will evaluate to a null pointer when not defined.
+#ifndef SANITIZER_SUPPORTS_WEAK_HOOKS
 #if (SANITIZER_LINUX || SANITIZER_MAC) && !SANITIZER_GO
 # define SANITIZER_SUPPORTS_WEAK_HOOKS 1
 #else
 # define SANITIZER_SUPPORTS_WEAK_HOOKS 0
 #endif
+#endif // SANITIZER_SUPPORTS_WEAK_HOOKS
 // For some weak hooks that will be called very often and we want to avoid the
 // overhead of executing the default implementation when it is not necessary,
 // we can use the flag SANITIZER_SUPPORTS_WEAK_HOOKS to only define the default
@@ -129,12 +139,8 @@ typedef int error_t;
 #endif
 typedef int pid_t;
 
-// WARNING: OFF_T may be different from OS type off_t, depending on the value of
-// _FILE_OFFSET_BITS. This definition of OFF_T matches the ABI of system calls
-// like pread and mmap, as opposed to pread64 and mmap64.
-// FreeBSD, Mac and Linux/x86-64 are special.
-#if SANITIZER_FREEBSD || SANITIZER_MAC || \
-  (SANITIZER_LINUX && defined(__x86_64__))
+#if SANITIZER_FREEBSD || SANITIZER_NETBSD || SANITIZER_MAC || \
+    (SANITIZER_LINUX && defined(__x86_64__))
 typedef u64 OFF_T;
 #else
 typedef uptr OFF_T;
@@ -257,8 +263,8 @@ void NORETURN CheckFailed(const char *file, int line, const char *cond,
 
 #define CHECK_IMPL(c1, op, c2) \
   do { \
-    __sanitizer::u64 v1 = (u64)(c1); \
-    __sanitizer::u64 v2 = (u64)(c2); \
+    __sanitizer::u64 v1 = (__sanitizer::u64)(c1); \
+    __sanitizer::u64 v2 = (__sanitizer::u64)(c2); \
     if (UNLIKELY(!(v1 op v2))) \
       __sanitizer::CheckFailed(__FILE__, __LINE__, \
         "(" #c1 ") " #op " (" #c2 ")", v1, v2); \

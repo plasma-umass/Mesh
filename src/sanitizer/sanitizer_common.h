@@ -29,8 +29,11 @@ extern "C" void _ReadWriteBarrier();
 #endif
 
 namespace __sanitizer {
-struct StackTrace;
+
 struct AddressInfo;
+struct BufferedStackTrace;
+struct SignalContext;
+struct StackTrace;
 
 // Constants.
 const uptr kWordSize = SANITIZER_WORDSIZE / 8;
@@ -71,6 +74,7 @@ INLINE uptr GetPageSizeCached() {
 }
 uptr GetMmapGranularity();
 uptr GetMaxVirtualAddress();
+uptr GetMaxUserVirtualAddress();
 // Threads
 tid_t GetTid();
 uptr GetThreadSelf();
@@ -124,6 +128,29 @@ void DontDumpShadowMemory(uptr addr, uptr length);
 void CheckVMASize();
 void RunMallocHooks(const void *ptr, uptr size);
 void RunFreeHooks(const void *ptr);
+
+class ReservedAddressRange {
+ public:
+  uptr Init(uptr size, const char *name = nullptr, uptr fixed_addr = 0);
+  uptr Map(uptr fixed_addr, uptr size);
+  uptr MapOrDie(uptr fixed_addr, uptr size);
+  void Unmap(uptr addr, uptr size);
+  void *base() const { return base_; }
+  uptr size() const { return size_; }
+
+ private:
+  void* base_;
+  uptr size_;
+  const char* name_;
+};
+
+typedef void (*fill_profile_f)(uptr start, uptr rss, bool file,
+                               /*out*/uptr *stats, uptr stats_size);
+
+// Parse the contents of /proc/self/smaps and generate a memory profile.
+// |cb| is a tool-specific callback that fills the |stats| array containing
+// |stats_size| elements.
+void GetMemoryProfile(fill_profile_f cb, uptr *stats, uptr stats_size);
 
 // InternalScopedBuffer can be used instead of large stack arrays to
 // keep frame size low.
@@ -201,8 +228,14 @@ void SetPrintfAndReportCallback(void (*callback)(const char *));
     if ((uptr)Verbosity() >= (level)) Printf(__VA_ARGS__); \
   } while (0)
 
-// Can be used to prevent mixing error reports from different sanitizers.
-extern StaticSpinMutex CommonSanitizerReportMutex;
+// Lock sanitizer error reporting and protects against nested errors.
+class ScopedErrorReportLock {
+ public:
+  ScopedErrorReportLock();
+  ~ScopedErrorReportLock();
+
+  static void CheckLocked();
+};
 
 extern uptr stoptheworld_tracer_pid;
 extern uptr stoptheworld_tracer_ppid;
@@ -307,7 +340,24 @@ void SetSoftRssLimitExceededCallback(void (*Callback)(bool exceeded));
 typedef void (*SignalHandlerType)(int, void *, void *);
 HandleSignalMode GetHandleSignalMode(int signum);
 void InstallDeadlySignalHandlers(SignalHandlerType handler);
-const char *DescribeSignalOrException(int signo);
+
+// Signal reporting.
+// Each sanitizer uses slightly different implementation of stack unwinding.
+typedef void (*UnwindSignalStackCallbackType)(const SignalContext &sig,
+                                              const void *callback_context,
+                                              BufferedStackTrace *stack);
+// Print deadly signal report and die.
+void HandleDeadlySignal(void *siginfo, void *context, u32 tid,
+                        UnwindSignalStackCallbackType unwind,
+                        const void *unwind_context);
+
+// Part of HandleDeadlySignal, exposed for asan.
+void StartReportDeadlySignal();
+// Part of HandleDeadlySignal, exposed for asan.
+void ReportDeadlySignal(const SignalContext &sig, u32 tid,
+                        UnwindSignalStackCallbackType unwind,
+                        const void *unwind_context);
+
 // Alternative signal stack (POSIX-only).
 void SetAlternateSignalStack();
 void UnsetAlternateSignalStack();
@@ -689,9 +739,10 @@ class LoadedModule {
 // filling this information.
 class ListOfModules {
  public:
-  ListOfModules() : modules_(kInitialCapacity) {}
+  ListOfModules() : initialized(false) {}
   ~ListOfModules() { clear(); }
   void init();
+  void fallbackInit();  // Uses fallback init if available, otherwise clears
   const LoadedModule *begin() const { return modules_.begin(); }
   LoadedModule *begin() { return modules_.begin(); }
   const LoadedModule *end() const { return modules_.end(); }
@@ -707,10 +758,15 @@ class ListOfModules {
     for (auto &module : modules_) module.clear();
     modules_.clear();
   }
+  void clearOrInit() {
+    initialized ? clear() : modules_.Initialize(kInitialCapacity);
+    initialized = true;
+  }
 
-  InternalMmapVector<LoadedModule> modules_;
+  InternalMmapVectorNoCtor<LoadedModule> modules_;
   // We rarely have more than 16K loaded modules.
   static const uptr kInitialCapacity = 1 << 14;
+  bool initialized;
 };
 
 // Callback type for iterating over a set of memory ranges.
@@ -786,35 +842,49 @@ static inline void SanitizerBreakOptimization(void *arg) {
 }
 
 struct SignalContext {
+  void *siginfo;
   void *context;
   uptr addr;
   uptr pc;
   uptr sp;
   uptr bp;
   bool is_memory_access;
-
   enum WriteFlag { UNKNOWN, READ, WRITE } write_flag;
 
-  SignalContext(void *context, uptr addr, uptr pc, uptr sp, uptr bp,
-                bool is_memory_access, WriteFlag write_flag)
-      : context(context),
-        addr(addr),
-        pc(pc),
-        sp(sp),
-        bp(bp),
-        is_memory_access(is_memory_access),
-        write_flag(write_flag) {}
+  // VS2013 doesn't implement unrestricted unions, so we need a trivial default
+  // constructor
+  SignalContext() = default;
+
+  // Creates signal context in a platform-specific manner.
+  // SignalContext is going to keep pointers to siginfo and context without
+  // owning them.
+  SignalContext(void *siginfo, void *context)
+      : siginfo(siginfo),
+        context(context),
+        addr(GetAddress()),
+        is_memory_access(IsMemoryAccess()),
+        write_flag(GetWriteFlag()) {
+    InitPcSpBp();
+  }
 
   static void DumpAllRegisters(void *context);
 
-  // Creates signal context in a platform-specific manner.
-  static SignalContext Create(void *siginfo, void *context);
+  // Type of signal e.g. SIGSEGV or EXCEPTION_ACCESS_VIOLATION.
+  int GetType() const;
 
-  // Returns true if the "context" indicates a memory write.
-  static WriteFlag GetWriteFlag(void *context);
+  // String description of the signal.
+  const char *Describe() const;
+
+  // Returns true if signal is stack overflow.
+  bool IsStackOverflow() const;
+
+ private:
+  // Platform specific initialization.
+  void InitPcSpBp();
+  uptr GetAddress() const;
+  WriteFlag GetWriteFlag() const;
+  bool IsMemoryAccess() const;
 };
-
-void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp);
 
 void MaybeReexec();
 
@@ -857,8 +927,8 @@ const s32 kReleaseToOSIntervalNever = -1;
 void CheckNoDeepBind(const char *filename, int flag);
 
 // Returns the requested amount of random data (up to 256 bytes) that can then
-// be used to seed a PRNG.
-bool GetRandom(void *buffer, uptr length);
+// be used to seed a PRNG. Defaults to blocking like the underlying syscall.
+bool GetRandom(void *buffer, uptr length, bool blocking = true);
 
 }  // namespace __sanitizer
 
