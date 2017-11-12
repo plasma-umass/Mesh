@@ -32,6 +32,7 @@ COMMON_SRCS      = src/runtime.cc src/meshing.cc src/meshable-arena.cc src/d_ass
                    src/sanitizer/sanitizer_flag_parser.cc \
                    src/sanitizer/sanitizer_flags.cc \
                    src/sanitizer/sanitizer_printf.cc \
+                   src/sanitizer/sanitizer_platform_limits_posix.cc \
                    src/sanitizer/sanitizer_stackdepot.cc \
                    src/sanitizer/sanitizer_stacktrace.cc \
                    src/sanitizer/sanitizer_stacktrace_libcdep.cc \

@@ -33,6 +33,7 @@
 #endif
 
 #if SI_POSIX
+# include "sanitizer_platform_limits_netbsd.h"
 # include "sanitizer_platform_limits_posix.h"
 #endif
 
@@ -388,5 +389,7 @@
 #define SANITIZER_INTERCEPT_MALLOC_USABLE_SIZE (!SI_MAC)
 #define SANITIZER_INTERCEPT_MCHECK_MPROBE SI_LINUX_NOT_ANDROID
 #define SANITIZER_INTERCEPT_WCSCAT SI_POSIX
+#define SANITIZER_INTERCEPT_SIGNAL_AND_SIGACTION (!SI_WINDOWS && SI_NOT_FUCHSIA)
+#define SANITIZER_INTERCEPT_BSD_SIGNAL SI_ANDROID
 
 #endif  // #ifndef SANITIZER_PLATFORM_INTERCEPTORS_H
