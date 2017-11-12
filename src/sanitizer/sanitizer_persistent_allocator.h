@@ -62,10 +62,7 @@ inline void *PersistentAllocator::alloc(uptr size) {
   }
 }
 
-extern PersistentAllocator thePersistentAllocator;
-inline void *PersistentAlloc(uptr sz) {
-  return thePersistentAllocator.alloc(sz);
-}
+void *PersistentAlloc(uptr sz);
 
 } // namespace __sanitizer
 
