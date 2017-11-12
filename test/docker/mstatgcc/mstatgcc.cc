@@ -13,8 +13,11 @@
 
 // these are the pathnames to the real compilers
 
-#define REAL_GCC	"/usr/bin/clang "
-#define REAL_GXX	"/usr/bin/clang++ "
+// #define REAL_GCC	"/usr/bin/clang "
+// #define REAL_GXX	"/usr/bin/clang++ "
+// #define REAL_GFORTRAN	"/usr/bin/false "
+#define REAL_GCC	"/usr/bin/gcc "
+#define REAL_GXX	"/usr/bin/g++ "
 #define REAL_GFORTRAN	"/usr/bin/false "
 
 // this is where we put the real executables
@@ -24,7 +27,7 @@
 
 // this is the statement you want runspec to use to invoke the real executable
 
-#define PREPEND		"mstat -freq 59 "
+#define PREPEND		"mstat -freq 10 "
 
 int main (int argc, char **argv) {
 
