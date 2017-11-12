@@ -17,3 +17,4 @@ config.mk
 /data
 /paper/latex.out/
 /paper/mesh.pdf
+__pycache__
