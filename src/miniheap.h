@@ -306,8 +306,8 @@ protected:
   internal::BinToken _token;
   Freelist<MaxFreelistLen> _freelist;
   const uint16_t _objectSize;
-  atomic_uint16_t _inUseCount{0};
-  mutable atomic_uint16_t _refCount{0};
+  atomic<uint16_t> _inUseCount{0};
+  mutable atomic<uint16_t> _refCount{0};
   uint8_t _meshCount : 7;
   uint8_t _attached : 1;
   internal::Bitmap _bitmap;
