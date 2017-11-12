@@ -14,9 +14,9 @@ from shutil import copyfile
 from config import configs
 from cmd import run_cmd
 
-ROOT_DIR = os.getcwd()
+ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 
-DATA_DIR = path.join(ROOT_DIR, 'data/')
+DATA_DIR = path.join(ROOT_DIR, 'data')
 
 DATASET_PREFIX = 'dataset_'
 
