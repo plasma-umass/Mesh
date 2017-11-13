@@ -23,7 +23,7 @@
 // this is where we put the real executables
 
 #define EVIL_LAIR	"/spec/native-binaries"
-#define DATA_LAIR	"/spec/report/mstat"
+#define DATA_LAIR	"/spec/result/mstat"
 
 // this is the statement you want runspec to use to invoke the real executable
 
