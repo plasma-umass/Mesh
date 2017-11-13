@@ -319,6 +319,10 @@ public:
     return Super::bitmap().inUseCount();
   }
 
+  void setMeshPeriodSecs(double period) {
+    _meshPeriodSecs = period;
+  }
+
   void lock() {
     _mhRWLock.lock();
     _bigMutex.lock();
@@ -374,7 +378,7 @@ protected:
 
       const auto now = std::chrono::high_resolution_clock::now();
       const std::chrono::duration<double> duration = now - _lastMesh;
-      if (duration.count() < _meshPeriodSecs) {
+      if (_meshPeriodSecs > 0 && duration.count() < _meshPeriodSecs) {
         shouldMesh = false;
       } else {
         // update last mesh

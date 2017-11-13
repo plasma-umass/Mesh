@@ -67,6 +67,9 @@ public:
     return _localHeap;
   }
   void startBgThread();
+  void setMeshPeriodSecs(double period) {
+    _heap.setMeshPeriodSecs(period);
+  }
 
 private:
   // initialize our pointer to libc's pthread_create, etc.  This

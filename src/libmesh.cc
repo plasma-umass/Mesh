@@ -1,6 +1,8 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
+#include <stdlib.h>
+
 #include "runtime.h"
 
 #include "wrappers/gnuwrapper.cpp"
@@ -8,6 +10,13 @@
 using namespace mesh;
 
 static __attribute__((constructor)) void libmesh_init() {
+
+  char *meshPeriodStr = getenv("MESH_PERIOD_SECS");
+  if (meshPeriodStr) {
+    double period = strtod(meshPeriodStr, nullptr);
+    runtime().setMeshPeriodSecs(period);
+  }
+
   char *bgThread = getenv("MESH_BACKGROUND_THREAD");
   if (!bgThread)
     return;
