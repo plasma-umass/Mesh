@@ -31,6 +31,7 @@ public:
 
   // give the BinnedTracker a back-pointer to its owner, the global heap
   void init(GlobalHeap *heap) {
+    std::lock_guard<std::mutex> lock(_mutex);
     _heap = heap;
   }
 
@@ -46,21 +47,6 @@ public:
     return _objectSize;
   }
 
-private:
-  // remove and return a MiniHeap uniformly at random from the given vector
-  MiniHeap *popRandomLocked(internal::vector<MiniHeap *> &vec) {
-    std::uniform_int_distribution<size_t> distribution(0, vec.size() - 1);
-    const size_t off = distribution(_prng);
-
-    MiniHeap *mh = vec[off];
-    // when we pop for reuse, we effectively "top off" a MiniHeap, so
-    // it moves into the full bin
-    move(_full, vec, mh, internal::BinToken::FlagFull);
-
-    return mh;
-  }
-
-public:
 #if 0
   MiniHeap *selectForReuse() {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -125,14 +111,17 @@ public:
     return bucket;
   }
 
-  // called after a free through the global heap has happened
+  // called after a free through the global heap has happened --
+  // miniheap must be unreffed by return
   void postFree(MiniHeap *mh) {
     const auto inUseCount = mh->inUseCount();
     if (unlikely(inUseCount == _objectCount))
       return;
 
-    if (mh->isAttached())
+    if (mh->isAttached()) {
+      mh->unref();
       return;
+    }
 
     uint32_t oldBinId;
     uint32_t newBinId;
@@ -142,6 +131,8 @@ public:
 
       oldBinId = mh->getBinToken().bin();
       newBinId = getBinId(inUseCount);
+
+      mh->unref();
 
       if (likely(newBinId == oldBinId))
         return;
@@ -204,14 +195,21 @@ public:
 
   // number of MiniHeaps we are tracking
   size_t count() const {
-    return nonEmptyCount() + _empty.size();
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _empty.size() + _full.size() + partialSizeLocked();
   }
 
   size_t nonEmptyCount() const {
-    return _full.size() + partialSize();
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _full.size() + partialSizeLocked();
   }
 
   size_t partialSize() const {
+    std::lock_guard<std::mutex> lock(_mutex);
+    return partialSizeLocked();
+  }
+
+  size_t partialSizeLocked() const {
     size_t sz = 0;
     for (size_t i = 0; i < BinCount; i++) {
       sz += _partial[i].size();
@@ -295,6 +293,19 @@ public:
   }
 
 private:
+  // remove and return a MiniHeap uniformly at random from the given vector
+  MiniHeap *popRandomLocked(internal::vector<MiniHeap *> &vec) {
+    std::uniform_int_distribution<size_t> distribution(0, vec.size() - 1);
+    const size_t off = distribution(_prng);
+
+    MiniHeap *mh = vec[off];
+    // when we pop for reuse, we effectively "top off" a MiniHeap, so
+    // it moves into the full bin
+    move(_full, vec, mh, internal::BinToken::FlagFull);
+
+    return mh;
+  }
+
   void setMetadata(MiniHeap *mh) {
     _objectCount = mh->maxCount();
     _objectSize = mh->objectSize();
@@ -364,7 +375,7 @@ private:
     } else if (inUseCount == 0) {
       return internal::BinToken::FlagEmpty;
     } else {
-      return (inUseCount * BinCount)/_objectCount;
+      return (inUseCount * BinCount) / _objectCount;
     }
   }
 
