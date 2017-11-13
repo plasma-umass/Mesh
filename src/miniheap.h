@@ -49,6 +49,12 @@ public:
   }
 
   ~MiniHeapBase() {
+    if (_attached || _inUseCount > 0) {
+      int attached = _attached;
+      int inUseCount = _inUseCount;
+      dumpDebug();
+      mesh::debug("\tBLARGH: %d %d", attached, inUseCount);
+    }
     // if (_meshCount > 1)
     //   dumpDebug();
   }
@@ -62,7 +68,7 @@ public:
   inline void *malloc(size_t sz) {
     if (unlikely(!_attached || isExhausted())) {
       dumpDebug();
-      d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached, isExhausted());
+      d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached.load(), isExhausted());
     }
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
@@ -160,6 +166,7 @@ public:
   inline void reattach(mt19937_64 &prng, MWC &fastPrng) {
     _freelist.init(prng, fastPrng, &_bitmap);
     _attached = true;
+    d_assert(!isExhausted());
     // if (_meshCount > 1)
     //   mesh::debug("fixme? un-mesh when reattaching");
   }
@@ -275,7 +282,7 @@ protected:
 
     for (size_t i = 1; i < _meshCount; ++i) {
       if (_span[i] == nullptr) {
-        mesh::debug("_span[%d] should be non-null (%zu)", i, _meshCount);
+        mesh::debug("_span[%d] should be non-null (%zu)", i, _meshCount.load());
         dumpDebug();
         d_assert(false);
       }
@@ -312,18 +319,21 @@ protected:
   char *_span[MaxMeshes];
   internal::BinToken _token;
   Freelist<MaxFreelistLen> _freelist;
-  const uint16_t _objectSize;
-  atomic<uint16_t> _inUseCount{0};
-  mutable atomic<uint16_t> _refCount{0};
-  uint8_t _meshCount : 7;
-  uint8_t _attached : 1;
+  const uint32_t _objectSize;
+
+  atomic<uint32_t> _inUseCount{0}; // 60
+
+  mutable atomic<uint32_t> _refCount{0};
+  atomic<uint32_t> _meshCount;// : 7;
+  atomic<uint32_t> _attached;// : 1;
   internal::Bitmap _bitmap;
 };
 
 typedef MiniHeapBase<> MiniHeap;
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
-static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 96, "MiniHeap too big!");
+//static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 
 }  // namespace mesh
 
