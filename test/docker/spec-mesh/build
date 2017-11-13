@@ -2,7 +2,9 @@
 set -e
 
 (cd ../mstatgcc && make)
+(cd ../../.. && make libmesh.so)
 
+cp ../../../libmesh.so .
 cp -a ../mstatgcc/mstatgcc .
 cp -a `which mstat` .
 

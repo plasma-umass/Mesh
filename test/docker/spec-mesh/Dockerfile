@@ -12,7 +12,8 @@ COPY ./mstatgcc /usr/local/bin/mstatg++
 COPY ./Linux-mesh.cfg /spec/config/
 COPY ./Linux-mesh-mstat.cfg /spec/config/
 
-RUN chmod 755 /usr/local/bin/mstatgcc /usr/local/bin/mstatg++ /usr/local/bin/mstat && \
+RUN ldconfig && \
+    chmod 755 /usr/local/bin/mstatgcc /usr/local/bin/mstatg++ /usr/local/bin/mstat && \
     chmod u+s /usr/local/bin/mstat && \
     cd /spec && . ./shrc && \
     runspec --config=Linux-mesh.cfg       --action=build --tune=base int && \
