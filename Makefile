@@ -8,7 +8,7 @@ all:
 
 else
 
-PREFIX = /usr/local
+PREFIX = /usr
 
 ARCH             = x86_64
 
