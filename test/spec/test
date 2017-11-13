@@ -70,15 +70,18 @@ def new_result_dir(name, ref):
     return dirname
 
 
-def test_speed(*benchmarks, ref=False, docker=True):
+def test_speed(*benchmarks, ref=False, docker=True, mstat=True):
     '''
     Run SPEC, collecting results
     '''
     benchmark_list = ' '.join(benchmarks)
-    log(DEBUG, 'benchmarks: %s (ref? %s)' % (benchmark_list, ref))
+    log(DEBUG, 'benchmarks: %s (mstat? %s)' % (benchmark_list, mstat))
 
     for config in configs:
-        spec_config = 'Linux-%s.cfg' % config.name
+        if mstat:
+            spec_config = 'Linux-%s-mstat.cfg' % config.name
+        else:
+            spec_config = 'Linux-%s.cfg' % config.name
 
         flags = '--tune=base'
         if not ref:
@@ -88,11 +91,20 @@ def test_speed(*benchmarks, ref=False, docker=True):
         cmd = 'cd /spec && . ./shrc && %s' % runspec_cmd
         if docker:
             result_dir = new_result_dir(config.name, ref)
-            flags = '--rm -it --mount type=bind,source=%s,target=/spec/result' % result_dir
+            flags = ''
+            if mstat:
+                os.makedirs(path.join(result_dir, 'mstat'))
+                os.chmod(path.join(result_dir, 'mstat'), 0o777)
+                flags +=  '--privileged '
+            flags += '--rm -it --mount type=bind,source=%s,target=/spec/result' % result_dir
             cmd = "docker run %s %s /bin/sh -c '%s'" % (flags, config.docker_image, cmd)
 
         log(WARN, '$ %s' % (cmd,))
-        run_cmd(cmd).join()
+        result = run_cmd(cmd).join()
+        if result.returncode != 0:
+            log(ERROR, '%s', result.stdout.decode('utf8'))
+            log(ERROR, '~~~~~')
+            log(ERROR, '%s', result.stderr.decode('utf8'))
 
 # docker run --rm -it --mount source=results-01,target=/spec/result bpowers/spec:native /bin/sh -c 'cd /spec && . ./shrc && runspec --config=Linux-libc.cfg --size=test --noreportable --tune=base --iterations=1 bzip2'
 
@@ -106,6 +118,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='Test redis with different allocators.')
     parser.add_argument('-v', action='store_const', const=True, help='print commit messages too')
+    parser.add_argument('--no-mstat', action='store_const', const=True, help='Disable mstat support')
     parser.add_argument('--no-ref', action='store_const', const=True, help='Whether this is a reference run')
     parser.add_argument('--no-docker', action='store_const', const=True, help='Do not use docker')
     parser.add_argument('--test', nargs='+', help='specific tests to run')
@@ -119,7 +132,7 @@ def main():
         args.test = TESTS.keys()
 
     for test in args.test:
-        TESTS[test](*args.benchmark, ref=not args.no_ref, docker=not args.no_docker)
+        TESTS[test](*args.benchmark, ref=not args.no_ref, docker=not args.no_docker, mstat=not args.no_mstat)
 
 
 if __name__ == '__main__':

@@ -7,5 +7,5 @@ class Config:
 
 configs = [
     Config('mesh', 'bpowers/spec:mesh'),
-    Config('libc', 'bpowers/spec:native'),
+    Config('glibc', 'bpowers/spec:glibc'),
 ]
