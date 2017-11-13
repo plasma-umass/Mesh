@@ -234,15 +234,11 @@ public:
       mh = nullptr;
     }
 
-    if (shouldFlush)
+    if (unlikely(shouldFlush))
       _littleheaps[szClass].flushFreeMiniheaps();
 
-    if (!shouldConsiderMesh) {
-      return;
-    }
-
-    if (unlikely(shouldMesh())) {
-      // meshAllSizeClasses();
+    if (shouldConsiderMesh && unlikely(shouldMesh())) {
+      meshAllSizeClasses();
       // meshSizeClass(getSizeClass(mh->objectSize()));
     }
   }
@@ -348,6 +344,7 @@ public:
 
     // make sure we adjust what bin the destination is in -- it might
     // now be full and not a candidate for meshing
+    dst->ref();
     _littleheaps[getSizeClass(dst->objectSize())].postFree(dst);
     freeMiniheapAfterMeshLocked(src);
     src = nullptr;
