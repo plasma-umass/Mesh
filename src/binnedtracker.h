@@ -20,7 +20,7 @@
 
 namespace mesh {
 
-template <typename MiniHeap, typename GlobalHeap, size_t BinCount = 4, size_t MaxEmpty = 0>
+template <typename MiniHeap, typename GlobalHeap, size_t BinCount = 4, size_t MaxEmpty = 128>
 class BinnedTracker {
 private:
   DISALLOW_COPY_AND_ASSIGN(BinnedTracker);
@@ -148,8 +148,8 @@ public:
 
       move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
 
-      // if (newBinId != internal::BinToken::FlagEmpty || _empty.size() < MaxEmpty)
-      //   return;
+      if (newBinId != internal::BinToken::FlagEmpty || _empty.size() < MaxEmpty)
+        return;
     }
 
     // must be called without lock held
@@ -346,13 +346,13 @@ private:
     vec[endOff] = nullptr;
     vec.pop_back();
 
-    for (size_t i = 0; i < vec.size(); i++) {
-      if (vec[i] == mh) {
-        mesh::debug("!!!! not actually removed?");
-        mh->dumpDebug();
-        abort();
-      }
-    }
+    // for (size_t i = 0; i < vec.size(); i++) {
+    //   if (vec[i] == mh) {
+    //     mesh::debug("!!!! not actually removed?");
+    //     mh->dumpDebug();
+    //     abort();
+    //   }
+    // }
 
     // update the miniheap's token
     mh->setBinToken(mh->getBinToken().newOff(internal::BinToken::FlagNoOff));
