@@ -49,12 +49,6 @@ public:
   }
 
   ~MiniHeapBase() {
-    if (_attached || _inUseCount > 0) {
-      int attached = _attached;
-      int inUseCount = _inUseCount;
-      dumpDebug();
-      mesh::debug("\tBLARGH: %d %d", attached, inUseCount);
-    }
     // if (_meshCount > 1)
     //   dumpDebug();
   }
