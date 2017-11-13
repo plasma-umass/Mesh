@@ -57,7 +57,8 @@ public:
   GlobalMeshingHeap()
       : _maxObjectSize(getClassMaxSize(NumBins - 1)),
         _prng(internal::seed()),
-        _fastPrng(internal::seed(), internal::seed()) {
+        _fastPrng(internal::seed(), internal::seed()),
+        _lastMesh{std::chrono::high_resolution_clock::now()} {
     resetNextMeshCheck();
   }
 
@@ -368,8 +369,18 @@ protected:
   inline bool shouldMesh() {
     _nextMeshCheck--;
     bool shouldMesh = _meshPeriod > 0 && _nextMeshCheck == 0;
-    if (unlikely(shouldMesh))
+    if (unlikely(shouldMesh)) {
       resetNextMeshCheck();
+
+      const auto now = std::chrono::high_resolution_clock::now();
+      const std::chrono::duration<double> duration = now - _lastMesh;
+      if (duration.count() < _meshPeriodSecs) {
+        shouldMesh = false;
+      } else {
+        // update last mesh
+        _lastMesh = now;
+      }
+    }
 
     return shouldMesh;
   }
@@ -476,6 +487,10 @@ protected:
   mutable std::shared_timed_mutex _mhRWLock{};
 
   GlobalHeapStats<NumBins> _stats{};
+
+  double _meshPeriodSecs{internal::MeshPeriodSecs};
+  // XXX: should be atomic, but has exception spec?
+  std::chrono::time_point<std::chrono::high_resolution_clock> _lastMesh;
 };
 }  // namespace mesh
 
