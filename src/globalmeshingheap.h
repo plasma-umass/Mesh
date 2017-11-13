@@ -104,6 +104,7 @@ public:
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
     if (existing != nullptr) {
       existing->reattach(_prng, _fastPrng);  // populate freelist, set attached bit
+      d_assert(existing->isAttached());
       return existing;
     }
 
@@ -177,7 +178,7 @@ public:
     if (untrack)
       untrackMiniheap(sizeClass, mh);
 
-    mh->MiniHeapBase::~MiniHeapBase();
+    //mh->MiniHeapBase::~MiniHeapBase();
     internal::Heap().free(mh);
   }
 
@@ -231,7 +232,7 @@ public:
     }
 
     if (unlikely(shouldMesh())) {
-      meshAllSizeClasses();
+      // meshAllSizeClasses();
       // meshSizeClass(getSizeClass(mh->objectSize()));
     }
   }
@@ -269,6 +270,9 @@ public:
       Super::mesh(dstSpanStart, srcSpans[i], dstSpanSize);
     }
 
+    // make sure we adjust what bin the destination is in -- it might
+    // now be full and not a candidate for meshing
+    _littleheaps[getSizeClass(dst->objectSize())].postFree(dst);
     freeMiniheapAfterMesh(src);
     src = nullptr;
   }
@@ -371,6 +375,7 @@ protected:
 
   // check for meshes in all size classes
   void meshAllSizeClasses() {
+    debug("MESHING");
     MeshArguments args;
     args.instance = this;
 

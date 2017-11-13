@@ -93,8 +93,14 @@ public:
     std::lock_guard<std::mutex> lock(_mutex);
 
     for (int i = BinCount - 1; i >= 0; i--) {
-      if (_partial[i].size() > 0)
-        return popRandomLocked(_partial[i]);
+      while (_partial[i].size() > 0) {
+        auto mh = popRandomLocked(_partial[i]);
+        if (unlikely(mh->inUseCount() == mh->maxCount())) {
+          mesh::debug("skipping exhausted partial?");
+          continue;
+        }
+        return mh;
+      }
     }
 
     return nullptr;
@@ -111,15 +117,8 @@ public:
       const auto partial = _partial[i];
       for (size_t j = 0; j < partial.size(); j++) {
         const auto mh = partial[j];
-        if (!mh->isMeshingCandidate() || (mh->fullness() >= occupancyCutoff)) {
-          // if (_objectSize < 4096)
-          //   mesh::debug("Bin(%zu): SKIP %d || %f >= %f (%d)", _objectSize.load(),
-          //               (int)!mh->isMeshingCandidate(),
-          //               mh->fullness(), occupancyCutoff,
-          //               (int)(mh->fullness() >= occupancyCutoff));
-          continue;
-        }
-        bucket.push_back(mh);
+        if (mh->isMeshingCandidate() && (mh->fullness() < occupancyCutoff))
+          bucket.push_back(mh);
       }
     }
 
@@ -132,7 +131,6 @@ public:
     if (unlikely(inUseCount == _objectCount))
       return;
 
-    // FIXME: does this matter
     if (mh->isAttached())
       return;
 
