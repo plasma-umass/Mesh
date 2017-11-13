@@ -20,7 +20,7 @@
 
 namespace mesh {
 
-template <typename MiniHeap, typename GlobalHeap, size_t BinCount = 4, size_t MaxEmpty = 128>
+template <typename MiniHeap, typename GlobalHeap, size_t BinCount = 4, size_t MaxEmpty = 0>
 class BinnedTracker {
 private:
   DISALLOW_COPY_AND_ASSIGN(BinnedTracker);
@@ -148,12 +148,12 @@ public:
 
       move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
 
-      if (newBinId != internal::BinToken::FlagEmpty || _empty.size() < MaxEmpty)
-        return;
+      // if (newBinId != internal::BinToken::FlagEmpty || _empty.size() < MaxEmpty)
+      //   return;
     }
 
     // must be called without lock held
-    flushFreeMiniHeaps();
+    flushFreeMiniheaps();
   }
 
   void add(MiniHeap *mh) {
@@ -177,18 +177,7 @@ public:
     }
 
     const auto bin = mh->getBinToken().bin();
-    if (bin == internal::BinToken::FlagFull) {
-      removeFrom(_full, mh);
-    } else if (bin == internal::BinToken::FlagEmpty) {
-      removeFrom(_empty, mh);
-    } else {
-      if (unlikely(bin >= BinCount)) {
-        mesh::debug("ERROR: bin too big: %u", bin);
-        return;
-      }
-
-      removeFrom(_partial[bin], mh);
-    }
+    removeFrom(getBin(bin), mh);
   }
 
   size_t allocatedObjectCount() const {
@@ -285,16 +274,24 @@ public:
           _highWaterMark.load(), inUseCount / totalObjects);
   }
 
-  void flushFreeMiniHeaps() {
-    std::lock_guard<std::mutex> lock(_mutex);
+  void flushFreeMiniheaps() {
+    internal::vector<MiniHeap *> toFree;
 
-    d_assert(_heap != nullptr);
+    // ensure we don't call back into the GlobalMeshingHeap with our lock held
+    {
+      std::lock_guard<std::mutex> lock(_mutex);
 
-    for (size_t i = 0; i < _empty.size(); i++) {
-      _heap->freeMiniheap(_empty[i], false);
+      for (size_t i = 0; i < _empty.size(); i++) {
+        toFree.push_back(_empty[i]);
+      }
+
+      _empty.clear();
     }
 
-    _empty.clear();
+    d_assert(_heap != nullptr);
+    for (size_t i = 0; i < toFree.size(); i++) {
+      _heap->freeMiniheap(toFree[i], false);
+    }
   }
 
 private:
@@ -348,6 +345,14 @@ private:
 
     vec[endOff] = nullptr;
     vec.pop_back();
+
+    for (size_t i = 0; i < vec.size(); i++) {
+      if (vec[i] == mh) {
+        mesh::debug("!!!! not actually removed?");
+        mh->dumpDebug();
+        abort();
+      }
+    }
 
     // update the miniheap's token
     mh->setBinToken(mh->getBinToken().newOff(internal::BinToken::FlagNoOff));

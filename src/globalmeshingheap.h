@@ -101,12 +101,13 @@ public:
     d_assert(sizeClass < NumBins);
 
     // check our bins for a miniheap to reuse
-    MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
-    if (existing != nullptr) {
-      existing->reattach(_prng, _fastPrng);  // populate freelist, set attached bit
-      d_assert(existing->isAttached());
-      return existing;
-    }
+    // MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
+    // if (existing != nullptr) {
+    //   existing->reattach(_prng, _fastPrng);  // populate freelist, set attached bit
+    //   d_assert(existing->isAttached());
+    //   // TODO: check that metadata is right?
+    //   return existing;
+    // }
 
     // if we have objects bigger than the size of a page, allocate
     // multiple pages to amortize the cost of creating a
@@ -154,8 +155,6 @@ public:
   inline MiniHeap *miniheapFor(const void *ptr) const {
     std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
 
-    // mask it so the pointer is page-aligned
-    auto pagePtr = internal::MaskToPage(ptr);
     auto mh = reinterpret_cast<MiniHeap *>(Super::lookup(ptr));
     if (mh != nullptr)
       mh->ref();
@@ -178,8 +177,10 @@ public:
     if (untrack)
       untrackMiniheap(sizeClass, mh);
 
-    //mh->MiniHeapBase::~MiniHeapBase();
-    internal::Heap().free(mh);
+    mh->MiniHeapBase::~MiniHeapBase();
+    char *mhp = reinterpret_cast<char *>(mh);
+    memset(mhp, 66, sizeof(MiniHeap));
+    //internal::Heap().free(mh);
   }
 
   void freeMiniheap(MiniHeap *&mh, bool untrack = true) {
@@ -381,7 +382,7 @@ protected:
 
     // first, clear out any free memory we might have
     for (size_t i = 0; i < NumBins; i++) {
-      _littleheaps[i].flushFreeMiniHeaps();
+      _littleheaps[i].flushFreeMiniheaps();
     }
 
     // dumpStrings();

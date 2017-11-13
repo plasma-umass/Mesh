@@ -76,8 +76,10 @@ public:
   }
 
   void detach() {
-    mesh::internal::Heap().free(_list);
+    auto list = _list;
     _list = nullptr;
+    atomic_thread_fence(memory_order_seq_cst);
+    mesh::internal::Heap().free(list);
   }
 
   inline bool isExhausted() const {
