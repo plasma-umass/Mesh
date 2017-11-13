@@ -72,7 +72,7 @@ static void meshTest(bool invert) {
 
   note("ABOUT TO MESH");
   // mesh the two miniheaps together
-  gheap.mesh(mh1, mh2);
+  gheap.meshLocked(mh1, mh2);
   note("DONE MESHING");
 
   // mh2 is consumed by mesh call, ensure it is now a null pointer

@@ -131,7 +131,7 @@ public:
     MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _prng, _fastPrng, spanSize);
     Super::assoc(span, mh, nPages);
 
-    trackMiniheap(sizeClass, mh);
+    trackMiniheapLocked(sizeClass, mh);
 
     _stats.mhAllocCount++;
     //_stats.mhHighWaterMark = max(_miniheaps.size(), _stats.mhHighWaterMark.load());
@@ -162,25 +162,25 @@ public:
     return mh;
   }
 
-  void trackMiniheap(size_t sizeClass, MiniHeap *mh) {
+  void trackMiniheapLocked(size_t sizeClass, MiniHeap *mh) {
     _littleheaps[sizeClass].add(mh);
   }
 
-  void untrackMiniheap(size_t sizeClass, MiniHeap *mh) {
+  void untrackMiniheapLocked(size_t sizeClass, MiniHeap *mh) {
     _stats.mhAllocCount -= 1;
     _littleheaps[sizeClass].remove(mh);
   }
 
   // called with lock held
-  void freeMiniheapAfterMesh(MiniHeap *mh, bool untrack = true) {
+  void freeMiniheapAfterMeshLocked(MiniHeap *mh, bool untrack = true) {
     const auto sizeClass = getSizeClass(mh->objectSize());
     if (untrack)
-      untrackMiniheap(sizeClass, mh);
+      untrackMiniheapLocked(sizeClass, mh);
 
     mh->MiniHeapBase::~MiniHeapBase();
     char *mhp = reinterpret_cast<char *>(mh);
     memset(mhp, 66, sizeof(MiniHeap));
-    //internal::Heap().free(mh);
+    // internal::Heap().free(mh);
   }
 
   void freeMiniheap(MiniHeap *&mh, bool untrack = true) {
@@ -196,7 +196,7 @@ public:
 
     _stats.mhFreeCount++;
 
-    freeMiniheapAfterMesh(mh, untrack);
+    freeMiniheapAfterMeshLocked(mh, untrack);
     mh = nullptr;
   }
 
@@ -256,31 +256,6 @@ public:
       std::lock_guard<std::mutex> lock(_bigMutex);
       return _bigheap.getSize(ptr);
     }
-  }
-
-  // must be called with the world stopped, after call to mesh()
-  // completes src is a nullptr
-  void mesh(MiniHeap *dst, MiniHeap *&src) {
-    if (dst->meshCount() + src->meshCount() > internal::MaxMeshes)
-      return;
-
-    dst->consume(src);
-
-    const size_t dstSpanSize = dst->spanSize();
-    const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart());
-
-    const auto srcSpans = src->spans();
-    const auto srcMeshCount = src->meshCount();
-
-    for (size_t i = 0; i < srcMeshCount; i++) {
-      Super::mesh(dstSpanStart, srcSpans[i], dstSpanSize);
-    }
-
-    // make sure we adjust what bin the destination is in -- it might
-    // now be full and not a candidate for meshing
-    _littleheaps[getSizeClass(dst->objectSize())].postFree(dst);
-    freeMiniheapAfterMesh(src);
-    src = nullptr;
   }
 
   int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
@@ -348,6 +323,32 @@ public:
     _mhRWLock.unlock();
   }
 
+  // PUBLIC ONLY FOR TESTING
+  // must be called with the world stopped, after call to mesh()
+  // completes src is a nullptr
+  void meshLocked(MiniHeap *dst, MiniHeap *&src) {
+    if (dst->meshCount() + src->meshCount() > internal::MaxMeshes)
+      return;
+
+    dst->consume(src);
+
+    const size_t dstSpanSize = dst->spanSize();
+    const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart());
+
+    const auto srcSpans = src->spans();
+    const auto srcMeshCount = src->meshCount();
+
+    for (size_t i = 0; i < srcMeshCount; i++) {
+      Super::mesh(dstSpanStart, srcSpans[i], dstSpanSize);
+    }
+
+    // make sure we adjust what bin the destination is in -- it might
+    // now be full and not a candidate for meshing
+    _littleheaps[getSizeClass(dst->objectSize())].postFree(dst);
+    freeMiniheapAfterMeshLocked(src);
+    src = nullptr;
+  }
+
 protected:
   inline void resetNextMeshCheck() {
     // a period of 0 means do not mesh.
@@ -375,13 +376,14 @@ protected:
       if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
         mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
 
-      args->instance->mesh(std::get<0>(mergeSet), std::get<1>(mergeSet));
+      args->instance->meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
     }
   }
 
-  // check for meshes in all size classes
+  // check for meshes in all size classes -- must be called unlocked
   void meshAllSizeClasses() {
-    debug("MESHING");
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+
     MeshArguments args;
     args.instance = this;
 
@@ -390,40 +392,29 @@ protected:
       _littleheaps[i].flushFreeMiniheaps();
     }
 
-    // dumpStrings();
-    // debug("<<<<<<>pre");
+    // FIXME: is it safe to have this function not use internal::allocator?
+    auto meshFound = function<void(std::pair<MiniHeap *, MiniHeap *> &&)>(
+        // std::allocator_arg, internal::allocator,
+        [&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
+          if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<0>(miniheaps)->isMeshingCandidate())
+            args.mergeSets.push_back(std::move(miniheaps));
+        });
 
-    {
-      // XXX: can we get away with using shared at first, then upgrading to exclusive?
-      std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
-
-      // FIXME: is it safe to have this function not use internal::allocator?
-      auto meshFound = function<void(std::pair<MiniHeap *, MiniHeap *> &&)>(
-          // std::allocator_arg, internal::allocator,
-          [&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
-            if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<0>(miniheaps)->isMeshingCandidate())
-              args.mergeSets.push_back(std::move(miniheaps));
-          });
-
-      for (size_t i = 0; i < NumBins; i++) {
-        // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
-        // method::greedySplitting(_prng, _littleheaps[i], meshFound);
-        method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
-      }
-
-      if (args.mergeSets.size() == 0) {
-        // debug("nothing to mesh.");
-        return;
-      }
-
-      _stats.meshCount += args.mergeSets.size();
-
-      // run the actual meshing with the world stopped
-      __sanitizer::StopTheWorld(performMeshing, &args);
+    for (size_t i = 0; i < NumBins; i++) {
+      // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
+      // method::greedySplitting(_prng, _littleheaps[i], meshFound);
+      method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
     }
 
-    // dumpStrings();
-    // debug("<<<<<<>post");
+    if (args.mergeSets.size() == 0) {
+      // debug("nothing to mesh.");
+      return;
+    }
+
+    _stats.meshCount += args.mergeSets.size();
+
+    // run the actual meshing with the world stopped
+    __sanitizer::StopTheWorld(performMeshing, &args);
   }
 
   void meshSizeClass(size_t sizeClass) {
