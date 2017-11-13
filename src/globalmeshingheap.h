@@ -58,10 +58,6 @@ public:
       : _maxObjectSize(getClassMaxSize(NumBins - 1)),
         _prng(internal::seed()),
         _fastPrng(internal::seed(), internal::seed()) {
-    for (size_t i = 0; i < NumBins; i++) {
-      _littleheaps[i].init(this);
-    }
-
     resetNextMeshCheck();
   }
 
@@ -183,7 +179,10 @@ public:
 
   void freeMiniheap(MiniHeap *&mh, bool untrack = true) {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    freeMiniheapLocked(mh, untrack);
+  }
 
+  void freeMiniheapLocked(MiniHeap *&mh, bool untrack) {
     const auto spans = mh->spans();
     const auto spanSize = mh->spanSize();
 
@@ -234,8 +233,14 @@ public:
       mh = nullptr;
     }
 
-    if (unlikely(shouldFlush))
-      _littleheaps[szClass].flushFreeMiniheaps();
+    if (unlikely(shouldFlush)) {
+      std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+
+      auto emptyMiniheaps = _littleheaps[szClass].getFreeMiniheaps();
+      for (size_t i = 0; i < emptyMiniheaps.size(); i++) {
+        freeMiniheapLocked(emptyMiniheaps[i], false);
+      }
+    }
 
     if (shouldConsiderMesh && unlikely(shouldMesh())) {
       meshAllSizeClasses();
@@ -390,7 +395,10 @@ protected:
 
     // first, clear out any free memory we might have
     for (size_t i = 0; i < NumBins; i++) {
-      _littleheaps[i].flushFreeMiniheaps();
+      auto emptyMiniheaps = _littleheaps[i].getFreeMiniheaps();
+      for (size_t i = 0; i < emptyMiniheaps.size(); i++) {
+        freeMiniheapLocked(emptyMiniheaps[i], false);
+      }
     }
 
     // FIXME: is it safe to have this function not use internal::allocator?
@@ -462,7 +470,7 @@ protected:
   mt19937_64 _prng;
   MWC _fastPrng;
 
-  BinnedTracker<MiniHeap, GlobalMeshingHeap> _littleheaps[NumBins];
+  BinnedTracker<MiniHeap> _littleheaps[NumBins];
 
   mutable std::mutex _bigMutex{};
   mutable std::shared_timed_mutex _mhRWLock{};

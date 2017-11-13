@@ -20,19 +20,13 @@
 
 namespace mesh {
 
-template <typename MiniHeap, typename GlobalHeap, size_t BinCount = 4, size_t MaxEmpty = 128>
+template <typename MiniHeap, size_t BinCount = 4, size_t MaxEmpty = 128>
 class BinnedTracker {
 private:
   DISALLOW_COPY_AND_ASSIGN(BinnedTracker);
 
 public:
   BinnedTracker() : _prng(internal::seed()) {
-  }
-
-  // give the BinnedTracker a back-pointer to its owner, the global heap
-  void init(GlobalHeap *heap) {
-    std::lock_guard<std::mutex> lock(_mutex);
-    _heap = heap;
   }
 
   size_t objectCount() const {
@@ -81,8 +75,9 @@ public:
     for (int i = BinCount - 1; i >= 0; i--) {
       while (_partial[i].size() > 0) {
         auto mh = popRandomLocked(_partial[i]);
+        // this can happen because in use count is updated outside the
+        // bin tracker lock -- it may be queued up for reuse.
         if (unlikely(mh->inUseCount() == mh->maxCount())) {
-          mesh::debug("skipping exhausted partial?");
           continue;
         }
         return mh;
@@ -273,7 +268,7 @@ public:
           _highWaterMark.load(), inUseCount / totalObjects);
   }
 
-  void flushFreeMiniheaps() {
+  internal::vector<MiniHeap *> getFreeMiniheaps() {
     internal::vector<MiniHeap *> toFree;
 
     // ensure we don't call back into the GlobalMeshingHeap with our lock held
@@ -287,10 +282,7 @@ public:
       _empty.clear();
     }
 
-    d_assert(_heap != nullptr);
-    for (size_t i = 0; i < toFree.size(); i++) {
-      _heap->freeMiniheap(toFree[i], false);
-    }
+    return toFree;
   }
 
 private:
@@ -389,8 +381,6 @@ private:
       return _partial[bin];
     }
   }
-
-  GlobalHeap *_heap;
 
   internal::vector<MiniHeap *> _full;
   internal::vector<MiniHeap *> _partial[BinCount];

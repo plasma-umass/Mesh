@@ -50,8 +50,8 @@ inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) noexcept {
   return meshes;
 }
 
-template <typename T, typename U>
-inline void randomSort(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps,
+template <typename T>
+inline void randomSort(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
                        const function<void(internal::vector<T *> &&)> &meshFound) noexcept {
   constexpr double OccupancyMaxThreshold = .9;
 
@@ -167,8 +167,8 @@ inline CutoffTable *generateCutoffs(const size_t len, const double cutoffPercent
 
 // split miniheaps into two lists depending on if their bitmaps are
 // left-heavy or right-heavy
-template <typename T, typename U>
-inline void unbalancedSplit(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps, internal::vector<T *> &left,
+template <typename T>
+inline void unbalancedSplit(mt19937_64 &prng, BinnedTracker<T> &miniheaps, internal::vector<T *> &left,
                             internal::vector<T *> &right) noexcept {
   const size_t nBits = miniheaps.objectCount();
   const size_t halfBits = nBits / 2;
@@ -198,8 +198,8 @@ inline void unbalancedSplit(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps, in
   }
 }
 
-template <typename T, typename U>
-inline void simpleGreedySplitting(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps,
+template <typename T>
+inline void simpleGreedySplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
                                   const function<void(std::pair<T *, T *> &&)> &meshFound) noexcept {
   if (miniheaps.partialSize() == 0)
     return;
@@ -242,8 +242,8 @@ inline void simpleGreedySplitting(mt19937_64 &prng, BinnedTracker<T, U> &minihea
   }
 }
 
-template <typename T, typename U>
-inline void greedySplitting(mt19937_64 &prng, BinnedTracker<T, U> &miniheaps,
+template <typename T>
+inline void greedySplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
                             const function<void(internal::vector<T *> &&)> &meshFound) noexcept {
   if (miniheaps.partialSize() == 0)
     return;
