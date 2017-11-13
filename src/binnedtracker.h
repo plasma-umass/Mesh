@@ -113,14 +113,16 @@ public:
 
   // called after a free through the global heap has happened --
   // miniheap must be unreffed by return
-  void postFree(MiniHeap *mh) {
+  bool postFree(MiniHeap *mh) {
     const auto inUseCount = mh->inUseCount();
-    if (unlikely(inUseCount == _objectCount))
-      return;
+    if (unlikely(inUseCount == _objectCount)) {
+      mh->unref();
+      return false;
+    }
 
     if (mh->isAttached()) {
       mh->unref();
-      return;
+      return false;
     }
 
     uint32_t oldBinId;
@@ -135,16 +137,15 @@ public:
       mh->unref();
 
       if (likely(newBinId == oldBinId))
-        return;
+        return false;
 
       move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
 
       if (newBinId != internal::BinToken::FlagEmpty || _empty.size() < MaxEmpty)
-        return;
+        return false;
     }
 
-    // must be called without lock held
-    flushFreeMiniheaps();
+    return true;
   }
 
   void add(MiniHeap *mh) {

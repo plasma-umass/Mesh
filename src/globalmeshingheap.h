@@ -224,14 +224,20 @@ public:
     // unreffed by the bin tracker
     // mh->unref();
 
+    const auto szClass = getSizeClass(mh->objectSize());
+
+    bool shouldFlush = false;
     {
       // FIXME: inefficient
       std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
       // this may free the miniheap -- we can't safely access it after
       // this point.
-      _littleheaps[getSizeClass(mh->objectSize())].postFree(mh);
+      shouldFlush = _littleheaps[szClass].postFree(mh);
       mh = nullptr;
     }
+
+    if (shouldFlush)
+      _littleheaps[szClass].flushFreeMiniheaps();
 
     if (!shouldConsiderMesh) {
       return;
