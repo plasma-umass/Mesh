@@ -221,12 +221,17 @@ public:
 
     mh->free(ptr);
     bool shouldConsiderMesh = !mh->isEmpty();
-    mh->unref();
+    // unreffed by the bin tracker
+    // mh->unref();
 
-    // this may free the miniheap -- we can't safely access it after
-    // this point.
-    _littleheaps[getSizeClass(mh->objectSize())].postFree(mh);
-    mh = nullptr;
+    {
+      // FIXME: inefficient
+      std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+      // this may free the miniheap -- we can't safely access it after
+      // this point.
+      _littleheaps[getSizeClass(mh->objectSize())].postFree(mh);
+      mh = nullptr;
+    }
 
     if (!shouldConsiderMesh) {
       return;
