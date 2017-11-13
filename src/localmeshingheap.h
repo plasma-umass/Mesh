@@ -66,6 +66,7 @@ public:
 
     if (unlikely(_current[sizeClass] == nullptr)) {
       MiniHeap *mh = _global->allocMiniheap(sizeMax);
+      d_assert(mh->isAttached());
       if (unlikely(mh == nullptr))
         abort();
 
@@ -75,6 +76,13 @@ public:
     }
 
     MiniHeap *mh = _current[sizeClass];
+    if (unlikely(!mh->isAttached() || mh->isExhausted())) {
+      int attached = mh->isAttached();
+      int exhausted = mh->isExhausted();
+      mesh::debug("LocalHeap(sz: %zu): expecting failure %d %d (%zu/%zu)", sz, attached, exhausted, sizeMax, mh->objectSize());
+      // mh->dumpDebug();
+      // abort();
+    }
 
     void *ptr = mh->malloc(sizeMax);
     if (unlikely(mh->isExhausted())) {

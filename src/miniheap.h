@@ -60,7 +60,10 @@ public:
 
   // always "localMalloc"
   inline void *malloc(size_t sz) {
-    d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached, isExhausted());
+    if (unlikely(!_attached || isExhausted())) {
+      dumpDebug();
+      d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached, isExhausted());
+    }
     d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
     auto off = _freelist.pop();
@@ -166,6 +169,7 @@ public:
   inline void detach() {
     _freelist.detach();
     _attached = false;
+    atomic_thread_fence(memory_order_seq_cst);
   }
 
   inline bool isAttached() const {
@@ -186,6 +190,7 @@ public:
 
   inline void unref() const {
     --_refCount;
+    atomic_thread_fence(memory_order_seq_cst);
   }
 
   inline bool isMeshingCandidate() const {
@@ -247,6 +252,16 @@ public:
     return this->inUseCount() < rhs->inUseCount();
   }
 
+  void dumpDebug() const {
+    const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
+    const size_t inUseCount = _inUseCount;
+    const size_t meshCount = _meshCount;
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu, mesh: %zu)\t%p-%p\n", this,
+                _objectSize, maxCount(), heapPages, this->isExhausted(), inUseCount, meshCount, _span[0],
+                reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
+    mesh::debug("\t%s\n", _bitmap.to_string().c_str());
+  }
+
 protected:
   inline uintptr_t spanStart(void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
@@ -272,15 +287,6 @@ protected:
     return 0;
   }
 
-  void dumpDebug() const {
-    const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
-    const size_t inUseCount = _inUseCount;
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu, mesh: %zu)\t%p-%p\n", this,
-                _objectSize, maxCount(), heapPages, this->isExhausted(), inUseCount, _meshCount, _span[0],
-                reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
-    mesh::debug("\t%s\n", _bitmap.to_string().c_str());
-  }
-
   inline ssize_t getOff(void *ptr) const {
     d_assert(getSize(ptr) == _objectSize);
 
@@ -296,6 +302,7 @@ protected:
 
     if (unlikely(!_bitmap.isSet(off))) {
       mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
+      dumpDebug();
       return -1;
     }
 
