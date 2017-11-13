@@ -178,9 +178,7 @@ public:
       untrackMiniheapLocked(sizeClass, mh);
 
     mh->MiniHeapBase::~MiniHeapBase();
-    char *mhp = reinterpret_cast<char *>(mh);
-    memset(mhp, 66, sizeof(MiniHeap));
-    // internal::Heap().free(mh);
+    internal::Heap().free(mh);
   }
 
   void freeMiniheap(MiniHeap *&mh, bool untrack = true) {
