@@ -70,6 +70,34 @@ Runtime::Runtime() {
   createSignalFd();
 }
 
+void Runtime::initInterposition() {
+  lock_guard<mutex> lock(_mutex);
+
+  if (_libcEpollWait != nullptr && _libcEpollPwait != nullptr)
+    return;
+
+  void *libcHandle = dlopen("libc.so.6", RTLD_LAZY | RTLD_NOLOAD);
+  if (libcHandle == nullptr) {
+    debug("expected libc handle");
+    abort();
+  }
+
+  auto epollWaitFn = dlsym(libcHandle, "epoll_wait");
+  if (epollWaitFn == nullptr) {
+    debug("expected epoll_wait");
+    abort();
+  }
+
+  auto epollPwaitFn = dlsym(libcHandle, "epoll_pwait");
+  if (epollPwaitFn == nullptr) {
+    debug("expected epoll_pwait");
+    abort();
+  }
+
+  _libcEpollWait = reinterpret_cast<EpollWaitFn>(epollWaitFn);
+  _libcEpollPwait = reinterpret_cast<EpollPwaitFn>(epollPwaitFn);
+}
+
 void Runtime::createSignalFd() {
   sigset_t mask;
 
@@ -159,5 +187,26 @@ void Runtime::allocLocalHeap() {
     abort();
   }
   _localHeap = new (buf) LocalHeap(&mesh::runtime().heap());
+}
+
+int Runtime::epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {
+  if (unlikely(_libcEpollWait == nullptr)) {
+    initInterposition();
+    if (_libcEpollWait == nullptr)
+      abort();
+  }
+
+  return _libcEpollWait(__epfd, __events, __maxevents, __timeout);
+}
+
+int Runtime::epollPwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
+                        const __sigset_t *__ss) {
+  if (unlikely(_libcEpollPwait == nullptr)) {
+    initInterposition();
+    if (_libcEpollPwait == nullptr)
+      abort();
+  }
+
+  return _libcEpollPwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
 }  // namespace mesh

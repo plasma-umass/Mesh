@@ -10,6 +10,7 @@
 using namespace mesh;
 
 static __attribute__((constructor)) void libmesh_init() {
+  runtime().initInterposition();
 
   char *meshPeriodStr = getenv("MESH_PERIOD_SECS");
   if (meshPeriodStr) {
@@ -75,5 +76,13 @@ void xxmalloc_unlock(void) {
 // allocator-related options.
 int mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
   return mesh::runtime().heap().mallctl(name, oldp, oldlenp, newp, newlen);
+}
+
+int epoll_wait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {
+  return mesh::runtime().epollWait(__epfd, __events, __maxevents, __timeout);
+}
+
+int epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss) {
+  return mesh::runtime().epollPwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
 }
