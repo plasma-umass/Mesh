@@ -32,7 +32,7 @@ static inline constexpr size_t RoundUpToPage(size_t sz) {
 
 namespace internal {
 
-static const double MeshPeriodSecs = .5; // don't try to mesh more than once every half second
+static const double MeshPeriodSecs = .1;
 
 static constexpr size_t MaxMeshes = 4;
 static constexpr bool SlowButAccurateRandom = false;
