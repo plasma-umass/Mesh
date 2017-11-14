@@ -165,6 +165,26 @@ inline CutoffTable *generateCutoffs(const size_t len, const double cutoffPercent
   return new (buf) CutoffTable(len, cutoffPercent);
 }
 
+// split miniheaps into two lists in a random order
+template <typename T>
+inline void halfSplit(mt19937_64 &prng, BinnedTracker<T> &miniheaps, internal::vector<T *> &left,
+                      internal::vector<T *> &right) noexcept {
+  internal::vector<T *> bucket = miniheaps.meshingCandidates(OccupancyCutoff);
+
+  std::shuffle(bucket.begin(), bucket.end(), prng);
+
+  for (size_t i = 0; i < bucket.size(); i++) {
+    auto mh = bucket[i];
+    if (!mh->isMeshingCandidate() || mh->fullness() >= OccupancyCutoff)
+      continue;
+
+    if (left.size() <= right.size())
+      left.push_back(mh);
+    else
+      right.push_back(mh);
+  }
+}
+
 // split miniheaps into two lists depending on if their bitmaps are
 // left-heavy or right-heavy
 template <typename T>
@@ -273,10 +293,53 @@ inline void greedySplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
       const auto bitmap2 = h2->bitmap().bitmap();
 
       if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes)) {
-        internal::vector<T *> heaps{h1, h2};
+        std::pair<T *, T *> heaps{h1, h2};
         meshFound(std::move(heaps));
         rightBucket[j] = nullptr;
         break;  // break after finding a mesh
+      }
+    }
+  }
+}
+
+template <typename T, size_t t = 64>
+inline void shiftedSplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
+                             const function<void(std::pair<T *, T *> &&)> &meshFound) noexcept {
+  if (miniheaps.partialSize() == 0)
+    return;
+
+  internal::vector<T *> leftBucket{};   // mutable copy
+  internal::vector<T *> rightBucket{};  // mutable copy
+
+  // unbalancedSplit(prng, miniheaps, leftBucket, rightBucket);
+  halfSplit(prng, miniheaps, leftBucket, rightBucket);
+
+  const auto leftSize = leftBucket.size();
+  const auto rightSize = rightBucket.size();
+
+  if (leftSize == 0 || rightSize == 0)
+    return;
+
+  const size_t nBytes = leftBucket[0]->bitmap().byteCount();
+
+  for (size_t i = 0; i < t; i++) {
+    for (size_t j = 0; j < leftSize; j++) {
+      const size_t idxLeft = j;
+      const size_t idxRight = (j + i) % rightSize;
+      auto h1 = leftBucket[idxLeft];
+      auto h2 = rightBucket[idxRight];
+
+      if (h1 == nullptr || h2 == nullptr)
+        continue;
+
+      const auto bitmap1 = h1->bitmap().bitmap();
+      const auto bitmap2 = h2->bitmap().bitmap();
+
+      if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes)) {
+        std::pair<T *, T *> heaps{h1, h2};
+        meshFound(std::move(heaps));
+        leftBucket[idxLeft] = nullptr;
+        rightBucket[idxRight] = nullptr;
       }
     }
   }
