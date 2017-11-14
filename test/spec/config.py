@@ -7,5 +7,6 @@ class Config:
 
 configs = [
     Config('mesh', 'bpowers/spec:mesh'),
+    Config('jemalloc', 'bpowers/spec:jemalloc'),
     Config('glibc', 'bpowers/spec:glibc'),
 ]

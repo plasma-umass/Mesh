@@ -61,16 +61,21 @@ def new_result_dir(name, ref):
     suffix = '0000'
     os.makedirs(DATA_DIR, exist_ok=True)
     dirs = sorted(
-        [d for d in os.listdir(DATA_DIR) if d.startswith(DATASET_PREFIX) and 'current' not in d])
-    if len(dirs) > 0:
-        suffix = dirs[-1][len(DATASET_PREFIX):]
+        [d for d in os.listdir(DATA_DIR) if d.startswith(DATASET_PREFIX)])
+    suffixes = sorted(set([f.split('_')[-1] for f in dirs]))
+    if len(suffixes) > 0:
+        suffix = suffixes[-1]
     next_suffix = int(suffix) + 1
-    dirname = path.join(DATA_DIR, '%s%04d' % (DATASET_PREFIX, next_suffix))
+    if ref:
+        kind = 'ref'
+    else:
+        kind = 'test'
+    dirname = path.join(DATA_DIR, '%s%s_%s_%04d' % (DATASET_PREFIX, kind, name, next_suffix))
     os.makedirs(dirname)
     return dirname
 
 
-def test_speed(*benchmarks, ref=False, docker=True, mstat=True):
+def test_speed(*benchmarks, enabled_configs=None, ref=False, docker=True, mstat=True):
     '''
     Run SPEC, collecting results
     '''
@@ -78,6 +83,9 @@ def test_speed(*benchmarks, ref=False, docker=True, mstat=True):
     log(DEBUG, 'benchmarks: %s (mstat? %s)' % (benchmark_list, mstat))
 
     for config in configs:
+        if enabled_configs and config.name not in enabled_configs:
+            continue
+
         if mstat:
             spec_config = 'Linux-%s-mstat.cfg' % config.name
         else:
@@ -117,10 +125,11 @@ def main():
     global log
 
     parser = argparse.ArgumentParser(description='Test redis with different allocators.')
-    parser.add_argument('-v', action='store_const', const=True, help='print commit messages too')
+    parser.add_argument('-v', action='store_const', const=True, help='verbose output')
     parser.add_argument('--no-mstat', action='store_const', const=True, help='Disable mstat support')
     parser.add_argument('--no-ref', action='store_const', const=True, help='Whether this is a reference run')
     parser.add_argument('--no-docker', action='store_const', const=True, help='Do not use docker')
+    parser.add_argument('--config', nargs='+', help='specific configs to run')
     parser.add_argument('--test', nargs='+', help='specific tests to run')
     parser.add_argument('--benchmark', nargs='+', default=['int'], help='specific benchmarks to run')
     args = parser.parse_args()
@@ -132,7 +141,8 @@ def main():
         args.test = TESTS.keys()
 
     for test in args.test:
-        TESTS[test](*args.benchmark, ref=not args.no_ref, docker=not args.no_docker, mstat=not args.no_mstat)
+        TESTS[test](*args.benchmark, enabled_configs=args.config,
+                    ref=not args.no_ref, docker=not args.no_docker, mstat=not args.no_mstat)
 
 
 if __name__ == '__main__':
