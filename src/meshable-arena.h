@@ -139,11 +139,8 @@ public:
       madvise(ptr, sz, MADV_DONTNEED);
       freePhys(ptr, sz);
     } else {
-      madvise(ptr, sz, MADV_DONTNEED);
-      freePhys(ptr, sz);
       // restore identity mapping
       mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, off * CPUInfo::PageSize);
-      madvise(ptr, sz, MADV_DONTNEED);
     }
 
     const auto pageCount = sz / CPUInfo::PageSize;
