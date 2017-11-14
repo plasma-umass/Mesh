@@ -131,7 +131,7 @@ def main():
     parser.add_argument('--no-docker', action='store_const', const=True, help='Do not use docker')
     parser.add_argument('--config', nargs='+', help='specific configs to run')
     parser.add_argument('--test', nargs='+', help='specific tests to run')
-    parser.add_argument('--benchmark', nargs='+', default=['int'], help='specific benchmarks to run')
+    parser.add_argument('benchmark', nargs='*', default=['int'], help='specific benchmarks to run')
     args = parser.parse_args()
 
     if args.v:
