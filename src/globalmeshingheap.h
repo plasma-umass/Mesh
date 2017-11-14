@@ -340,6 +340,7 @@ public:
     if (dst->meshCount() + src->meshCount() > internal::MaxMeshes)
       return;
 
+    // does the copying of objects and updating of span metadata
     dst->consume(src);
 
     const size_t dstSpanSize = dst->spanSize();
