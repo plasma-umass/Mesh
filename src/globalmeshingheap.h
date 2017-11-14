@@ -405,6 +405,9 @@ protected:
   void meshAllSizeClasses() {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
+    const auto start = std::chrono::high_resolution_clock::now();
+    size_t partialCount = 0;
+
     MeshArguments args;
     args.instance = this;
 
@@ -428,6 +431,7 @@ protected:
       // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
       // method::greedySplitting(_prng, _littleheaps[i], meshFound);
       // method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
+      partialCount += _littleheaps[i].partialSize();
       method::shiftedSplitting(_prng, _littleheaps[i], meshFound);
     }
 
@@ -440,6 +444,11 @@ protected:
 
     // run the actual meshing with the world stopped
     __sanitizer::StopTheWorld(performMeshing, &args);
+
+    _lastMesh = std::chrono::high_resolution_clock::now();
+
+    const std::chrono::duration<double> duration = _lastMesh - start;
+    debug("mesh took %f, found %zu", duration.count(), args.mergeSets.size());
   }
 
   void meshSizeClass(size_t sizeClass) {
