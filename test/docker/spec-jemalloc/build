@@ -1,0 +1,9 @@
+#!/bin/bash
+set -e
+
+(cd ../mstatgcc && make)
+
+cp -a ../mstatgcc/mstatgcc .
+cp -a `which mstat` .
+
+docker build -t bpowers/spec:jemalloc .
