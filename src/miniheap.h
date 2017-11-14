@@ -58,8 +58,8 @@ public:
   }
 
   void printOccupancy() const {
-    mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"bitmap\": \"%s\"}\n", this, objectSize(),
-                maxCount(), _bitmap.to_string().c_str());
+    mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"mesh-count\": %d, \"bitmap\": \"%s\"}\n", this, objectSize(),
+                maxCount(), meshCount(), _bitmap.to_string().c_str());
   }
 
   // always "localMalloc"
