@@ -323,8 +323,8 @@ inline void shiftedSplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
 
   const size_t nBytes = leftBucket[0]->bitmap().byteCount();
 
-  for (size_t i = 0; i < t; i++) {
-    for (size_t j = 0; j < leftSize; j++) {
+  for (size_t j = 0; j < leftSize; j++) {
+    for (size_t i = 0; i < t; i++) {
       const size_t idxLeft = j;
       const size_t idxRight = (j + i) % rightSize;
       auto h1 = leftBucket[idxLeft];
