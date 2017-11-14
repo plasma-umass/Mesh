@@ -302,7 +302,7 @@ inline void greedySplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
   }
 }
 
-template <typename T, size_t t = 64>
+template <typename T, size_t t = 256>
 inline void shiftedSplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
                              const function<void(std::pair<T *, T *> &&)> &meshFound) noexcept {
   if (miniheaps.partialSize() == 0)
