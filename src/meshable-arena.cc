@@ -58,13 +58,8 @@ void MeshableArena::mesh(void *keep, void *remove, size_t sz) {
   // debug("keep: %p, remove: %p\n", keep, remove);
   const auto keepOff = offsetFor(keep);
   const auto removeOff = offsetFor(remove);
-  const auto removeFlags = getMetadataFlags(removeOff);
-
-  if (removeFlags == internal::PageType::Identity)
-    madvise(remove, sz, MADV_DONTNEED);
-
   d_assert(getMetadataFlags(keepOff) == internal::PageType::Identity);
-  d_assert(removeFlags != internal::PageType::Unallocated);
+  d_assert(getMetadataFlags(removeOff) != internal::PageType::Unallocated);
 
   const auto pageCount = sz / CPUInfo::PageSize;
   for (size_t i = 0; i < pageCount; i++) {
