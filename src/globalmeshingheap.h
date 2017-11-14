@@ -405,7 +405,7 @@ protected:
   void meshAllSizeClasses() {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
-    const auto start = std::chrono::high_resolution_clock::now();
+    // const auto start = std::chrono::high_resolution_clock::now();
     size_t partialCount = 0;
 
     MeshArguments args;
@@ -447,8 +447,8 @@ protected:
 
     _lastMesh = std::chrono::high_resolution_clock::now();
 
-    const std::chrono::duration<double> duration = _lastMesh - start;
-    debug("mesh took %f, found %zu", duration.count(), args.mergeSets.size());
+    // const std::chrono::duration<double> duration = _lastMesh - start;
+    // debug("mesh took %f, found %zu", duration.count(), args.mergeSets.size());
   }
 
   void meshSizeClass(size_t sizeClass) {
