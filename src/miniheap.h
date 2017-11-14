@@ -28,16 +28,20 @@ private:
 public:
   MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng,
                size_t expectedSpanSize)
-      : _span{reinterpret_cast<char *>(span)},
-        _freelist{objectCount, prng, fastPrng},
+      : _freelist{objectCount, prng, fastPrng},
         _objectSize(objectSize),
+        _spanSize(dynamicSpanSize()),
+        _span{reinterpret_cast<char *>(span)},
         _meshCount(1),
         _attached(true),
         _bitmap(maxCount()) {
     if (!_span[0])
       abort();
 
+    //debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
+                 maxCount(), _objectSize);
+    d_assert_msg(expectedSpanSize == dynamicSpanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
                  maxCount(), _objectSize);
 
     // d_assert_msg(spanSize == static_cast<size_t>(_spanSize), "%zu != %hu", spanSize, _spanSize);
@@ -77,7 +81,7 @@ public:
 
   inline void localFree(void *ptr, mt19937_64 &prng, MWC &mwc) {
     const ssize_t freedOff = getOff(ptr);
-    if (freedOff < 0)
+    if (unlikely(freedOff < 0))
       return;
 
     _freelist.push(freedOff, prng, mwc);
@@ -86,8 +90,8 @@ public:
   }
 
   inline void free(void *ptr) {
-    const size_t off = getOff(ptr);
-    if (off < 0)
+    const ssize_t off = getOff(ptr);
+    if (unlikely(off < 0))
       return;
 
     _bitmap.unset(off);
@@ -123,6 +127,10 @@ public:
   }
 
   inline size_t spanSize() const {
+    return _spanSize;
+  }
+
+  inline size_t dynamicSpanSize() const {
     size_t bytesNeeded = static_cast<size_t>(_objectSize) * maxCount();
     return mesh::RoundUpToPage(bytesNeeded);
   }
@@ -191,12 +199,11 @@ public:
 
   inline void unref() const {
     --_refCount;
-    atomic_thread_fence(memory_order_seq_cst);
   }
 
   inline bool isMeshingCandidate() const {
     if (_refCount > 0)
-      mesh::debug("skipping due to MH reference (%zu)", _refCount.load());
+      mesh::debug("skipping due to MH reference (%zu)", _refCount);
     return !isAttached() && _refCount == 0 && objectSize() < 4096;
   }
 
@@ -266,7 +273,7 @@ public:
 protected:
   inline uintptr_t spanStart(void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    const auto len = spanSize();
+    const auto len = _spanSize;
 
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
@@ -275,8 +282,8 @@ protected:
       return span;
 
     for (size_t i = 1; i < _meshCount; ++i) {
-      if (_span[i] == nullptr) {
-        mesh::debug("_span[%d] should be non-null (%zu)", i, _meshCount.load());
+      if (unlikely(_span[i] == nullptr)) {
+        mesh::debug("_span[%d] should be non-null (%zu)", i, _meshCount);
         dumpDebug();
         d_assert(false);
       }
@@ -296,31 +303,32 @@ protected:
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
     const auto off = (ptrval - span) / _objectSize;
-    if (span > ptrval || off >= maxCount()) {
-      mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
-      return -1;
-    }
+    // if (unlikely(span > ptrval || off >= maxCount())) {
+    //   mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
+    //   return -1;
+    // }
 
-    if (unlikely(!_bitmap.isSet(off))) {
-      mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
-      dumpDebug();
-      return -1;
-    }
+    // if (unlikely(!_bitmap.isSet(off))) {
+    //   mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
+    //   dumpDebug();
+    //   return -1;
+    // }
 
     return off;
   }
 
-  char *_span[MaxMeshes];
-  internal::BinToken _token;
   Freelist<MaxFreelistLen> _freelist;
   const uint32_t _objectSize;
+  const uint32_t _spanSize;
+  char *_span[MaxMeshes];
+  internal::BinToken _token;
 
   atomic<uint32_t> _inUseCount{0}; // 60
 
-  mutable atomic<uint32_t> _refCount{0};
-  atomic<uint32_t> _meshCount;// : 7;
+  mutable uint32_t _refCount{0};
+  uint32_t _meshCount;// : 7;
   atomic<uint32_t> _attached;// : 1;
-  internal::Bitmap _bitmap;
+  internal::Bitmap _bitmap; // 16 bytes
 };
 
 typedef MiniHeapBase<> MiniHeap;
