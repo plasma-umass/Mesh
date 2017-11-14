@@ -27,6 +27,10 @@ namespace mesh {
 static const int NBins = 11;  // 16Kb max object size
 static const int MeshPeriod = 10000;
 
+typedef int (*EpollWaitFn)(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout);
+typedef int (*EpollPwaitFn)(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
+                            const __sigset_t *__ss);
+
 // The global heap manages the spans that back MiniHeaps as well as
 // large allocations.
 class GlobalHeap : public GlobalMeshingHeap<mesh::MmapHeap, NBins, mesh::size2Class, mesh::class2Size, MeshPeriod> {};
@@ -71,6 +75,10 @@ public:
     _heap.setMeshPeriodSecs(period);
   }
 
+  int epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout);
+  int epollPwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss);
+
+  void initInterposition();
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
   // happens lazily, as the dynamic linker's dlopen calls into malloc
@@ -90,6 +98,9 @@ private:
   GlobalHeap _heap{};
   mutex _mutex{};
   int _signalFd{-2};
+
+  EpollWaitFn _libcEpollWait{nullptr};
+  EpollPwaitFn _libcEpollPwait{nullptr};
 };
 
 // get a reference to the Runtime singleton
