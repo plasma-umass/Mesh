@@ -59,7 +59,6 @@ public:
         _prng(internal::seed()),
         _fastPrng(internal::seed(), internal::seed()),
         _lastMesh{std::chrono::high_resolution_clock::now()} {
-    resetNextMeshCheck();
   }
 
   inline void dumpStrings() const {
@@ -217,6 +216,7 @@ public:
       return;
     }
 
+    _lastMeshEffective = 1;
     mh->free(ptr);
     bool shouldConsiderMesh = !mh->isEmpty();
     // unreffed by the bin tracker
@@ -243,10 +243,8 @@ public:
       }
     }
 
-    if (shouldConsiderMesh && unlikely(shouldMesh())) {
-      meshAllSizeClasses();
-      // meshSizeClass(getSizeClass(mh->objectSize()));
-    }
+    if (shouldConsiderMesh)
+      maybeMesh();
   }
 
   inline size_t getSize(void *ptr) const {
@@ -278,7 +276,7 @@ public:
         return -1;
       auto newVal = reinterpret_cast<size_t *>(newp);
       _meshPeriod = *newVal;
-      resetNextMeshCheck();
+      // resetNextMeshCheck();
     } else if (strcmp(name, "mesh.compact") == 0) {
       sharedLock.unlock();
       meshAllSizeClasses();
@@ -361,35 +359,23 @@ public:
     src = nullptr;
   }
 
-protected:
-  inline void resetNextMeshCheck() {
-    // a period of 0 means do not mesh.
+  inline void maybeMesh() {
     if (_meshPeriod == 0)
       return;
+    // if (_smallFreeCount == 0)
+    //   return;
 
-    uniform_int_distribution<size_t> distribution(1, _meshPeriod);
-    _nextMeshCheck = distribution(_prng);
+    const auto now = std::chrono::high_resolution_clock::now();
+    const std::chrono::duration<double> duration = now - _lastMesh;
+
+    if (likely(_meshPeriodSecs > 0 && duration.count() < _meshPeriodSecs))
+      return;
+
+    _lastMesh = now;
+    meshAllSizeClasses();
   }
 
-  inline bool shouldMesh() {
-    _nextMeshCheck--;
-    bool shouldMesh = _meshPeriod > 0 && _nextMeshCheck == 0;
-    if (unlikely(shouldMesh)) {
-      resetNextMeshCheck();
-
-      const auto now = std::chrono::high_resolution_clock::now();
-      const std::chrono::duration<double> duration = now - _lastMesh;
-      if (_meshPeriodSecs > 0 && duration.count() < _meshPeriodSecs) {
-        shouldMesh = false;
-      } else {
-        // update last mesh
-        _lastMesh = now;
-      }
-    }
-
-    return shouldMesh;
-  }
-
+protected:
   static void performMeshing(const __sanitizer::SuspendedThreadsList &suspendedThreads, void *argument) {
     MeshArguments *args = (MeshArguments *)argument;
 
@@ -406,7 +392,12 @@ protected:
   void meshAllSizeClasses() {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
-    // const auto start = std::chrono::high_resolution_clock::now();
+    if (!_lastMeshEffective)
+      return;
+
+    _lastMeshEffective = 1;
+
+    const auto start = std::chrono::high_resolution_clock::now();
     size_t partialCount = 0;
 
     MeshArguments args;
@@ -436,6 +427,9 @@ protected:
       method::shiftedSplitting(_prng, _littleheaps[i], meshFound);
     }
 
+    // more than ~ 1 MB saved
+    _lastMeshEffective = args.mergeSets.size() > 256;
+
     if (args.mergeSets.size() == 0) {
       // debug("nothing to mesh.");
       return;
@@ -452,39 +446,8 @@ protected:
     // debug("mesh took %f, found %zu", duration.count(), args.mergeSets.size());
   }
 
-  void meshSizeClass(size_t sizeClass) {
-    MeshArguments args;
-    args.instance = this;
-
-    // XXX: can we get away with using shared at first, then upgrading to exclusive?
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
-
-    // FIXME: is it safe to have this function not use internal::allocator?
-    auto meshFound = function<void(internal::vector<MiniHeap *> &&)>(
-        // std::allocator_arg, internal::allocator,
-        [&](internal::vector<MiniHeap *> &&miniheaps) {
-          if (miniheaps[0]->isMeshingCandidate() && miniheaps[1]->isMeshingCandidate())
-            args.mergeSets.push_back(std::move(miniheaps));
-        });
-
-    // method::greedySplitting(_prng, _littleheaps[sizeClass], meshFound);
-    // method::simpleGreedySplitting(_prng, _littleheaps[sizeClass], meshFound);
-
-    if (args.mergeSets.size() == 0)
-      return;
-
-    _stats.meshCount += args.mergeSets.size();
-
-    // run the actual meshing with the world stopped
-    __sanitizer::StopTheWorld(performMeshing, &args);
-
-    // internal::StopTheWorld();
-    // performMeshing(&args);
-    // internal::StartTheWorld();
-  }
-
   const size_t _maxObjectSize;
-  size_t _nextMeshCheck{0};
+  atomic_size_t _lastMeshEffective{0};
   atomic_size_t _meshPeriod{DefaultMeshPeriod};
 
   // The big heap is handles malloc requests for large objects.  We
