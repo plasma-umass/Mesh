@@ -196,6 +196,8 @@ int Runtime::epollWait(int __epfd, struct epoll_event *__events, int __maxevents
       abort();
   }
 
+  _heap.maybeMesh();
+
   return _libcEpollWait(__epfd, __events, __maxevents, __timeout);
 }
 
@@ -206,6 +208,8 @@ int Runtime::epollPwait(int __epfd, struct epoll_event *__events, int __maxevent
     if (_libcEpollPwait == nullptr)
       abort();
   }
+
+  _heap.maybeMesh();
 
   return _libcEpollPwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
