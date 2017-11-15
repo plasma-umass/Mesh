@@ -6,4 +6,4 @@ set -e
 cp -a ../mstatgcc/mstatgcc .
 cp -a `which mstat` .
 
-docker build -t bpowers/spec:diehard .
+docker build -t bpowers/spec:hoard .

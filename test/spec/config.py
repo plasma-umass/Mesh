@@ -9,4 +9,6 @@ configs = [
     Config('mesh', 'bpowers/spec:mesh'),
     Config('jemalloc', 'bpowers/spec:jemalloc'),
     Config('glibc', 'bpowers/spec:glibc'),
+    Config('diehard', 'bpowers/spec:diehard'),
+    Config('hoard', 'bpowers/spec:hoard'),
 ]
