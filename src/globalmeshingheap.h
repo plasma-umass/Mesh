@@ -42,7 +42,8 @@ private:
   DISALLOW_COPY_AND_ASSIGN(GlobalMeshingHeap);
   typedef MeshableArena Super;
 
-  static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
+  // static_assert(getClassMaxSize(NumBins - 1) == kMaxSize, "expected 16k max object size");
+  // static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
   static_assert(HL::gcd<BigHeap::Alignment, Alignment>::value == Alignment,
                 "expected BigHeap to have 16-byte alignment");
 
@@ -137,11 +138,13 @@ public:
   }
 
   void *malloc(size_t sz) {
-    const int sizeClass = getSizeClass(sz);
-    const size_t sizeMax = getClassMaxSize(sizeClass);
-
-    if (unlikely(sizeMax <= _maxObjectSize))
+    if (unlikely(sz <= kMaxSize))
       abort();
+    // const int sizeClass = getSizeClass(sz);
+    // const size_t sizeMax = getClassMaxSize(sizeClass);
+
+    // if (unlikely(sizeMax <= _maxObjectSize))
+    //   abort();
 
     std::lock_guard<std::mutex> lock(_bigMutex);
     return _bigheap.malloc(sz);

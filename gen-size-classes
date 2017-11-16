@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+
+import sys
+
+# NO 8-byte size classes
+
+SIZE_CLASSES = [
+    0,
+    16,
+    32,
+    48,
+    64,
+    80,
+    96,
+    112,
+    128,
+    160,
+    192,
+    224,
+    256,
+    320,
+    384,
+    448,
+    512,
+    640,
+    768,
+    896,
+    1024,
+    2048,
+    4096,
+    8192,
+    16384,
+]
+
+SIZE_CLASS_INDICES = {x: i for i, x in enumerate(SIZE_CLASSES)}
+
+def get_next(i):
+    for sz in SIZE_CLASSES:
+        if i <= sz:
+            return sz
+    assert False
+
+def main():
+    print('// small size classes')
+    for i in range(0, 1025, 8):
+        size_class = get_next(i)
+        print('\t%d,\t// %5d -> %5d' % (SIZE_CLASS_INDICES[size_class], i, size_class))
+
+    print('// large size classes')
+    for i in range(1024, 16385, 128):
+        if i == 1024:
+            continue
+        size_class = get_next(i)
+        print('\t%d,\t// %5d -> %5d' % (SIZE_CLASS_INDICES[size_class], i, size_class))
+
+if __name__ == '__main__':
+    sys.exit(main())

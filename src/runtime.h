@@ -24,7 +24,8 @@ using std::condition_variable;
 
 namespace mesh {
 
-static const int NBins = 11;  // 16Kb max object size
+//static const int NBins = 11;  // 16Kb max object size
+static const int NBins = 25;  // 16Kb max object size
 static const int MeshPeriod = 10000;
 
 typedef int (*EpollWaitFn)(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout);

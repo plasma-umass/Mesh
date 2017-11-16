@@ -12,6 +12,40 @@
 
 namespace mesh {
 
+ATTRIBUTE_ALIGNED(CACHELINE)
+const unsigned char SizeMap::class_array_[kClassArraySize] = {
+#include "size_classes.def"
+};
+
+ATTRIBUTE_ALIGNED(CACHELINE)
+const int32_t SizeMap::class_to_size_[kClassSizesMax] = {
+    0,
+    16,
+    32,
+    48,
+    64,
+    80,
+    96,
+    112,
+    128,
+    160,
+    192,
+    224,
+    256,
+    320,
+    384,
+    448,
+    512,
+    640,
+    768,
+    896,
+    1024,
+    2048,
+    4096,
+    8192,
+    16384,
+};
+
 // const internal::BinToken::Size internal::BinToken::Max = numeric_limits<uint32_t>::max();
 // const internal::BinToken::Size internal::BinToken::MinFlags = numeric_limits<uint32_t>::max() - 4;
 

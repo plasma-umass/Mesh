@@ -44,27 +44,28 @@ public:
         _prng(internal::seed()),
         _mwc(internal::seed(), internal::seed()),
         _global(global) {
-    static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
+    // static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
     for (auto i = 0; i < NumBins; i++) {
       _current[i] = nullptr;
     }
     d_assert(_global != nullptr);
   }
 
+  // semiansiheap ensures we never see size == 0
   inline void *malloc(size_t sz) {
-    const int sizeClass = getSizeClass(sz);
-    const size_t sizeMax = getClassMaxSize(sizeClass);
+    uint32_t sizeClass = 0;
+    if (unlikely(!SizeMap::GetSizeClass(sz, &sizeClass)))
+      return _global->malloc(sz);
 
     // d_assert_msg(sz <= sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", sz, sizeMax, sizeClass);
-
-    if (unlikely(sizeMax > _maxObjectSize))
-      return _global->malloc(sz);
 
     // d_assert(sizeMax <= _maxObjectSize);
     // d_assert(sizeClass >= 0);
     // d_assert(sizeClass < NumBins);
 
     if (unlikely(_current[sizeClass] == nullptr)) {
+      const size_t sizeMax = getClassMaxSize(sizeClass);
+
       MiniHeap *mh = _global->allocMiniheap(sizeMax);
       d_assert(mh->isAttached());
       if (unlikely(mh == nullptr))
@@ -76,15 +77,15 @@ public:
     }
 
     MiniHeap *mh = _current[sizeClass];
-    if (unlikely(!mh->isAttached() || mh->isExhausted())) {
-      int attached = mh->isAttached();
-      int exhausted = mh->isExhausted();
-      mesh::debug("LocalHeap(sz: %zu): expecting failure %d %d (%zu/%zu)", sz, attached, exhausted, sizeMax, mh->objectSize());
-      // mh->dumpDebug();
-      // abort();
-    }
+    // if (unlikely(!mh->isAttached() || mh->isExhausted())) {
+    //   int attached = mh->isAttached();
+    //   int exhausted = mh->isExhausted();
+    //   mesh::debug("LocalHeap(sz: %zu): expecting failure %d %d (%zu/%zu)", sz, attached, exhausted, sizeMax, mh->objectSize());
+    //   // mh->dumpDebug();
+    //   // abort();
+    // }
 
-    void *ptr = mh->malloc(sizeMax);
+    void *ptr = mh->malloc(0); // arg doesn't matter -- MiniHeap knows the size
     if (unlikely(mh->isExhausted())) {
       mh->detach();
       _current[sizeClass] = nullptr;
