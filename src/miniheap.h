@@ -68,7 +68,7 @@ public:
       dumpDebug();
       d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached.load(), isExhausted());
     }
-    d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
+    //d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
     auto off = _freelist.pop();
     // mesh::debug("%p: ma %u", this, off);

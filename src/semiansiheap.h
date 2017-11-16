@@ -43,7 +43,7 @@ public:
     // Prevent integer underflows. This maximum should (and
     // currently does) provide more than enough slack to compensate for any
     // rounding below (in the alignment section).
-    if (sz > INT_MAX || sz == 0) {
+    if (unlikely(sz > INT_MAX || sz == 0)) {
       return 0;
     }
 
