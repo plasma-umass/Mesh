@@ -43,17 +43,3 @@ $ ./configure
 $ make
 $ ./run
 ```
-
-
-TODO
-----
-
-- bg thread
-- dump out strings
-- interpose sig* functions and make sure application doesn't override our handlers
-- merge adjacent mappings
-- matching algorithm
-- keep more stats; clock_gettime(CLOCK_MONOTONIC) of last free time
-- some sort of LRU sorting of miniheaps -- when freeing move to end
-  (don't consider meshing heaps that have been active in the last... 5
-  ms or something)
