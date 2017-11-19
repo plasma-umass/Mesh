@@ -371,7 +371,9 @@ public:
     const auto now = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double> duration = now - _lastMesh;
 
-    if (likely(_meshPeriodSecs > 0 && duration.count() < _meshPeriodSecs))
+    if (unlikely(_meshPeriodSecs <= 0))
+      return;
+    if (likely(duration.count() < _meshPeriodSecs))
       return;
 
     _lastMesh = now;
