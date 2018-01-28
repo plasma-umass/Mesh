@@ -145,9 +145,12 @@ typedef struct user_fpregs elf_fpregset_t;
 #include <netipx/ipx.h>
 #include <netrom/netrom.h>
 #if HAVE_RPC_XDR_H
-# include <rpc/xdr.h>
-#elif HAVE_TIRPC_RPC_XDR_H
-# include <tirpc/rpc/xdr.h>
+# undef HAVE_RPC_XDR_H
+# define HAVE_RPC_XDR_H 0
+#endif
+#if HAVE_TIRPC_RPC_XDR_H
+# undef HAVE_TIRPC_RPC_XDR_H
+# define HAVE_TIRPC_RPC_XDR_H 0
 #endif
 #include <scsi/scsi.h>
 #include <sys/mtio.h>
