@@ -442,13 +442,16 @@ protected:
 
     _stats.meshCount += args.mergeSets.size();
 
+    const auto stwStart = std::chrono::high_resolution_clock::now();
+
     // run the actual meshing with the world stopped
     __sanitizer::StopTheWorld(performMeshing, &args);
 
     _lastMesh = std::chrono::high_resolution_clock::now();
 
-    // const std::chrono::duration<double> duration = _lastMesh - start;
-    // debug("mesh took %f, found %zu", duration.count(), args.mergeSets.size());
+    const auto duration = chrono::duration_cast<chrono::nanoseconds>(_lastMesh - start);
+    const auto stwDuration = chrono::duration_cast<chrono::nanoseconds>(_lastMesh - stwStart);
+    debug("STW\t%d\t%d\n", stwDuration.count(), args.mergeSets.size());
   }
 
   const size_t _maxObjectSize;
