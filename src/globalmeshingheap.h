@@ -271,9 +271,9 @@ public:
 
     auto mh = miniheapFor(ptr);
     if (likely(mh)) {
-      // .. bitmap get
+      auto result = mh->bitmapGet(type, ptr);
       mh->unref();
-      return 0;
+      return result;
     } else {
       internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
     }
@@ -285,9 +285,9 @@ public:
 
     auto mh = miniheapFor(ptr);
     if (likely(mh)) {
-      // .. bitmap set
+      auto result = mh->bitmapSet(type, ptr);
       mh->unref();
-      return 0;
+      return result;
     } else {
       internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
     }
@@ -299,9 +299,9 @@ public:
 
     auto mh = miniheapFor(ptr);
     if (likely(mh)) {
-      // .. bitmap clear
+      auto result = mh->bitmapClear(type, ptr);
       mh->unref();
-      return 0;
+      return result;
     } else {
       internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
     }
