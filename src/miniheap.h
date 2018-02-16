@@ -274,6 +274,66 @@ public:
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
   }
 
+  inline int bitmapGet(enum mesh::BitType type, void *ptr) {
+    const ssize_t off = getOff(ptr);
+    d_assert(off >= 0);
+
+    switch (type) {
+    case MESH_BIT_0:
+      return _bitmap0.isSet(off);
+    case MESH_BIT_1:
+      return _bitmap1.isSet(off);
+    case MESH_BIT_2:
+      return _bitmap2.isSet(off);
+    case MESH_BIT_3:
+      return _bitmap3.isSet(off);
+    default:
+      break;
+    }
+    d_assert(false);
+    return -1;
+  }
+
+  inline int bitmapSet(enum mesh::BitType type, void *ptr) {
+    const ssize_t off = getOff(ptr);
+    d_assert(off >= 0);
+
+    switch (type) {
+    case MESH_BIT_0:
+      return _bitmap0.tryToSet(off);
+    case MESH_BIT_1:
+      return _bitmap1.tryToSet(off);
+    case MESH_BIT_2:
+      return _bitmap2.tryToSet(off);
+    case MESH_BIT_3:
+      return _bitmap3.tryToSet(off);
+    default:
+      break;
+    }
+    d_assert(false);
+    return -1;
+  }
+
+  inline int bitmapClear(enum mesh::BitType type, void *ptr) {
+    const ssize_t off = getOff(ptr);
+    d_assert(off >= 0);
+
+    switch (type) {
+    case MESH_BIT_0:
+      return _bitmap0.unset(off);
+    case MESH_BIT_1:
+      return _bitmap1.unset(off);
+    case MESH_BIT_2:
+      return _bitmap2.unset(off);
+    case MESH_BIT_3:
+      return _bitmap3.unset(off);
+    default:
+      break;
+    }
+    d_assert(false);
+    return -1;
+  }
+
 protected:
   inline uintptr_t spanStart(void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
