@@ -274,7 +274,7 @@ public:
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
   }
 
-  inline int bitmapGet(enum mesh::BitType type, void *ptr) {
+  inline int bitmapGet(enum mesh::BitType type, void *ptr) const {
     const ssize_t off = getOff(ptr);
     d_assert(off >= 0);
 
