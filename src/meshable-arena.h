@@ -196,6 +196,7 @@ private:
   }
 
   int openSpanFile(size_t sz);
+  char *openSpanDir(int pid);
 
   // pointer must already have been checked by `contains()` for bounds
   size_t offsetFor(const void *ptr) const {
@@ -230,6 +231,12 @@ private:
   static void staticAfterForkChild();
 
   void exit() {
+    // FIXME: do this from the destructor, and test that destructor is
+    // called.  Also don't leak _spanDir
+    if (_spanDir != nullptr) {
+      rmdir(_spanDir);
+      _spanDir = nullptr;
+    }
   }
 
   void prepareForFork();
@@ -250,6 +257,7 @@ private:
 
   int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
+  char *_spanDir{nullptr};
 };
 }  // namespace mesh
 
