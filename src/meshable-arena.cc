@@ -1,8 +1,8 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
-// #define USE_MEMFD 1
-#undef USE_MEMFD
+#define USE_MEMFD 1
+// #undef USE_MEMFD
 
 #ifdef USE_MEMFD
 #include <sys/syscall.h>
@@ -25,11 +25,9 @@ namespace mesh {
 
 static void *arenaInstance;
 
-#ifndef USE_MEMFD
 static const char *const TMP_DIRS[] = {
     "/dev/shm", "/tmp",
 };
-#endif
 
 MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUInfo::PageSize} {
   d_assert(arenaInstance == nullptr);
