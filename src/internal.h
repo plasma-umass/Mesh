@@ -30,6 +30,15 @@ static inline constexpr size_t RoundUpToPage(size_t sz) {
   return HL::CPUInfo::PageSize * PageCount(sz);
 }
 
+// keep in-sync with the version in plasma/mesh.h
+enum BitType {
+  MESH_BIT_0,
+  MESH_BIT_1,
+  MESH_BIT_2,
+  MESH_BIT_3,
+  MESH_BIT_COUNT,
+};
+
 namespace internal {
 
 static const double MeshPeriodSecs = .1;

@@ -141,4 +141,16 @@ int epoll_wait(int __epfd, struct epoll_event *__events, int __maxevents, int __
 int epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss) {
   return mesh::runtime().epollPwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
+
+  int mesh_bit_get(enum mesh::BitType type, void *ptr) {
+  return mesh::runtime().heap().bitmapGet(type, ptr);
+}
+
+int mesh_bit_set(enum mesh::BitType type, void *ptr) {
+  return mesh::runtime().heap().bitmapSet(type, ptr);
+}
+
+int mesh_bit_clear(enum mesh::BitType type, void *ptr) {
+  return mesh::runtime().heap().bitmapClear(type, ptr);
+}
 }

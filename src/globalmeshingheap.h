@@ -265,6 +265,48 @@ public:
     }
   }
 
+  int bitmapGet(enum mesh::BitType type, void *ptr) {
+    if (unlikely(ptr == nullptr))  // || internal::isMeshMarker(ptr))
+      return 0;
+
+    auto mh = miniheapFor(ptr);
+    if (likely(mh)) {
+      // .. bitmap get
+      mh->unref();
+      return 0;
+    } else {
+      internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
+    }
+  }
+
+  int bitmapSet(enum mesh::BitType type, void *ptr) {
+    if (unlikely(ptr == nullptr))  // || internal::isMeshMarker(ptr))
+      return 0;
+
+    auto mh = miniheapFor(ptr);
+    if (likely(mh)) {
+      // .. bitmap set
+      mh->unref();
+      return 0;
+    } else {
+      internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
+    }
+  }
+
+  int bitmapClear(enum mesh::BitType type, void *ptr) {
+    if (unlikely(ptr == nullptr))  // || internal::isMeshMarker(ptr))
+      return 0;
+
+    auto mh = miniheapFor(ptr);
+    if (likely(mh)) {
+      // .. bitmap clear
+      mh->unref();
+      return 0;
+    } else {
+      internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
+    }
+  }
+
   int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
 
