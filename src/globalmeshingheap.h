@@ -265,7 +265,21 @@ public:
     }
   }
 
-  int bitmapGet(enum mesh::BitType type, void *ptr) {
+  inline bool inBounds(void *ptr) const {
+    if (unlikely(ptr == nullptr))
+      return false;
+
+    auto mh = miniheapFor(ptr);
+    if (likely(mh)) {
+      mh->unref();
+      return true;
+    } else {
+      std::lock_guard<std::mutex> lock(_bigMutex);
+      return _bigheap.inBounds(ptr);
+    }
+  }
+
+  int bitmapGet(enum mesh::BitType type, void *ptr) const {
     if (unlikely(ptr == nullptr))  // || internal::isMeshMarker(ptr))
       return 0;
 

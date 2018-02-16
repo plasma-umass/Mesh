@@ -125,6 +125,14 @@ public:
     return entry->second;
   }
 
+  inline bool inBounds(void *ptr) const {
+    auto entry = _vmaMap.find(ptr);
+    if (unlikely(entry == _vmaMap.end())) {
+      return false;
+    }
+    return true;
+  }
+
   inline void free(void *ptr) {
     auto entry = _vmaMap.find(ptr);
     if (unlikely(entry == _vmaMap.end())) {
