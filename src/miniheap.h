@@ -34,7 +34,11 @@ public:
         _span{reinterpret_cast<char *>(span)},
         _meshCount(1),
         _attached(true),
-        _bitmap(maxCount()) {
+        _bitmap(maxCount()),
+        _bitmap0(maxCount()),
+        _bitmap1(maxCount()),
+        _bitmap2(maxCount()),
+        _bitmap3(maxCount()) {
     if (!_span[0])
       abort();
 
@@ -329,12 +333,17 @@ protected:
   uint32_t _meshCount;// : 7;
   atomic<uint32_t> _attached;// : 1;
   internal::Bitmap _bitmap; // 16 bytes
+  internal::Bitmap _bitmap0; // 16 bytes
+  internal::Bitmap _bitmap1; // 16 bytes
+  internal::Bitmap _bitmap2; // 16 bytes
+  internal::Bitmap _bitmap3; // 16 bytes
 };
 
 typedef MiniHeapBase<> MiniHeap;
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
-static_assert(sizeof(MiniHeap) == 96, "MiniHeap too big!");
+//static_assert(sizeof(MiniHeap) == 96, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 160, "MiniHeap too big!");
 //static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 
 }  // namespace mesh
