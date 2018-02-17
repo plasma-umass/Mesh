@@ -12,35 +12,9 @@ PREFIX = /usr
 
 ARCH             = x86_64
 
-COMMON_SRCS      = src/runtime.cc src/meshing.cc src/meshable-arena.cc src/d_assert.cc \
-                   src/sanitizer/sanitizer_stubs.cc \
-                   src/sanitizer/sanitizer_stoptheworld_linux_libcdep.cc \
-                   src/sanitizer/sanitizer_libc.cc \
-                   src/sanitizer/sanitizer_linux.cc \
-                   src/sanitizer/sanitizer_linux_libcdep.cc \
-                   src/sanitizer/sanitizer_posix.cc \
-                   src/sanitizer/sanitizer_posix_libcdep.cc \
-                   src/sanitizer/sanitizer_procmaps_common.cc \
-                   src/sanitizer/sanitizer_procmaps_linux.cc \
-                   src/sanitizer/sanitizer_symbolizer.cc \
-                   src/sanitizer/sanitizer_symbolizer_libbacktrace.cc \
-                   src/sanitizer/sanitizer_symbolizer_libcdep.cc \
-                   src/sanitizer/sanitizer_symbolizer_posix_libcdep.cc \
-                   src/sanitizer/sanitizer_common.cc \
-                   src/sanitizer/sanitizer_common_libcdep.cc \
-                   src/sanitizer/sanitizer_file.cc \
-                   src/sanitizer/sanitizer_flag_parser.cc \
-                   src/sanitizer/sanitizer_flags.cc \
-                   src/sanitizer/sanitizer_printf.cc \
-                   src/sanitizer/sanitizer_platform_limits_posix.cc \
-                   src/sanitizer/sanitizer_stackdepot.cc \
-                   src/sanitizer/sanitizer_stacktrace.cc \
-                   src/sanitizer/sanitizer_stacktrace_libcdep.cc \
-                   src/sanitizer/sanitizer_stacktrace_printer.cc \
-                   src/sanitizer/sanitizer_termination.cc \
-                   src/sanitizer/sanitizer_unwind_linux_libcdep.cc
+COMMON_SRCS      = src/runtime.cc src/meshing.cc src/meshable-arena.cc src/d_assert.cc
 
-LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc src/sanitizer/sanitizer_linux_$(ARCH).S
+LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc
 LIB_OBJS         = $(addprefix build/,$(patsubst %.c,%.o,$(patsubst %.S,%.o,$(LIB_SRCS:.cc=.o))))
 LIB              = libmesh.so
 

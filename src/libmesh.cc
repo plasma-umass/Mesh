@@ -41,63 +41,7 @@ static __attribute__((destructor)) void libmesh_fini() {
   runtime().heap().dumpStats(mlevel, false);
 }
 
-// This is required to properly use internal_sigaction.
-namespace __sanitizer {
-int real_sigaction(int signum, const void *act, void *oldact) {
-  mesh::debug("TODO: implement real_sigaction\n");
-  _exit(1);
-  // if (REAL(sigaction) == nullptr) {
-  //   // With an instrumented allocator, this is called during interceptor init
-  //   // and we need a raw syscall solution.
-  //   return internal_sigaction_syscall(signum, act, oldact);
-  // }
-  // return REAL(sigaction)(signum, (const struct sigaction *)act,
-  //                        (struct sigaction *)oldact);
-}
-}  // namespace __sanitizer
-
-namespace __sanitizer {
-int real_pthread_create(void *th, void *attr, void *(*callback)(void *), void *param) {
-  mesh::debug("TODO: implement real_pthread_create\n");
-  _exit(1);
-}
-int real_pthread_join(void *th, void **ret) {
-  mesh::debug("TODO: implement real_pthread_join\n");
-  _exit(1);
-}
-}  // namespace __sanitizer
-
 extern "C" {
-void __sanitizer_print_memory_profile(size_t top_percent, size_t max_number_of_contexts) {
-  mesh::debug("TODO: __sanitizer_print_memory_profile\n");
-  _exit(1);
-}
-
-bool __sanitizer_symbolize_code(const char *ModuleName, uint64_t ModuleOffset, char *Buffer, int MaxLength) {
-  mesh::debug("TODO: __sanitizer_symbolize_code\n");
-  _exit(1);
-}
-
-bool __sanitizer_symbolize_data(const char *ModuleName, uint64_t ModuleOffset, char *Buffer, int MaxLength) {
-  mesh::debug("TODO: __sanitizer_symbolize_data\n");
-  _exit(1);
-}
-
-void __sanitizer_symbolize_flush() {
-  mesh::debug("TODO: __sanitizer_symbolize_flush\n");
-  _exit(1);
-}
-
-int __sanitizer_symbolize_demangle(const char *Name, char *Buffer, int MaxLength) {
-  mesh::debug("TODO: __sanitizer_symbolize_demangle\n");
-  _exit(1);
-}
-
-int real_pthread_attr_getstack(void *attr, void **addr, size_t *size) {
-  mesh::debug("TODO: real_pthread_attr_getstack\n");
-  _exit(1);
-}
-
 void *xxmalloc(size_t sz) {
   return runtime().localHeap()->malloc(sz);
 }
