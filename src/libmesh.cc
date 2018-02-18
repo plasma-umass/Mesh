@@ -72,6 +72,14 @@ void xxmalloc_unlock(void) {
   mesh::runtime().unlock();
 }
 
+int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) {
+  return mesh::runtime().sigAction(signum, act, oldact);
+}
+
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
+  return mesh::runtime().sigProcMask(how, set, oldset);
+}
+
 // Same API as je_mallctl, allows a program to query stats and set
 // allocator-related options.
 int mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {

@@ -128,8 +128,22 @@ void Runtime::initInterposition() {
     abort();
   }
 
+  auto sigActionFn = dlsym(libcHandle, "sigaction");
+  if (sigActionFn == nullptr) {
+    debug("expected sigaction");
+    abort();
+  }
+
+  auto sigProcMaskFn = dlsym(libcHandle, "sigprocmask");
+  if (sigProcMaskFn == nullptr) {
+    debug("expected sigprocmask");
+    abort();
+  }
+
   _libcEpollWait = reinterpret_cast<EpollWaitFn>(epollWaitFn);
   _libcEpollPwait = reinterpret_cast<EpollPwaitFn>(epollPwaitFn);
+  _libcSigAction = reinterpret_cast<SigActionFn>(sigActionFn);
+  _libcSigProcMask = reinterpret_cast<SigProcMaskFn>(sigProcMaskFn);
 }
 
 void Runtime::createSignalFd() {
@@ -248,5 +262,25 @@ int Runtime::epollPwait(int __epfd, struct epoll_event *__events, int __maxevent
   _heap.maybeMesh();
 
   return _libcEpollPwait(__epfd, __events, __maxevents, __timeout, __ss);
+}
+
+int Runtime::sigAction(int signum, const struct sigaction *act, struct sigaction *oldact) {
+  if (unlikely(_libcSigAction == nullptr)) {
+    initInterposition();
+    if (_libcSigAction == nullptr)
+      abort();
+  }
+
+  return _libcSigAction(signum, act, oldact);
+}
+
+int Runtime::sigProcMask(int how, const sigset_t *set, sigset_t *oldset) {
+  if (unlikely(_libcSigProcMask == nullptr)) {
+    initInterposition();
+    if (_libcSigProcMask == nullptr)
+      abort();
+  }
+
+  return _libcSigProcMask(how, set, oldset);
 }
 }  // namespace mesh
