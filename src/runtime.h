@@ -32,6 +32,9 @@ typedef int (*EpollWaitFn)(int __epfd, struct epoll_event *__events, int __maxev
 typedef int (*EpollPwaitFn)(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
                             const __sigset_t *__ss);
 
+typedef int (*SigActionFn)(int signum, const struct sigaction *act, struct sigaction *oldact);
+typedef int (*SigProcMaskFn)(int how, const sigset_t *set, sigset_t *oldset);
+
 // The global heap manages the spans that back MiniHeaps as well as
 // large allocations.
 class GlobalHeap : public GlobalMeshingHeap<mesh::MmapHeap, NBins, mesh::size2Class, mesh::class2Size, MeshPeriod> {};
@@ -78,6 +81,8 @@ public:
 
   int epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout);
   int epollPwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss);
+  int sigAction(int signum, const struct sigaction *act, struct sigaction *oldact);
+  int sigProcMask(int how, const sigset_t *set, sigset_t *oldset);
 
   void initInterposition();
 private:
@@ -102,6 +107,8 @@ private:
 
   EpollWaitFn _libcEpollWait{nullptr};
   EpollPwaitFn _libcEpollPwait{nullptr};
+  SigActionFn _libcSigAction{nullptr};
+  SigProcMaskFn _libcSigProcMask{nullptr};
 };
 
 // get a reference to the Runtime singleton
