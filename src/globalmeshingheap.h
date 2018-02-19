@@ -263,13 +263,20 @@ public:
     }
   }
 
+  inline bool inBoundsSmall(void *ptr) const {
+    auto mh = miniheapFor(ptr);
+    if (likely(mh)) {
+      mh->unref();
+      return true;
+    }
+    return false;
+  }
+
   inline bool inBounds(void *ptr) const {
     if (unlikely(ptr == nullptr))
       return false;
 
-    auto mh = miniheapFor(ptr);
-    if (likely(mh)) {
-      mh->unref();
+    if (inBoundsSmall(ptr)) {
       return true;
     } else {
       std::lock_guard<std::mutex> lock(_bigMutex);
@@ -389,14 +396,10 @@ public:
   }
 
   // PUBLIC ONLY FOR TESTING
-  // must be called with the world stopped, after call to mesh()
-  // completes src is a nullptr
+  // after call to meshLocked() completes src is a nullptr
   void meshLocked(MiniHeap *dst, MiniHeap *&src) {
     if (dst->meshCount() + src->meshCount() > internal::MaxMeshes)
       return;
-
-    // does the copying of objects and updating of span metadata
-    dst->consume(src);
 
     const size_t dstSpanSize = dst->spanSize();
     const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart());
@@ -405,7 +408,16 @@ public:
     const auto srcMeshCount = src->meshCount();
 
     for (size_t i = 0; i < srcMeshCount; i++) {
-      Super::mesh(dstSpanStart, srcSpans[i], dstSpanSize);
+      // marks srcSpans read-only
+      Super::beginMesh(dstSpanStart, srcSpans[i], dstSpanSize);
+    }
+
+    // does the copying of objects and updating of span metadata
+    dst->consume(src);
+
+    for (size_t i = 0; i < srcMeshCount; i++) {
+      // frees physical memory + re-marks srcSpans as read/write
+      Super::finalizeMesh(dstSpanStart, srcSpans[i], dstSpanSize);
     }
 
     // make sure we adjust what bin the destination is in -- it might
@@ -434,9 +446,8 @@ public:
     meshAllSizeClasses();
   }
 
-  inline bool okToProceed(void *ptr) {
-    // return inBounds(ptr);
-    return false;
+  inline bool okToProceed(void *ptr) const {
+    return inBoundsSmall(ptr);
   }
 
 protected:

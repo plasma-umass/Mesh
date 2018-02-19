@@ -77,7 +77,11 @@ char *MeshableArena::openSpanDir(int pid) {
   return nullptr;
 }
 
-void MeshableArena::mesh(void *keep, void *remove, size_t sz) {
+void MeshableArena::beginMesh(void *keep, void *remove, size_t sz) {
+  mprotect(remove, sz, PROT_READ);
+}
+
+void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   // debug("keep: %p, remove: %p\n", keep, remove);
   const auto keepOff = offsetFor(keep);
   const auto removeOff = offsetFor(remove);
@@ -89,11 +93,12 @@ void MeshableArena::mesh(void *keep, void *remove, size_t sz) {
     setMetadata(removeOff + i, internal::PageType::Meshed | getMetadataPtr(keepOff));
   }
 
+
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * CPUInfo::PageSize);
+  hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
   freePhys(remove, sz);
-  // if (*(char *)remove == 0 || *(char *)((char *)remove+sz-1))
-  //   write(-2, "mmap was OK", 11);
-  d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
+
+  mprotect(remove, sz, PROT_READ|PROT_WRITE);
 }
 
 #ifdef USE_MEMFD
