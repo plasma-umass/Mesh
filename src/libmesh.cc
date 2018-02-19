@@ -13,6 +13,7 @@ static __attribute__((constructor)) void libmesh_init() {
   mesh::real::init();
 
   runtime().createSignalFd();
+  runtime().installSegfaultHandler();
 
   char *meshPeriodStr = getenv("MESH_PERIOD_SECS");
   if (meshPeriodStr) {
@@ -75,11 +76,11 @@ void xxmalloc_unlock(void) {
 }
 
 int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) {
-  return mesh::runtime().sigAction(signum, act, oldact);
+  return mesh::runtime().sigaction(signum, act, oldact);
 }
 
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
-  return mesh::runtime().sigProcMask(how, set, oldset);
+  return mesh::runtime().sigprocmask(how, set, oldset);
 }
 
 // Same API as je_mallctl, allows a program to query stats and set

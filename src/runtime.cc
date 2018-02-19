@@ -19,31 +19,8 @@ const unsigned char SizeMap::class_array_[kClassArraySize] = {
 
 ATTRIBUTE_ALIGNED(CACHELINE)
 const int32_t SizeMap::class_to_size_[kClassSizesMax] = {
-    0,
-    16,
-    32,
-    48,
-    64,
-    80,
-    96,
-    112,
-    128,
-    160,
-    192,
-    224,
-    256,
-    320,
-    384,
-    448,
-    512,
-    640,
-    768,
-    896,
-    1024,
-    2048,
-    4096,
-    8192,
-    16384,
+    0,   16,  32,  48,  64,  80,  96,  112,  128,  160,  192,  224,   256,
+    320, 384, 448, 512, 640, 768, 896, 1024, 2048, 4096, 8192, 16384,
 };
 
 // const internal::BinToken::Size internal::BinToken::Max = numeric_limits<uint32_t>::max();
@@ -212,17 +189,67 @@ int Runtime::epollPwait(int __epfd, struct epoll_event *__events, int __maxevent
   return mesh::real::epoll_pwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
 
-int Runtime::sigAction(int signum, const struct sigaction *act, struct sigaction *oldact) {
+static struct sigaction sigsegv_action;
+static mutex sigsegv_lock;
+
+int Runtime::sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) {
   if (unlikely(mesh::real::sigaction == nullptr))
     mesh::real::init();
 
-  return mesh::real::sigaction(signum, act, oldact);
+  if (signum != SIGSEGV)
+    return mesh::real::sigaction(signum, act, oldact);
+
+  // if a user is trying to install a segfault handler, record that
+  // here to proxy to later.
+  lock_guard<mutex> lock(sigsegv_lock);
+
+  if (oldact)
+    memcpy(oldact, &sigsegv_action, sizeof(sigsegv_action));
+
+  if (act == nullptr)
+    memset(&sigsegv_action, 0, sizeof(sigsegv_action));
+  else
+    memcpy(&sigsegv_action, act, sizeof(sigsegv_action));
+
+  return 0;
 }
 
-int Runtime::sigProcMask(int how, const sigset_t *set, sigset_t *oldset) {
+int Runtime::sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
   if (unlikely(mesh::real::sigprocmask == nullptr))
     mesh::real::init();
 
+  lock_guard<mutex> lock(sigsegv_lock);
+
+  // TODO: ensure we never mask SIGSEGV
+
   return mesh::real::sigprocmask(how, set, oldset);
+}
+
+void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
+  debug("mesh segfault handler");
+
+  // okToProceed is a barrier that ensures any in-proress meshing has
+  // completed, and the reason for the fault was 'just' a meshing
+  if (siginfo->si_code == SEGV_ACCERR && runtime().heap().okToProceed(siginfo->si_addr)) {
+    // TODO: collect stats on how often this happens
+    return;
+  }
+
+  // TODO: check + call program's handler
+}
+
+void Runtime::installSegfaultHandler() {
+  struct sigaction action;
+  struct sigaction old_action;
+
+  memset(&action, 0, sizeof(action));
+  memset(&old_action, 0, sizeof(old_action));
+
+  action.sa_sigaction = segfaultHandler;
+  action.sa_flags = SA_SIGINFO | SA_NODEFER;
+  auto err = mesh::real::sigaction(SIGSEGV, &action, &old_action);
+  hard_assert(err == 0);
+
+  // TODO: check old_action is 'NULL'
 }
 }  // namespace mesh

@@ -76,11 +76,12 @@ public:
 
   int epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout);
   int epollPwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss);
-  int sigAction(int signum, const struct sigaction *act, struct sigaction *oldact);
-  int sigProcMask(int how, const sigset_t *set, sigset_t *oldset);
+  int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+  int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
 
   // so we can call from the libmesh init function
   void createSignalFd();
+  void installSegfaultHandler();
 
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
@@ -88,6 +89,8 @@ private:
   // for memory allocation, so if we try to do this in MeshHeaps's
   // constructor we deadlock before main even runs.
   void initThreads();
+
+  static void segfaultHandler(int sig, siginfo_t *siginfo, void *context);
 
   static void *bgThread(void *arg);
 
