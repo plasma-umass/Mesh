@@ -434,6 +434,11 @@ public:
     meshAllSizeClasses();
   }
 
+  inline bool okToProceed(void *ptr) {
+    // return inBounds(ptr);
+    return false;
+  }
+
 protected:
   static void performMeshing(void *argument) {
     MeshArguments *args = (MeshArguments *)argument;
