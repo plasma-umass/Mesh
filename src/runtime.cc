@@ -101,49 +101,6 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 }
 
 Runtime::Runtime() {
-  createSignalFd();
-}
-
-void Runtime::initInterposition() {
-  lock_guard<mutex> lock(_mutex);
-
-  if (_libcEpollWait != nullptr && _libcEpollPwait != nullptr)
-    return;
-
-  void *libcHandle = dlopen("libc.so.6", RTLD_LAZY | RTLD_NOLOAD);
-  if (libcHandle == nullptr) {
-    debug("expected libc handle");
-    abort();
-  }
-
-  auto epollWaitFn = dlsym(libcHandle, "epoll_wait");
-  if (epollWaitFn == nullptr) {
-    debug("expected epoll_wait");
-    abort();
-  }
-
-  auto epollPwaitFn = dlsym(libcHandle, "epoll_pwait");
-  if (epollPwaitFn == nullptr) {
-    debug("expected epoll_pwait");
-    abort();
-  }
-
-  auto sigActionFn = dlsym(libcHandle, "sigaction");
-  if (sigActionFn == nullptr) {
-    debug("expected sigaction");
-    abort();
-  }
-
-  auto sigProcMaskFn = dlsym(libcHandle, "sigprocmask");
-  if (sigProcMaskFn == nullptr) {
-    debug("expected sigprocmask");
-    abort();
-  }
-
-  _libcEpollWait = reinterpret_cast<EpollWaitFn>(epollWaitFn);
-  _libcEpollPwait = reinterpret_cast<EpollPwaitFn>(epollPwaitFn);
-  _libcSigAction = reinterpret_cast<SigActionFn>(sigActionFn);
-  _libcSigProcMask = reinterpret_cast<SigProcMaskFn>(sigProcMaskFn);
 }
 
 void Runtime::createSignalFd() {
@@ -152,19 +109,16 @@ void Runtime::createSignalFd() {
   sigemptyset(&mask);
   sigaddset(&mask, SIGDUMP);
 
+  mesh::real::init();
+
   /* Block signals so that they aren't handled
      according to their default dispositions */
 
-  if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1) {
-    debug("failed to block signal mask for BG thread");
-    abort();
-  }
+  auto result = mesh::real::sigprocmask(SIG_BLOCK, &mask, NULL);
+  hard_assert(result == 0);
 
   _signalFd = signalfd(-1, &mask, 0);
-  if (_signalFd == -1) {
-    debug("failed to create signal FD");
-    abort();
-  }
+  hard_assert(_signalFd >= 0);
 }
 
 void Runtime::startBgThread() {
@@ -240,47 +194,35 @@ void Runtime::allocLocalHeap() {
 }
 
 int Runtime::epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {
-  if (unlikely(_libcEpollWait == nullptr)) {
-    initInterposition();
-    if (_libcEpollWait == nullptr)
-      abort();
-  }
+  if (unlikely(mesh::real::epoll_wait == nullptr))
+    mesh::real::init();
 
   _heap.maybeMesh();
 
-  return _libcEpollWait(__epfd, __events, __maxevents, __timeout);
+  return mesh::real::epoll_wait(__epfd, __events, __maxevents, __timeout);
 }
 
 int Runtime::epollPwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
                         const __sigset_t *__ss) {
-  if (unlikely(_libcEpollPwait == nullptr)) {
-    initInterposition();
-    if (_libcEpollPwait == nullptr)
-      abort();
-  }
+  if (unlikely(mesh::real::epoll_pwait == nullptr))
+    mesh::real::init();
 
   _heap.maybeMesh();
 
-  return _libcEpollPwait(__epfd, __events, __maxevents, __timeout, __ss);
+  return mesh::real::epoll_pwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
 
 int Runtime::sigAction(int signum, const struct sigaction *act, struct sigaction *oldact) {
-  if (unlikely(_libcSigAction == nullptr)) {
-    initInterposition();
-    if (_libcSigAction == nullptr)
-      abort();
-  }
+  if (unlikely(mesh::real::sigaction == nullptr))
+    mesh::real::init();
 
-  return _libcSigAction(signum, act, oldact);
+  return mesh::real::sigaction(signum, act, oldact);
 }
 
 int Runtime::sigProcMask(int how, const sigset_t *set, sigset_t *oldset) {
-  if (unlikely(_libcSigProcMask == nullptr)) {
-    initInterposition();
-    if (_libcSigProcMask == nullptr)
-      abort();
-  }
+  if (unlikely(mesh::real::sigprocmask == nullptr))
+    mesh::real::init();
 
-  return _libcSigProcMask(how, set, oldset);
+  return mesh::real::sigprocmask(how, set, oldset);
 }
 }  // namespace mesh
