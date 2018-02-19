@@ -18,6 +18,9 @@ namespace mesh {
 namespace real {
 DEFINE_REAL(epoll_pwait);
 DEFINE_REAL(epoll_wait);
+
+DEFINE_REAL(pthread_create);
+
 DEFINE_REAL(sigaction);
 DEFINE_REAL(sigprocmask);
 
@@ -29,6 +32,11 @@ void init() {
   if (initialized)
     return;
   initialized = true;
+
+  INIT_REAL(epoll_pwait, RTLD_NEXT);
+  INIT_REAL(epoll_wait, RTLD_NEXT);
+
+  INIT_REAL(pthread_create, RTLD_NEXT);
 
   INIT_REAL(sigaction, RTLD_NEXT);
   INIT_REAL(sigprocmask, RTLD_NEXT);

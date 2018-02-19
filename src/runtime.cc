@@ -80,6 +80,34 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 Runtime::Runtime() {
 }
 
+int Runtime::createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg) {
+  lock_guard<Runtime> lock(*this);
+
+  if (mesh::real::pthread_create == nullptr)
+    mesh::real::init();
+
+  void *threadArgsBuf = mesh::internal::Heap().malloc(sizeof(StartThreadArgs));
+  d_assert(threadArgsBuf != nullptr);
+  StartThreadArgs *threadArgs = new (threadArgsBuf) StartThreadArgs(this, startRoutine, arg);
+
+  return mesh::real::pthread_create(thread, attr, reinterpret_cast<PthreadFn>(startThread), threadArgs);
+}
+
+void *Runtime::startThread(StartThreadArgs *threadArgs) {
+  d_assert(threadArgs != nullptr);
+
+  Runtime *runtime = threadArgs->runtime;
+  PthreadFn startRoutine = threadArgs->startRoutine;
+  void *arg = threadArgs->arg;
+
+  mesh::internal::Heap().free(threadArgs);
+  threadArgs = nullptr;
+
+  runtime->installSegfaultHandler();
+
+  return startRoutine(arg);
+}
+
 void Runtime::createSignalFd() {
   sigset_t mask;
 
@@ -226,16 +254,15 @@ int Runtime::sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
 }
 
 void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
-  debug("mesh segfault handler");
-
   // okToProceed is a barrier that ensures any in-proress meshing has
   // completed, and the reason for the fault was 'just' a meshing
   if (siginfo->si_code == SEGV_ACCERR && runtime().heap().okToProceed(siginfo->si_addr)) {
-    debug("TODO: trapped access violation from meshing, log stat\n");
+    // debug("TODO: trapped access violation from meshing, log stat\n");
     return;
   }
 
-  debug("TODO: check for + call program's\n");
+  debug("TODO: check for + call program's handler\n");
+  abort();
 }
 
 void Runtime::installSegfaultHandler() {
