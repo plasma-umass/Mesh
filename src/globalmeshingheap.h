@@ -451,15 +451,15 @@ public:
   }
 
 protected:
-  static void performMeshing(void *argument) {
-    MeshArguments *args = (MeshArguments *)argument;
+  void performMeshing(internal::vector<std::pair<MiniHeap *, MiniHeap *>> &mergeSets) {
 
-    for (auto &mergeSet : args->mergeSets) {
-      // merge into the one with a larger mesh count
+    for (auto &mergeSet : mergeSets) {
+      // merge _into_ the one with a larger mesh count, potentiall
+      // swapping the order of the pair
       if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
         mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
 
-      args->instance->meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
+      meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
     }
   }
 
@@ -475,8 +475,7 @@ protected:
     const auto start = std::chrono::high_resolution_clock::now();
     size_t partialCount = 0;
 
-    MeshArguments args;
-    args.instance = this;
+    internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
 
     // first, clear out any free memory we might have
     for (size_t i = 0; i < NumBins; i++) {
@@ -491,7 +490,7 @@ protected:
         // std::allocator_arg, internal::allocator,
         [&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
           if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<0>(miniheaps)->isMeshingCandidate())
-            args.mergeSets.push_back(std::move(miniheaps));
+            mergeSets.push_back(std::move(miniheaps));
         });
 
     for (size_t i = 0; i < NumBins; i++) {
@@ -503,22 +502,21 @@ protected:
     }
 
     // more than ~ 1 MB saved
-    _lastMeshEffective = args.mergeSets.size() > 256;
+    _lastMeshEffective = mergeSets.size() > 256;
 
-    if (args.mergeSets.size() == 0) {
+    if (mergeSets.size() == 0) {
       // debug("nothing to mesh.");
       return;
     }
 
-    _stats.meshCount += args.mergeSets.size();
+    _stats.meshCount += mergeSets.size();
 
-    // TODO: run the actual meshing with the world stopped
-    performMeshing(&args);
+    performMeshing(mergeSets);
 
     _lastMesh = std::chrono::high_resolution_clock::now();
 
     // const std::chrono::duration<double> duration = _lastMesh - start;
-    // debug("mesh took %f, found %zu", duration.count(), args.mergeSets.size());
+    // debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
   }
 
   const size_t _maxObjectSize;
