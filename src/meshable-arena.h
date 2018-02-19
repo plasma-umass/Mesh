@@ -182,8 +182,8 @@ public:
     return result;
   }
 
-  // must be called with the world stopped
-  void mesh(void *keep, void *remove, size_t sz);
+  void beginMesh(void *keep, void *remove, size_t sz);
+  void finalizeMesh(void *keep, void *remove, size_t sz);
 
   const internal::Bitmap &bitmap() const {
     return _bitmap;
