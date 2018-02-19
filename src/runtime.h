@@ -12,6 +12,8 @@
 
 #include "internal.h"
 
+#include "real.h"
+
 #include "globalmeshingheap.h"
 #include "localmeshingheap.h"
 #include "lockedheap.h"
@@ -24,16 +26,9 @@ using std::condition_variable;
 
 namespace mesh {
 
-//static const int NBins = 11;  // 16Kb max object size
+// static const int NBins = 11;  // 16Kb max object size
 static const int NBins = 25;  // 16Kb max object size
 static const int MeshPeriod = 10000;
-
-typedef int (*EpollWaitFn)(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout);
-typedef int (*EpollPwaitFn)(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
-                            const __sigset_t *__ss);
-
-typedef int (*SigActionFn)(int signum, const struct sigaction *act, struct sigaction *oldact);
-typedef int (*SigProcMaskFn)(int how, const sigset_t *set, sigset_t *oldset);
 
 // The global heap manages the spans that back MiniHeaps as well as
 // large allocations.
@@ -84,7 +79,9 @@ public:
   int sigAction(int signum, const struct sigaction *act, struct sigaction *oldact);
   int sigProcMask(int how, const sigset_t *set, sigset_t *oldset);
 
-  void initInterposition();
+  // so we can call from the libmesh init function
+  void createSignalFd();
+
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
   // happens lazily, as the dynamic linker's dlopen calls into malloc
@@ -92,7 +89,6 @@ private:
   // constructor we deadlock before main even runs.
   void initThreads();
 
-  void createSignalFd();
   static void *bgThread(void *arg);
 
   static void allocLocalHeap();
@@ -104,11 +100,6 @@ private:
   GlobalHeap _heap{};
   mutex _mutex{};
   int _signalFd{-2};
-
-  EpollWaitFn _libcEpollWait{nullptr};
-  EpollPwaitFn _libcEpollPwait{nullptr};
-  SigActionFn _libcSigAction{nullptr};
-  SigProcMaskFn _libcSigProcMask{nullptr};
 };
 
 // get a reference to the Runtime singleton

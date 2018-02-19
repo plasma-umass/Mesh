@@ -10,7 +10,9 @@
 using namespace mesh;
 
 static __attribute__((constructor)) void libmesh_init() {
-  runtime().initInterposition();
+  mesh::real::init();
+
+  runtime().createSignalFd();
 
   char *meshPeriodStr = getenv("MESH_PERIOD_SECS");
   if (meshPeriodStr) {
