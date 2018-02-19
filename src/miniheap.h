@@ -16,6 +16,8 @@
 
 #include "heaplayers.h"
 
+#undef MESH_EXTRA_BITS
+
 namespace mesh {
 
 template <size_t MaxFreelistLen = sizeof(uint8_t) << 8,  // AKA max # of objects per miniheap
@@ -34,15 +36,19 @@ public:
         _span{reinterpret_cast<char *>(span)},
         _meshCount(1),
         _attached(true),
-        _bitmap(maxCount()),
+        _bitmap(maxCount())
+#ifdef MESH_EXTRABITS
+        ,
         _bitmap0(maxCount()),
         _bitmap1(maxCount()),
         _bitmap2(maxCount()),
-        _bitmap3(maxCount()) {
+        _bitmap3(maxCount())
+#endif
+  {
     if (!_span[0])
       abort();
 
-    //debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
+    // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
                  maxCount(), _objectSize);
     d_assert_msg(expectedSpanSize == dynamicSpanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
@@ -53,7 +59,7 @@ public:
 
     d_assert(_span[1] == nullptr);
 
-    // dumpDebug();
+    dumpDebug();
   }
 
   ~MiniHeapBase() {
@@ -62,8 +68,8 @@ public:
   }
 
   void printOccupancy() const {
-    mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"mesh-count\": %d, \"bitmap\": \"%s\"}\n", this, objectSize(),
-                maxCount(), meshCount(), _bitmap.to_string().c_str());
+    mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"mesh-count\": %d, \"bitmap\": \"%s\"}\n",
+                this, objectSize(), maxCount(), meshCount(), _bitmap.to_string().c_str());
   }
 
   // always "localMalloc"
@@ -72,7 +78,7 @@ public:
       dumpDebug();
       d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached.load(), isExhausted());
     }
-    //d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
+    // d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
     auto off = _freelist.pop();
     // mesh::debug("%p: ma %u", this, off);
@@ -278,6 +284,7 @@ public:
     const ssize_t off = getOff(ptr);
     d_assert(off >= 0);
 
+#ifdef MESH_EXTRA_BITS
     switch (type) {
     case MESH_BIT_0:
       return _bitmap0.isSet(off);
@@ -290,6 +297,7 @@ public:
     default:
       break;
     }
+#endif
     d_assert(false);
     return -1;
   }
@@ -298,6 +306,7 @@ public:
     const ssize_t off = getOff(ptr);
     d_assert(off >= 0);
 
+#ifdef MESH_EXTRA_BITS
     switch (type) {
     case MESH_BIT_0:
       return _bitmap0.tryToSet(off);
@@ -310,6 +319,7 @@ public:
     default:
       break;
     }
+#endif
     d_assert(false);
     return -1;
   }
@@ -318,6 +328,7 @@ public:
     const ssize_t off = getOff(ptr);
     d_assert(off >= 0);
 
+#ifdef MESH_EXTRA_BITS
     switch (type) {
     case MESH_BIT_0:
       return _bitmap0.unset(off);
@@ -330,6 +341,7 @@ public:
     default:
       break;
     }
+#endif
     d_assert(false);
     return -1;
   }
@@ -387,24 +399,29 @@ protected:
   char *_span[MaxMeshes];
   internal::BinToken _token;
 
-  atomic<uint32_t> _inUseCount{0}; // 60
+  atomic<uint32_t> _inUseCount{0};  // 60
 
   mutable uint32_t _refCount{0};
-  uint32_t _meshCount;// : 7;
-  atomic<uint32_t> _attached;// : 1;
-  internal::Bitmap _bitmap; // 16 bytes
-  internal::Bitmap _bitmap0; // 16 bytes
-  internal::Bitmap _bitmap1; // 16 bytes
-  internal::Bitmap _bitmap2; // 16 bytes
-  internal::Bitmap _bitmap3; // 16 bytes
+  uint32_t _meshCount;         // : 7;
+  atomic<uint32_t> _attached;  // : 1;
+  internal::Bitmap _bitmap;    // 16 bytes
+#ifdef MESH_EXTRA_BITS
+  internal::Bitmap _bitmap0;  // 16 bytes
+  internal::Bitmap _bitmap1;  // 16 bytes
+  internal::Bitmap _bitmap2;  // 16 bytes
+  internal::Bitmap _bitmap3;  // 16 bytes
+#endif
 };
 
 typedef MiniHeapBase<> MiniHeap;
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
-//static_assert(sizeof(MiniHeap) == 96, "MiniHeap too big!");
+#ifdef MESH_EXTRA_BITS
 static_assert(sizeof(MiniHeap) == 160, "MiniHeap too big!");
-//static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
+#else
+static_assert(sizeof(MiniHeap) == 96, "MiniHeap too big!");
+#endif
+// static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 
 }  // namespace mesh
 
