@@ -130,6 +130,7 @@ public:
     if (unlikely(entry == _vmaMap.end())) {
       return false;
     }
+    // FIXME: this isn't right -- we want inclusion not exact match
     return true;
   }
 
