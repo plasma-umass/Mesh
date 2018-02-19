@@ -26,6 +26,13 @@ static char *s2;
 static atomic<int> ShouldExit;
 static atomic<int> ShouldContinueTest;
 
+// we need to wrap pthread_create so that we can safely implement a
+// stop-the-world quiescent period for the copy/mremap phase of
+// meshing -- copied from libmesh.cc
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg) {
+  return mesh::runtime().createThread(thread, attr, startRoutine, arg);
+}
+
 static void writerThread() {
   ShouldContinueTest = 1;
 
@@ -121,13 +128,13 @@ static void meshTestConcurrentWrite(bool invert) {
   char *s3 = s1 + (ObjCount - 1) * StrLen;
   ASSERT_TRUE(strcmp(s2, s3) == 0);
 
+  ShouldExit = 1;
+  writer.join();
+
   // modify the second string, ensure the modification shows up on
   // string 3 (would fail if the two miniheaps weren't meshed)
   s2[0] = 'b';
   ASSERT_EQ(s3[0], 'b');
-
-  ShouldExit = 1;
-  writer.join();
 
   // now free the objects by going through the global heap -- it
   // should redirect both objects to the same miniheap
