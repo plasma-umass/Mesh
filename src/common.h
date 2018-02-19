@@ -49,6 +49,15 @@ using std::mutex;
 #define d_assert(expr)
 #endif
 
+// like d_assert, but will not be removed in release builds
+#define hard_assert_msg(expr, fmt, ...) \
+  ((likely(expr))                       \
+       ? static_cast<void>(0)           \
+       : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, __LINE__, fmt, __VA_ARGS__))
+#define hard_assert(expr)                \
+  ((likely(expr)) ? static_cast<void>(0) \
+                  : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, __LINE__, ""))
+
 namespace mesh {
 
 void debug(const char *fmt, ...);
@@ -59,7 +68,6 @@ static constexpr size_t kClassSizesMax = 96;
 static constexpr size_t kAlignment = 8;
 static constexpr int kMinAlign = 16;
 static constexpr int kPageSize = 4096;
-
 
 // inline constexpr size_t class2Size(const int i) {
 //   return static_cast<size_t>(1ULL << (i + staticlog(MinObjectSize)));
@@ -174,7 +182,6 @@ private:
     }
   }
 
-
   // Mapping from size class to max size storable in that class
   static const int32_t class_to_size_[kClassSizesMax];
 
@@ -203,7 +210,7 @@ public:
   }
 
   // Get the byte-size for a specified class
-  //static inline int32_t ATTRIBUTE_ALWAYS_INLINE ByteSizeForClass(uint32_t cl) {
+  // static inline int32_t ATTRIBUTE_ALWAYS_INLINE ByteSizeForClass(uint32_t cl) {
   static inline size_t ATTRIBUTE_ALWAYS_INLINE ByteSizeForClass(int32_t cl) {
     return class_to_size_[static_cast<uint32_t>(cl)];
   }
