@@ -220,7 +220,7 @@ int Runtime::sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
 
   lock_guard<mutex> lock(sigsegv_lock);
 
-  // TODO: ensure we never mask SIGSEGV
+  debug("TODO: ensure we never mask SIGSEGV\n");
 
   return mesh::real::sigprocmask(how, set, oldset);
 }
@@ -231,11 +231,11 @@ void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
   // okToProceed is a barrier that ensures any in-proress meshing has
   // completed, and the reason for the fault was 'just' a meshing
   if (siginfo->si_code == SEGV_ACCERR && runtime().heap().okToProceed(siginfo->si_addr)) {
-    // TODO: collect stats on how often this happens
+    debug("TODO: trapped access violation from meshing, log stat\n");
     return;
   }
 
-  // TODO: check + call program's handler
+  debug("TODO: check for + call program's\n");
 }
 
 void Runtime::installSegfaultHandler() {
@@ -250,6 +250,6 @@ void Runtime::installSegfaultHandler() {
   auto err = mesh::real::sigaction(SIGSEGV, &action, &old_action);
   hard_assert(err == 0);
 
-  // TODO: check old_action is 'NULL'
+  debug("TODO: check old_action is NULL");
 }
 }  // namespace mesh
