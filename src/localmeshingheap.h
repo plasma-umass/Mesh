@@ -80,12 +80,13 @@ public:
     // if (unlikely(!mh->isAttached() || mh->isExhausted())) {
     //   int attached = mh->isAttached();
     //   int exhausted = mh->isExhausted();
-    //   mesh::debug("LocalHeap(sz: %zu): expecting failure %d %d (%zu/%zu)", sz, attached, exhausted, sizeMax, mh->objectSize());
+    //   mesh::debug("LocalHeap(sz: %zu): expecting failure %d %d (%zu/%zu)", sz, attached, exhausted, sizeMax,
+    //   mh->objectSize());
     //   // mh->dumpDebug();
     //   // abort();
     // }
 
-    void *ptr = mh->malloc(0); // arg doesn't matter -- MiniHeap knows the size
+    void *ptr = mh->malloc(0);  // arg doesn't matter -- MiniHeap knows the size
     if (unlikely(mh->isExhausted())) {
       mh->detach();
       _current[sizeClass] = nullptr;
@@ -95,15 +96,12 @@ public:
   }
 
   inline void free(void *ptr) {
-    for (size_t i = 0; i < NumBins; i++) {
-      const auto curr = _current[i];
-      if (curr && curr->contains(ptr)) {
-        curr->localFree(ptr, _prng, _mwc);
-        return;
-      }
+    auto mh = _global->UNSAFEMiniheapFor(ptr);
+    if (likely(mh->isOwnedBy(pthread_self()))) {
+      mh->localFree(ptr, _prng, _mwc);
+    } else {
+      _global->free(ptr);
     }
-
-    _global->free(ptr);
   }
 
   inline size_t getSize(void *ptr) {
