@@ -59,7 +59,7 @@ public:
 
     d_assert(_span[1] == nullptr);
 
-    dumpDebug();
+    // dumpDebug();
   }
 
   ~MiniHeapBase() {
