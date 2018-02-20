@@ -5,6 +5,8 @@
 #ifndef MESH__MINIHEAP_H
 #define MESH__MINIHEAP_H
 
+#include <pthread.h>
+
 #include <atomic>
 #include <random>
 
@@ -35,7 +37,7 @@ public:
         _spanSize(dynamicSpanSize()),
         _span{reinterpret_cast<char *>(span)},
         _meshCount(1),
-        _attached(true),
+        _attached(pthread_self()),
         _bitmap(maxCount())
 #ifdef MESH_EXTRABITS
         ,
@@ -177,7 +179,7 @@ public:
 
   inline void reattach(mt19937_64 &prng, MWC &fastPrng) {
     _freelist.init(prng, fastPrng, &_bitmap);
-    _attached = true;
+    _attached = pthread_self();
     d_assert(!isExhausted());
     // if (_meshCount > 1)
     //   mesh::debug("fixme? un-mesh when reattaching");
@@ -187,12 +189,16 @@ public:
   /// "detaching" it and releasing it back to the global heap)
   inline void detach() {
     _freelist.detach();
-    _attached = false;
+    _attached = 0;
     atomic_thread_fence(memory_order_seq_cst);
   }
 
   inline bool isAttached() const {
-    return _attached;
+    return !!_attached;
+  }
+
+  inline bool isOwnedBy(pthread_t thread) const {
+    return pthread_equal(_attached, thread);
   }
 
   inline bool isEmpty() const {
@@ -403,7 +409,7 @@ protected:
 
   mutable uint32_t _refCount{0};
   uint32_t _meshCount;         // : 7;
-  atomic<uint32_t> _attached;  // : 1;
+  atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding
   internal::Bitmap _bitmap;    // 16 bytes
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;  // 16 bytes
@@ -417,9 +423,9 @@ typedef MiniHeapBase<> MiniHeap;
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
-static_assert(sizeof(MiniHeap) == 160, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 168, "MiniHeap too big!");
 #else
-static_assert(sizeof(MiniHeap) == 96, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 

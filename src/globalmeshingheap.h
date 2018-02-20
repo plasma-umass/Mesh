@@ -148,6 +148,10 @@ public:
     return _bigheap.malloc(sz);
   }
 
+  inline MiniHeap *UNSAFEMiniheapFor(const void *ptr) const {
+    return reinterpret_cast<MiniHeap *>(Super::lookup(ptr));
+  }
+
   // if the MiniHeap is non-null, its reference count is increased by one
   inline MiniHeap *miniheapFor(const void *ptr) const {
     std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
