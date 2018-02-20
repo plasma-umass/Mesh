@@ -149,7 +149,7 @@ public:
     // mesh::debug("Bitmap(%zu): %zu bytes", nelts, byteCount());
 
     // Allocate the right number of bytes.
-    _bitarray = reinterpret_cast<atomic_size_t *>(Heap::malloc(byteCount()));
+    _bitarray = reinterpret_cast<size_t *>(Heap::malloc(byteCount()));
     d_assert(_bitarray != nullptr);
 
     clear();
@@ -165,7 +165,7 @@ public:
   }
 
   const atomic_size_t *bitmap() const {
-    return _bitarray;
+    return reinterpret_cast<atomic_size_t *>(_bitarray);
   }
 
   /// Clears out the bitmap array.
@@ -238,10 +238,12 @@ public:
     uint32_t item, position;
     computeItemPosition(index, item, position);
 
+    auto atomic_bitarray = reinterpret_cast<atomic_size_t *>(_bitarray);
+
     const auto mask = getMask(position);
-    size_t oldValue = _bitarray[item];
-    while (!std::atomic_compare_exchange_weak(&_bitarray[item],  // address of word
-                                              &oldValue,         // old val
+    size_t oldValue = atomic_bitarray[item];
+    while (!std::atomic_compare_exchange_weak(&atomic_bitarray[item],  // address of word
+                                              &oldValue,               // old val
                                               oldValue & ~mask)) {
     }
 
@@ -320,10 +322,12 @@ public:
 private:
   inline bool tryToSetAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
-    size_t oldValue = _bitarray[item];
 
-    while (!std::atomic_compare_exchange_weak(&_bitarray[item],  // address of word
-                                              &oldValue,         // old val
+    auto atomic_bitarray = reinterpret_cast<atomic_size_t *>(_bitarray);
+
+    size_t oldValue = atomic_bitarray[item];
+    while (!std::atomic_compare_exchange_weak(&atomic_bitarray[item],  // address of word
+                                              &oldValue,               // old val
                                               oldValue | mask)) {
     }
 
@@ -355,7 +359,7 @@ private:
   }
 
   /// The bit array itself.
-  atomic_size_t *_bitarray{nullptr};
+  size_t *_bitarray{nullptr};
 
   /// The number of elements (bits) in the array.
   size_t _elements{0};

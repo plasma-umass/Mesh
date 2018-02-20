@@ -145,6 +145,9 @@ paper:
 src/test/fork-example: build/src/test/fork-example.o $(CONFIG)
 	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"
 
+src/test/local-alloc: src/test/local-alloc.c $(CONFIG)
+	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -Wl,-rpath,"$(PWD)"
+
 src/test/thread-example: src/test/thread.cc $(CONFIG)
 	$(CXX) -std=c++11 -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)" -lpthread
 
