@@ -137,8 +137,8 @@ public:
   inline void free(void *ptr) {
     auto entry = _vmaMap.find(ptr);
     if (unlikely(entry == _vmaMap.end())) {
-      debug("mmap: invalid free: %p", ptr);
-      abort();
+      debug("mmap: invalid free, possibly from memalign: %p", ptr);
+      // abort();
       return;
     }
 
