@@ -29,6 +29,7 @@ using std::mutex;
 #define ATTRIBUTE_HIDDEN __attribute__((visibility("hidden")))
 #define ATTRIBUTE_ALIGNED(s) __attribute__((aligned(s)))
 #define CACHELINE 64
+#define CACHELINE_ALIGNED_FN ATTRIBUTE_ALIGNED(CACHELINE)
 
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
   TypeName(const TypeName &);              \
