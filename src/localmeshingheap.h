@@ -54,19 +54,22 @@ public:
   // semiansiheap ensures we never see size == 0
   inline void *malloc(size_t sz) {
     uint32_t sizeClass = 0;
+
+    // if the size isn't in our sizemap it is a large alloc
     if (unlikely(!SizeMap::GetSizeClass(sz, &sizeClass)))
       return _global->malloc(sz);
 
-    // d_assert_msg(sz <= sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", sz, sizeMax, sizeClass);
+    d_assert_msg(sz <= sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", sz, sizeMax, sizeClass);
 
-    // d_assert(sizeMax <= _maxObjectSize);
-    // d_assert(sizeClass >= 0);
-    // d_assert(sizeClass < NumBins);
+    d_assert(sizeMax <= _maxObjectSize);
+    d_assert(sizeClass >= 0);
+    d_assert(sizeClass < NumBins);
 
-    if (unlikely(_current[sizeClass] == nullptr)) {
+    MiniHeap *mh = _current[sizeClass];
+    if (unlikely(mh == nullptr)) {
       const size_t sizeMax = getClassMaxSize(sizeClass);
 
-      MiniHeap *mh = _global->allocMiniheap(sizeMax);
+      mh = _global->allocMiniheap(sizeMax);
       d_assert(mh->isAttached());
       if (unlikely(mh == nullptr))
         abort();
@@ -76,7 +79,6 @@ public:
       d_assert(_current[sizeClass] == mh);
     }
 
-    MiniHeap *mh = _current[sizeClass];
     // if (unlikely(!mh->isAttached() || mh->isExhausted())) {
     //   int attached = mh->isAttached();
     //   int exhausted = mh->isExhausted();
@@ -86,8 +88,9 @@ public:
     //   // abort();
     // }
 
-    void *ptr = mh->malloc(0);  // arg doesn't matter -- MiniHeap knows the size
-    if (unlikely(mh->isExhausted())) {
+    bool isExhausted = false;
+    void *ptr = mh->malloc(isExhausted);
+    if (unlikely(isExhausted)) {
       mh->detach();
       _current[sizeClass] = nullptr;
     }
