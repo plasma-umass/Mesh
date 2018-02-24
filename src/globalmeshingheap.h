@@ -31,8 +31,6 @@ public:
 
 template <typename BigHeap,                      // for large allocations
           int NumBins,                           // number of size classes
-          int (*getSizeClass)(const size_t),     // same as for local
-          size_t (*getClassMaxSize)(const int),  // same as for local
           int DefaultMeshPeriod,                 // perform meshing on average once every MeshPeriod frees
           size_t MinStringLen = 8UL>
 class GlobalMeshingHeap : public MeshableArena {
@@ -40,8 +38,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(GlobalMeshingHeap);
   typedef MeshableArena Super;
 
-  // static_assert(getClassMaxSize(NumBins - 1) == kMaxSize, "expected 16k max object size");
-  // static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
   static_assert(HL::gcd<BigHeap::Alignment, Alignment>::value == Alignment,
                 "expected BigHeap to have 16-byte alignment");
 
@@ -54,7 +50,7 @@ public:
   enum { Alignment = 16 };
 
   GlobalMeshingHeap()
-      : _maxObjectSize(getClassMaxSize(NumBins - 1)),
+      : _maxObjectSize(SizeMap::ByteSizeForClass(NumBins - 1)),
         _prng(internal::seed()),
         _fastPrng(internal::seed(), internal::seed()),
         _lastMesh{std::chrono::high_resolution_clock::now()} {
@@ -87,8 +83,8 @@ public:
 
     d_assert(objectSize <= _maxObjectSize);
 
-    const int sizeClass = getSizeClass(objectSize);
-    const size_t sizeMax = getClassMaxSize(sizeClass);
+    const int sizeClass = SizeMap::SizeClass(objectSize);
+    const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
     d_assert_msg(objectSize == sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize, sizeMax,
                  sizeClass);
@@ -135,14 +131,12 @@ public:
     return mh;
   }
 
+  // large, page-multiple allocations
   void *malloc(size_t sz) {
+#ifndef NDEBUG
     if (unlikely(sz <= kMaxSize))
       abort();
-    // const int sizeClass = getSizeClass(sz);
-    // const size_t sizeMax = getClassMaxSize(sizeClass);
-
-    // if (unlikely(sizeMax <= _maxObjectSize))
-    //   abort();
+#endif
 
     std::lock_guard<std::mutex> lock(_bigMutex);
     return _bigheap.malloc(sz);
@@ -174,7 +168,7 @@ public:
 
   // called with lock held
   void freeMiniheapAfterMeshLocked(MiniHeap *mh, bool untrack = true) {
-    const auto sizeClass = getSizeClass(mh->objectSize());
+    const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
     if (untrack)
       untrackMiniheapLocked(sizeClass, mh);
 
@@ -227,7 +221,7 @@ public:
     // unreffed by the bin tracker
     // mh->unref();
 
-    const auto szClass = getSizeClass(mh->objectSize());
+    const auto szClass = SizeMap::SizeClass(mh->objectSize());
 
     bool shouldFlush = false;
     {
@@ -427,7 +421,7 @@ public:
     // make sure we adjust what bin the destination is in -- it might
     // now be full and not a candidate for meshing
     dst->ref();
-    _littleheaps[getSizeClass(dst->objectSize())].postFree(dst);
+    _littleheaps[SizeMap::SizeClass(dst->objectSize())].postFree(dst);
     freeMiniheapAfterMeshLocked(src);
     src = nullptr;
   }

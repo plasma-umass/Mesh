@@ -35,7 +35,7 @@ using std::mutex;
   TypeName(const TypeName &);              \
   void operator=(const TypeName &)
 
-// dynamic (runtime) assert
+// runtime debug-level asserts
 #ifndef NDEBUG
 #define d_assert_msg(expr, fmt, ...) \
   ((likely(expr))                    \
@@ -50,7 +50,7 @@ using std::mutex;
 #define d_assert(expr)
 #endif
 
-// like d_assert, but will not be removed in release builds
+// like d_assert, but still executed in release builds
 #define hard_assert_msg(expr, fmt, ...) \
   ((likely(expr))                       \
        ? static_cast<void>(0)           \
@@ -61,27 +61,17 @@ using std::mutex;
 
 namespace mesh {
 
+// logging
 void debug(const char *fmt, ...);
 
-static constexpr size_t MinObjectSize = 16;
+static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;
 static constexpr size_t kClassSizesMax = 96;
 static constexpr size_t kAlignment = 8;
 static constexpr int kMinAlign = 16;
 static constexpr int kPageSize = 4096;
 
-// inline constexpr size_t class2Size(const int i) {
-//   return static_cast<size_t>(1ULL << (i + staticlog(MinObjectSize)));
-// }
-
-// inline int size2Class(const size_t sz) {
-//   return static_cast<int>(HL::ilog2((sz < 8) ? 8 : sz) - staticlog(MinObjectSize));
-// }
-
 namespace internal {
-
-void StopTheWorld() noexcept;
-void StartTheWorld() noexcept;
 
 inline static mutex *getSeedMutex() {
   static char muBuf[sizeof(mutex)];
@@ -221,15 +211,6 @@ public:
     return class_to_size_[cl];
   }
 };
-
-inline size_t ATTRIBUTE_ALWAYS_INLINE class2Size(const int i) {
-  return SizeMap::ByteSizeForClass(i);
-}
-
-inline int ATTRIBUTE_ALWAYS_INLINE size2Class(const size_t sz) {
-  return SizeMap::SizeClass(sz);
-}
-
 }  // namespace mesh
 
 #endif  // MESH__COMMON_H

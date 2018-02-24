@@ -28,8 +28,6 @@ public:
 };
 
 template <int NumBins,                           // number of size classes
-          int (*getSizeClass)(const size_t),     // same as for global
-          size_t (*getClassMaxSize)(const int),  // same as for global
           int MeshPeriod,                        // perform meshing on average once every MeshPeriod frees
           typename GlobalHeap>
 class LocalMeshingHeap {
@@ -40,11 +38,10 @@ public:
   enum { Alignment = 16 };
 
   LocalMeshingHeap(GlobalHeap *global)
-      : _maxObjectSize(getClassMaxSize(NumBins - 1)),
+    : _maxObjectSize(SizeMap::ByteSizeForClass(NumBins - 1)),
         _prng(internal::seed()),
         _mwc(internal::seed(), internal::seed()),
         _global(global) {
-    // static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
     for (auto i = 0; i < NumBins; i++) {
       _current[i] = nullptr;
     }
@@ -61,7 +58,7 @@ public:
 
     MiniHeap *mh = _current[sizeClass];
     if (unlikely(mh == nullptr)) {
-      const size_t sizeMax = getClassMaxSize(sizeClass);
+      const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
       mh = _global->allocMiniheap(sizeMax);
       d_assert(mh->isAttached());

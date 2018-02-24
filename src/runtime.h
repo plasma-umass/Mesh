@@ -35,17 +35,15 @@ static const int MeshPeriod = 10000;
 
 // The global heap manages the spans that back MiniHeaps as well as
 // large allocations.
-class GlobalHeap : public GlobalMeshingHeap<mesh::MmapHeap, NBins, mesh::size2Class, mesh::class2Size, MeshPeriod> {};
+class GlobalHeap : public GlobalMeshingHeap<mesh::MmapHeap, NBins, MeshPeriod> {};
 
 // Fewer buckets than regular KingsleyHeap (to ensure multiple objects
 // fit in the 128Kb spans used by MiniHeaps).
 class LocalHeap
-    : public SemiANSIHeap<LocalMeshingHeap<NBins, mesh::size2Class, mesh::class2Size, MeshPeriod, GlobalHeap>,
-                          GlobalHeap> {
+    : public SemiANSIHeap<LocalMeshingHeap<NBins, MeshPeriod, GlobalHeap>, GlobalHeap> {
 private:
   DISALLOW_COPY_AND_ASSIGN(LocalHeap);
-  typedef SemiANSIHeap<LocalMeshingHeap<NBins, mesh::size2Class, mesh::class2Size, MeshPeriod, GlobalHeap>, GlobalHeap>
-      SuperHeap;
+  typedef SemiANSIHeap<LocalMeshingHeap<NBins, MeshPeriod, GlobalHeap>, GlobalHeap> SuperHeap;
 
 public:
   explicit LocalHeap(GlobalHeap *global) : SuperHeap(global) {
