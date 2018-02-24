@@ -64,8 +64,13 @@ public:
     for (size_t i = 0, off = _off; i < objectCount; i++) {
       // if we were passed in a bitmap and the current object is
       // already allocated, don't add its offset to the freelist
-      if (bitmap != nullptr && bitmap->isSet(i))
-        continue;
+      if (bitmap != nullptr) {
+        if (bitmap->isSet(i)) {
+          continue;
+        } else {
+          bitmap->tryToSet(i);
+        }
+      }
 
       d_assert(off < objectCount);
       _list[off++] = i;
@@ -93,6 +98,11 @@ public:
 
   inline size_t maxCount() const {
     return _maxCount;
+  }
+
+  // number of items in the list
+  inline size_t length() const {
+    return _maxCount - _off;
   }
 
   // Pushing an element onto the freelist does a round of the

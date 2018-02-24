@@ -50,6 +50,11 @@ public:
     if (!_span[0])
       abort();
 
+    // proactively set all the objects to 'in-use' when pulled out of
+    // the bitmap into the freelist.  This avoids frobbing the atomic
+    // bitmap and inUseCounts in the malloc fastpath
+    _inUseCount += _freelist.length();
+
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
                  maxCount(), _objectSize);
@@ -91,12 +96,21 @@ public:
     return ptr;
   }
 
+  /// for testing only
+  void freeEntireFreelistExcept(void *exception) {
+    bool isExhausted = false;
+    while (!isExhausted) {
+      auto off = _freelist.pop(isExhausted);
+      auto ptr = mallocAt(off);
+      if (ptr != exception)
+        free(ptr);
+    }
+  }
+
   inline void localFree(void *ptr, mt19937_64 &prng, MWC &mwc) {
     const ssize_t freedOff = getOff(ptr);
 
     _freelist.push(freedOff, prng, mwc);
-    _bitmap.unset(freedOff);
-    _inUseCount--;
   }
 
   inline void free(void *ptr) {
@@ -115,12 +129,16 @@ public:
     // this would be bad
     d_assert(src != this);
 
+    mesh::debug("CONSIMING %d\n", src->inUseCount());
+
     // for each object in src, copy it to our backing span + update
     // our bitmap and in-use count
     for (auto const &off : src->bitmap()) {
       d_assert(!_bitmap.isSet(off));
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize());
-      void *dstObject = mallocAt(off);
+      mesh::debug("mallocing at %d\n", off);
+      // need to ensure we update the bitmap and in-use count
+      void *dstObject = mallocAtWithBitmap(off);
       d_assert(dstObject != nullptr);
       memcpy(dstObject, srcObject, objectSize());
     }
@@ -176,8 +194,15 @@ public:
   }
 
   inline void reattach(mt19937_64 &prng, MWC &fastPrng) {
-    _freelist.init(prng, fastPrng, &_bitmap);
     _attached = pthread_self();
+
+    _freelist.init(prng, fastPrng, &_bitmap);
+
+    // proactively set all the objects to 'in-use' when pulled out of
+    // the bitmap into the freelist.  This avoids frobbing the atomic
+    // bitmap and inUseCounts in the malloc fastpath
+    _inUseCount += _freelist.length();
+
     d_assert(!isExhausted());
     // if (_meshCount > 1)
     //   mesh::debug("fixme? un-mesh when reattaching");
@@ -257,8 +282,7 @@ public:
     _token = token;
   }
 
-  /// public for meshTest only
-  inline void *mallocAt(size_t off) {
+  inline void *mallocAtWithBitmap(size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
@@ -267,6 +291,11 @@ public:
 
     _inUseCount++;
 
+    return mallocAt(off);
+  }
+
+  /// public for meshTest only
+  inline void *mallocAt(size_t off) {
     return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
   }
 
