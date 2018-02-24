@@ -59,12 +59,6 @@ public:
     if (unlikely(!SizeMap::GetSizeClass(sz, &sizeClass)))
       return _global->malloc(sz);
 
-    d_assert_msg(sz <= sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", sz, sizeMax, sizeClass);
-
-    d_assert(sizeMax <= _maxObjectSize);
-    d_assert(sizeClass >= 0);
-    d_assert(sizeClass < NumBins);
-
     MiniHeap *mh = _current[sizeClass];
     if (unlikely(mh == nullptr)) {
       const size_t sizeMax = getClassMaxSize(sizeClass);
