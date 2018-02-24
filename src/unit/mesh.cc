@@ -42,6 +42,9 @@ static void meshTest(bool invert) {
   ASSERT_TRUE(s1 != nullptr);
   ASSERT_TRUE(s2 != nullptr);
 
+  mh1->freeEntireFreelistExcept(s1);
+  mh2->freeEntireFreelistExcept(s2);
+
   // fill in the strings, set the trailing null byte
   memset(s1, 'A', StrLen);
   memset(s2, 'Z', StrLen);
