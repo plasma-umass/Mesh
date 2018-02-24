@@ -32,11 +32,7 @@ void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RN
   }
 }
 
-extern inline int __attribute__((__gnu_inline__, __always_inline__, __artificial__)) _rdrand64_step(size_t *ptr) {
-  return __builtin_ia32_rdrand64_step((unsigned long long *)ptr);
-}
-
-template <size_t MaxFreelistLen = sizeof(uint8_t) << 8, typename fl_off_t = uint8_t>
+template <size_t MaxFreelistLen = sizeof(uint8_t) << 8, bool EnableShuffle = false, typename fl_off_t = uint8_t>
 class Freelist {
 private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
@@ -75,8 +71,10 @@ public:
       _list[off++] = i;
     }
 
-    // mwcShuffle(&_list[0], &_list[objectCount], fastPrng);
-    std::shuffle(&_list[_off], &_list[objectCount], prng);
+    if (EnableShuffle) {
+      // mwcShuffle(&_list[0], &_list[objectCount], fastPrng);
+      std::shuffle(&_list[_off], &_list[objectCount], prng);
+    }
   }
 
   void detach() {
@@ -100,18 +98,20 @@ public:
     d_assert(_off > 0);  // we must have at least 1 free space in the list
     _list[--_off] = freedOff;
 
-    // size_t swapOff;
-    // if (mesh::internal::SlowButAccurateRandom) {
-    //   // endpoint is _inclusive_, so we subtract 1 from maxCount since
-    //   // we're dealing with 0-indexed offsets
-    //   std::uniform_int_distribution<size_t> distribution(_off, maxCount() - 1);
+    if (EnableShuffle) {
+      size_t swapOff;
+      if (mesh::internal::SlowButAccurateRandom) {
+        // endpoint is _inclusive_, so we subtract 1 from maxCount since
+        // we're dealing with 0-indexed offsets
+        std::uniform_int_distribution<size_t> distribution(_off, maxCount() - 1);
 
-    //   swapOff = distribution(prng);
-    // } else {
-    //   swapOff = mwc.inRange(_off, maxCount() - 1);
-    // }
+        swapOff = distribution(prng);
+      } else {
+        swapOff = mwc.inRange(_off, maxCount() - 1);
+      }
 
-    // std::swap(_list[_off], _list[swapOff]);
+      std::swap(_list[_off], _list[swapOff]);
+    }
   }
 
   inline size_t pop() {
