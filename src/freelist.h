@@ -32,7 +32,7 @@ void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RN
   }
 }
 
-template <size_t MaxFreelistLen = sizeof(uint8_t) << 8, bool EnableShuffle = false, typename fl_off_t = uint8_t>
+template <size_t MaxFreelistLen = sizeof(uint8_t) << 8, bool EnableShuffle = true, typename fl_off_t = uint8_t>
 class Freelist {
 private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
