@@ -11,17 +11,15 @@
 
 using namespace mesh;
 
-#define roundtrip(n) ASSERT_TRUE(n == class2Size(size2Class(n)))
-#define rt_debug(n) debug("%d c2s: %zu s2c: %d", n, class2Size(size2Class(n)), size2Class(n))
+#define roundtrip(n) ASSERT_TRUE(n == SizeMap::ByteSizeForClass(SizeMap::SizeClass(n)))
+#define rt_debug(n) debug("%d c2s: %zu s2c: %d", n, SizeMap::ByteSizeForClass(SizeMap::SizeClass(n)), SizeMap::SizeClass(n))
 
 TEST(SizeClass, MinObjectSize) {
-  ASSERT_EQ(alignof(max_align_t), MinObjectSize);
+  ASSERT_EQ(alignof(max_align_t), kMinObjectSize);
 
-  ASSERT_EQ(MinObjectSize, 16);
-  // ASSERT_EQ(MinObjectSize, 8);
+  ASSERT_EQ(kMinObjectSize, 16);
 
-  ASSERT_EQ(staticlog(MinObjectSize), 4);
-  // ASSERT_EQ(staticlog(MinObjectSize), 3);
+  ASSERT_EQ(staticlog(kMinObjectSize), 4);
 }
 
 TEST(SizeClass, SmallClasses) {
