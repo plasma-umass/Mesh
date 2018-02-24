@@ -42,21 +42,25 @@ static __attribute__((destructor)) void libmesh_fini() {
   runtime().heap().dumpStats(mlevel, false);
 }
 
-extern "C" {
+extern "C" CACHELINE_ALIGNED_FN
 void *mesh_malloc(size_t sz) {
   return runtime().localHeap()->malloc(sz);
 }
 #define xxmalloc mesh_malloc
 
+extern "C" CACHELINE_ALIGNED_FN
 void mesh_free(void *ptr)  {
   runtime().localHeap()->free(ptr);
 }
 #define xxfree mesh_free
 
-size_t __attribute__((always_inline)) xxmalloc_usable_size(void *ptr) {
+extern "C" CACHELINE_ALIGNED_FN
+size_t mesh_malloc_usable_size(void *ptr) {
   return runtime().localHeap()->getSize(ptr);
 }
+#define xxmalloc_usable_size mesh_malloc_usable_size
 
+extern "C" {
 size_t mesh_usable_size(void *ptr) {
   return xxmalloc_usable_size(ptr);
 }
