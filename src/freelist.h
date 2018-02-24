@@ -38,38 +38,30 @@ private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
 
 public:
-  Freelist(size_t objectCount, mt19937_64 &prng, MWC &fastPrng) : _maxCount(objectCount) {
+  Freelist(size_t objectCount) : _maxCount(objectCount) {
     d_assert(objectCount <= MaxFreelistLen);
     d_assert(_maxCount == objectCount);
-
-    init(prng, fastPrng);
   }
 
   ~Freelist() {
     detach();
   }
 
-  void init(mt19937_64 &prng, MWC &fastPrng, internal::Bitmap *bitmap = nullptr) {
+  void init(mt19937_64 &prng, MWC &fastPrng, internal::Bitmap &bitmap) {
     const size_t objectCount = maxCount();
     const size_t listSize = objectCount * sizeof(fl_off_t);
 
-    // account for in-use objects if passed a bitmap
-    if (bitmap == nullptr)
-      _off = 0;
-    else
-      _off = bitmap->inUseCount();
+    _off = bitmap.inUseCount();
 
     _list = reinterpret_cast<fl_off_t *>(mesh::internal::Heap().malloc(listSize));
 
     for (size_t i = 0, off = _off; i < objectCount; i++) {
       // if we were passed in a bitmap and the current object is
       // already allocated, don't add its offset to the freelist
-      if (bitmap != nullptr) {
-        if (bitmap->isSet(i)) {
-          continue;
-        } else {
-          bitmap->tryToSet(i);
-        }
+      if (bitmap.isSet(i)) {
+        continue;
+      } else {
+        bitmap.tryToSet(i);
       }
 
       d_assert(off < objectCount);

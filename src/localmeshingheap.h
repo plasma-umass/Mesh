@@ -90,7 +90,8 @@ public:
   }
 
   inline void free(void *ptr) {
-    auto mh = _global->UNSAFEMiniheapFor(ptr);
+    // auto mh = _global->UNSAFEMiniheapFor(ptr);
+    auto mh = _global->miniheapFor(ptr);
     if (likely(mh != nullptr && mh->isOwnedBy(pthread_self()))) {
       mh->localFree(ptr, _prng, _mwc);
     } else {
