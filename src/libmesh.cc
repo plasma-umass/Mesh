@@ -5,8 +5,6 @@
 
 #include "runtime.h"
 
-#include "wrappers/gnuwrapper.cpp"
-
 using namespace mesh;
 
 static __attribute__((constructor)) void libmesh_init() {
@@ -45,15 +43,17 @@ static __attribute__((destructor)) void libmesh_fini() {
 }
 
 extern "C" {
-void *xxmalloc(size_t sz) {
+void *mesh_malloc(size_t sz) {
   return runtime().localHeap()->malloc(sz);
 }
+#define xxmalloc mesh_malloc
 
-void xxfree(void *ptr) {
+void mesh_free(void *ptr)  {
   runtime().localHeap()->free(ptr);
 }
+#define xxfree mesh_free
 
-size_t xxmalloc_usable_size(void *ptr) {
+size_t __attribute__((always_inline)) xxmalloc_usable_size(void *ptr) {
   return runtime().localHeap()->getSize(ptr);
 }
 
@@ -120,3 +120,5 @@ int mesh_bit_clear(enum mesh::BitType type, void *ptr) {
   return mesh::runtime().heap().bitmapClear(type, ptr);
 }
 }
+
+#include "gnuwrapper.cpp"
