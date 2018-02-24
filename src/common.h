@@ -28,8 +28,8 @@ using std::mutex;
 #define ATTRIBUTE_ALWAYS_INLINE __attribute__((always_inline))
 #define ATTRIBUTE_HIDDEN __attribute__((visibility("hidden")))
 #define ATTRIBUTE_ALIGNED(s) __attribute__((aligned(s)))
-#define CACHELINE 64
-#define CACHELINE_ALIGNED_FN ATTRIBUTE_ALIGNED(CACHELINE)
+#define CACHELINE_SIZE 64
+#define CACHELINE_ALIGNED_FN ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
   TypeName(const TypeName &);              \
