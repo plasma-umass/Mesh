@@ -93,8 +93,6 @@ public:
 
   inline void localFree(void *ptr, mt19937_64 &prng, MWC &mwc) {
     const ssize_t freedOff = getOff(ptr);
-    if (unlikely(freedOff < 0))
-      return;
 
     _freelist.push(freedOff, prng, mwc);
     _bitmap.unsetRelaxed(freedOff);
@@ -405,7 +403,7 @@ protected:
   char *_span[MaxMeshes];
   internal::BinToken _token;
 
-  atomic<uint32_t> _inUseCount{0};  // 60
+  uint32_t _inUseCount{0};  // 60
 
   mutable uint32_t _refCount{0};
   uint32_t _meshCount;         // : 7;
