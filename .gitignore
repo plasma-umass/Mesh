@@ -18,3 +18,7 @@ config.mk
 /paper/latex.out/
 /paper/mesh.pdf
 __pycache__
+/perf.data
+/perf.data.old
+/src/test/local-alloc
+/src/test/local-alloc-glibc
