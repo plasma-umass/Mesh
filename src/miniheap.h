@@ -75,14 +75,14 @@ public:
   }
 
   // always "localMalloc"
-  inline void *malloc(size_t sz) {
-    if (unlikely(!_attached || isExhausted())) {
-      dumpDebug();
-      d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached.load(), isExhausted());
-    }
+  inline void *malloc(bool &isExhausted) {
+    // if (unlikely(!_attached || isExhausted())) {
+    //   dumpDebug();
+    //   d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached.load(), isExhausted());
+    // }
     // d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
-    auto off = _freelist.pop();
+    auto off = _freelist.pop(isExhausted);
     // mesh::debug("%p: ma %u", this, off);
 
     auto ptr = mallocAt(off);

@@ -84,8 +84,11 @@ public:
     mesh::internal::Heap().free(list);
   }
 
+  inline bool isNonNullExhausted() const {
+    return _off >= _maxCount;
+  }
   inline bool isExhausted() const {
-    return _list == nullptr || _off >= _maxCount;
+    return _list == nullptr || isNonNullExhausted();
   }
 
   inline size_t maxCount() const {
@@ -114,9 +117,11 @@ public:
     }
   }
 
-  inline size_t pop() {
+  inline size_t pop(bool &isExhausted) {
     d_assert(_off >= 0 && static_cast<uint16_t>(_off) < _maxCount);
     auto allocOff = _list[_off++];
+
+    isExhausted = isNonNullExhausted();
 
     return allocOff;
   }
