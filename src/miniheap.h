@@ -32,13 +32,13 @@ private:
 public:
   MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng,
                size_t expectedSpanSize)
-      : _freelist{objectCount, prng, fastPrng},
+      : _freelist{objectCount},
+        _attached(pthread_self()),
+        _bitmap(maxCount()),
         _objectSize(objectSize),
         _spanSize(dynamicSpanSize()),
         _span{reinterpret_cast<char *>(span)},
-        _meshCount(1),
-        _attached(pthread_self()),
-        _bitmap(maxCount())
+        _meshCount(1)
 #ifdef MESH_EXTRABITS
         ,
         _bitmap0(maxCount()),
@@ -49,6 +49,8 @@ public:
   {
     if (!_span[0])
       abort();
+
+    _freelist.init(prng, fastPrng, _bitmap);
 
     // proactively set all the objects to 'in-use' when pulled out of
     // the bitmap into the freelist.  This avoids frobbing the atomic
@@ -129,14 +131,11 @@ public:
     // this would be bad
     d_assert(src != this);
 
-    mesh::debug("CONSIMING %d\n", src->inUseCount());
-
     // for each object in src, copy it to our backing span + update
     // our bitmap and in-use count
     for (auto const &off : src->bitmap()) {
       d_assert(!_bitmap.isSet(off));
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize());
-      mesh::debug("mallocing at %d\n", off);
       // need to ensure we update the bitmap and in-use count
       void *dstObject = mallocAtWithBitmap(off);
       d_assert(dstObject != nullptr);
@@ -196,7 +195,7 @@ public:
   inline void reattach(mt19937_64 &prng, MWC &fastPrng) {
     _attached = pthread_self();
 
-    _freelist.init(prng, fastPrng, &_bitmap);
+    _freelist.init(prng, fastPrng, _bitmap);
 
     // proactively set all the objects to 'in-use' when pulled out of
     // the bitmap into the freelist.  This avoids frobbing the atomic
@@ -427,6 +426,9 @@ protected:
   }
 
   Freelist<MaxFreelistLen> _freelist;
+  atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding
+  internal::Bitmap _bitmap;    // 16 bytes
+
   const uint32_t _objectSize;
   const uint32_t _spanSize;
   char *_span[MaxMeshes];
@@ -436,8 +438,6 @@ protected:
 
   mutable uint32_t _refCount{0};
   uint32_t _meshCount;         // : 7;
-  atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding
-  internal::Bitmap _bitmap;    // 16 bytes
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;  // 16 bytes
   internal::Bitmap _bitmap1;  // 16 bytes
