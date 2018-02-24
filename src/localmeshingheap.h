@@ -94,8 +94,11 @@ public:
     auto mh = _global->miniheapFor(ptr);
     if (likely(mh != nullptr && mh->isOwnedBy(pthread_self()))) {
       mh->localFree(ptr, _prng, _mwc);
+      mh->unref();
     } else {
       _global->free(ptr);
+      if (mh != nullptr)
+        mh->unref();
     }
   }
 
