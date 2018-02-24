@@ -95,7 +95,7 @@ public:
     const ssize_t freedOff = getOff(ptr);
 
     _freelist.push(freedOff, prng, mwc);
-    _bitmap.unsetRelaxed(freedOff);
+    _bitmap.unset(freedOff);
     _inUseCount--;
   }
 
@@ -104,7 +104,7 @@ public:
     if (unlikely(off < 0))
       return;
 
-    _bitmap.unsetRelaxed(off);
+    _bitmap.unset(off);
     _inUseCount--;
   }
 
@@ -259,7 +259,7 @@ public:
 
   /// public for meshTest only
   inline void *mallocAt(size_t off) {
-    if (!_bitmap.tryToSetRelaxed(off)) {
+    if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
       return nullptr;

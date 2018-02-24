@@ -149,7 +149,7 @@ public:
     // mesh::debug("Bitmap(%zu): %zu bytes", nelts, byteCount());
 
     // Allocate the right number of bytes.
-    _bitarray = reinterpret_cast<size_t *>(Heap::malloc(byteCount()));
+    _bitarray = reinterpret_cast<atomic_size_t *>(Heap::malloc(byteCount()));
     d_assert(_bitarray != nullptr);
 
     clear();
@@ -165,7 +165,7 @@ public:
   }
 
   const atomic_size_t *bitmap() const {
-    return reinterpret_cast<atomic_size_t *>(_bitarray);
+    return _bitarray;
   }
 
   /// Clears out the bitmap array.
@@ -359,7 +359,7 @@ private:
   }
 
   /// The bit array itself.
-  size_t *_bitarray{nullptr};
+  atomic_size_t *_bitarray{nullptr};
 
   /// The number of elements (bits) in the array.
   size_t _elements{0};
