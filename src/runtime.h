@@ -15,7 +15,6 @@
 #include "globalmeshingheap.h"
 #include "lockedheap.h"
 #include "mmapheap.h"
-#include "semiansiheap.h"
 
 #include "heaplayers.h"
 
