@@ -11,7 +11,6 @@
 #include <random>
 
 #include "bitmap.h"
-#include "freelist.h"
 #include "internal.h"
 
 #include "rng/mwc.h"
@@ -27,10 +26,9 @@ private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeap);
 
 public:
-  MiniHeap(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng,
-               size_t expectedSpanSize)
-      : _freelist{objectCount},
-        _attached(pthread_self()),
+  MiniHeap(void *span, size_t objectCount, size_t objectSize, MWC &fastPrng, size_t expectedSpanSize)
+      : _attached(pthread_self()),
+        _maxCount(objectCount),
         _bitmap(maxCount()),
         _objectSize(objectSize),
         _spanSize(dynamicSpanSize()),
@@ -47,12 +45,7 @@ public:
     if (!_span[0])
       abort();
 
-    _freelist.init(prng, fastPrng, _bitmap);
-
-    // proactively set all the objects to 'in-use' when pulled out of
-    // the bitmap into the freelist.  This avoids frobbing the atomic
-    // bitmap and inUseCounts in the malloc fastpath
-    _inUseCount += _freelist.length();
+    _inUseCount = 0;
 
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
@@ -78,39 +71,9 @@ public:
                 this, objectSize(), maxCount(), meshCount(), _bitmap.to_string().c_str());
   }
 
-  // always "localMalloc"
-  inline void *malloc(bool &isExhausted) {
-    // if (unlikely(!_attached || isExhausted())) {
-    //   dumpDebug();
-    //   d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached.load(), isExhausted());
-    // }
-    // d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
-
-    auto off = _freelist.pop(isExhausted);
-    // mesh::debug("%p: ma %u", this, off);
-
-    auto ptr = mallocAt(off);
-    d_assert(ptr != nullptr);
-
-    return ptr;
-  }
-
-  /// for testing only
-  void freeEntireFreelistExcept(void *exception) {
-    bool isExhausted = false;
-    while (!isExhausted) {
-      auto off = _freelist.pop(isExhausted);
-      auto ptr = mallocAt(off);
-      if (ptr != exception)
-        free(ptr);
-    }
-  }
-
-  inline void localFree(void *ptr, mt19937_64 &prng, MWC &mwc) {
-    const ssize_t freedOff = getOff(ptr);
-
-    _freelist.push(freedOff, prng, mwc);
-  }
+  // should never be called directly, a freelist is populated from our bitmap
+  // inline void *malloc();
+  // inline void localFree(Freelist &freelist, MWC &prng, void *ptr);
 
   inline void free(void *ptr) {
     const ssize_t off = getOff(ptr);
@@ -160,7 +123,7 @@ public:
   }
 
   inline size_t maxCount() const {
-    return _freelist.maxCount();
+    return _maxCount;
   }
 
   inline size_t objectSize() const {
@@ -174,40 +137,18 @@ public:
     return objectSize();
   }
 
-  /// Whether we can still locally allocate out of this MiniHeap, or
-  /// if our freelist has been exhausted.  This is NOT necessarily the
-  /// same as whether our bitmap is full -- if an object is allocated
-  /// on one thread, passed to another, and a non-local free happens
-  /// from that other thread, we might end up with the case that our
-  /// bitmap is non-full, but the freelist is empty (as non-local
-  /// frees don't touch the bitmap).
-  inline bool isExhausted() const {
-    return _freelist.isExhausted();
-  }
-
   inline uintptr_t getSpanStart() const {
     return reinterpret_cast<uintptr_t>(_span[0]);
   }
 
-  inline void reattach(mt19937_64 &prng, MWC &fastPrng) {
+  inline void reattach(size_t additionalInUse) {
     _attached = pthread_self();
-
-    _freelist.init(prng, fastPrng, _bitmap);
-
-    // proactively set all the objects to 'in-use' when pulled out of
-    // the bitmap into the freelist.  This avoids frobbing the atomic
-    // bitmap and inUseCounts in the malloc fastpath
-    _inUseCount += _freelist.length();
-
-    d_assert(!isExhausted());
-    // if (_meshCount > 1)
-    //   mesh::debug("fixme? un-mesh when reattaching");
+    _inUseCount += additionalInUse;
   }
 
   /// called when a LocalHeap is done with a MiniHeap (it is
   /// "detaching" it and releasing it back to the global heap)
   inline void detach() {
-    _freelist.detach();
     _attached = 0;
     atomic_thread_fence(memory_order_seq_cst);
   }
@@ -251,6 +192,10 @@ public:
     return _bitmap;
   }
 
+  mesh::internal::Bitmap &writableBitmap() {
+    return _bitmap;
+  }
+
   void trackMeshedSpan(uintptr_t spanStart) {
     if (_meshCount >= kMaxMeshes) {
       mesh::debug("fatal: too many meshes for one miniheap");
@@ -278,6 +223,7 @@ public:
     _token = token;
   }
 
+  /// public for meshTest only
   inline void *mallocAtWithBitmap(size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
@@ -287,11 +233,10 @@ public:
 
     _inUseCount++;
 
-    return mallocAt(off);
+    return ptrForOffset(off);
   }
 
-  /// public for meshTest only
-  inline void *mallocAt(size_t off) {
+  inline void *ptrForOffset(size_t off) {
     return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
   }
 
@@ -303,8 +248,8 @@ public:
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = _inUseCount;
     const size_t meshCount = _meshCount;
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (full: %d, inUse: %zu, mesh: %zu)\t%p-%p\n", this,
-                _objectSize, maxCount(), heapPages, this->isExhausted(), inUseCount, meshCount, _span[0],
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, mesh: %zu)\t%p-%p\n", this,
+                _objectSize, maxCount(), heapPages, inUseCount, meshCount, _span[0],
                 reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
   }
@@ -375,6 +320,28 @@ public:
     return -1;
   }
 
+  inline ssize_t getOff(void *ptr) const {
+    d_assert(getSize(ptr) == _objectSize);
+
+    const auto span = spanStart(ptr);
+    d_assert(span != 0);
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+
+    const auto off = (ptrval - span) / _objectSize;
+    // if (unlikely(span > ptrval || off >= maxCount())) {
+    //   mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
+    //   return -1;
+    // }
+
+    // if (unlikely(!_bitmap.isSet(off))) {
+    //   mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
+    //   dumpDebug();
+    //   return -1;
+    // }
+
+    return off;
+  }
+
 protected:
   inline uintptr_t spanStart(void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
@@ -400,31 +367,9 @@ protected:
     return 0;
   }
 
-  inline ssize_t getOff(void *ptr) const {
-    d_assert(getSize(ptr) == _objectSize);
-
-    const auto span = spanStart(ptr);
-    d_assert(span != 0);
-    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-
-    const auto off = (ptrval - span) / _objectSize;
-    // if (unlikely(span > ptrval || off >= maxCount())) {
-    //   mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
-    //   return -1;
-    // }
-
-    // if (unlikely(!_bitmap.isSet(off))) {
-    //   mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
-    //   dumpDebug();
-    //   return -1;
-    // }
-
-    return off;
-  }
-
-  Freelist _freelist;
   atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding
-  internal::Bitmap _bitmap;    // 16 bytes
+  uint32_t _maxCount;
+  internal::Bitmap _bitmap;     // 16 bytes
 
   const uint32_t _objectSize;
   const uint32_t _spanSize;
@@ -434,7 +379,7 @@ protected:
   uint32_t _inUseCount{0};  // 60
 
   mutable uint32_t _refCount{0};
-  uint32_t _meshCount;         // : 7;
+  uint32_t _meshCount;  // : 7;
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;  // 16 bytes
   internal::Bitmap _bitmap1;  // 16 bytes
@@ -447,7 +392,7 @@ static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
 static_assert(sizeof(MiniHeap) == 168, "MiniHeap too big!");
 #else
-static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 96, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 

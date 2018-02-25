@@ -20,7 +20,7 @@
 
 namespace mesh {
 
-template <typename MiniHeap, size_t BinCount = 4, size_t MaxEmpty = 128>
+template <typename MiniHeap>
 class BinnedTracker {
 private:
   DISALLOW_COPY_AND_ASSIGN(BinnedTracker);
@@ -59,7 +59,7 @@ public:
     const size_t off = distribution(_prng);
 
     size_t count = 0;
-    for (size_t i = 0; i < BinCount; i++) {
+    for (size_t i = 0; i < kBinnedTrackerBinCount; i++) {
       count += _partial[i].size();
       if (off < count)
         return popRandomLocked(_partial[i]);
@@ -72,7 +72,7 @@ public:
   MiniHeap *selectForReuse() {
     std::lock_guard<std::mutex> lock(_mutex);
 
-    for (int i = BinCount - 1; i >= 0; i--) {
+    for (int i = kBinnedTrackerBinCount - 1; i >= 0; i--) {
       while (_partial[i].size() > 0) {
         auto mh = popRandomLocked(_partial[i]);
         // this can happen because in use count is updated outside the
@@ -94,9 +94,9 @@ public:
     internal::vector<MiniHeap *> bucket{};
 
     // consider all of our partially filled miniheaps
-    for (size_t i = 0; i < BinCount; i++) {
+    for (size_t i = 0; i < kBinnedTrackerBinCount; i++) {
       const auto partial = _partial[i];
-      if (i == BinCount/2 + 1 && bucket.size() == 0) {
+      if (i == kBinnedTrackerBinCount / 2 + 1 && bucket.size() == 0) {
         break;
       }
       for (size_t j = 0; j < partial.size(); j++) {
@@ -139,7 +139,7 @@ public:
 
       move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
 
-      if (newBinId != internal::BinToken::FlagEmpty || _empty.size() < MaxEmpty)
+      if (newBinId != internal::BinToken::FlagEmpty || _empty.size() < kBinnedTrackerMaxEmpty)
         return false;
     }
 
@@ -180,7 +180,7 @@ public:
         sz += _full[i]->inUseCount();
     }
 
-    for (size_t i = 0; i < BinCount; i++) {
+    for (size_t i = 0; i < kBinnedTrackerBinCount; i++) {
       auto partial = _partial[i];
       for (size_t j = 0; j < partial.size(); j++) {
         MiniHeap *mh = partial[j];
@@ -210,7 +210,7 @@ public:
 
   size_t partialSizeLocked() const {
     size_t sz = 0;
-    for (size_t i = 0; i < BinCount; i++) {
+    for (size_t i = 0; i < kBinnedTrackerBinCount; i++) {
       sz += _partial[i].size();
     }
     return sz;
@@ -224,7 +224,7 @@ public:
         _full[i]->printOccupancy();
     }
 
-    for (size_t i = 0; i < BinCount; i++) {
+    for (size_t i = 0; i < kBinnedTrackerBinCount; i++) {
       auto partial = _partial[i];
       for (size_t j = 0; j < partial.size(); j++) {
         MiniHeap *mh = partial[j];
@@ -258,7 +258,7 @@ public:
       }
     }
 
-    for (size_t i = 0; i < BinCount; i++) {
+    for (size_t i = 0; i < kBinnedTrackerBinCount; i++) {
       auto partial = _partial[i];
       for (size_t j = 0; j < partial.size(); j++) {
         MiniHeap *mh = partial[j];
@@ -371,7 +371,7 @@ private:
     } else if (inUseCount == 0) {
       return internal::BinToken::FlagEmpty;
     } else {
-      return (inUseCount * BinCount) / _objectCount;
+      return (inUseCount * kBinnedTrackerBinCount) / _objectCount;
     }
   }
 
@@ -386,7 +386,7 @@ private:
   }
 
   internal::vector<MiniHeap *> _full;
-  internal::vector<MiniHeap *> _partial[BinCount];
+  internal::vector<MiniHeap *> _partial[kBinnedTrackerBinCount];
   internal::vector<MiniHeap *> _empty;
 
   atomic_size_t _objectSize{0};

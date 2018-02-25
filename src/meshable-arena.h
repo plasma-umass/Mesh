@@ -84,7 +84,7 @@ public:
         // if one of the pages we need is already in use, bump our
         // offset into the page index up and try again
         if (_bitmap.isSet(firstOff + i)) {
-          _bitmap.unset(firstOff); // don't 'leak' this empty page
+          _bitmap.unset(firstOff);  // don't 'leak' this empty page
           firstOff += i + 1;
           found = false;
           break;
@@ -105,7 +105,7 @@ public:
         debug("hard assertion failue");
         abort();
       }
-      d_assert(getMetadataFlags(firstOff+i) == 0 && getMetadataPtr(firstOff+i) == 0);
+      d_assert(getMetadataFlags(firstOff + i) == 0 && getMetadataPtr(firstOff + i) == 0);
       setMetadata(firstOff + i, internal::PageType::Identity);
     }
 
@@ -164,7 +164,7 @@ public:
     // under the MH writer-lock in global heap
     uintptr_t mh = reinterpret_cast<uintptr_t>(miniheap);
     for (size_t i = 0; i < pageCount; i++) {
-      setMetadata(off+i, mh | getMetadataFlags(off));
+      setMetadata(off + i, mh | getMetadataFlags(off));
     }
 
     // mesh::debug("assoc %p(%zu) %p | %u", span, off, miniheap, getMetadataFlags(off));

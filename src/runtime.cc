@@ -31,8 +31,6 @@ const int32_t SizeMap::class_to_size_[kClassSizesMax] = {
 // const internal::BinToken::Size internal::BinToken::FlagEmpty = numeric_limits<uint32_t>::max() - 2;
 // const internal::BinToken::Size internal::BinToken::FlagNoOff = numeric_limits<uint32_t>::max();
 
-__thread ThreadLocalHeap::ThreadLocalData ThreadLocalHeap::_threadLocalData ATTR_INITIAL_EXEC CACHELINE_ALIGNED;
-
 STLAllocator<char, internal::Heap> internal::allocator{};
 
 size_t internal::measurePssKiB() {

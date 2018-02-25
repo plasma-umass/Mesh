@@ -1,20 +1,21 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
-#ifndef MESH__GLOBALMESHINGHEAP_H
-#define MESH__GLOBALMESHINGHEAP_H
+#pragma once
+#ifndef MESH__GLOBAL_HEAP_H
+#define MESH__GLOBAL_HEAP_H
 
 #include <algorithm>
 #include <mutex>
 #include <shared_mutex>
-
-#include "heaplayers.h"
 
 #include "binnedtracker.h"
 #include "internal.h"
 #include "meshable-arena.h"
 #include "meshing.h"
 #include "miniheap.h"
+
+#include "heaplayers.h"
 
 using namespace HL;
 
@@ -89,9 +90,6 @@ public:
     // check our bins for a miniheap to reuse
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
     if (existing != nullptr) {
-      existing->reattach(_prng, _fastPrng);  // populate freelist, set attached bit
-      d_assert(existing->isAttached());
-      // TODO: check that metadata is right?
       return existing;
     }
 
@@ -114,7 +112,7 @@ public:
 
     // if (spanSize > 4096)
     //   mesh::debug("spana %p(%zu) %p (%zu)", span, spanSize, buf, objectSize);
-    MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _prng, _fastPrng, spanSize);
+    MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _fastPrng, spanSize);
     Super::assoc(span, mh, nPages);
 
     trackMiniheapLocked(sizeClass, mh);
@@ -437,7 +435,6 @@ public:
 
 protected:
   void performMeshing(internal::vector<std::pair<MiniHeap *, MiniHeap *>> &mergeSets) {
-
     for (auto &mergeSet : mergeSets) {
       // merge _into_ the one with a larger mesh count, potentiall
       // swapping the order of the pair
@@ -530,4 +527,4 @@ protected:
 };
 }  // namespace mesh
 
-#endif  // MESH__GLOBALMESHINGHEAP_H
+#endif  // MESH__GLOBAL_HEAP_H

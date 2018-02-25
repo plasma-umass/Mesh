@@ -37,22 +37,20 @@ private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
 
 public:
-  Freelist(size_t objectCount) : _maxCount(objectCount) {
-    d_assert_msg(objectCount <= kMaxFreelistLength, "objCount? %zu <= %zu", objectCount, kMaxFreelistLength);
-    d_assert(_maxCount == objectCount);
+  Freelist() {
   }
 
   ~Freelist() {
     detach();
   }
 
-  void init(mt19937_64 &prng, MWC &fastPrng, internal::Bitmap &bitmap) {
-    const size_t objectCount = maxCount();
+  void init(MWC &fastPrng, internal::Bitmap &bitmap) {
+    const auto objectCount = _maxCount;
+    d_assert_msg(objectCount <= kMaxFreelistLength, "objCount? %zu <= %zu", objectCount, kMaxFreelistLength);
+    d_assert(_maxCount == objectCount);
     const size_t listSize = objectCount * sizeof(uint8_t);
 
     _off = bitmap.inUseCount();
-
-    _list = reinterpret_cast<uint8_t *>(mesh::internal::Heap().malloc(listSize));
 
     for (size_t i = 0, off = _off; i < objectCount; i++) {
       // if we were passed in a bitmap and the current object is
@@ -68,23 +66,24 @@ public:
     }
 
     if (kEnableShuffleFreelist) {
-      // mwcShuffle(&_list[0], &_list[objectCount], fastPrng);
-      std::shuffle(&_list[_off], &_list[objectCount], prng);
+      mwcShuffle(&_list[0], &_list[objectCount], fastPrng);
+      // std::shuffle(&_list[_off], &_list[objectCount], prng);
     }
   }
 
   void detach() {
-    auto list = _list;
-    _list = nullptr;
+    // auto list = _list;
+    // _list = nullptr;
+    _attachedMiniheap->detach();
+    _attachedMiniheap = nullptr;
+    _start = 0;
+    _end = 0;
     atomic_thread_fence(memory_order_seq_cst);
-    mesh::internal::Heap().free(list);
+    // mesh::internal::Heap().free(list);
   }
 
-  inline bool isNonNullExhausted() const {
-    return _off >= _maxCount;
-  }
   inline bool isExhausted() const {
-    return _list == nullptr || isNonNullExhausted();
+    return _off >= _maxCount;
   }
 
   inline size_t maxCount() const {
@@ -98,41 +97,89 @@ public:
 
   // Pushing an element onto the freelist does a round of the
   // Fisher-Yates shuffle.
-  inline void push(size_t freedOff, mt19937_64 &prng, MWC &mwc) {
+  inline void push(MWC &prng, size_t freedOff) {
     d_assert(_off > 0);  // we must have at least 1 free space in the list
     _list[--_off] = freedOff;
 
     if (kEnableShuffleFreelist) {
-      size_t swapOff;
-      if (kSlowButAccurateRandom) {
-        // endpoint is _inclusive_, so we subtract 1 from maxCount since
-        // we're dealing with 0-indexed offsets
-        std::uniform_int_distribution<size_t> distribution(_off, maxCount() - 1);
-
-        swapOff = distribution(prng);
-      } else {
-        swapOff = mwc.inRange(_off, maxCount() - 1);
-      }
+      size_t swapOff = prng.inRange(_off, maxCount() - 1);
 
       std::swap(_list[_off], _list[swapOff]);
     }
   }
 
-  inline size_t pop(bool &isExhausted) {
+  inline size_t pop(bool &exhausted) {
     d_assert(_off >= 0 && static_cast<uint16_t>(_off) < _maxCount);
     auto allocOff = _list[_off++];
 
-    isExhausted = isNonNullExhausted();
+    exhausted = isExhausted();
 
     return allocOff;
   }
 
+  inline void free(MWC &prng, void *ptr) {
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+    const auto off = (ptrval - _start) / _objectSize;
+
+    push(prng, off);
+  }
+
+  void freeAllExcept(void *exception) {
+    bool exhausted = isExhausted();
+    while (!exhausted) {
+      auto off = pop(exhausted);
+      auto ptr = _attachedMiniheap->ptrForOffset(off);
+      if (ptr != exception)
+        _attachedMiniheap->free(ptr);
+    }
+  }
+
+  inline bool isAttached() const {
+    return _attachedMiniheap != nullptr;
+  }
+
+  inline void attach(MWC &prng, MiniHeap *mh) {
+    d_assert(_attachedMiniheap == nullptr);
+    _attachedMiniheap = mh;
+    _start = mh->getSpanStart();
+    _end = _start + mh->spanSize();
+    init(prng, mh->writableBitmap());
+  }
+
+  inline bool contains(void *ptr) const {
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+    return ptrval >= _start && ptrval < _end;
+  }
+
+  inline void *malloc(bool &exhausted) {
+    const auto off = pop(exhausted);
+    // TODO: reduce duplication w/ miniheap
+    return reinterpret_cast<void *>(_start + off * _objectSize);
+  }
+
+  // FIXME: pull onto freelist?
+  inline size_t getSize() {
+    return _objectSize;
+  }
+
+  inline void setObjectSize(size_t sz) {
+    _objectSize = sz;
+    _maxCount = max(HL::CPUInfo::PageSize / sz, kMinStringLen);
+
+  }
+
 private:
-  uint8_t *_list{nullptr};
-  const uint16_t _maxCount;
-  // FIXME: we can use a uint8_t here if we encode "overflowed" as _list == nullptr
+  size_t _objectSize{0};
+  uintptr_t _start{0};
+  uintptr_t _end{0};
+  MiniHeap *_attachedMiniheap{nullptr};
+  uint16_t _maxCount{0};
   uint16_t _off{0};
+  uint8_t _list[kMaxFreelistLength];
+  uint8_t __padding[24];
 };
+
+static_assert(HL::gcd<sizeof(Freelist), CACHELINE_SIZE>::value == CACHELINE_SIZE, "Freelist not multiple of cacheline size!");
 }  // namespace mesh
 
 #endif  // MESH__FREELIST_H
