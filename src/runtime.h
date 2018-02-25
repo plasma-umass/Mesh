@@ -12,7 +12,7 @@
 
 #include "real.h"
 
-#include "globalmeshingheap.h"
+#include "global_heap.h"
 #include "lockedheap.h"
 #include "mmapheap.h"
 

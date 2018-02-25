@@ -12,7 +12,7 @@ PREFIX = /usr
 
 ARCH             = x86_64
 
-COMMON_SRCS      = src/runtime.cc src/real.cc src/meshing.cc src/meshable-arena.cc src/d_assert.cc
+COMMON_SRCS      = src/thread_local_heap.cc src/global_heap.cc src/runtime.cc src/real.cc src/meshing.cc src/meshable-arena.cc src/d_assert.cc
 
 LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc
 LIB_OBJS         = $(addprefix build/,$(patsubst %.c,%.o,$(patsubst %.S,%.o,$(LIB_SRCS:.cc=.o))))
