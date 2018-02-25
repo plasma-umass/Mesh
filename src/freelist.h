@@ -74,6 +74,8 @@ public:
   void detach() {
     // auto list = _list;
     // _list = nullptr;
+    _attachedMiniheap->detach();
+    _attachedMiniheap = nullptr;
     atomic_thread_fence(memory_order_seq_cst);
     // mesh::internal::Heap().free(list);
   }
@@ -113,11 +115,54 @@ public:
     return allocOff;
   }
 
+  inline void free(MWC &prng, void *ptr) {
+    const auto off = _attachedMiniheap->getOff(ptr);
+    push(prng, off);
+  }
+
+  void freeAllExcept(void *exception) {
+    bool exhausted = isExhausted();
+    while (!exhausted) {
+      auto off = pop(exhausted);
+      auto ptr = _attachedMiniheap->ptrForOffset(off);
+      if (ptr != exception)
+        _attachedMiniheap->free(ptr);
+    }
+  }
+
+  inline bool isAttached() const {
+    return _attachedMiniheap != nullptr;
+  }
+
+  inline void attach(MWC &prng, MiniHeap *mh) {
+    d_assert(_attachedMiniheap == nullptr);
+    _attachedMiniheap = mh;
+    init(mh->maxCount(), prng, mh->writableBitmap());
+  }
+
+  inline bool contains(void *ptr) const {
+    if (unlikely(_attachedMiniheap == nullptr))
+      return false;
+
+    return _attachedMiniheap->contains(ptr);
+  }
+
+  inline void *malloc(bool &exhausted) {
+    const auto off = pop(exhausted);
+    return _attachedMiniheap->ptrForOffset(off);
+  }
+
+  // FIXME: pull onto freelist?
+  inline size_t getSize() {
+    return _attachedMiniheap->objectSize();
+  }
+
 private:
+  MiniHeap *_attachedMiniheap;
   uint16_t _maxCount{0};
   uint16_t _off{0};
   uint8_t _list[kMaxFreelistLength];
-  uint8_t __padding[60];
+  uint8_t __padding[52];
 };
 
 static_assert(HL::gcd<sizeof(Freelist), CACHELINE_SIZE>::value == CACHELINE_SIZE, "Freelist not multiple of cacheline size!");

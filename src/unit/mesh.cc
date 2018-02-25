@@ -20,19 +20,13 @@ static inline void note(const char *note) {
 }
 
 static void meshTest(bool invert) {
-  MWC prng(internal::seed(), internal::seed());
   GlobalHeap &gheap = runtime().heap();
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0);
 
-  Freelist f1;
-  Freelist f2;
-
   // allocate two miniheaps for the same object size from our global heap
   MiniHeap *mh1 = gheap.allocMiniheap(StrLen);
   MiniHeap *mh2 = gheap.allocMiniheap(StrLen);
-  mh1->reattach(f1, prng);
-  mh2->reattach(f2, prng);
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 2);
 
@@ -42,14 +36,11 @@ static void meshTest(bool invert) {
   ASSERT_EQ(mh1->maxCount(), ObjCount);
 
   // allocate two c strings, one from each miniheap at different offsets
-  char *s1 = reinterpret_cast<char *>(mh1->mallocAt(0));
-  char *s2 = reinterpret_cast<char *>(mh2->mallocAt(ObjCount - 1));
+  char *s1 = reinterpret_cast<char *>(mh1->mallocAtWithBitmap(0));
+  char *s2 = reinterpret_cast<char *>(mh2->mallocAtWithBitmap(ObjCount - 1));
 
   ASSERT_TRUE(s1 != nullptr);
   ASSERT_TRUE(s2 != nullptr);
-
-  mh1->freeEntireFreelistExcept(f1, s1);
-  mh2->freeEntireFreelistExcept(f2, s2);
 
   // fill in the strings, set the trailing null byte
   memset(s1, 'A', StrLen);
