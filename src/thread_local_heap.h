@@ -96,6 +96,9 @@ public:
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
+    if (unlikely(ptr == nullptr))
+        return;
+
     for (size_t i = 0; i < kNumBins; i++) {
       const auto curr = _current[i];
       if (curr && curr->contains(ptr)) {
@@ -108,6 +111,9 @@ public:
   }
 
   inline size_t getSize(void *ptr) {
+    if (unlikely(ptr == nullptr))
+      return 0;
+
     for (size_t i = 0; i < kNumBins; i++) {
       const auto curr = _current[i];
       if (curr && curr->contains(ptr)) {
