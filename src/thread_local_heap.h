@@ -38,8 +38,7 @@ public:
 
   ThreadLocalHeap(GlobalHeap *global)
       : _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)),
-        _prng(internal::seed()),
-        _mwc(internal::seed(), internal::seed()),
+        _prng(internal::seed(), internal::seed()),
         _global(global) {
     for (auto i = 0; i < kNumBins; i++) {
       _current[i] = nullptr;
@@ -63,11 +62,14 @@ public:
       return _global->malloc(sz);
     }
 
+    Freelist &freelist = _freelist[sizeClass];
     MiniHeap *mh = _current[sizeClass];
     if (unlikely(mh == nullptr)) {
       const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
       mh = _global->allocMiniheap(sizeMax);
+      mh->reattach(freelist, _prng);  // populate freelist, set attached bit
+
       d_assert(mh->isAttached());
       if (unlikely(mh == nullptr))
         abort();
@@ -78,11 +80,12 @@ public:
     }
 
     bool isExhausted = false;
-    void *ptr = mh->malloc(isExhausted);
+    void *ptr = mh->malloc(freelist, isExhausted);
     if (unlikely(isExhausted)) {
       if (mh == _last) {
         _last = nullptr;
       }
+      freelist.detach();
       mh->detach();
       _current[sizeClass] = nullptr;
     } else {
@@ -96,15 +99,16 @@ public:
     if (unlikely(ptr == nullptr))
       return;
 
-    if (likely(_last != nullptr && _last->contains(ptr))) {
-      _last->localFree(ptr, _prng, _mwc);
-      return;
-    }
+    // if (likely(_last != nullptr && _last->contains(ptr))) {
+    //   _last->localFree(freelist, _prng, ptr);
+    //   return;
+    // }
 
     for (size_t i = 0; i < kNumBins; i++) {
+      Freelist &freelist = _freelist[i];
       const auto curr = _current[i];
       if (curr && curr->contains(ptr)) {
-        curr->localFree(ptr, _prng, _mwc);
+        curr->localFree(freelist, _prng, ptr);
         _last = curr;
         return;
       }
@@ -152,10 +156,10 @@ protected:
   const size_t _maxObjectSize;
   MiniHeap *_last{nullptr};
   MiniHeap *_current[kNumBins];
-  mt19937_64 _prng;
-  MWC _mwc;
+  MWC _prng;
   GlobalHeap *_global;
   LocalHeapStats _stats{};
+  Freelist _freelist[kNumBins] CACHELINE_ALIGNED;
 
   struct ThreadLocalData {
     ThreadLocalHeap *fastpathHeap;
