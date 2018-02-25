@@ -1,8 +1,8 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
-#ifndef MESH__LOCALMESHINGHEAP_H
-#define MESH__LOCALMESHINGHEAP_H
+#ifndef MESH__THREAD_LOCAL_HEAP_H
+#define MESH__THREAD_LOCAL_HEAP_H
 
 #include <pthread.h>
 #include <stdalign.h>
@@ -30,14 +30,14 @@ public:
 template <int NumBins,                           // number of size classes
           int MeshPeriod,                        // perform meshing on average once every MeshPeriod frees
           typename GlobalHeap>
-class LocalMeshingHeap {
+class ThreadLocalHeap {
 private:
-  DISALLOW_COPY_AND_ASSIGN(LocalMeshingHeap);
+  DISALLOW_COPY_AND_ASSIGN(ThreadLocalHeap);
 
 public:
   enum { Alignment = 16 };
 
-  LocalMeshingHeap(GlobalHeap *global)
+  ThreadLocalHeap(GlobalHeap *global)
     : _maxObjectSize(SizeMap::ByteSizeForClass(NumBins - 1)),
         _prng(internal::seed()),
         _mwc(internal::seed(), internal::seed()),
@@ -123,4 +123,4 @@ protected:
 };
 }  // namespace mesh
 
-#endif  // MESH__LOCALMESHINGHEAP_H
+#endif  // MESH__THREAD_LOCAL_HEAP_H
