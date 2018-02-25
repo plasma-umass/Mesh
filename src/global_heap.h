@@ -1,8 +1,9 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
-#ifndef MESH__GLOBALMESHINGHEAP_H
-#define MESH__GLOBALMESHINGHEAP_H
+#pragma once
+#ifndef MESH__GLOBAL_HEAP_H
+#define MESH__GLOBAL_HEAP_H
 
 #include <algorithm>
 #include <mutex>
@@ -530,4 +531,4 @@ protected:
 };
 }  // namespace mesh
 
-#endif  // MESH__GLOBALMESHINGHEAP_H
+#endif  // MESH__GLOBAL_HEAP_H

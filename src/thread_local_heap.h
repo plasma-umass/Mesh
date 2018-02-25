@@ -59,8 +59,9 @@ public:
     uint32_t sizeClass = 0;
 
     // if the size isn't in our sizemap it is a large alloc
-    if (unlikely(!SizeMap::GetSizeClass(sz, &sizeClass)))
+    if (unlikely(!SizeMap::GetSizeClass(sz, &sizeClass))) {
       return _global->malloc(sz);
+    }
 
     MiniHeap *mh = _current[sizeClass];
     if (unlikely(mh == nullptr)) {
@@ -88,8 +89,13 @@ public:
     bool isExhausted = false;
     void *ptr = mh->malloc(isExhausted);
     if (unlikely(isExhausted)) {
+      if (mh == _last) {
+        _last = nullptr;
+      }
       mh->detach();
       _current[sizeClass] = nullptr;
+    } else {
+      _last = mh;
     }
 
     return ptr;
@@ -99,10 +105,16 @@ public:
     if (unlikely(ptr == nullptr))
         return;
 
+    if (likely(_last != nullptr && _last->contains(ptr))) {
+      _last->localFree(ptr, _prng, _mwc);
+      return;
+    }
+
     for (size_t i = 0; i < kNumBins; i++) {
       const auto curr = _current[i];
       if (curr && curr->contains(ptr)) {
         curr->localFree(ptr, _prng, _mwc);
+        _last = curr;
         return;
       }
     }
@@ -114,9 +126,14 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
+    if (likely(_last != nullptr && _last->contains(ptr))) {
+      return _last->getSize(ptr);
+    }
+
     for (size_t i = 0; i < kNumBins; i++) {
       const auto curr = _current[i];
       if (curr && curr->contains(ptr)) {
+        _last = curr;
         return curr->getSize(ptr);
       }
     }
@@ -128,14 +145,7 @@ public:
     return _threadLocalData.fastpathHeap;
   }
 
-  static inline ThreadLocalHeap *GetHeap() {
-    auto heap = GetFastPathHeap();
-    if (heap == nullptr) {
-      heap = CreateThreadLocalHeap();
-      _threadLocalData.fastpathHeap = heap;
-    }
-    return heap;
-  }
+  static ATTRIBUTE_NEVER_INLINE ThreadLocalHeap *GetHeap();
 
   static inline ThreadLocalHeap *CreateThreadLocalHeap() {
     void *buf = mesh::internal::Heap().malloc(sizeof(ThreadLocalHeap));
@@ -149,6 +159,7 @@ public:
 
 protected:
   const size_t _maxObjectSize;
+  MiniHeap *_last{nullptr};
   MiniHeap *_current[kNumBins];
   mt19937_64 _prng;
   MWC _mwc;

@@ -125,6 +125,10 @@ typename Map::iterator greatest_leq(Map &m, typename Map::key_type const &k) {
 
 typedef Bitmap<Heap> Bitmap;
 
+// BinTokens are stored on MiniHeaps and used by the BinTracker to
+// store occupancy metadata.  They are opaque to the MiniHeap, but
+// storing the BinTracker's metadata on the MiniHeap saves a bunch of
+// internal allocations and indirections.
 class BinToken {
 public:
   typedef uint32_t Size;
