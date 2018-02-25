@@ -41,7 +41,6 @@ static const double kMeshPeriodSecs = .1;
 
 // controls aspects of miniheaps
 static constexpr size_t kMaxMeshes = 4;
-static constexpr bool kSlowButAccurateRandom = false;
 
 // static constexpr size_t ArenaSize = 1UL << 35;        // 32 GB
 static constexpr size_t kArenaSize = 1UL << 30;       // 32 GB

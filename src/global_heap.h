@@ -90,9 +90,6 @@ public:
     // check our bins for a miniheap to reuse
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
     if (existing != nullptr) {
-      existing->reattach(_prng, _fastPrng);  // populate freelist, set attached bit
-      d_assert(existing->isAttached());
-      // TODO: check that metadata is right?
       return existing;
     }
 
@@ -115,7 +112,7 @@ public:
 
     // if (spanSize > 4096)
     //   mesh::debug("spana %p(%zu) %p (%zu)", span, spanSize, buf, objectSize);
-    MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _prng, _fastPrng, spanSize);
+    MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _fastPrng, spanSize);
     Super::assoc(span, mh, nPages);
 
     trackMiniheapLocked(sizeClass, mh);
