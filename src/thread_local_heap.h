@@ -48,7 +48,7 @@ public:
   }
 
   // semiansiheap ensures we never see size == 0
-  inline void *malloc(size_t sz) {
+  inline void *ATTRIBUTE_ALWAYS_INLINE malloc(size_t sz) {
     uint32_t sizeClass = 0;
 
     // if the size isn't in our sizemap it is a large alloc
@@ -88,17 +88,16 @@ public:
     return ptr;
   }
 
-  inline void free(void *ptr) {
-    // auto mh = _global->UNSAFEMiniheapFor(ptr);
-    auto mh = _global->miniheapFor(ptr);
-    if (likely(mh != nullptr && mh->isOwnedBy(pthread_self()))) {
-      mh->localFree(ptr, _prng, _mwc);
-      mh->unref();
-    } else {
-      _global->free(ptr);
-      if (mh != nullptr)
-        mh->unref();
+  inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
+    for (size_t i = 0; i < kNumBins; i++) {
+      const auto curr = _current[i];
+      if (curr && curr->contains(ptr)) {
+        curr->localFree(ptr, _prng, _mwc);
+        return;
+      }
     }
+
+    _global->free(ptr);
   }
 
   inline size_t getSize(void *ptr) {
