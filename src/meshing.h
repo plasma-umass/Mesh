@@ -169,7 +169,6 @@ inline CutoffTable *generateCutoffs(const size_t len, const double cutoffPercent
 template <typename T>
 inline void halfSplit(mt19937_64 &prng, BinnedTracker<T> &miniheaps, internal::vector<T *> &left,
                       internal::vector<T *> &right) noexcept {
-
   internal::vector<T *> bucket = miniheaps.meshingCandidates(OccupancyCutoff);
 
   std::shuffle(bucket.begin(), bucket.end(), prng);

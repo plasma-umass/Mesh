@@ -96,7 +96,7 @@ public:
     // consider all of our partially filled miniheaps
     for (size_t i = 0; i < kBinnedTrackerBinCount; i++) {
       const auto partial = _partial[i];
-      if (i == kBinnedTrackerBinCount/2 + 1 && bucket.size() == 0) {
+      if (i == kBinnedTrackerBinCount / 2 + 1 && bucket.size() == 0) {
         break;
       }
       for (size_t j = 0; j < partial.size(); j++) {

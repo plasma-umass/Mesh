@@ -26,7 +26,8 @@ namespace mesh {
 static void *arenaInstance;
 
 static const char *const TMP_DIRS[] = {
-    "/dev/shm", "/tmp",
+    "/dev/shm",
+    "/tmp",
 };
 
 MeshableArena::MeshableArena() : SuperHeap(), _bitmap{kArenaSize / CPUInfo::PageSize} {
@@ -93,12 +94,11 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
     setMetadata(removeOff + i, internal::PageType::Meshed | getMetadataPtr(keepOff));
   }
 
-
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * CPUInfo::PageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
   freePhys(remove, sz);
 
-  mprotect(remove, sz, PROT_READ|PROT_WRITE);
+  mprotect(remove, sz, PROT_READ | PROT_WRITE);
 }
 
 #ifdef USE_MEMFD

@@ -15,12 +15,12 @@
 #include "bitmap.h"
 #include "meshing.h"
 
-using std::vector;
+using mesh::Bitmap;
+using std::make_unique;
+using std::stoi;
 using std::string;
 using std::unique_ptr;
-using std::make_unique;
-using mesh::Bitmap;
-using std::stoi;
+using std::vector;
 
 typedef std::basic_string<char, std::char_traits<char>, STLAllocator<char, MallocHeap>> internal_string;
 
