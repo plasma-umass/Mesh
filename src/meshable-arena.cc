@@ -29,7 +29,7 @@ static const char *const TMP_DIRS[] = {
     "/dev/shm", "/tmp",
 };
 
-MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUInfo::PageSize} {
+MeshableArena::MeshableArena() : SuperHeap(), _bitmap{kArenaSize / CPUInfo::PageSize} {
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
@@ -38,13 +38,13 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{internal::ArenaSize / CPUI
   d_assert(_spanDir != nullptr);
 #endif
 
-  int fd = openSpanFile(internal::ArenaSize);
+  int fd = openSpanFile(kArenaSize);
   if (fd < 0) {
     debug("mesh: opening arena file failed.\n");
     abort();
   }
   _fd = fd;
-  _arenaBegin = SuperHeap::map(internal::ArenaSize, MAP_SHARED, fd);
+  _arenaBegin = SuperHeap::map(kArenaSize, MAP_SHARED, fd);
   _metadata = reinterpret_cast<atomic<uintptr_t> *>(SuperHeap::map(metadataSize(), MAP_ANONYMOUS | MAP_PRIVATE));
   if (unlikely(_arenaBegin == nullptr || _metadata == nullptr))
     abort();
@@ -225,12 +225,12 @@ void MeshableArena::afterForkChild() {
   d_assert(_spanDir != nullptr);
 
   // open new file for the arena
-  int newFd = openSpanFile(internal::ArenaSize);
+  int newFd = openSpanFile(kArenaSize);
 
   struct stat fileinfo;
   memset(&fileinfo, 0, sizeof(fileinfo));
   fstat(newFd, &fileinfo);
-  d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == internal::ArenaSize);
+  d_assert(fileinfo.st_size >= 0 && (size_t)fileinfo.st_size == kArenaSize);
 
   const int oldFd = _fd;
 
@@ -240,7 +240,7 @@ void MeshableArena::afterForkChild() {
   }
 
   // remap the new region over the old
-  void *ptr = mmap(_arenaBegin, internal::ArenaSize, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
+  void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
   d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
   _fd = newFd;

@@ -22,15 +22,12 @@
 
 namespace mesh {
 
-template <size_t MaxFreelistLen = sizeof(uint8_t) << 8,  // AKA max # of objects per miniheap
-          size_t MaxMeshes = internal::MaxMeshes>        // maximum number of VM spans we can track
-class MiniHeapBase {
+class MiniHeap {
 private:
-  DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
-  typedef MiniHeapBase<MaxFreelistLen, MaxMeshes> MiniHeap;
+  DISALLOW_COPY_AND_ASSIGN(MiniHeap);
 
 public:
-  MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng,
+  MiniHeap(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng,
                size_t expectedSpanSize)
       : _freelist{objectCount},
         _attached(pthread_self()),
@@ -71,7 +68,7 @@ public:
     // dumpDebug();
   }
 
-  ~MiniHeapBase() {
+  ~MiniHeap() {
     // if (_meshCount > 1)
     //   dumpDebug();
   }
@@ -255,7 +252,7 @@ public:
   }
 
   void trackMeshedSpan(uintptr_t spanStart) {
-    if (_meshCount >= MaxMeshes) {
+    if (_meshCount >= kMaxMeshes) {
       mesh::debug("fatal: too many meshes for one miniheap");
       dumpDebug();
       abort();
@@ -425,13 +422,13 @@ protected:
     return off;
   }
 
-  Freelist<MaxFreelistLen> _freelist;
+  Freelist _freelist;
   atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding
   internal::Bitmap _bitmap;    // 16 bytes
 
   const uint32_t _objectSize;
   const uint32_t _spanSize;
-  char *_span[MaxMeshes];
+  char *_span[kMaxMeshes];
   internal::BinToken _token;
 
   uint32_t _inUseCount{0};  // 60
@@ -445,8 +442,6 @@ protected:
   internal::Bitmap _bitmap3;  // 16 bytes
 #endif
 };
-
-typedef MiniHeapBase<> MiniHeap;
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS

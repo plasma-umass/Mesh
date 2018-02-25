@@ -32,14 +32,13 @@ void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RN
   }
 }
 
-template <size_t MaxFreelistLen = sizeof(uint8_t) << 8, bool EnableShuffle = false, typename fl_off_t = uint8_t>
 class Freelist {
 private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
 
 public:
   Freelist(size_t objectCount) : _maxCount(objectCount) {
-    d_assert(objectCount <= MaxFreelistLen);
+    d_assert_msg(objectCount <= kMaxFreelistLength, "objCount? %zu <= %zu", objectCount, kMaxFreelistLength);
     d_assert(_maxCount == objectCount);
   }
 
@@ -49,11 +48,11 @@ public:
 
   void init(mt19937_64 &prng, MWC &fastPrng, internal::Bitmap &bitmap) {
     const size_t objectCount = maxCount();
-    const size_t listSize = objectCount * sizeof(fl_off_t);
+    const size_t listSize = objectCount * sizeof(uint8_t);
 
     _off = bitmap.inUseCount();
 
-    _list = reinterpret_cast<fl_off_t *>(mesh::internal::Heap().malloc(listSize));
+    _list = reinterpret_cast<uint8_t *>(mesh::internal::Heap().malloc(listSize));
 
     for (size_t i = 0, off = _off; i < objectCount; i++) {
       // if we were passed in a bitmap and the current object is
@@ -68,7 +67,7 @@ public:
       _list[off++] = i;
     }
 
-    if (EnableShuffle) {
+    if (kEnableShuffleFreelist) {
       // mwcShuffle(&_list[0], &_list[objectCount], fastPrng);
       std::shuffle(&_list[_off], &_list[objectCount], prng);
     }
@@ -103,9 +102,9 @@ public:
     d_assert(_off > 0);  // we must have at least 1 free space in the list
     _list[--_off] = freedOff;
 
-    if (EnableShuffle) {
+    if (kEnableShuffleFreelist) {
       size_t swapOff;
-      if (mesh::internal::SlowButAccurateRandom) {
+      if (kSlowButAccurateRandom) {
         // endpoint is _inclusive_, so we subtract 1 from maxCount since
         // we're dealing with 0-indexed offsets
         std::uniform_int_distribution<size_t> distribution(_off, maxCount() - 1);
@@ -129,7 +128,7 @@ public:
   }
 
 private:
-  fl_off_t *_list{nullptr};
+  uint8_t *_list{nullptr};
   const uint16_t _maxCount;
   // FIXME: we can use a uint8_t here if we encode "overflowed" as _list == nullptr
   uint16_t _off{0};
