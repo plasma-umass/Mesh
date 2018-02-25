@@ -54,7 +54,7 @@ public:
   inline bool contains(const void *ptr) const {
     auto arena = reinterpret_cast<uintptr_t>(_arenaBegin);
     auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    return arena <= ptrval && ptrval < arena + internal::ArenaSize;
+    return arena <= ptrval && ptrval < arena + kArenaSize;
   }
 
   inline void *malloc(size_t sz) {
@@ -182,8 +182,8 @@ public:
     return result;
   }
 
-  // must be called with the world stopped
-  void mesh(void *keep, void *remove, size_t sz);
+  void beginMesh(void *keep, void *remove, size_t sz);
+  void finalizeMesh(void *keep, void *remove, size_t sz);
 
   const internal::Bitmap &bitmap() const {
     return _bitmap;
@@ -192,10 +192,11 @@ public:
 private:
   static constexpr inline size_t metadataSize() {
     // one pointer per page in our arena
-    return sizeof(uintptr_t) * (internal::ArenaSize / CPUInfo::PageSize);
+    return sizeof(uintptr_t) * (kArenaSize / CPUInfo::PageSize);
   }
 
   int openSpanFile(size_t sz);
+  char *openSpanDir(int pid);
 
   // pointer must already have been checked by `contains()` for bounds
   size_t offsetFor(const void *ptr) const {
@@ -230,6 +231,12 @@ private:
   static void staticAfterForkChild();
 
   void exit() {
+    // FIXME: do this from the destructor, and test that destructor is
+    // called.  Also don't leak _spanDir
+    if (_spanDir != nullptr) {
+      rmdir(_spanDir);
+      _spanDir = nullptr;
+    }
   }
 
   void prepareForFork();
@@ -237,7 +244,7 @@ private:
   void afterForkChild();
 
   void *arenaEnd() {
-    return reinterpret_cast<char *>(_arenaBegin) + internal::ArenaSize;
+    return reinterpret_cast<char *>(_arenaBegin) + kArenaSize;
   }
 
   void *_arenaBegin{nullptr};
@@ -250,6 +257,7 @@ private:
 
   int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
+  char *_spanDir{nullptr};
 };
 }  // namespace mesh
 

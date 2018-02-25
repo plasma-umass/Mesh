@@ -8,8 +8,6 @@
 #include <mutex>
 #include <shared_mutex>
 
-#include "sanitizer/sanitizer_stoptheworld.h"
-
 #include "heaplayers.h"
 
 #include "binnedtracker.h"
@@ -22,7 +20,6 @@ using namespace HL;
 
 namespace mesh {
 
-template <int NumBins>
 class GlobalHeapStats {
 public:
   atomic_size_t meshCount;
@@ -31,32 +28,24 @@ public:
   atomic_size_t mhHighWaterMark;
 };
 
-template <typename BigHeap,                      // for large allocations
-          int NumBins,                           // number of size classes
-          int (*getSizeClass)(const size_t),     // same as for local
-          size_t (*getClassMaxSize)(const int),  // same as for local
-          int DefaultMeshPeriod,                 // perform meshing on average once every MeshPeriod frees
-          size_t MinStringLen = 8UL>
-class GlobalMeshingHeap : public MeshableArena {
+class GlobalHeap : public MeshableArena {
 private:
-  DISALLOW_COPY_AND_ASSIGN(GlobalMeshingHeap);
+  DISALLOW_COPY_AND_ASSIGN(GlobalHeap);
   typedef MeshableArena Super;
 
-  // static_assert(getClassMaxSize(NumBins - 1) == kMaxSize, "expected 16k max object size");
-  // static_assert(getClassMaxSize(NumBins - 1) == 16384, "expected 16k max object size");
-  static_assert(HL::gcd<BigHeap::Alignment, Alignment>::value == Alignment,
-                "expected BigHeap to have 16-byte alignment");
+  static_assert(HL::gcd<MmapHeap::Alignment, Alignment>::value == Alignment,
+                "expected MmapHeap to have 16-byte alignment");
 
   struct MeshArguments {
-    GlobalMeshingHeap *instance;
+    GlobalHeap *instance;
     internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
   };
 
 public:
   enum { Alignment = 16 };
 
-  GlobalMeshingHeap()
-      : _maxObjectSize(getClassMaxSize(NumBins - 1)),
+  GlobalHeap()
+      : _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)),
         _prng(internal::seed()),
         _fastPrng(internal::seed(), internal::seed()),
         _lastMesh{std::chrono::high_resolution_clock::now()} {
@@ -65,7 +54,7 @@ public:
   inline void dumpStrings() const {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
-    for (size_t i = 0; i < NumBins; i++) {
+    for (size_t i = 0; i < kNumBins; i++) {
       _littleheaps[i].printOccupancy();
     }
   }
@@ -80,7 +69,7 @@ public:
     debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
     debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
     debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
-    for (size_t i = 0; i < NumBins; i++)
+    for (size_t i = 0; i < kNumBins; i++)
       _littleheaps[i].dumpStats(beDetailed);
   }
 
@@ -89,13 +78,13 @@ public:
 
     d_assert(objectSize <= _maxObjectSize);
 
-    const int sizeClass = getSizeClass(objectSize);
-    const size_t sizeMax = getClassMaxSize(sizeClass);
+    const int sizeClass = SizeMap::SizeClass(objectSize);
+    const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
     d_assert_msg(objectSize == sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize, sizeMax,
                  sizeClass);
     d_assert(sizeClass >= 0);
-    d_assert(sizeClass < NumBins);
+    d_assert(sizeClass < kNumBins);
 
     // check our bins for a miniheap to reuse
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
@@ -109,7 +98,7 @@ public:
     // if we have objects bigger than the size of a page, allocate
     // multiple pages to amortize the cost of creating a
     // miniheap/globally locking the heap.
-    size_t nObjects = max(HL::CPUInfo::PageSize / sizeMax, MinStringLen);
+    size_t nObjects = max(HL::CPUInfo::PageSize / sizeMax, kMinStringLen);
 
     const size_t nPages = PageCount(sizeMax * nObjects);
     const size_t spanSize = HL::CPUInfo::PageSize * nPages;
@@ -137,17 +126,19 @@ public:
     return mh;
   }
 
+  // large, page-multiple allocations
   void *malloc(size_t sz) {
+#ifndef NDEBUG
     if (unlikely(sz <= kMaxSize))
       abort();
-    // const int sizeClass = getSizeClass(sz);
-    // const size_t sizeMax = getClassMaxSize(sizeClass);
-
-    // if (unlikely(sizeMax <= _maxObjectSize))
-    //   abort();
+#endif
 
     std::lock_guard<std::mutex> lock(_bigMutex);
     return _bigheap.malloc(sz);
+  }
+
+  inline MiniHeap *UNSAFEMiniheapFor(const void *ptr) const {
+    return reinterpret_cast<MiniHeap *>(Super::lookup(ptr));
   }
 
   // if the MiniHeap is non-null, its reference count is increased by one
@@ -172,11 +163,11 @@ public:
 
   // called with lock held
   void freeMiniheapAfterMeshLocked(MiniHeap *mh, bool untrack = true) {
-    const auto sizeClass = getSizeClass(mh->objectSize());
+    const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
     if (untrack)
       untrackMiniheapLocked(sizeClass, mh);
 
-    mh->MiniHeapBase::~MiniHeapBase();
+    mh->MiniHeap::~MiniHeap();
     internal::Heap().free(mh);
   }
 
@@ -201,14 +192,6 @@ public:
   }
 
   void free(void *ptr) {
-    // if (unlikely(internal::isMeshMarker(ptr))) {
-    //   dumpStats(2, false);
-    //   for (size_t i = 0; i < 128; i++)
-    //     meshAllSizeClasses();
-    //   dumpStats(2, false);
-    //   return;
-    // }
-
     // two possibilities: most likely the ptr is small (and therefor
     // owned by a miniheap), or is a large allocation
 
@@ -225,7 +208,7 @@ public:
     // unreffed by the bin tracker
     // mh->unref();
 
-    const auto szClass = getSizeClass(mh->objectSize());
+    const auto szClass = SizeMap::SizeClass(mh->objectSize());
 
     bool shouldFlush = false;
     {
@@ -251,7 +234,7 @@ public:
   }
 
   inline size_t getSize(void *ptr) const {
-    if (unlikely(ptr == nullptr))  // || internal::isMeshMarker(ptr))
+    if (unlikely(ptr == nullptr))
       return 0;
 
     auto mh = miniheapFor(ptr);
@@ -262,6 +245,69 @@ public:
     } else {
       std::lock_guard<std::mutex> lock(_bigMutex);
       return _bigheap.getSize(ptr);
+    }
+  }
+
+  inline bool inBoundsSmall(void *ptr) const {
+    auto mh = miniheapFor(ptr);
+    if (likely(mh)) {
+      mh->unref();
+      return true;
+    }
+    return false;
+  }
+
+  inline bool inBounds(void *ptr) const {
+    if (unlikely(ptr == nullptr))
+      return false;
+
+    if (inBoundsSmall(ptr)) {
+      return true;
+    } else {
+      std::lock_guard<std::mutex> lock(_bigMutex);
+      return _bigheap.inBounds(ptr);
+    }
+  }
+
+  int bitmapGet(enum mesh::BitType type, void *ptr) const {
+    if (unlikely(ptr == nullptr))
+      return 0;
+
+    auto mh = miniheapFor(ptr);
+    if (likely(mh)) {
+      auto result = mh->bitmapGet(type, ptr);
+      mh->unref();
+      return result;
+    } else {
+      internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
+    }
+  }
+
+  int bitmapSet(enum mesh::BitType type, void *ptr) {
+    if (unlikely(ptr == nullptr))
+      return 0;
+
+    auto mh = miniheapFor(ptr);
+    if (likely(mh)) {
+      auto result = mh->bitmapSet(type, ptr);
+      mh->unref();
+      return result;
+    } else {
+      internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
+    }
+  }
+
+  int bitmapClear(enum mesh::BitType type, void *ptr) {
+    if (unlikely(ptr == nullptr))
+      return 0;
+
+    auto mh = miniheapFor(ptr);
+    if (likely(mh)) {
+      auto result = mh->bitmapClear(type, ptr);
+      mh->unref();
+      return result;
+    } else {
+      internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
     }
   }
 
@@ -294,7 +340,7 @@ public:
     } else if (strcmp(name, "stats.active") == 0) {
       // all miniheaps at least partially full
       size_t sz = _bigheap.arenaSize();
-      for (size_t i = 0; i < NumBins; i++) {
+      for (size_t i = 0; i < kNumBins; i++) {
         const auto count = _littleheaps[i].nonEmptyCount();
         if (count == 0)
           continue;
@@ -304,7 +350,7 @@ public:
     } else if (strcmp(name, "stats.allocated") == 0) {
       // same as active for us, for now -- memory not returned to the OS
       size_t sz = _bigheap.arenaSize();
-      for (size_t i = 0; i < NumBins; i++) {
+      for (size_t i = 0; i < kNumBins; i++) {
         const auto &bin = _littleheaps[i];
         const auto count = bin.nonEmptyCount();
         if (count == 0)
@@ -335,14 +381,10 @@ public:
   }
 
   // PUBLIC ONLY FOR TESTING
-  // must be called with the world stopped, after call to mesh()
-  // completes src is a nullptr
+  // after call to meshLocked() completes src is a nullptr
   void meshLocked(MiniHeap *dst, MiniHeap *&src) {
-    if (dst->meshCount() + src->meshCount() > internal::MaxMeshes)
+    if (dst->meshCount() + src->meshCount() > kMaxMeshes)
       return;
-
-    // does the copying of objects and updating of span metadata
-    dst->consume(src);
 
     const size_t dstSpanSize = dst->spanSize();
     const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart());
@@ -351,13 +393,22 @@ public:
     const auto srcMeshCount = src->meshCount();
 
     for (size_t i = 0; i < srcMeshCount; i++) {
-      Super::mesh(dstSpanStart, srcSpans[i], dstSpanSize);
+      // marks srcSpans read-only
+      Super::beginMesh(dstSpanStart, srcSpans[i], dstSpanSize);
+    }
+
+    // does the copying of objects and updating of span metadata
+    dst->consume(src);
+
+    for (size_t i = 0; i < srcMeshCount; i++) {
+      // frees physical memory + re-marks srcSpans as read/write
+      Super::finalizeMesh(dstSpanStart, srcSpans[i], dstSpanSize);
     }
 
     // make sure we adjust what bin the destination is in -- it might
     // now be full and not a candidate for meshing
     dst->ref();
-    _littleheaps[getSizeClass(dst->objectSize())].postFree(dst);
+    _littleheaps[SizeMap::SizeClass(dst->objectSize())].postFree(dst);
     freeMiniheapAfterMeshLocked(src);
     src = nullptr;
   }
@@ -380,16 +431,20 @@ public:
     meshAllSizeClasses();
   }
 
-protected:
-  static void performMeshing(const __sanitizer::SuspendedThreadsList &suspendedThreads, void *argument) {
-    MeshArguments *args = (MeshArguments *)argument;
+  inline bool okToProceed(void *ptr) const {
+    return inBoundsSmall(ptr);
+  }
 
-    for (auto &mergeSet : args->mergeSets) {
-      // merge into the one with a larger mesh count
+protected:
+  void performMeshing(internal::vector<std::pair<MiniHeap *, MiniHeap *>> &mergeSets) {
+
+    for (auto &mergeSet : mergeSets) {
+      // merge _into_ the one with a larger mesh count, potentiall
+      // swapping the order of the pair
       if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
         mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
 
-      args->instance->meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
+      meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
     }
   }
 
@@ -405,11 +460,10 @@ protected:
     const auto start = std::chrono::high_resolution_clock::now();
     size_t partialCount = 0;
 
-    MeshArguments args;
-    args.instance = this;
+    internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
 
     // first, clear out any free memory we might have
-    for (size_t i = 0; i < NumBins; i++) {
+    for (size_t i = 0; i < kNumBins; i++) {
       auto emptyMiniheaps = _littleheaps[i].getFreeMiniheaps();
       for (size_t i = 0; i < emptyMiniheaps.size(); i++) {
         freeMiniheapLocked(emptyMiniheaps[i], false);
@@ -421,10 +475,10 @@ protected:
         // std::allocator_arg, internal::allocator,
         [&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
           if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<0>(miniheaps)->isMeshingCandidate())
-            args.mergeSets.push_back(std::move(miniheaps));
+            mergeSets.push_back(std::move(miniheaps));
         });
 
-    for (size_t i = 0; i < NumBins; i++) {
+    for (size_t i = 0; i < kNumBins; i++) {
       // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
       // method::greedySplitting(_prng, _littleheaps[i], meshFound);
       // method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
@@ -433,45 +487,44 @@ protected:
     }
 
     // more than ~ 1 MB saved
-    _lastMeshEffective = args.mergeSets.size() > 256;
+    _lastMeshEffective = mergeSets.size() > 256;
 
-    if (args.mergeSets.size() == 0) {
+    if (mergeSets.size() == 0) {
       // debug("nothing to mesh.");
       return;
     }
 
-    _stats.meshCount += args.mergeSets.size();
+    _stats.meshCount += mergeSets.size();
 
-    // run the actual meshing with the world stopped
-    __sanitizer::StopTheWorld(performMeshing, &args);
+    performMeshing(mergeSets);
 
     _lastMesh = std::chrono::high_resolution_clock::now();
 
     // const std::chrono::duration<double> duration = _lastMesh - start;
-    // debug("mesh took %f, found %zu", duration.count(), args.mergeSets.size());
+    // debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
   }
 
   const size_t _maxObjectSize;
   atomic_size_t _lastMeshEffective{0};
-  atomic_size_t _meshPeriod{DefaultMeshPeriod};
+  atomic_size_t _meshPeriod{kDefaultMeshPeriod};
 
   // The big heap is handles malloc requests for large objects.  We
   // define a separate class to handle these to segregate bookkeeping
   // for large malloc requests from the ones used to back spans (which
   // are allocated from the arena)
-  BigHeap _bigheap{};
+  MmapHeap _bigheap{};
 
   mt19937_64 _prng;
   MWC _fastPrng;
 
-  BinnedTracker<MiniHeap> _littleheaps[NumBins];
+  BinnedTracker<MiniHeap> _littleheaps[kNumBins];
 
   mutable std::mutex _bigMutex{};
   mutable std::shared_timed_mutex _mhRWLock{};
 
-  GlobalHeapStats<NumBins> _stats{};
+  GlobalHeapStats _stats{};
 
-  double _meshPeriodSecs{internal::MeshPeriodSecs};
+  double _meshPeriodSecs{kMeshPeriodSecs};
   // XXX: should be atomic, but has exception spec?
   std::chrono::time_point<std::chrono::high_resolution_clock> _lastMesh;
 };

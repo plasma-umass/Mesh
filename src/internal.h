@@ -30,22 +30,16 @@ static inline constexpr size_t RoundUpToPage(size_t sz) {
   return HL::CPUInfo::PageSize * PageCount(sz);
 }
 
+// keep in-sync with the version in plasma/mesh.h
+enum BitType {
+  MESH_BIT_0,
+  MESH_BIT_1,
+  MESH_BIT_2,
+  MESH_BIT_3,
+  MESH_BIT_COUNT,
+};
+
 namespace internal {
-
-static const double MeshPeriodSecs = .1;
-
-static constexpr size_t MaxMeshes = 4;
-static constexpr bool SlowButAccurateRandom = false;
-static constexpr size_t MeshMarker = 7305126540297948313;
-static inline bool isMeshMarker(void *ptr) {
-  return reinterpret_cast<size_t>(ptr) == internal::MeshMarker;
-}
-
-// static constexpr size_t ArenaSize = 1UL << 35;        // 32 GB
-static constexpr size_t ArenaSize = 1UL << 30;        // 32 GB
-static constexpr size_t ALTSTACK_SIZE = 16 * 1024UL;  // 16k sigaltstacks
-#define SIGQUIESCE (SIGRTMIN + 7)
-#define SIGDUMP (SIGRTMIN + 8)
 
 // return the kernel's perspective on our proportional set size
 size_t measurePssKiB();

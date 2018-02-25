@@ -8,48 +8,21 @@
 #include <pthread.h>
 #include <signal.h>  // for stack_t
 
-#include <condition_variable>
-
 #include "internal.h"
 
+#include "real.h"
+
 #include "globalmeshingheap.h"
-#include "localmeshingheap.h"
 #include "lockedheap.h"
 #include "mmapheap.h"
 #include "semiansiheap.h"
 
 #include "heaplayers.h"
 
-using std::condition_variable;
-
 namespace mesh {
 
-//static const int NBins = 11;  // 16Kb max object size
-static const int NBins = 25;  // 16Kb max object size
-static const int MeshPeriod = 10000;
-
-typedef int (*EpollWaitFn)(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout);
-typedef int (*EpollPwaitFn)(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
-                            const __sigset_t *__ss);
-
-// The global heap manages the spans that back MiniHeaps as well as
-// large allocations.
-class GlobalHeap : public GlobalMeshingHeap<mesh::MmapHeap, NBins, mesh::size2Class, mesh::class2Size, MeshPeriod> {};
-
-// Fewer buckets than regular KingsleyHeap (to ensure multiple objects
-// fit in the 128Kb spans used by MiniHeaps).
-class LocalHeap
-    : public SemiANSIHeap<LocalMeshingHeap<NBins, mesh::size2Class, mesh::class2Size, MeshPeriod, GlobalHeap>,
-                          GlobalHeap> {
-private:
-  DISALLOW_COPY_AND_ASSIGN(LocalHeap);
-  typedef SemiANSIHeap<LocalMeshingHeap<NBins, mesh::size2Class, mesh::class2Size, MeshPeriod, GlobalHeap>, GlobalHeap>
-      SuperHeap;
-
-public:
-  explicit LocalHeap(GlobalHeap *global) : SuperHeap(global) {
-  }
-};
+// function passed to pthread_create
+typedef void *(*PthreadFn)(void *);
 
 class Runtime {
 private:
@@ -66,20 +39,38 @@ public:
     return _heap;
   }
 
-  static inline LocalHeap *localHeap() __attribute__((always_inline)) {
-    if (unlikely(_localHeap == nullptr))
-      allocLocalHeap();
-    return _localHeap;
-  }
   void startBgThread();
+
+  // we need to wrap pthread_create so that we can safely implement a
+  // stop-the-world quiescent period for the copy/mremap phase of
+  // meshing
+  int createThread(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg);
+
   void setMeshPeriodSecs(double period) {
     _heap.setMeshPeriodSecs(period);
   }
 
   int epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout);
   int epollPwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss);
+  int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+  int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
 
-  void initInterposition();
+  struct StartThreadArgs {
+    explicit StartThreadArgs(Runtime *runtime_, PthreadFn startRoutine_, void *arg_)
+        : runtime(runtime_), startRoutine(startRoutine_), arg(arg_) {
+    }
+
+    Runtime *runtime;
+    PthreadFn startRoutine;
+    void *arg;
+  };
+
+  static void *startThread(StartThreadArgs *threadArgs);
+
+  // so we can call from the libmesh init function
+  void createSignalFd();
+  void installSegfaultHandler();
+
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
   // happens lazily, as the dynamic linker's dlopen calls into malloc
@@ -87,21 +78,15 @@ private:
   // constructor we deadlock before main even runs.
   void initThreads();
 
-  void createSignalFd();
+  static void segfaultHandler(int sig, siginfo_t *siginfo, void *context);
+
   static void *bgThread(void *arg);
-
-  static void allocLocalHeap();
-
-  static __thread LocalHeap *_localHeap;
 
   friend Runtime &runtime();
 
   GlobalHeap _heap{};
   mutex _mutex{};
   int _signalFd{-2};
-
-  EpollWaitFn _libcEpollWait{nullptr};
-  EpollPwaitFn _libcEpollPwait{nullptr};
 };
 
 // get a reference to the Runtime singleton

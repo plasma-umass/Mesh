@@ -5,6 +5,8 @@
 #ifndef MESH__MINIHEAP_H
 #define MESH__MINIHEAP_H
 
+#include <pthread.h>
+
 #include <atomic>
 #include <random>
 
@@ -16,29 +18,43 @@
 
 #include "heaplayers.h"
 
+#undef MESH_EXTRA_BITS
+
 namespace mesh {
 
-template <size_t MaxFreelistLen = sizeof(uint8_t) << 8,  // AKA max # of objects per miniheap
-          size_t MaxMeshes = internal::MaxMeshes>        // maximum number of VM spans we can track
-class MiniHeapBase {
+class MiniHeap {
 private:
-  DISALLOW_COPY_AND_ASSIGN(MiniHeapBase);
-  typedef MiniHeapBase<MaxFreelistLen, MaxMeshes> MiniHeap;
+  DISALLOW_COPY_AND_ASSIGN(MiniHeap);
 
 public:
-  MiniHeapBase(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng,
+  MiniHeap(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng,
                size_t expectedSpanSize)
-      : _freelist{objectCount, prng, fastPrng},
+      : _freelist{objectCount},
+        _attached(pthread_self()),
+        _bitmap(maxCount()),
         _objectSize(objectSize),
         _spanSize(dynamicSpanSize()),
         _span{reinterpret_cast<char *>(span)},
-        _meshCount(1),
-        _attached(true),
-        _bitmap(maxCount()) {
+        _meshCount(1)
+#ifdef MESH_EXTRABITS
+        ,
+        _bitmap0(maxCount()),
+        _bitmap1(maxCount()),
+        _bitmap2(maxCount()),
+        _bitmap3(maxCount())
+#endif
+  {
     if (!_span[0])
       abort();
 
-    //debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
+    _freelist.init(prng, fastPrng, _bitmap);
+
+    // proactively set all the objects to 'in-use' when pulled out of
+    // the bitmap into the freelist.  This avoids frobbing the atomic
+    // bitmap and inUseCounts in the malloc fastpath
+    _inUseCount += _freelist.length();
+
+    // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
                  maxCount(), _objectSize);
     d_assert_msg(expectedSpanSize == dynamicSpanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
@@ -52,25 +68,25 @@ public:
     // dumpDebug();
   }
 
-  ~MiniHeapBase() {
+  ~MiniHeap() {
     // if (_meshCount > 1)
     //   dumpDebug();
   }
 
   void printOccupancy() const {
-    mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"mesh-count\": %d, \"bitmap\": \"%s\"}\n", this, objectSize(),
-                maxCount(), meshCount(), _bitmap.to_string().c_str());
+    mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"mesh-count\": %d, \"bitmap\": \"%s\"}\n",
+                this, objectSize(), maxCount(), meshCount(), _bitmap.to_string().c_str());
   }
 
   // always "localMalloc"
-  inline void *malloc(size_t sz) {
-    if (unlikely(!_attached || isExhausted())) {
-      dumpDebug();
-      d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached.load(), isExhausted());
-    }
-    //d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
+  inline void *malloc(bool &isExhausted) {
+    // if (unlikely(!_attached || isExhausted())) {
+    //   dumpDebug();
+    //   d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached.load(), isExhausted());
+    // }
+    // d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
 
-    auto off = _freelist.pop();
+    auto off = _freelist.pop(isExhausted);
     // mesh::debug("%p: ma %u", this, off);
 
     auto ptr = mallocAt(off);
@@ -79,14 +95,21 @@ public:
     return ptr;
   }
 
+  /// for testing only
+  void freeEntireFreelistExcept(void *exception) {
+    bool isExhausted = false;
+    while (!isExhausted) {
+      auto off = _freelist.pop(isExhausted);
+      auto ptr = mallocAt(off);
+      if (ptr != exception)
+        free(ptr);
+    }
+  }
+
   inline void localFree(void *ptr, mt19937_64 &prng, MWC &mwc) {
     const ssize_t freedOff = getOff(ptr);
-    if (unlikely(freedOff < 0))
-      return;
 
     _freelist.push(freedOff, prng, mwc);
-    _bitmap.unset(freedOff);
-    _inUseCount--;
   }
 
   inline void free(void *ptr) {
@@ -110,7 +133,8 @@ public:
     for (auto const &off : src->bitmap()) {
       d_assert(!_bitmap.isSet(off));
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize());
-      void *dstObject = mallocAt(off);
+      // need to ensure we update the bitmap and in-use count
+      void *dstObject = mallocAtWithBitmap(off);
       d_assert(dstObject != nullptr);
       memcpy(dstObject, srcObject, objectSize());
     }
@@ -166,8 +190,15 @@ public:
   }
 
   inline void reattach(mt19937_64 &prng, MWC &fastPrng) {
-    _freelist.init(prng, fastPrng, &_bitmap);
-    _attached = true;
+    _attached = pthread_self();
+
+    _freelist.init(prng, fastPrng, _bitmap);
+
+    // proactively set all the objects to 'in-use' when pulled out of
+    // the bitmap into the freelist.  This avoids frobbing the atomic
+    // bitmap and inUseCounts in the malloc fastpath
+    _inUseCount += _freelist.length();
+
     d_assert(!isExhausted());
     // if (_meshCount > 1)
     //   mesh::debug("fixme? un-mesh when reattaching");
@@ -177,12 +208,16 @@ public:
   /// "detaching" it and releasing it back to the global heap)
   inline void detach() {
     _freelist.detach();
-    _attached = false;
+    _attached = 0;
     atomic_thread_fence(memory_order_seq_cst);
   }
 
   inline bool isAttached() const {
-    return _attached;
+    return !!_attached;
+  }
+
+  inline bool isOwnedBy(pthread_t thread) const {
+    return pthread_equal(_attached, thread);
   }
 
   inline bool isEmpty() const {
@@ -217,7 +252,7 @@ public:
   }
 
   void trackMeshedSpan(uintptr_t spanStart) {
-    if (_meshCount >= MaxMeshes) {
+    if (_meshCount >= kMaxMeshes) {
       mesh::debug("fatal: too many meshes for one miniheap");
       dumpDebug();
       abort();
@@ -243,8 +278,7 @@ public:
     _token = token;
   }
 
-  /// public for meshTest only
-  inline void *mallocAt(size_t off) {
+  inline void *mallocAtWithBitmap(size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
@@ -253,6 +287,11 @@ public:
 
     _inUseCount++;
 
+    return mallocAt(off);
+  }
+
+  /// public for meshTest only
+  inline void *mallocAt(size_t off) {
     return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
   }
 
@@ -268,6 +307,72 @@ public:
                 _objectSize, maxCount(), heapPages, this->isExhausted(), inUseCount, meshCount, _span[0],
                 reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
+  }
+
+  inline int bitmapGet(enum mesh::BitType type, void *ptr) const {
+    const ssize_t off = getOff(ptr);
+    d_assert(off >= 0);
+
+#ifdef MESH_EXTRA_BITS
+    switch (type) {
+    case MESH_BIT_0:
+      return _bitmap0.isSet(off);
+    case MESH_BIT_1:
+      return _bitmap1.isSet(off);
+    case MESH_BIT_2:
+      return _bitmap2.isSet(off);
+    case MESH_BIT_3:
+      return _bitmap3.isSet(off);
+    default:
+      break;
+    }
+#endif
+    d_assert(false);
+    return -1;
+  }
+
+  inline int bitmapSet(enum mesh::BitType type, void *ptr) {
+    const ssize_t off = getOff(ptr);
+    d_assert(off >= 0);
+
+#ifdef MESH_EXTRA_BITS
+    switch (type) {
+    case MESH_BIT_0:
+      return _bitmap0.tryToSet(off);
+    case MESH_BIT_1:
+      return _bitmap1.tryToSet(off);
+    case MESH_BIT_2:
+      return _bitmap2.tryToSet(off);
+    case MESH_BIT_3:
+      return _bitmap3.tryToSet(off);
+    default:
+      break;
+    }
+#endif
+    d_assert(false);
+    return -1;
+  }
+
+  inline int bitmapClear(enum mesh::BitType type, void *ptr) {
+    const ssize_t off = getOff(ptr);
+    d_assert(off >= 0);
+
+#ifdef MESH_EXTRA_BITS
+    switch (type) {
+    case MESH_BIT_0:
+      return _bitmap0.unset(off);
+    case MESH_BIT_1:
+      return _bitmap1.unset(off);
+    case MESH_BIT_2:
+      return _bitmap2.unset(off);
+    case MESH_BIT_3:
+      return _bitmap3.unset(off);
+    default:
+      break;
+    }
+#endif
+    d_assert(false);
+    return -1;
   }
 
 protected:
@@ -317,25 +422,34 @@ protected:
     return off;
   }
 
-  Freelist<MaxFreelistLen> _freelist;
+  Freelist _freelist;
+  atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding
+  internal::Bitmap _bitmap;    // 16 bytes
+
   const uint32_t _objectSize;
   const uint32_t _spanSize;
-  char *_span[MaxMeshes];
+  char *_span[kMaxMeshes];
   internal::BinToken _token;
 
-  atomic<uint32_t> _inUseCount{0}; // 60
+  uint32_t _inUseCount{0};  // 60
 
   mutable uint32_t _refCount{0};
-  uint32_t _meshCount;// : 7;
-  atomic<uint32_t> _attached;// : 1;
-  internal::Bitmap _bitmap; // 16 bytes
+  uint32_t _meshCount;         // : 7;
+#ifdef MESH_EXTRA_BITS
+  internal::Bitmap _bitmap0;  // 16 bytes
+  internal::Bitmap _bitmap1;  // 16 bytes
+  internal::Bitmap _bitmap2;  // 16 bytes
+  internal::Bitmap _bitmap3;  // 16 bytes
+#endif
 };
 
-typedef MiniHeapBase<> MiniHeap;
-
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
-static_assert(sizeof(MiniHeap) == 96, "MiniHeap too big!");
-//static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
+#ifdef MESH_EXTRA_BITS
+static_assert(sizeof(MiniHeap) == 168, "MiniHeap too big!");
+#else
+static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
+#endif
+// static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 
 }  // namespace mesh
 
