@@ -94,7 +94,7 @@ public:
 
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
     if (unlikely(ptr == nullptr))
-        return;
+      return;
 
     if (likely(_last != nullptr && _last->contains(ptr))) {
       _last->localFree(ptr, _prng, _mwc);

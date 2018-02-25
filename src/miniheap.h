@@ -27,8 +27,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeap);
 
 public:
-  MiniHeap(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng,
-               size_t expectedSpanSize)
+  MiniHeap(void *span, size_t objectCount, size_t objectSize, mt19937_64 &prng, MWC &fastPrng, size_t expectedSpanSize)
       : _freelist{objectCount},
         _attached(pthread_self()),
         _bitmap(maxCount()),
@@ -424,7 +423,7 @@ protected:
 
   Freelist _freelist;
   atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding
-  internal::Bitmap _bitmap;    // 16 bytes
+  internal::Bitmap _bitmap;     // 16 bytes
 
   const uint32_t _objectSize;
   const uint32_t _spanSize;
@@ -434,7 +433,7 @@ protected:
   uint32_t _inUseCount{0};  // 60
 
   mutable uint32_t _refCount{0};
-  uint32_t _meshCount;         // : 7;
+  uint32_t _meshCount;  // : 7;
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;  // 16 bytes
   internal::Bitmap _bitmap1;  // 16 bytes

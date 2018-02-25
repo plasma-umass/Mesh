@@ -438,7 +438,6 @@ public:
 
 protected:
   void performMeshing(internal::vector<std::pair<MiniHeap *, MiniHeap *>> &mergeSets) {
-
     for (auto &mergeSet : mergeSets) {
       // merge _into_ the one with a larger mesh count, potentiall
       // swapping the order of the pair
