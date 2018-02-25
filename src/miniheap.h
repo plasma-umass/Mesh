@@ -11,7 +11,6 @@
 #include <random>
 
 #include "bitmap.h"
-#include "freelist.h"
 #include "internal.h"
 
 #include "rng/mwc.h"
@@ -72,39 +71,9 @@ public:
                 this, objectSize(), maxCount(), meshCount(), _bitmap.to_string().c_str());
   }
 
-  // always "localMalloc"
-  inline void *malloc(Freelist &freelist, bool &isExhausted) {
-    // if (unlikely(!_attached || isExhausted())) {
-    //   dumpDebug();
-    //   d_assert_msg(_attached && !isExhausted(), "attached: %d, full: %d", _attached.load(), isExhausted());
-    // }
-    // d_assert_msg(sz == _objectSize, "sz: %zu _objectSize: %zu", sz, _objectSize);
-
-    auto off = freelist.pop(isExhausted);
-    // mesh::debug("%p: ma %u", this, off);
-
-    auto ptr = mallocAt(off);
-    d_assert(ptr != nullptr);
-
-    return ptr;
-  }
-
-  /// for testing only
-  void freeEntireFreelistExcept(Freelist &freelist, void *exception) {
-    bool isExhausted = false;
-    while (!isExhausted) {
-      auto off = freelist.pop(isExhausted);
-      auto ptr = mallocAt(off);
-      if (ptr != exception)
-        free(ptr);
-    }
-  }
-
-  inline void localFree(Freelist &freelist, MWC &prng, void *ptr) {
-    const ssize_t freedOff = getOff(ptr);
-
-    freelist.push(prng, freedOff);
-  }
+  // should never be called directly, a freelist is populated from our bitmap
+  // inline void *malloc();
+  // inline void localFree(Freelist &freelist, MWC &prng, void *ptr);
 
   inline void free(void *ptr) {
     const ssize_t off = getOff(ptr);
@@ -172,19 +141,9 @@ public:
     return reinterpret_cast<uintptr_t>(_span[0]);
   }
 
-  inline void reattach(Freelist &freelist, MWC &fastPrng) {
+  inline void reattach(size_t additionalInUse) {
     _attached = pthread_self();
-
-    freelist.init(maxCount(), fastPrng, _bitmap);
-
-    // proactively set all the objects to 'in-use' when pulled out of
-    // the bitmap into the freelist.  This avoids frobbing the atomic
-    // bitmap and inUseCounts in the malloc fastpath
-    _inUseCount += freelist.length();
-
-    d_assert(!freelist.isExhausted());
-    // if (_meshCount > 1)
-    //   mesh::debug("fixme? un-mesh when reattaching");
+    _inUseCount += additionalInUse;
   }
 
   /// called when a LocalHeap is done with a MiniHeap (it is
@@ -233,6 +192,10 @@ public:
     return _bitmap;
   }
 
+  mesh::internal::Bitmap &writableBitmap() {
+    return _bitmap;
+  }
+
   void trackMeshedSpan(uintptr_t spanStart) {
     if (_meshCount >= kMaxMeshes) {
       mesh::debug("fatal: too many meshes for one miniheap");
@@ -260,6 +223,7 @@ public:
     _token = token;
   }
 
+  /// public for meshTest only
   inline void *mallocAtWithBitmap(size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
@@ -269,11 +233,10 @@ public:
 
     _inUseCount++;
 
-    return mallocAt(off);
+    return ptrForOffset(off);
   }
 
-  /// public for meshTest only
-  inline void *mallocAt(size_t off) {
+  inline void *ptrForOffset(size_t off) {
     return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
   }
 
@@ -357,6 +320,28 @@ public:
     return -1;
   }
 
+  inline ssize_t getOff(void *ptr) const {
+    d_assert(getSize(ptr) == _objectSize);
+
+    const auto span = spanStart(ptr);
+    d_assert(span != 0);
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+
+    const auto off = (ptrval - span) / _objectSize;
+    // if (unlikely(span > ptrval || off >= maxCount())) {
+    //   mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
+    //   return -1;
+    // }
+
+    // if (unlikely(!_bitmap.isSet(off))) {
+    //   mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
+    //   dumpDebug();
+    //   return -1;
+    // }
+
+    return off;
+  }
+
 protected:
   inline uintptr_t spanStart(void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
@@ -380,28 +365,6 @@ protected:
     }
 
     return 0;
-  }
-
-  inline ssize_t getOff(void *ptr) const {
-    d_assert(getSize(ptr) == _objectSize);
-
-    const auto span = spanStart(ptr);
-    d_assert(span != 0);
-    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-
-    const auto off = (ptrval - span) / _objectSize;
-    // if (unlikely(span > ptrval || off >= maxCount())) {
-    //   mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
-    //   return -1;
-    // }
-
-    // if (unlikely(!_bitmap.isSet(off))) {
-    //   mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
-    //   dumpDebug();
-    //   return -1;
-    // }
-
-    return off;
   }
 
   atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding

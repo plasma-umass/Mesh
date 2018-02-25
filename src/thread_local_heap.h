@@ -12,6 +12,7 @@
 
 #include "internal.h"
 #include "miniheap.h"
+#include "freelist.h"
 
 #include "rng/mwc.h"
 
@@ -40,9 +41,6 @@ public:
       : _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)),
         _prng(internal::seed(), internal::seed()),
         _global(global) {
-    for (auto i = 0; i < kNumBins; i++) {
-      _current[i] = nullptr;
-    }
     d_assert(_global != nullptr);
   }
 
@@ -63,33 +61,33 @@ public:
     }
 
     Freelist &freelist = _freelist[sizeClass];
-    MiniHeap *mh = _current[sizeClass];
-    if (unlikely(mh == nullptr)) {
+    if (unlikely(!freelist.isAttached())) {
       const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
-      mh = _global->allocMiniheap(sizeMax);
-      mh->reattach(freelist, _prng);  // populate freelist, set attached bit
+      MiniHeap *mh = _global->allocMiniheap(sizeMax);
+
+      freelist.attach(_prng, mh);
+      d_assert(!freelist.isExhausted());
+
+      // tell the miniheap how many offsets we pulled out/preallocated into our freelist
+      mh->reattach(freelist.length());
 
       d_assert(mh->isAttached());
+#ifndef NDEBUG
       if (unlikely(mh == nullptr))
         abort();
-
-      _current[sizeClass] = mh;
-
-      d_assert(_current[sizeClass] == mh);
+#endif
     }
 
     bool isExhausted = false;
-    void *ptr = mh->malloc(freelist, isExhausted);
+    void *ptr = freelist.malloc(isExhausted);
     if (unlikely(isExhausted)) {
-      if (mh == _last) {
+      if (&freelist == _last) {
         _last = nullptr;
       }
       freelist.detach();
-      mh->detach();
-      _current[sizeClass] = nullptr;
     } else {
-      _last = mh;
+      _last = &freelist;
     }
 
     return ptr;
@@ -99,17 +97,16 @@ public:
     if (unlikely(ptr == nullptr))
       return;
 
-    // if (likely(_last != nullptr && _last->contains(ptr))) {
-    //   _last->localFree(freelist, _prng, ptr);
-    //   return;
-    // }
+    if (likely(_last != nullptr && _last->contains(ptr))) {
+      _last->free(_prng, ptr);
+      return;
+    }
 
     for (size_t i = 0; i < kNumBins; i++) {
       Freelist &freelist = _freelist[i];
-      const auto curr = _current[i];
-      if (curr && curr->contains(ptr)) {
-        curr->localFree(freelist, _prng, ptr);
-        _last = curr;
+      if (freelist.contains(ptr)) {
+        freelist.free(_prng, ptr);
+        _last = &freelist;
         return;
       }
     }
@@ -122,14 +119,14 @@ public:
       return 0;
 
     if (likely(_last != nullptr && _last->contains(ptr))) {
-      return _last->getSize(ptr);
+      return _last->getSize();
     }
 
     for (size_t i = 0; i < kNumBins; i++) {
-      const auto curr = _current[i];
-      if (curr && curr->contains(ptr)) {
-        _last = curr;
-        return curr->getSize(ptr);
+      Freelist &freelist = _freelist[i];
+      if (freelist.contains(ptr)) {
+        _last = &freelist;
+        return freelist.getSize();
       }
     }
 
@@ -154,8 +151,7 @@ public:
 
 protected:
   const size_t _maxObjectSize;
-  MiniHeap *_last{nullptr};
-  MiniHeap *_current[kNumBins];
+  Freelist *_last{nullptr};
   MWC _prng;
   GlobalHeap *_global;
   LocalHeapStats _stats{};
