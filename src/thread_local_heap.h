@@ -77,15 +77,6 @@ public:
       d_assert(_current[sizeClass] == mh);
     }
 
-    // if (unlikely(!mh->isAttached() || mh->isExhausted())) {
-    //   int attached = mh->isAttached();
-    //   int exhausted = mh->isExhausted();
-    //   mesh::debug("LocalHeap(sz: %zu): expecting failure %d %d (%zu/%zu)", sz, attached, exhausted, sizeMax,
-    //   mh->objectSize());
-    //   // mh->dumpDebug();
-    //   // abort();
-    // }
-
     bool isExhausted = false;
     void *ptr = mh->malloc(isExhausted);
     if (unlikely(isExhausted)) {
