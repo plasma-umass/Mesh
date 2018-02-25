@@ -41,6 +41,10 @@ public:
       : _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)),
         _prng(internal::seed(), internal::seed()),
         _global(global) {
+    // start at 1, becuase 0 is an unused '0' size class
+    for (size_t i = 1; i < kNumBins; i++) {
+      _freelist[i].setObjectSize(SizeMap::ByteSizeForClass(i));
+    }
     d_assert(_global != nullptr);
   }
 
