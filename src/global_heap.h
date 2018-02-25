@@ -9,13 +9,13 @@
 #include <mutex>
 #include <shared_mutex>
 
-#include "heaplayers.h"
-
 #include "binnedtracker.h"
 #include "internal.h"
 #include "meshable-arena.h"
 #include "meshing.h"
 #include "miniheap.h"
+
+#include "heaplayers.h"
 
 using namespace HL;
 
