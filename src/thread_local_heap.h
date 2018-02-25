@@ -49,6 +49,13 @@ public:
 
   // semiansiheap ensures we never see size == 0
   inline void *ATTRIBUTE_ALWAYS_INLINE malloc(size_t sz) {
+    // Prevent integer underflows. This maximum should (and
+    // currently does) provide more than enough slack to compensate for any
+    // rounding below (in the alignment section).
+    if (unlikely(sz > INT_MAX || sz == 0)) {
+      return 0;
+    }
+
     uint32_t sizeClass = 0;
 
     // if the size isn't in our sizemap it is a large alloc
