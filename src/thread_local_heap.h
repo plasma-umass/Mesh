@@ -12,6 +12,7 @@
 
 #include "internal.h"
 #include "miniheap.h"
+#include "freelist.h"
 
 #include "rng/mwc.h"
 
@@ -38,11 +39,11 @@ public:
 
   ThreadLocalHeap(GlobalHeap *global)
       : _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)),
-        _prng(internal::seed()),
-        _mwc(internal::seed(), internal::seed()),
+        _prng(internal::seed(), internal::seed()),
         _global(global) {
-    for (auto i = 0; i < kNumBins; i++) {
-      _current[i] = nullptr;
+    // start at 1, becuase 0 is an unused '0' size class
+    for (size_t i = 1; i < kNumBins; i++) {
+      _freelist[i].setObjectSize(SizeMap::ByteSizeForClass(i));
     }
     d_assert(_global != nullptr);
   }
@@ -59,37 +60,38 @@ public:
     uint32_t sizeClass = 0;
 
     // if the size isn't in our sizemap it is a large alloc
-    if (unlikely(!SizeMap::GetSizeClass(sz, &sizeClass)))
+    if (unlikely(!SizeMap::GetSizeClass(sz, &sizeClass))) {
       return _global->malloc(sz);
-
-    MiniHeap *mh = _current[sizeClass];
-    if (unlikely(mh == nullptr)) {
-      const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
-
-      mh = _global->allocMiniheap(sizeMax);
-      d_assert(mh->isAttached());
-      if (unlikely(mh == nullptr))
-        abort();
-
-      _current[sizeClass] = mh;
-
-      d_assert(_current[sizeClass] == mh);
     }
 
-    // if (unlikely(!mh->isAttached() || mh->isExhausted())) {
-    //   int attached = mh->isAttached();
-    //   int exhausted = mh->isExhausted();
-    //   mesh::debug("LocalHeap(sz: %zu): expecting failure %d %d (%zu/%zu)", sz, attached, exhausted, sizeMax,
-    //   mh->objectSize());
-    //   // mh->dumpDebug();
-    //   // abort();
-    // }
+    Freelist &freelist = _freelist[sizeClass];
+    if (unlikely(!freelist.isAttached())) {
+      const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
+
+      MiniHeap *mh = _global->allocMiniheap(sizeMax);
+
+      freelist.attach(_prng, mh);
+      d_assert(!freelist.isExhausted());
+
+      // tell the miniheap how many offsets we pulled out/preallocated into our freelist
+      mh->reattach(freelist.length());
+
+      d_assert(mh->isAttached());
+#ifndef NDEBUG
+      if (unlikely(mh == nullptr))
+        abort();
+#endif
+    }
 
     bool isExhausted = false;
-    void *ptr = mh->malloc(isExhausted);
+    void *ptr = freelist.malloc(isExhausted);
     if (unlikely(isExhausted)) {
-      mh->detach();
-      _current[sizeClass] = nullptr;
+      if (&freelist == _last) {
+        _last = nullptr;
+      }
+      freelist.detach();
+    } else {
+      _last = &freelist;
     }
 
     return ptr;
@@ -97,12 +99,18 @@ public:
 
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
     if (unlikely(ptr == nullptr))
-        return;
+      return;
+
+    if (likely(_last != nullptr && _last->contains(ptr))) {
+      _last->free(_prng, ptr);
+      return;
+    }
 
     for (size_t i = 0; i < kNumBins; i++) {
-      const auto curr = _current[i];
-      if (curr && curr->contains(ptr)) {
-        curr->localFree(ptr, _prng, _mwc);
+      Freelist &freelist = _freelist[i];
+      if (freelist.contains(ptr)) {
+        freelist.free(_prng, ptr);
+        _last = &freelist;
         return;
       }
     }
@@ -114,10 +122,15 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
+    if (likely(_last != nullptr && _last->contains(ptr))) {
+      return _last->getSize();
+    }
+
     for (size_t i = 0; i < kNumBins; i++) {
-      const auto curr = _current[i];
-      if (curr && curr->contains(ptr)) {
-        return curr->getSize(ptr);
+      Freelist &freelist = _freelist[i];
+      if (freelist.contains(ptr)) {
+        _last = &freelist;
+        return freelist.getSize();
       }
     }
 
@@ -128,14 +141,7 @@ public:
     return _threadLocalData.fastpathHeap;
   }
 
-  static inline ThreadLocalHeap *GetHeap() {
-    auto heap = GetFastPathHeap();
-    if (heap == nullptr) {
-      heap = CreateThreadLocalHeap();
-      _threadLocalData.fastpathHeap = heap;
-    }
-    return heap;
-  }
+  static ATTRIBUTE_NEVER_INLINE ThreadLocalHeap *GetHeap();
 
   static inline ThreadLocalHeap *CreateThreadLocalHeap() {
     void *buf = mesh::internal::Heap().malloc(sizeof(ThreadLocalHeap));
@@ -149,11 +155,11 @@ public:
 
 protected:
   const size_t _maxObjectSize;
-  MiniHeap *_current[kNumBins];
-  mt19937_64 _prng;
-  MWC _mwc;
+  Freelist *_last{nullptr};
+  MWC _prng;
   GlobalHeap *_global;
   LocalHeapStats _stats{};
+  Freelist _freelist[kNumBins] CACHELINE_ALIGNED;
 
   struct ThreadLocalData {
     ThreadLocalHeap *fastpathHeap;
