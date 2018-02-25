@@ -20,7 +20,6 @@ using namespace HL;
 
 namespace mesh {
 
-template <int NumBins>
 class GlobalHeapStats {
 public:
   atomic_size_t meshCount;
@@ -29,28 +28,24 @@ public:
   atomic_size_t mhHighWaterMark;
 };
 
-template <typename BigHeap,                      // for large allocations
-          int NumBins,                           // number of size classes
-          int DefaultMeshPeriod,                 // perform meshing on average once every MeshPeriod frees
-          size_t MinStringLen = 8UL>
-class GlobalMeshingHeap : public MeshableArena {
+class GlobalHeap : public MeshableArena {
 private:
-  DISALLOW_COPY_AND_ASSIGN(GlobalMeshingHeap);
+  DISALLOW_COPY_AND_ASSIGN(GlobalHeap);
   typedef MeshableArena Super;
 
-  static_assert(HL::gcd<BigHeap::Alignment, Alignment>::value == Alignment,
-                "expected BigHeap to have 16-byte alignment");
+  static_assert(HL::gcd<MmapHeap::Alignment, Alignment>::value == Alignment,
+                "expected MmapHeap to have 16-byte alignment");
 
   struct MeshArguments {
-    GlobalMeshingHeap *instance;
+    GlobalHeap *instance;
     internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
   };
 
 public:
   enum { Alignment = 16 };
 
-  GlobalMeshingHeap()
-      : _maxObjectSize(SizeMap::ByteSizeForClass(NumBins - 1)),
+  GlobalHeap()
+      : _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)),
         _prng(internal::seed()),
         _fastPrng(internal::seed(), internal::seed()),
         _lastMesh{std::chrono::high_resolution_clock::now()} {
@@ -59,7 +54,7 @@ public:
   inline void dumpStrings() const {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
-    for (size_t i = 0; i < NumBins; i++) {
+    for (size_t i = 0; i < kNumBins; i++) {
       _littleheaps[i].printOccupancy();
     }
   }
@@ -74,7 +69,7 @@ public:
     debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
     debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
     debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
-    for (size_t i = 0; i < NumBins; i++)
+    for (size_t i = 0; i < kNumBins; i++)
       _littleheaps[i].dumpStats(beDetailed);
   }
 
@@ -89,7 +84,7 @@ public:
     d_assert_msg(objectSize == sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize, sizeMax,
                  sizeClass);
     d_assert(sizeClass >= 0);
-    d_assert(sizeClass < NumBins);
+    d_assert(sizeClass < kNumBins);
 
     // check our bins for a miniheap to reuse
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
@@ -103,7 +98,7 @@ public:
     // if we have objects bigger than the size of a page, allocate
     // multiple pages to amortize the cost of creating a
     // miniheap/globally locking the heap.
-    size_t nObjects = max(HL::CPUInfo::PageSize / sizeMax, MinStringLen);
+    size_t nObjects = max(HL::CPUInfo::PageSize / sizeMax, kMinStringLen);
 
     const size_t nPages = PageCount(sizeMax * nObjects);
     const size_t spanSize = HL::CPUInfo::PageSize * nPages;
@@ -353,7 +348,7 @@ public:
     } else if (strcmp(name, "stats.active") == 0) {
       // all miniheaps at least partially full
       size_t sz = _bigheap.arenaSize();
-      for (size_t i = 0; i < NumBins; i++) {
+      for (size_t i = 0; i < kNumBins; i++) {
         const auto count = _littleheaps[i].nonEmptyCount();
         if (count == 0)
           continue;
@@ -363,7 +358,7 @@ public:
     } else if (strcmp(name, "stats.allocated") == 0) {
       // same as active for us, for now -- memory not returned to the OS
       size_t sz = _bigheap.arenaSize();
-      for (size_t i = 0; i < NumBins; i++) {
+      for (size_t i = 0; i < kNumBins; i++) {
         const auto &bin = _littleheaps[i];
         const auto count = bin.nonEmptyCount();
         if (count == 0)
@@ -476,7 +471,7 @@ protected:
     internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
 
     // first, clear out any free memory we might have
-    for (size_t i = 0; i < NumBins; i++) {
+    for (size_t i = 0; i < kNumBins; i++) {
       auto emptyMiniheaps = _littleheaps[i].getFreeMiniheaps();
       for (size_t i = 0; i < emptyMiniheaps.size(); i++) {
         freeMiniheapLocked(emptyMiniheaps[i], false);
@@ -491,7 +486,7 @@ protected:
             mergeSets.push_back(std::move(miniheaps));
         });
 
-    for (size_t i = 0; i < NumBins; i++) {
+    for (size_t i = 0; i < kNumBins; i++) {
       // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
       // method::greedySplitting(_prng, _littleheaps[i], meshFound);
       // method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
@@ -519,23 +514,23 @@ protected:
 
   const size_t _maxObjectSize;
   atomic_size_t _lastMeshEffective{0};
-  atomic_size_t _meshPeriod{DefaultMeshPeriod};
+  atomic_size_t _meshPeriod{kDefaultMeshPeriod};
 
   // The big heap is handles malloc requests for large objects.  We
   // define a separate class to handle these to segregate bookkeeping
   // for large malloc requests from the ones used to back spans (which
   // are allocated from the arena)
-  BigHeap _bigheap{};
+  MmapHeap _bigheap{};
 
   mt19937_64 _prng;
   MWC _fastPrng;
 
-  BinnedTracker<MiniHeap> _littleheaps[NumBins];
+  BinnedTracker<MiniHeap> _littleheaps[kNumBins];
 
   mutable std::mutex _bigMutex{};
   mutable std::shared_timed_mutex _mhRWLock{};
 
-  GlobalHeapStats<NumBins> _stats{};
+  GlobalHeapStats _stats{};
 
   double _meshPeriodSecs{internal::MeshPeriodSecs};
   // XXX: should be atomic, but has exception spec?

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include "runtime.h"
+#include "thread_local_heap.h"
 
 using namespace mesh;
 
@@ -42,21 +43,57 @@ static __attribute__((destructor)) void libmesh_fini() {
   runtime().heap().dumpStats(mlevel, false);
 }
 
-extern "C" CACHELINE_ALIGNED_FN
-void *mesh_malloc(size_t sz) {
-  return runtime().localHeap()->malloc(sz);
+namespace mesh {
+ATTRIBUTE_NEVER_INLINE
+static void *allocSlowpath(size_t sz) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeap();
+  return localHeap->malloc(sz);
+}
+
+ATTRIBUTE_NEVER_INLINE
+static void freeSlowpath(void *ptr) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeap();
+  localHeap->free(ptr);
+}
+
+ATTRIBUTE_NEVER_INLINE
+static size_t usableSizeSlowpath(void *ptr) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeap();
+  return localHeap->getSize(ptr);
+}
+}  // namespace mesh
+
+extern "C" CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+
+  if (unlikely(localHeap == nullptr)) {
+    return mesh::allocSlowpath(sz);
+  }
+
+  return localHeap->malloc(sz);
 }
 #define xxmalloc mesh_malloc
 
-extern "C" CACHELINE_ALIGNED_FN
-void mesh_free(void *ptr)  {
-  runtime().localHeap()->free(ptr);
+extern "C" CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+
+  if (unlikely(localHeap == nullptr)) {
+    mesh::freeSlowpath(ptr);
+    return;
+  }
+
+  return localHeap->free(ptr);
 }
 #define xxfree mesh_free
 
-extern "C" CACHELINE_ALIGNED_FN
-size_t mesh_malloc_usable_size(void *ptr) {
-  return runtime().localHeap()->getSize(ptr);
+extern "C" CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+
+  if (unlikely(localHeap == nullptr)) {
+    return mesh::usableSizeSlowpath(ptr);
+  }
+
+  return localHeap->getSize(ptr);
 }
 #define xxmalloc_usable_size mesh_malloc_usable_size
 

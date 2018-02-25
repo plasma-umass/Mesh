@@ -7,6 +7,8 @@
 
 #include <cstddef>
 #include <cstdint>
+
+#include <condition_variable>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -17,6 +19,21 @@
 #include "static/staticlog.h"
 #include "utility/ilog2.h"
 
+namespace mesh {
+static constexpr size_t kMinObjectSize = 16;
+static constexpr size_t kMaxSize = 16384;
+static constexpr size_t kClassSizesMax = 96;
+static constexpr size_t kAlignment = 8;
+static constexpr int kMinAlign = 16;
+static constexpr int kPageSize = 4096;
+
+static constexpr int kNumBins = 25;  // 16Kb max object size
+static constexpr int kDefaultMeshPeriod = 10000;
+
+static constexpr size_t kMinStringLen = 8;
+};  // namespace mesh
+
+using std::condition_variable;
 using std::function;
 using std::lock_guard;
 using std::mt19937_64;
@@ -25,11 +42,15 @@ using std::mutex;
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#define ATTRIBUTE_NEVER_INLINE __attribute__((noinline))
 #define ATTRIBUTE_ALWAYS_INLINE __attribute__((always_inline))
 #define ATTRIBUTE_HIDDEN __attribute__((visibility("hidden")))
 #define ATTRIBUTE_ALIGNED(s) __attribute__((aligned(s)))
 #define CACHELINE_SIZE 64
-#define CACHELINE_ALIGNED_FN ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
+#define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
+#define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
+
+#define ATTR_INITIAL_EXEC __attribute__((tls_model("initial-exec")))
 
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
   TypeName(const TypeName &);              \
@@ -63,13 +84,6 @@ namespace mesh {
 
 // logging
 void debug(const char *fmt, ...);
-
-static constexpr size_t kMinObjectSize = 16;
-static constexpr size_t kMaxSize = 16384;
-static constexpr size_t kClassSizesMax = 96;
-static constexpr size_t kAlignment = 8;
-static constexpr int kMinAlign = 16;
-static constexpr int kPageSize = 4096;
 
 namespace internal {
 

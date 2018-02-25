@@ -8,47 +8,21 @@
 #include <pthread.h>
 #include <signal.h>  // for stack_t
 
-#include <condition_variable>
-
 #include "internal.h"
 
 #include "real.h"
 
 #include "globalmeshingheap.h"
-#include "thread_local_heap.h"
 #include "lockedheap.h"
 #include "mmapheap.h"
 #include "semiansiheap.h"
 
 #include "heaplayers.h"
 
-using std::condition_variable;
-
 namespace mesh {
 
 // function passed to pthread_create
 typedef void *(*PthreadFn)(void *);
-
-// static const int NBins = 11;  // 16Kb max object size
-static const int NBins = 25;  // 16Kb max object size
-static const int MeshPeriod = 10000;
-
-// The global heap manages the spans that back MiniHeaps as well as
-// large allocations.
-class GlobalHeap : public GlobalMeshingHeap<mesh::MmapHeap, NBins, MeshPeriod> {};
-
-// Fewer buckets than regular KingsleyHeap (to ensure multiple objects
-// fit in the 128Kb spans used by MiniHeaps).
-class LocalHeap
-    : public SemiANSIHeap<ThreadLocalHeap<NBins, MeshPeriod, GlobalHeap>, GlobalHeap> {
-private:
-  DISALLOW_COPY_AND_ASSIGN(LocalHeap);
-  typedef SemiANSIHeap<ThreadLocalHeap<NBins, MeshPeriod, GlobalHeap>, GlobalHeap> SuperHeap;
-
-public:
-  explicit LocalHeap(GlobalHeap *global) : SuperHeap(global) {
-  }
-};
 
 class Runtime {
 private:
@@ -65,11 +39,6 @@ public:
     return _heap;
   }
 
-  static inline LocalHeap *localHeap() __attribute__((always_inline)) {
-    if (unlikely(_localHeap == nullptr))
-      allocLocalHeap();
-    return _localHeap;
-  }
   void startBgThread();
 
   // we need to wrap pthread_create so that we can safely implement a
@@ -112,10 +81,6 @@ private:
   static void segfaultHandler(int sig, siginfo_t *siginfo, void *context);
 
   static void *bgThread(void *arg);
-
-  static void allocLocalHeap();
-
-  static __thread LocalHeap *_localHeap;
 
   friend Runtime &runtime();
 

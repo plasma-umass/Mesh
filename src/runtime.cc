@@ -9,6 +9,7 @@
 #include <sys/types.h>
 
 #include "runtime.h"
+#include "thread_local_heap.h"
 
 namespace mesh {
 
@@ -30,7 +31,7 @@ const int32_t SizeMap::class_to_size_[kClassSizesMax] = {
 // const internal::BinToken::Size internal::BinToken::FlagEmpty = numeric_limits<uint32_t>::max() - 2;
 // const internal::BinToken::Size internal::BinToken::FlagNoOff = numeric_limits<uint32_t>::max();
 
-__thread LocalHeap *Runtime::_localHeap;
+__thread ThreadLocalHeap::ThreadLocalData ThreadLocalHeap::_threadLocalData ATTR_INITIAL_EXEC CACHELINE_ALIGNED;
 
 STLAllocator<char, internal::Heap> internal::allocator{};
 
@@ -185,17 +186,6 @@ void Runtime::lock() {
 
 void Runtime::unlock() {
   _mutex.unlock();
-}
-
-void Runtime::allocLocalHeap() {
-  d_assert(_localHeap == nullptr);
-
-  void *buf = mesh::internal::Heap().malloc(sizeof(LocalHeap));
-  if (buf == nullptr) {
-    mesh::debug("mesh: unable to allocate LocalHeap, aborting.\n");
-    abort();
-  }
-  _localHeap = new (buf) LocalHeap(&mesh::runtime().heap());
 }
 
 int Runtime::epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {

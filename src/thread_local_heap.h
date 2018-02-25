@@ -17,6 +17,8 @@
 
 #include "heaplayers.h"
 
+#include "runtime.h"
+
 using namespace HL;
 
 namespace mesh {
@@ -27,9 +29,6 @@ public:
   atomic_size_t freeCount{0};
 };
 
-template <int NumBins,                           // number of size classes
-          int MeshPeriod,                        // perform meshing on average once every MeshPeriod frees
-          typename GlobalHeap>
 class ThreadLocalHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(ThreadLocalHeap);
@@ -38,11 +37,11 @@ public:
   enum { Alignment = 16 };
 
   ThreadLocalHeap(GlobalHeap *global)
-    : _maxObjectSize(SizeMap::ByteSizeForClass(NumBins - 1)),
+      : _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)),
         _prng(internal::seed()),
         _mwc(internal::seed(), internal::seed()),
         _global(global) {
-    for (auto i = 0; i < NumBins; i++) {
+    for (auto i = 0; i < kNumBins; i++) {
       _current[i] = nullptr;
     }
     d_assert(_global != nullptr);
@@ -103,7 +102,7 @@ public:
   }
 
   inline size_t getSize(void *ptr) {
-    for (size_t i = 0; i < NumBins; i++) {
+    for (size_t i = 0; i < kNumBins; i++) {
       const auto curr = _current[i];
       if (curr && curr->contains(ptr)) {
         return curr->getSize(ptr);
@@ -113,13 +112,41 @@ public:
     return _global->getSize(ptr);
   }
 
+  static inline ThreadLocalHeap *GetFastPathHeap() {
+    return _threadLocalData.fastpathHeap;
+  }
+
+  static inline ThreadLocalHeap *GetHeap() {
+    auto heap = GetFastPathHeap();
+    if (heap == nullptr) {
+      heap = CreateThreadLocalHeap();
+      _threadLocalData.fastpathHeap = heap;
+    }
+    return heap;
+  }
+
+  static inline ThreadLocalHeap *CreateThreadLocalHeap() {
+    void *buf = mesh::internal::Heap().malloc(sizeof(ThreadLocalHeap));
+    if (buf == nullptr) {
+      mesh::debug("mesh: unable to allocate ThreadLocalHeap, aborting.\n");
+      abort();
+    }
+
+    return new (buf) ThreadLocalHeap(&mesh::runtime().heap());
+  }
+
 protected:
   const size_t _maxObjectSize;
-  MiniHeap *_current[NumBins];
+  MiniHeap *_current[kNumBins];
   mt19937_64 _prng;
   MWC _mwc;
   GlobalHeap *_global;
   LocalHeapStats _stats{};
+
+  struct ThreadLocalData {
+    ThreadLocalHeap *fastpathHeap;
+  };
+  static __thread ThreadLocalData _threadLocalData CACHELINE_ALIGNED ATTR_INITIAL_EXEC;
 };
 }  // namespace mesh
 
