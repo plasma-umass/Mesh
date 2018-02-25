@@ -15,7 +15,7 @@
 #include "real.h"
 
 #include "globalmeshingheap.h"
-#include "localmeshingheap.h"
+#include "thread_local_heap.h"
 #include "lockedheap.h"
 #include "mmapheap.h"
 #include "semiansiheap.h"
@@ -40,10 +40,10 @@ class GlobalHeap : public GlobalMeshingHeap<mesh::MmapHeap, NBins, MeshPeriod> {
 // Fewer buckets than regular KingsleyHeap (to ensure multiple objects
 // fit in the 128Kb spans used by MiniHeaps).
 class LocalHeap
-    : public SemiANSIHeap<LocalMeshingHeap<NBins, MeshPeriod, GlobalHeap>, GlobalHeap> {
+    : public SemiANSIHeap<ThreadLocalHeap<NBins, MeshPeriod, GlobalHeap>, GlobalHeap> {
 private:
   DISALLOW_COPY_AND_ASSIGN(LocalHeap);
-  typedef SemiANSIHeap<LocalMeshingHeap<NBins, MeshPeriod, GlobalHeap>, GlobalHeap> SuperHeap;
+  typedef SemiANSIHeap<ThreadLocalHeap<NBins, MeshPeriod, GlobalHeap>, GlobalHeap> SuperHeap;
 
 public:
   explicit LocalHeap(GlobalHeap *global) : SuperHeap(global) {
