@@ -167,7 +167,7 @@ public:
     if (untrack)
       untrackMiniheapLocked(sizeClass, mh);
 
-    mh->MiniHeapBase::~MiniHeapBase();
+    mh->MiniHeap::~MiniHeap();
     internal::Heap().free(mh);
   }
 
@@ -192,14 +192,6 @@ public:
   }
 
   void free(void *ptr) {
-    // if (unlikely(internal::isMeshMarker(ptr))) {
-    //   dumpStats(2, false);
-    //   for (size_t i = 0; i < 128; i++)
-    //     meshAllSizeClasses();
-    //   dumpStats(2, false);
-    //   return;
-    // }
-
     // two possibilities: most likely the ptr is small (and therefor
     // owned by a miniheap), or is a large allocation
 
@@ -242,7 +234,7 @@ public:
   }
 
   inline size_t getSize(void *ptr) const {
-    if (unlikely(ptr == nullptr))  // || internal::isMeshMarker(ptr))
+    if (unlikely(ptr == nullptr))
       return 0;
 
     auto mh = miniheapFor(ptr);
@@ -278,7 +270,7 @@ public:
   }
 
   int bitmapGet(enum mesh::BitType type, void *ptr) const {
-    if (unlikely(ptr == nullptr))  // || internal::isMeshMarker(ptr))
+    if (unlikely(ptr == nullptr))
       return 0;
 
     auto mh = miniheapFor(ptr);
@@ -292,7 +284,7 @@ public:
   }
 
   int bitmapSet(enum mesh::BitType type, void *ptr) {
-    if (unlikely(ptr == nullptr))  // || internal::isMeshMarker(ptr))
+    if (unlikely(ptr == nullptr))
       return 0;
 
     auto mh = miniheapFor(ptr);
@@ -306,7 +298,7 @@ public:
   }
 
   int bitmapClear(enum mesh::BitType type, void *ptr) {
-    if (unlikely(ptr == nullptr))  // || internal::isMeshMarker(ptr))
+    if (unlikely(ptr == nullptr))
       return 0;
 
     auto mh = miniheapFor(ptr);
@@ -391,7 +383,7 @@ public:
   // PUBLIC ONLY FOR TESTING
   // after call to meshLocked() completes src is a nullptr
   void meshLocked(MiniHeap *dst, MiniHeap *&src) {
-    if (dst->meshCount() + src->meshCount() > internal::MaxMeshes)
+    if (dst->meshCount() + src->meshCount() > kMaxMeshes)
       return;
 
     const size_t dstSpanSize = dst->spanSize();
@@ -532,7 +524,7 @@ protected:
 
   GlobalHeapStats _stats{};
 
-  double _meshPeriodSecs{internal::MeshPeriodSecs};
+  double _meshPeriodSecs{kMeshPeriodSecs};
   // XXX: should be atomic, but has exception spec?
   std::chrono::time_point<std::chrono::high_resolution_clock> _lastMesh;
 };
