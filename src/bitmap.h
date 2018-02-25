@@ -238,10 +238,12 @@ public:
     uint32_t item, position;
     computeItemPosition(index, item, position);
 
+    auto atomic_bitarray = reinterpret_cast<atomic_size_t *>(_bitarray);
+
     const auto mask = getMask(position);
-    size_t oldValue = _bitarray[item];
-    while (!std::atomic_compare_exchange_weak(&_bitarray[item],  // address of word
-                                              &oldValue,         // old val
+    size_t oldValue = atomic_bitarray[item];
+    while (!std::atomic_compare_exchange_weak(&atomic_bitarray[item],  // address of word
+                                              &oldValue,               // old val
                                               oldValue & ~mask)) {
     }
 
@@ -320,10 +322,12 @@ public:
 private:
   inline bool tryToSetAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
-    size_t oldValue = _bitarray[item];
 
-    while (!std::atomic_compare_exchange_weak(&_bitarray[item],  // address of word
-                                              &oldValue,         // old val
+    auto atomic_bitarray = reinterpret_cast<atomic_size_t *>(_bitarray);
+
+    size_t oldValue = atomic_bitarray[item];
+    while (!std::atomic_compare_exchange_weak(&atomic_bitarray[item],  // address of word
+                                              &oldValue,               // old val
                                               oldValue | mask)) {
     }
 

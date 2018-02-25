@@ -18,8 +18,23 @@ extern "C" {
 // allocator-related options.
 int mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
+// 0 if not in bounds, 1 if is.
+int mesh_in_bounds(void *ptr);
+
 // returns the usable size of an allocation
 size_t mesh_usable_size(void *ptr);
+
+enum MeshBitType {
+  MESH_BIT_0,
+  MESH_BIT_1,
+  MESH_BIT_2,
+  MESH_BIT_3,
+  MESH_BIT_COUNT,
+};
+
+int mesh_bit_get(enum MeshBitType type, void *ptr);
+int mesh_bit_set(enum MeshBitType type, void *ptr);
+int mesh_bit_clear(enum MeshBitType type, void *ptr);
 
 #ifdef __cplusplus
 }

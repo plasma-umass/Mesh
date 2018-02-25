@@ -7,6 +7,8 @@
 
 #include <cstddef>
 #include <cstdint>
+
+#include <condition_variable>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -17,6 +19,35 @@
 #include "static/staticlog.h"
 #include "utility/ilog2.h"
 
+namespace mesh {
+static constexpr size_t kMinObjectSize = 16;
+static constexpr size_t kMaxSize = 16384;
+static constexpr size_t kClassSizesMax = 96;
+static constexpr size_t kAlignment = 8;
+static constexpr int kMinAlign = 16;
+static constexpr int kPageSize = 4096;
+
+static constexpr int kNumBins = 25;  // 16Kb max object size
+static constexpr int kDefaultMeshPeriod = 10000;
+
+static constexpr size_t kMinStringLen = 8;
+
+static constexpr size_t kMaxFreelistLength = sizeof(uint8_t) << 8;  // 256
+static constexpr bool kEnableShuffleFreelist = true;
+
+static const double kMeshPeriodSecs = .1;
+
+static constexpr size_t kMaxMeshes = 4;
+static constexpr bool kSlowButAccurateRandom = false;
+
+// static constexpr size_t ArenaSize = 1UL << 35;        // 32 GB
+static constexpr size_t kArenaSize = 1UL << 30;       // 32 GB
+static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
+#define SIGQUIESCE (SIGRTMIN + 7)
+#define SIGDUMP (SIGRTMIN + 8)
+};  // namespace mesh
+
+using std::condition_variable;
 using std::function;
 using std::lock_guard;
 using std::mt19937_64;
@@ -25,16 +56,21 @@ using std::mutex;
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#define ATTRIBUTE_NEVER_INLINE __attribute__((noinline))
 #define ATTRIBUTE_ALWAYS_INLINE __attribute__((always_inline))
 #define ATTRIBUTE_HIDDEN __attribute__((visibility("hidden")))
 #define ATTRIBUTE_ALIGNED(s) __attribute__((aligned(s)))
-#define CACHELINE 64
+#define CACHELINE_SIZE 64
+#define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
+#define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
+
+#define ATTR_INITIAL_EXEC __attribute__((tls_model("initial-exec")))
 
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
   TypeName(const TypeName &);              \
   void operator=(const TypeName &)
 
-// dynamic (runtime) assert
+// runtime debug-level asserts
 #ifndef NDEBUG
 #define d_assert_msg(expr, fmt, ...) \
   ((likely(expr))                    \
@@ -49,30 +85,21 @@ using std::mutex;
 #define d_assert(expr)
 #endif
 
+// like d_assert, but still executed in release builds
+#define hard_assert_msg(expr, fmt, ...) \
+  ((likely(expr))                       \
+       ? static_cast<void>(0)           \
+       : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, __LINE__, fmt, __VA_ARGS__))
+#define hard_assert(expr)                \
+  ((likely(expr)) ? static_cast<void>(0) \
+                  : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, __LINE__, ""))
+
 namespace mesh {
 
+// logging
 void debug(const char *fmt, ...);
 
-static constexpr size_t MinObjectSize = 16;
-static constexpr size_t kMaxSize = 16384;
-static constexpr size_t kClassSizesMax = 96;
-static constexpr size_t kAlignment = 8;
-static constexpr int kMinAlign = 16;
-static constexpr int kPageSize = 4096;
-
-
-// inline constexpr size_t class2Size(const int i) {
-//   return static_cast<size_t>(1ULL << (i + staticlog(MinObjectSize)));
-// }
-
-// inline int size2Class(const size_t sz) {
-//   return static_cast<int>(HL::ilog2((sz < 8) ? 8 : sz) - staticlog(MinObjectSize));
-// }
-
 namespace internal {
-
-void StopTheWorld() noexcept;
-void StartTheWorld() noexcept;
 
 inline static mutex *getSeedMutex() {
   static char muBuf[sizeof(mutex)];
@@ -174,7 +201,6 @@ private:
     }
   }
 
-
   // Mapping from size class to max size storable in that class
   static const int32_t class_to_size_[kClassSizesMax];
 
@@ -203,7 +229,7 @@ public:
   }
 
   // Get the byte-size for a specified class
-  //static inline int32_t ATTRIBUTE_ALWAYS_INLINE ByteSizeForClass(uint32_t cl) {
+  // static inline int32_t ATTRIBUTE_ALWAYS_INLINE ByteSizeForClass(uint32_t cl) {
   static inline size_t ATTRIBUTE_ALWAYS_INLINE ByteSizeForClass(int32_t cl) {
     return class_to_size_[static_cast<uint32_t>(cl)];
   }
@@ -213,15 +239,6 @@ public:
     return class_to_size_[cl];
   }
 };
-
-inline size_t ATTRIBUTE_ALWAYS_INLINE class2Size(const int i) {
-  return SizeMap::ByteSizeForClass(i);
-}
-
-inline int ATTRIBUTE_ALWAYS_INLINE size2Class(const size_t sz) {
-  return SizeMap::SizeClass(sz);
-}
-
 }  // namespace mesh
 
 #endif  // MESH__COMMON_H

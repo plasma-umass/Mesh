@@ -74,6 +74,8 @@ c.append('ldflags', '-Wl,-Bsymbolic-functions')
 c.append('ldflags', '-Wl,-z,now,-z,relro')
 c.append('ldflags', '-ftls-model=initial-exec')
 
+c.append('ldflags', '-static-libstdc++ -static-libgcc')
+
 c.append('libs', '-lm -lpthread')
 c.append('libs', '-ldl')
 

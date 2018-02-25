@@ -9,41 +9,19 @@
 #include <sys/types.h>
 
 #include "runtime.h"
+#include "thread_local_heap.h"
 
 namespace mesh {
 
-ATTRIBUTE_ALIGNED(CACHELINE)
+ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 const unsigned char SizeMap::class_array_[kClassArraySize] = {
 #include "size_classes.def"
 };
 
-ATTRIBUTE_ALIGNED(CACHELINE)
+ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 const int32_t SizeMap::class_to_size_[kClassSizesMax] = {
-    0,
-    16,
-    32,
-    48,
-    64,
-    80,
-    96,
-    112,
-    128,
-    160,
-    192,
-    224,
-    256,
-    320,
-    384,
-    448,
-    512,
-    640,
-    768,
-    896,
-    1024,
-    2048,
-    4096,
-    8192,
-    16384,
+    0,   16,  32,  48,  64,  80,  96,  112,  128,  160,  192,  224,   256,
+    320, 384, 448, 512, 640, 768, 896, 1024, 2048, 4096, 8192, 16384,
 };
 
 // const internal::BinToken::Size internal::BinToken::Max = numeric_limits<uint32_t>::max();
@@ -53,7 +31,7 @@ const int32_t SizeMap::class_to_size_[kClassSizesMax] = {
 // const internal::BinToken::Size internal::BinToken::FlagEmpty = numeric_limits<uint32_t>::max() - 2;
 // const internal::BinToken::Size internal::BinToken::FlagNoOff = numeric_limits<uint32_t>::max();
 
-__thread LocalHeap *Runtime::_localHeap;
+__thread ThreadLocalHeap::ThreadLocalData ThreadLocalHeap::_threadLocalData ATTR_INITIAL_EXEC CACHELINE_ALIGNED;
 
 STLAllocator<char, internal::Heap> internal::allocator{};
 
@@ -101,35 +79,34 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 }
 
 Runtime::Runtime() {
-  createSignalFd();
 }
 
-void Runtime::initInterposition() {
-  lock_guard<mutex> lock(_mutex);
+int Runtime::createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg) {
+  lock_guard<Runtime> lock(*this);
 
-  if (_libcEpollWait != nullptr && _libcEpollPwait != nullptr)
-    return;
+  if (mesh::real::pthread_create == nullptr)
+    mesh::real::init();
 
-  void *libcHandle = dlopen("libc.so.6", RTLD_LAZY | RTLD_NOLOAD);
-  if (libcHandle == nullptr) {
-    debug("expected libc handle");
-    abort();
-  }
+  void *threadArgsBuf = mesh::internal::Heap().malloc(sizeof(StartThreadArgs));
+  d_assert(threadArgsBuf != nullptr);
+  StartThreadArgs *threadArgs = new (threadArgsBuf) StartThreadArgs(this, startRoutine, arg);
 
-  auto epollWaitFn = dlsym(libcHandle, "epoll_wait");
-  if (epollWaitFn == nullptr) {
-    debug("expected epoll_wait");
-    abort();
-  }
+  return mesh::real::pthread_create(thread, attr, reinterpret_cast<PthreadFn>(startThread), threadArgs);
+}
 
-  auto epollPwaitFn = dlsym(libcHandle, "epoll_pwait");
-  if (epollPwaitFn == nullptr) {
-    debug("expected epoll_pwait");
-    abort();
-  }
+void *Runtime::startThread(StartThreadArgs *threadArgs) {
+  d_assert(threadArgs != nullptr);
 
-  _libcEpollWait = reinterpret_cast<EpollWaitFn>(epollWaitFn);
-  _libcEpollPwait = reinterpret_cast<EpollPwaitFn>(epollPwaitFn);
+  Runtime *runtime = threadArgs->runtime;
+  PthreadFn startRoutine = threadArgs->startRoutine;
+  void *arg = threadArgs->arg;
+
+  mesh::internal::Heap().free(threadArgs);
+  threadArgs = nullptr;
+
+  runtime->installSegfaultHandler();
+
+  return startRoutine(arg);
 }
 
 void Runtime::createSignalFd() {
@@ -138,19 +115,16 @@ void Runtime::createSignalFd() {
   sigemptyset(&mask);
   sigaddset(&mask, SIGDUMP);
 
+  mesh::real::init();
+
   /* Block signals so that they aren't handled
      according to their default dispositions */
 
-  if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1) {
-    debug("failed to block signal mask for BG thread");
-    abort();
-  }
+  auto result = mesh::real::sigprocmask(SIG_BLOCK, &mask, NULL);
+  hard_assert(result == 0);
 
   _signalFd = signalfd(-1, &mask, 0);
-  if (_signalFd == -1) {
-    debug("failed to create signal FD");
-    abort();
-  }
+  hard_assert(_signalFd >= 0);
 }
 
 void Runtime::startBgThread() {
@@ -214,39 +188,85 @@ void Runtime::unlock() {
   _mutex.unlock();
 }
 
-void Runtime::allocLocalHeap() {
-  d_assert(_localHeap == nullptr);
-
-  void *buf = mesh::internal::Heap().malloc(sizeof(LocalHeap));
-  if (buf == nullptr) {
-    mesh::debug("mesh: unable to allocate LocalHeap, aborting.\n");
-    abort();
-  }
-  _localHeap = new (buf) LocalHeap(&mesh::runtime().heap());
-}
-
 int Runtime::epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {
-  if (unlikely(_libcEpollWait == nullptr)) {
-    initInterposition();
-    if (_libcEpollWait == nullptr)
-      abort();
-  }
+  if (unlikely(mesh::real::epoll_wait == nullptr))
+    mesh::real::init();
 
   _heap.maybeMesh();
 
-  return _libcEpollWait(__epfd, __events, __maxevents, __timeout);
+  return mesh::real::epoll_wait(__epfd, __events, __maxevents, __timeout);
 }
 
 int Runtime::epollPwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
                         const __sigset_t *__ss) {
-  if (unlikely(_libcEpollPwait == nullptr)) {
-    initInterposition();
-    if (_libcEpollPwait == nullptr)
-      abort();
-  }
+  if (unlikely(mesh::real::epoll_pwait == nullptr))
+    mesh::real::init();
 
   _heap.maybeMesh();
 
-  return _libcEpollPwait(__epfd, __events, __maxevents, __timeout, __ss);
+  return mesh::real::epoll_pwait(__epfd, __events, __maxevents, __timeout, __ss);
+}
+
+static struct sigaction sigsegv_action;
+static mutex sigsegv_lock;
+
+int Runtime::sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) {
+  if (unlikely(mesh::real::sigaction == nullptr))
+    mesh::real::init();
+
+  if (signum != SIGSEGV)
+    return mesh::real::sigaction(signum, act, oldact);
+
+  // if a user is trying to install a segfault handler, record that
+  // here to proxy to later.
+  lock_guard<mutex> lock(sigsegv_lock);
+
+  if (oldact)
+    memcpy(oldact, &sigsegv_action, sizeof(sigsegv_action));
+
+  if (act == nullptr)
+    memset(&sigsegv_action, 0, sizeof(sigsegv_action));
+  else
+    memcpy(&sigsegv_action, act, sizeof(sigsegv_action));
+
+  return 0;
+}
+
+int Runtime::sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
+  if (unlikely(mesh::real::sigprocmask == nullptr))
+    mesh::real::init();
+
+  lock_guard<mutex> lock(sigsegv_lock);
+
+  debug("TODO: ensure we never mask SIGSEGV\n");
+
+  return mesh::real::sigprocmask(how, set, oldset);
+}
+
+void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
+  // okToProceed is a barrier that ensures any in-proress meshing has
+  // completed, and the reason for the fault was 'just' a meshing
+  if (siginfo->si_code == SEGV_ACCERR && runtime().heap().okToProceed(siginfo->si_addr)) {
+    // debug("TODO: trapped access violation from meshing, log stat\n");
+    return;
+  }
+
+  debug("TODO: check for + call program's handler\n");
+  abort();
+}
+
+void Runtime::installSegfaultHandler() {
+  struct sigaction action;
+  struct sigaction old_action;
+
+  memset(&action, 0, sizeof(action));
+  memset(&old_action, 0, sizeof(old_action));
+
+  action.sa_sigaction = segfaultHandler;
+  action.sa_flags = SA_SIGINFO | SA_NODEFER;
+  auto err = mesh::real::sigaction(SIGSEGV, &action, &old_action);
+  hard_assert(err == 0);
+
+  debug("TODO: check old_action is NULL");
 }
 }  // namespace mesh
