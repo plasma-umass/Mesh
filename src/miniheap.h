@@ -150,7 +150,7 @@ public:
   /// "detaching" it and releasing it back to the global heap)
   inline void detach() {
     _attached = 0;
-    atomic_thread_fence(memory_order_seq_cst);
+    // atomic_thread_fence(memory_order_seq_cst);
   }
 
   inline bool isAttached() const {
