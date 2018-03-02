@@ -84,7 +84,7 @@ public:
     _attachedMiniheap = nullptr;
     _start = 0;
     _end = 0;
-    atomic_thread_fence(memory_order_seq_cst);
+    // atomic_thread_fence(memory_order_seq_cst);
     // mesh::internal::Heap().free(list);
   }
 
@@ -169,6 +169,11 @@ public:
   inline void setObjectSize(size_t sz) {
     _objectSize = sz;
     _maxCount = max(HL::CPUInfo::PageSize / sz, kMinStringLen);
+    // initially, we are unattached and therefor have no capacity.
+    // Setting _off to _maxCount causes isExhausted() to return true
+    // so that we don't separately have to check !isAttached() in the
+    // malloc fastpath.
+    _off = _maxCount;
   }
 
 private:

@@ -44,7 +44,6 @@ public:
     // start at 1, becuase 0 is an unused '0' size class
     for (size_t i = 1; i < kNumBins; i++) {
       _freelist[i].setObjectSize(SizeMap::ByteSizeForClass(i));
-      attachFreelist(_freelist[i], i);
     }
     d_assert(_global != nullptr);
   }
@@ -72,7 +71,9 @@ public:
       if (&freelist == _last) {
         _last = nullptr;
       }
-      freelist.detach();
+      if (freelist.isAttached()) {
+        freelist.detach();
+      }
 
       attachFreelist(freelist, sizeClass);
     }
