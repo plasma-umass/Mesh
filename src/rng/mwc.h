@@ -23,15 +23,15 @@ public:
   }
 
   inline unsigned int next(void) {
-    assert(w != 0);
-    assert(z != 0);
+    d_assert(w != 0);
+    d_assert(z != 0);
     // These magic numbers are derived from a note by George Marsaglia.
     unsigned int znew = 36969 * (z & 65535) + (z >> 16);
     unsigned int wnew = 18000 * (w & 65535) + (w >> 16);
     unsigned int x = (znew << 16) + wnew;
     //debug("MWC: %8x\n", x);
-    assert(wnew != 0);
-    assert(znew != 0);
+    d_assert(wnew != 0);
+    d_assert(znew != 0);
     w = wnew;
     z = znew;
     return x;
