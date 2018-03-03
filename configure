@@ -18,7 +18,6 @@ c.config('package-bugreport', 'bpowers@cs.umass.edu')
 if c.debug_build:
     c.append('cflags', '-g')
     c.append('ldflags', '-g')
-#else:
 
 if c.optimize_build:
     c.append('cflags', '-DNDEBUG')
@@ -45,19 +44,18 @@ c.append('cflags', '-D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700')
 
 c.append('cflags', '-Wall -Wextra -pedantic')
 c.append('cflags', '-Wundef')
-c.append('cflags', '-Wno-gnu-statement-expression')
+# c.append('cflags', '-Wno-gnu-statement-expression')
 c.append('cflags', '-Wno-unused-parameter')
 c.append('cflags', '-Wno-unused-variable')
-c.append('cflags', '-Wno-c99-extensions')
-c.append('cflags', '-Woverloaded-virtual')
+# c.append('cflags', '-Wno-c99-extensions')
+c.append('cxxflags', '-Woverloaded-virtual')
 c.append('cflags', '-Werror=return-type')
 c.append('cflags', '-Wtype-limits')
 c.append('cflags', '-Wempty-body')
-c.append('cflags', '-Wno-ctor-dtor-privacy')
-c.append('cflags', '-Winvalid-offsetof')
+c.append('cxxflags', '-Wno-ctor-dtor-privacy')
+c.append('cxxflags', '-Winvalid-offsetof')
 c.append('cflags', '-Wvariadic-macros')
 c.append('cflags', '-Wcast-align')
-c.append('cflags', '-Wno-c++17-extensions')
 
 
 c.append('cflags', '-Isrc/vendor/googletest/googletest/include')
@@ -79,20 +77,17 @@ c.append('ldflags', '-static-libstdc++ -static-libgcc')
 c.append('libs', '-lm -lpthread')
 c.append('libs', '-ldl')
 
-c.append('cxxflags', '-std=gnu++14 -I src')
+c.append('cxxflags', '-std=c++1z -I src')
 c.append('cxxflags', '$(CFLAGS)')
 
 # for development work, clang has much, much nicer error messages
-c.prefer('cc', 'clang')
-c.prefer('cxx', 'clang++')
+# c.prefer('cc', 'clang')
+# c.prefer('cxx', 'clang++')
 
-c.prefer('ar', 'llvm-ar')
-c.prefer('ranlib', 'llvm-ranlib')
+# c.prefer('ar', 'llvm-ar')
+# c.prefer('ranlib', 'llvm-ranlib')
 
 if not 'cc' in c.env or c.env['cc'] != 'clang':
     c.append('cflags', '-Wa,--noexecstack')
-elif exe_available('lld'):
-    # use LLVM's linker if available
-    c.append('ldflags', '-fuse-ld=lld')
 
 c.generate()
