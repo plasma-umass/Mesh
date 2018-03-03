@@ -113,9 +113,12 @@ private:
   DISALLOW_COPY_AND_ASSIGN(CutoffTable);
 
 public:
-  CutoffTable(size_t len, double cutoffPercent) : _len(len), _cutoffPercent(cutoffPercent) {
+  CutoffTable(size_t len, double cutoffPercent, uint8_t *table) : _len(len), _cutoffPercent(cutoffPercent) {
     d_assert(len <= 256);
     d_assert(cutoffPercent > 0 && cutoffPercent <= 1);
+    d_assert(table != nullptr);
+
+    _table = table;
 
     // size_t cutoff = (size_t)ceil(cutoffPercent * len);
 
@@ -153,16 +156,17 @@ private:
 
   size_t _len;
   double _cutoffPercent;
-  uint8_t _table[];
+  uint8_t *_table;
 };
 
 inline CutoffTable *generateCutoffs(const size_t len, const double cutoffPercent) noexcept {
   d_assert(len <= 256);
-  static_assert(sizeof(CutoffTable) == sizeof(double) + sizeof(size_t), "CutoffTable: expected packed size");
+  static_assert(sizeof(CutoffTable) == sizeof(double) + sizeof(size_t) + sizeof(uint8_t *), "CutoffTable: expected packed size");
 
   void *buf = internal::Heap().malloc(sizeof(CutoffTable) + len * sizeof(uint8_t));
+  uint8_t *table = reinterpret_cast<uint8_t *>(buf) + sizeof(CutoffTable);
 
-  return new (buf) CutoffTable(len, cutoffPercent);
+  return new (buf) CutoffTable(len, cutoffPercent, table);
 }
 
 // split miniheaps into two lists in a random order
