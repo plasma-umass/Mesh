@@ -43,4 +43,16 @@ void ThreadLocalHeap::attachFreelist(Freelist &freelist, size_t sizeClass) {
   d_assert(mh->isAttached());
 }
 
+void ThreadLocalHeap::freeSlowpath(void *ptr) {
+  for (size_t i = 0; i < kNumBins; i++) {
+    Freelist &freelist = _freelist[i];
+    if (freelist.contains(ptr)) {
+      freelist.free(ptr);
+      _last = &freelist;
+      return;
+    }
+  }
+
+  _global->free(ptr);
+}
 }  // namespace mesh
