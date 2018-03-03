@@ -45,7 +45,8 @@ namespace internal {
 size_t measurePssKiB();
 
 inline void *MaskToPage(const void *ptr) {
-  return reinterpret_cast<void *const>(reinterpret_cast<uintptr_t>(ptr) & (uintptr_t) ~(CPUInfo::PageSize - 1));
+  const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+  return reinterpret_cast<void *>(ptrval & (uintptr_t) ~(CPUInfo::PageSize - 1));
 }
 
 // efficiently copy data from srcFd to dstFd
@@ -132,9 +133,9 @@ typedef Bitmap<Heap> Bitmap;
 class BinToken {
 public:
   typedef uint32_t Size;
+  // C++ 17 has inline vars, but earlier versions don't
   static constexpr inline Size Max = numeric_limits<uint32_t>::max();
   static constexpr inline Size MinFlags = numeric_limits<uint32_t>::max() - 4;
-
   static constexpr inline Size FlagFull = numeric_limits<uint32_t>::max() - 1;
   static constexpr inline Size FlagEmpty = numeric_limits<uint32_t>::max() - 2;
   static constexpr inline Size FlagNoOff = numeric_limits<uint32_t>::max();

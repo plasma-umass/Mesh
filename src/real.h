@@ -9,7 +9,7 @@
 #ifndef MESH__REAL_H
 #define MESH__REAL_H
 
-#define DECLARE_REAL(name) extern decltype(::name) *name;
+#define DECLARE_REAL(name) extern decltype(::name) *name
 
 namespace mesh {
 namespace real {
@@ -22,7 +22,7 @@ DECLARE_REAL(pthread_create);
 
 DECLARE_REAL(sigaction);
 DECLARE_REAL(sigprocmask);
-};  // namespace real
-};  // namespace mesh
+}  // namespace real
+}  // namespace mesh
 
 #endif  // MESH__REAL_H

@@ -7,7 +7,7 @@
 
 #include "common.h"
 
-#define DEFINE_REAL(name) decltype(::name) *name;
+#define DEFINE_REAL(name) decltype(::name) *name
 #define INIT_REAL(name, handle)                                         \
   do {                                                                  \
     name = reinterpret_cast<decltype(::name) *>(dlsym(handle, #name));  \
@@ -41,5 +41,5 @@ void init() {
   INIT_REAL(sigaction, RTLD_NEXT);
   INIT_REAL(sigprocmask, RTLD_NEXT);
 }
-};  // namespace real
-};  // namespace mesh
+}  // namespace real
+}  // namespace mesh

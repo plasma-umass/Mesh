@@ -171,7 +171,11 @@ public:
   /// Clears out the bitmap array.
   void clear(void) {
     if (_bitarray != nullptr) {
-      memset(_bitarray, 0, byteCount());  // 0 = false
+      const auto wordCount = byteCount()/sizeof(size_t);
+      // use an explicit array since these are atomic_size_t's
+      for (size_t i = 0; i < wordCount; i++) {
+        _bitarray[i] = 0;
+      }
     }
   }
 

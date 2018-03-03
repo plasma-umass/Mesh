@@ -454,7 +454,7 @@ protected:
 
     _lastMeshEffective = 1;
 
-    const auto start = std::chrono::high_resolution_clock::now();
+    // const auto start = std::chrono::high_resolution_clock::now();
     size_t partialCount = 0;
 
     internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
