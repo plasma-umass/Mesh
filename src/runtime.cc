@@ -45,7 +45,7 @@ size_t internal::measurePssKiB() {
   char buf[BUF_LEN];
   memset(buf, 0, BUF_LEN);
 
-  (void)read(fd, buf, BUF_LEN - 1);
+  auto _ __attribute__((unused)) = read(fd, buf, BUF_LEN - 1);
   close(fd);
 
   auto start = strstr(buf, "\nPss: ");
