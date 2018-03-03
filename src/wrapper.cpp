@@ -386,7 +386,7 @@ void * operator new (size_t sz)
 #endif
 {
   void * ptr = xxmalloc (sz);
-  if (ptr == NULL) {
+  if (unlikely(ptr == NULL && sz != 0)) {
     throw std::bad_alloc();
   } else {
     return ptr;
