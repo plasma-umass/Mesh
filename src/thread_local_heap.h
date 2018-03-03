@@ -84,25 +84,17 @@ public:
     return ptr;
   }
 
+  void freeSlowpath(void *ptr);
+
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
     if (unlikely(ptr == nullptr))
       return;
 
     if (likely(_last != nullptr && _last->contains(ptr))) {
-      _last->free(_prng, ptr);
-      return;
+      _last->free(ptr);
+    } else {
+      freeSlowpath(ptr);
     }
-
-    for (size_t i = 0; i < kNumBins; i++) {
-      Freelist &freelist = _freelist[i];
-      if (freelist.contains(ptr)) {
-        freelist.free(_prng, ptr);
-        _last = &freelist;
-        return;
-      }
-    }
-
-    _global->free(ptr);
   }
 
   inline size_t getSize(void *ptr) {

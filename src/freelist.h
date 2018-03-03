@@ -9,7 +9,7 @@
 #include <random>
 #include <utility>
 
-#include "rng/mwc.h"
+#include "rng/xoroshiro128plus.h"
 
 #include "internal.h"
 
@@ -39,7 +39,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
 
 public:
-  Freelist() {
+  Freelist() : _prng(internal::seed(), internal::seed()) {
     // set initialized = false;
   }
 
@@ -103,15 +103,15 @@ public:
 
   // Pushing an element onto the freelist does a round of the
   // Fisher-Yates shuffle.
-  inline void ATTRIBUTE_ALWAYS_INLINE push(MWC &prng, size_t freedOff) {
+  inline void ATTRIBUTE_ALWAYS_INLINE push(size_t freedOff) {
     d_assert(_off > 0);  // we must have at least 1 free space in the list
 
     _off--;
     _list[_off] = freedOff;
 
     if (kEnableShuffleFreelist) {
-      size_t swapOff = prng.inRange(_off, maxCount() - 1);
-
+      size_t swapOff = _prng.inRange(_off, maxCount() - 1);
+      _lastOff = swapOff;
       std::swap(_list[_off], _list[swapOff]);
     }
   }
@@ -125,11 +125,11 @@ public:
     return val;
   }
 
-  inline void ATTRIBUTE_ALWAYS_INLINE free(MWC &prng, void *ptr) {
+  inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     const auto off = (ptrval - _start) / _objectSize;
 
-    push(prng, off);
+    push(off);
   }
 
   inline bool isAttached() const {
@@ -181,9 +181,11 @@ private:
   uintptr_t _start{0};
   uintptr_t _end{0};
   MiniHeap *_attachedMiniheap{nullptr};
+  Xoroshiro _prng;
   uint16_t _maxCount{0};
   uint16_t _off{0};
-  uint8_t __padding[24];
+  volatile uint8_t _lastOff{0};
+  uint8_t __padding[7];
   uint8_t _list[kMaxFreelistLength] CACHELINE_ALIGNED;
 };
 
