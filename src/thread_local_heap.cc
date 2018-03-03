@@ -43,4 +43,4 @@ void ThreadLocalHeap::attachFreelist(Freelist &freelist, size_t sizeClass) {
   d_assert(mh->isAttached());
 }
 
-};  // namespace mesh
+}  // namespace mesh

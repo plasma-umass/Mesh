@@ -51,7 +51,7 @@ static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
 // BinnedTracker
 static constexpr size_t kBinnedTrackerBinCount = 4;
 static constexpr size_t kBinnedTrackerMaxEmpty = 128;
-};  // namespace mesh
+}  // namespace mesh
 
 using std::condition_variable;
 using std::function;
@@ -198,7 +198,6 @@ private:
   // Compute index of the class_array[] entry for a given size
   static inline size_t ClassIndex(size_t s) {
     // Use unsigned arithmetic to avoid unnecessary sign extensions.
-    d_assert(0 <= s);
     d_assert(s <= kMaxSize);
     if (PREDICT_TRUE(s <= kMaxSmallSize)) {
       return SmallSizeClass(s);

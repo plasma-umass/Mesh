@@ -313,10 +313,8 @@ end:
 
 int get_self_rss(CmdInfo *ci) {
   size_t details_len;
-  char *filter, *details_buf;
+  char *details_buf;
   CmdInfo *ci2;
-
-  filter = NULL;
 
   details_len = smap_details_len();
   details_buf = malloc(details_len + 1);

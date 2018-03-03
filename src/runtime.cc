@@ -236,7 +236,7 @@ int Runtime::sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
 
   lock_guard<mutex> lock(sigsegv_lock);
 
-  debug("TODO: ensure we never mask SIGSEGV\n");
+  // debug("TODO: ensure we never mask SIGSEGV\n");
 
   return mesh::real::sigprocmask(how, set, oldset);
 }
@@ -265,6 +265,6 @@ void Runtime::installSegfaultHandler() {
   auto err = mesh::real::sigaction(SIGSEGV, &action, &old_action);
   hard_assert(err == 0);
 
-  debug("TODO: check old_action is NULL");
+  // debug("TODO: check old_action is NULL");
 }
 }  // namespace mesh
