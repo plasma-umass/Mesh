@@ -41,24 +41,22 @@ public:
       : _prng(internal::seed(), internal::seed()),
         _global(global),
         _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)) {
-    // start at 1, becuase 0 is an unused '0' size class
-    for (size_t i = 1; i < kNumBins; i++) {
-      _freelist[i].setObjectSize(SizeMap::ByteSizeForClass(i));
+    for (size_t i = 0; i < kNumBins; i++) {
+      auto objectSize = SizeMap::ByteSizeForClass(i);
+      // treat 0-sized requests as just a duplication of the 16-byte
+      if (i == 0)
+        objectSize = SizeMap::ByteSizeForClass(1);
+      _freelist[i].setObjectSize(objectSize);
     }
     d_assert(_global != nullptr);
   }
 
   void attachFreelist(Freelist &freelist, size_t sizeClass);
 
+  void *mallocSlowpath(size_t sz);
+
   // semiansiheap ensures we never see size == 0
   inline void *ATTRIBUTE_ALWAYS_INLINE malloc(size_t sz) {
-    // Prevent integer underflows. This maximum should (and
-    // currently does) provide more than enough slack to compensate for any
-    // rounding below (in the alignment section).
-    if (unlikely(sz > INT_MAX || sz == 0)) {
-      return 0;
-    }
-
     uint32_t sizeClass = 0;
 
     // if the size isn't in our sizemap it is a large alloc
@@ -68,14 +66,7 @@ public:
 
     Freelist &freelist = _freelist[sizeClass];
     if (unlikely(freelist.isExhausted())) {
-      if (&freelist == _last) {
-        _last = nullptr;
-      }
-      if (freelist.isAttached()) {
-        freelist.detach();
-      }
-
-      attachFreelist(freelist, sizeClass);
+      return mallocSlowpath(sz);
     }
 
     void *ptr = freelist.malloc();
