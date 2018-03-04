@@ -125,15 +125,7 @@ public:
   }
 
   // large, page-multiple allocations
-  void *malloc(size_t sz) {
-#ifndef NDEBUG
-    if (unlikely(sz <= kMaxSize))
-      abort();
-#endif
-
-    std::lock_guard<std::mutex> lock(_bigMutex);
-    return _bigheap.malloc(sz);
-  }
+  void *malloc(size_t sz);
 
   inline MiniHeap *UNSAFEMiniheapFor(const void *ptr) const {
     return reinterpret_cast<MiniHeap *>(Super::lookup(ptr));

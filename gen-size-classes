@@ -5,7 +5,7 @@ import sys
 # NO 8-byte size classes
 
 SIZE_CLASSES = [
-    0,
+    16,
     16,
     32,
     48,
