@@ -28,7 +28,7 @@ DEFINE_bool(v, false, "verbose debugging output");
 void *NOINLINE bench_alloc(size_t n) {
   volatile void *ptr = malloc(n);
   for (size_t i = 0; i < n; i++) {
-    ((char *)ptr)[i] = 0x55;
+    ((char *)ptr)[i] = lrand48() & 0xff;
   }
 
   return (voidptr)ptr;
