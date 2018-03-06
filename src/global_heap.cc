@@ -5,6 +5,10 @@
 
 namespace mesh {
 void *GlobalHeap::malloc(size_t sz) {
+  // prevent integer underflows
+  if (unlikely(sz > INT_MAX))
+      return nullptr;
+
 #ifndef NDEBUG
   if (unlikely(sz <= kMaxSize))
     abort();
