@@ -30,8 +30,6 @@ SIZE_CLASSES = [
     4096,
     8192,
     16384,
-    32768,
-    65536,
 ]
 
 SIZE_CLASS_INDICES = {x: i for i, x in enumerate(SIZE_CLASSES)}
