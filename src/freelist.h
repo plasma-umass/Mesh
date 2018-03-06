@@ -9,7 +9,8 @@
 #include <random>
 #include <utility>
 
-#include "rng/xoroshiro128plus.h"
+// #include "rng/xoroshiro128plus.h"
+#include "rng/mwc.h"
 
 #include "internal.h"
 
@@ -181,7 +182,7 @@ private:
   uintptr_t _start{0};
   uintptr_t _end{0};
   MiniHeap *_attachedMiniheap{nullptr};
-  Xoroshiro _prng;
+  MWC _prng;
   uint16_t _maxCount{0};
   uint16_t _off{0};
   volatile uint8_t _lastOff{0};
