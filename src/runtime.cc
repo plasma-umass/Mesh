@@ -20,8 +20,8 @@ const unsigned char SizeMap::class_array_[kClassArraySize] = {
 
 ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 const int32_t SizeMap::class_to_size_[kClassSizesMax] = {
-    16,  16,  32,  48,  64,  80,  96,  112,  128,  160,  192,  224,   256,
-    320, 384, 448, 512, 640, 768, 896, 1024, 2048, 4096, 8192, 16384,
+    16,  16,  32,  48,  64,  80,  96,   112,  128,  160,  192,   224,   256,   320,
+    384, 448, 512, 640, 768, 896, 1024, 2048, 4096, 8192, 16384, 32768, 65536,
 };
 
 // const internal::BinToken::Size internal::BinToken::Max = numeric_limits<uint32_t>::max();
