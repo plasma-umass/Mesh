@@ -6,7 +6,7 @@ class Config:
         self.docker_image = docker_image
 
 configs = [
-    Config('mesh', 'bpowers/spec:mesh'),
+    Config('mesh', 'bpowers/spec:mesh-v2'),
     Config('jemalloc', 'bpowers/spec:jemalloc'),
     Config('glibc', 'bpowers/spec:glibc'),
     Config('diehard', 'bpowers/spec:diehard'),
