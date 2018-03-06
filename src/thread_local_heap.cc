@@ -43,6 +43,25 @@ void ThreadLocalHeap::attachFreelist(Freelist &freelist, size_t sizeClass) {
   d_assert(mh->isAttached());
 }
 
+// we get here if the freelist is exhausted
+void *ThreadLocalHeap::mallocSlowpath(size_t sizeClass, size_t sz) {
+  Freelist &freelist = _freelist[sizeClass];
+
+  if (&freelist == _last) {
+    _last = nullptr;
+  }
+  if (freelist.isAttached()) {
+    freelist.detach();
+  }
+
+  attachFreelist(freelist, sizeClass);
+
+  void *ptr = freelist.malloc();
+  _last = &freelist;
+
+  return ptr;
+}
+
 void ThreadLocalHeap::freeSlowpath(void *ptr) {
   for (size_t i = 0; i < kNumBins; i++) {
     Freelist &freelist = _freelist[i];
