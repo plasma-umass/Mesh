@@ -179,7 +179,7 @@ public:
 
   inline bool isMeshingCandidate() const {
     if (_refCount > 0)
-      mesh::debug("skipping due to MH reference (%zu)", _refCount);
+      mesh::debug("skipping due to MH reference (%zu)", _refCount.load());
     return !isAttached() && _refCount == 0 && objectSize() < 4096;
   }
 
@@ -376,9 +376,9 @@ protected:
   char *_span[kMaxMeshes];
   internal::BinToken _token;
 
-  uint32_t _inUseCount{0};  // 60
+  atomic<uint32_t> _inUseCount{0};  // 60
 
-  mutable uint32_t _refCount{0};
+  mutable atomic<uint32_t> _refCount{0};
   uint32_t _meshCount;  // : 7;
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;  // 16 bytes
@@ -387,6 +387,8 @@ protected:
   internal::Bitmap _bitmap3;  // 16 bytes
 #endif
 };
+
+static_assert(sizeof(pthread_t) == 8, "pthread_t too big");
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
