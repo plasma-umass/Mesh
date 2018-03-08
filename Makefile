@@ -146,6 +146,15 @@ src/test/fork-example: build/src/test/fork-example.o $(CONFIG)
 	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"
 
 src/test/local-alloc: src/test/local-alloc.c $(CONFIG)
+	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"
+
+src/test/big-alloc: src/test/big-alloc.c $(CONFIG)
+	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"
+
+src/test/big-alloc-hoard: src/test/big-alloc.c $(CONFIG)
+	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lhoard -Wl,-rpath,"$(PWD)"
+
+src/test/big-alloc-glibc: src/test/big-alloc.c $(CONFIG)
 	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -Wl,-rpath,"$(PWD)"
 
 src/test/thread-example: src/test/thread.cc $(CONFIG)
