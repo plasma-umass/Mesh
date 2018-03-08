@@ -41,7 +41,8 @@ public:
       : _prng(internal::seed(), internal::seed()),
         _global(global),
         _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)) {
-    // start at 1, becuase 0 is an unused '0' size class
+    // when asked, give 16-byte allocations for 0-byte requests
+    _freelist[0].setObjectSize(SizeMap::ByteSizeForClass(1));
     for (size_t i = 1; i < kNumBins; i++) {
       _freelist[i].setObjectSize(SizeMap::ByteSizeForClass(i));
     }
