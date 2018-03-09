@@ -4,9 +4,12 @@
 #include <dirent.h>
 #include <pthread.h>
 #include <sched.h>
-#include <sys/signalfd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+
+#ifdef __linux__
+#include <sys/signalfd.h>
+#endif
 
 #include "runtime.h"
 #include "thread_local_heap.h"
@@ -58,16 +61,16 @@ size_t internal::measurePssKiB() {
 }
 
 int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
-#if defined(__APPLE__) || defined(__FreeBSD__)
-#error FIXME: use off
-  // fcopyfile works on FreeBSD and OS X 10.5+
-  int result = fcopyfile(srcFd, dstFd, 0, COPYFILE_ALL);
-#else
   d_assert(off >= 0);
 
   off_t newOff = lseek(dstFd, off, SEEK_SET);
   d_assert(newOff == off);
 
+#if defined(__APPLE__) || defined(__FreeBSD__)
+#warning test that setting offset on dstFd works as intended
+  // fcopyfile works on FreeBSD and OS X 10.5+
+  int result = fcopyfile(srcFd, dstFd, 0, COPYFILE_ALL);
+#else
   errno = 0;
   // sendfile will work with non-socket output (i.e. regular file) on Linux 2.6.33+
   int result = sendfile(dstFd, srcFd, &off, sz);
@@ -108,12 +111,12 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
 }
 
 void Runtime::createSignalFd() {
-  sigset_t mask;
+  mesh::real::init();
 
+#ifdef __linux__
+  sigset_t mask;
   sigemptyset(&mask);
   sigaddset(&mask, SIGDUMP);
-
-  mesh::real::init();
 
   /* Block signals so that they aren't handled
      according to their default dispositions */
@@ -123,6 +126,7 @@ void Runtime::createSignalFd() {
 
   _signalFd = signalfd(-1, &mask, 0);
   hard_assert(_signalFd >= 0);
+#endif
 }
 
 void Runtime::startBgThread() {
@@ -151,6 +155,7 @@ void *Runtime::bgThread(void *arg) {
 
   // debug("libmesh: background thread started\n");
 
+#ifdef __linux__
   while (true) {
     struct signalfd_siginfo siginfo;
 
@@ -176,6 +181,8 @@ void *Runtime::bgThread(void *arg) {
       printf("Read unexpected signal\n");
     }
   }
+#endif
+  return nullptr;
 }
 
 void Runtime::lock() {
@@ -186,6 +193,7 @@ void Runtime::unlock() {
   _mutex.unlock();
 }
 
+#ifdef __linux__
 int Runtime::epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {
   if (unlikely(mesh::real::epoll_wait == nullptr))
     mesh::real::init();
@@ -204,6 +212,7 @@ int Runtime::epollPwait(int __epfd, struct epoll_event *__events, int __maxevent
 
   return mesh::real::epoll_pwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
+#endif
 
 static struct sigaction sigsegv_action;
 static mutex sigsegv_lock;

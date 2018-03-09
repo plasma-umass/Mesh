@@ -16,8 +16,10 @@
 
 namespace mesh {
 namespace real {
+#ifdef __linux__
 DEFINE_REAL(epoll_pwait);
 DEFINE_REAL(epoll_wait);
+#endif
 
 DEFINE_REAL(pthread_create);
 
@@ -32,9 +34,10 @@ void init() {
   if (initialized)
     return;
   initialized = true;
-
+#ifdef __linux__
   INIT_REAL(epoll_pwait, RTLD_NEXT);
   INIT_REAL(epoll_wait, RTLD_NEXT);
+#endif
 
   INIT_REAL(pthread_create, RTLD_NEXT);
 

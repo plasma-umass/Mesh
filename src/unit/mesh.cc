@@ -22,13 +22,13 @@ static inline void note(const char *note) {
 static void meshTest(bool invert) {
   GlobalHeap &gheap = runtime().heap();
 
-  ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0);
+  ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
   // allocate two miniheaps for the same object size from our global heap
   MiniHeap *mh1 = gheap.allocMiniheap(StrLen);
   MiniHeap *mh2 = gheap.allocMiniheap(StrLen);
 
-  ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 2);
+  ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 2UL);
 
   // sanity checks
   ASSERT_TRUE(mh1 != mh2);
@@ -54,8 +54,8 @@ static void meshTest(bool invert) {
   ASSERT_TRUE(strcmp(s1, v1) == 0);
   ASSERT_TRUE(strcmp(s2, v2) == 0);
 
-  ASSERT_EQ(mh1->inUseCount(), 1);
-  ASSERT_EQ(mh2->inUseCount(), 1);
+  ASSERT_EQ(mh1->inUseCount(), 1UL);
+  ASSERT_EQ(mh2->inUseCount(), 1UL);
 
   if (invert) {
     MiniHeap *tmp = mh1;
@@ -79,7 +79,7 @@ static void meshTest(bool invert) {
   ASSERT_EQ(mh2, nullptr);
 
   // ensure the count of set bits looks right
-  ASSERT_EQ(mh1->inUseCount(), 2);
+  ASSERT_EQ(mh1->inUseCount(), 2UL);
 
   // check that our two allocated objects still look right
   ASSERT_TRUE(strcmp(s1, v1) == 0);
@@ -105,7 +105,7 @@ static void meshTest(bool invert) {
   note("ABOUT TO FREE");
   gheap.freeMiniheap(mh1);
 
-  ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0);
+  ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 }
 
 TEST(MeshTest, TryMesh) {

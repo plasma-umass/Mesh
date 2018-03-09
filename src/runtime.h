@@ -49,8 +49,11 @@ public:
     _heap.setMeshPeriodSecs(period);
   }
 
+#ifdef __linux__
   int epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout);
   int epollPwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss);
+#endif
+
   int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
   int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
 

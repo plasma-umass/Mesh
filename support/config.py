@@ -51,7 +51,7 @@ def exe_available(cmd):
 def _new_env():
     return {
         'cflags': '',
-        'ldflags': '-lrt',
+        'ldflags': '',
         'libs': '',
     }
 
