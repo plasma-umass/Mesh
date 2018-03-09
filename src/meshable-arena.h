@@ -120,8 +120,12 @@ public:
     d_assert(sz % CPUInfo::PageSize == 0);
 
     const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
+#ifndef __APPLE__
     int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
     d_assert(result == 0);
+#else
+#warning macOS version of fallocate goes here
+#endif
   }
 
   inline void free(void *ptr, size_t sz) {
@@ -225,7 +229,7 @@ private:
     return _metadata[off] & (uintptr_t)~0x07;
   }
 
-  static void staticOnExit(int code, void *data);
+  static void staticAtExit();
   static void staticPrepareForFork();
   static void staticAfterForkParent();
   static void staticAfterForkChild();

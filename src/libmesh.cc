@@ -162,4 +162,8 @@ int mesh_bit_clear(enum mesh::BitType type, void *ptr) {
 }
 }
 
+#ifdef __linux__
 #include "gnuwrapper.cpp"
+#else
+#include "macwrapper.cpp"
+#endif

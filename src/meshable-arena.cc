@@ -1,7 +1,10 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
+#ifdef __linux__
 #define USE_MEMFD 1
+#include <linux/fs.h>
+#endif
 // #undef USE_MEMFD
 
 #ifdef USE_MEMFD
@@ -14,7 +17,6 @@
 #include <linux/memfd.h>
 #endif
 
-#include <linux/fs.h>
 #include <sys/ioctl.h>
 
 #include "meshable-arena.h"
@@ -53,7 +55,7 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{kArenaSize / CPUInfo::Page
   // debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
 
   // TODO: move this to runtime
-  on_exit(staticOnExit, this);
+  atexit(staticAtExit);
   pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
 }
 
@@ -159,8 +161,10 @@ int MeshableArena::openSpanFile(size_t sz) {
 }
 #endif  // USE_MEMFD
 
-void MeshableArena::staticOnExit(int code, void *data) {
-  reinterpret_cast<MeshableArena *>(data)->exit();
+void MeshableArena::staticAtExit() {
+  d_assert(arenaInstance != nullptr);
+  if (arenaInstance != nullptr)
+    reinterpret_cast<MeshableArena *>(arenaInstance)->exit();
 }
 
 void MeshableArena::staticPrepareForFork() {

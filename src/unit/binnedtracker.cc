@@ -4,9 +4,10 @@
 #include <cstdint>
 #include <cstdlib>
 
+#include "binnedtracker.h"
+
 #include "gtest/gtest.h"
 
-#include "binnedtracker.h"
 
 using namespace mesh;
 using namespace mesh::internal;

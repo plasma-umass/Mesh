@@ -5,6 +5,10 @@
 #ifndef MESH__COMMON_H
 #define MESH__COMMON_H
 
+#ifdef __APPLE__
+#include <sys/types.h>
+#endif
+
 #include <cstddef>
 #include <cstdint>
 

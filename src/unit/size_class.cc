@@ -17,7 +17,7 @@ using namespace mesh;
 TEST(SizeClass, MinObjectSize) {
   ASSERT_EQ(alignof(max_align_t), kMinObjectSize);
 
-  ASSERT_EQ(kMinObjectSize, 16);
+  ASSERT_EQ(kMinObjectSize, 16UL);
 
   ASSERT_EQ(staticlog(kMinObjectSize), 4);
 }

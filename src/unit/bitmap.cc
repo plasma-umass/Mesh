@@ -89,7 +89,7 @@ TEST(BitmapTest, Builtins) {
   mesh::Bitmap<MallocHeap> b{1024};
 
   uint64_t i = b.setFirstEmpty();
-  ASSERT_EQ(i, 0);
+  ASSERT_EQ(i, 0ULL);
 
   b.unset(i);
 
@@ -106,13 +106,13 @@ TEST(BitmapTest, Builtins) {
   }
 
   i = b.setFirstEmpty();
-  ASSERT_EQ(i, 0);
+  ASSERT_EQ(i, 0ULL);
 
   i = b.setFirstEmpty(4);
-  ASSERT_EQ(i, 4);
+  ASSERT_EQ(i, 4ULL);
 
   i = b.setFirstEmpty(111);
-  ASSERT_EQ(i, 111);
+  ASSERT_EQ(i, 111ULL);
 }
 
 TEST(BitmapTest, Iter) {
@@ -124,7 +124,7 @@ TEST(BitmapTest, Iter) {
 
   std::unordered_map<size_t, bool> bits;
 
-  ASSERT_EQ(bits.size(), 0);
+  ASSERT_EQ(bits.size(), 0ULL);
 
   size_t n = 0;
   for (auto const &off : b) {
@@ -132,8 +132,8 @@ TEST(BitmapTest, Iter) {
     n++;
   }
 
-  ASSERT_EQ(n, 3);
-  ASSERT_EQ(bits.size(), 3);
+  ASSERT_EQ(n, 3ULL);
+  ASSERT_EQ(bits.size(), 3ULL);
 
   ASSERT_EQ(bits[0], true);
   ASSERT_EQ(bits[200], true);
@@ -150,7 +150,7 @@ TEST(BitmapTest, Iter2) {
 
   std::unordered_map<size_t, bool> bits;
 
-  ASSERT_EQ(bits.size(), 0);
+  ASSERT_EQ(bits.size(), 0ULL);
 
   size_t n = 0;
   for (auto const &off : b) {
@@ -158,8 +158,8 @@ TEST(BitmapTest, Iter2) {
     n++;
   }
 
-  ASSERT_EQ(n, 2);
-  ASSERT_EQ(bits.size(), 2);
+  ASSERT_EQ(n, 2ULL);
+  ASSERT_EQ(bits.size(), 2ULL);
 
   ASSERT_EQ(bits[200], true);
   ASSERT_EQ(bits[500], true);

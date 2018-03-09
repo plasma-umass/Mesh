@@ -3,7 +3,7 @@
 from support.config import ConfigBuilder, slurp, exe_available
 from os import environ, curdir, listdir
 from os.path import abspath
-from sys import argv
+from sys import argv, platform
 
 NAME = 'mesh'
 VERSION = '0.1.0'
@@ -40,10 +40,11 @@ c.append('cflags', '-Werror=implicit-int')
 c.append('cflags', '-Werror=pointer-sign')
 c.append('cflags', '-Werror=pointer-arith')
 
-c.append('cflags', '-D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700')
+if platform != 'darwin':
+    c.append('cflags', '-D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700')
+    c.append('cflags', '-Wundef')
 
 c.append('cflags', '-Wall -Wextra -pedantic')
-c.append('cflags', '-Wundef')
 # c.append('cflags', '-Wno-gnu-statement-expression')
 c.append('cflags', '-Wno-unused-parameter')
 c.append('cflags', '-Wno-unused-variable')
@@ -63,16 +64,18 @@ c.append('cflags', '-Isrc/vendor/googletest/googletest')
 c.append('cflags', '-isystem build/src/vendor/gflags/include')
 c.append('cflags', '-Isrc/vendor/Heap-Layers')
 
-c.append('ldflags', '-Wl,--no-add-needed')
-c.append('ldflags', '-Wl,--sort-common')
-c.append('ldflags', '-Wl,--gc-sections')
-c.append('ldflags', '-Wl,--hash-style=both')
-c.append('ldflags', '-Wl,--no-undefined')
-c.append('ldflags', '-Wl,-Bsymbolic-functions')
-c.append('ldflags', '-Wl,-z,now,-z,relro')
-c.append('ldflags', '-ftls-model=initial-exec')
+if platform != 'darwin':
+    c.append('ldflags', '-Wl,--no-add-needed')
+    c.append('ldflags', '-Wl,--sort-common')
+    c.append('ldflags', '-Wl,--gc-sections')
+    c.append('ldflags', '-Wl,--hash-style=both')
+    c.append('ldflags', '-Wl,--no-undefined')
+    c.append('ldflags', '-Wl,-Bsymbolic-functions')
+    c.append('ldflags', '-Wl,-z,now,-z,relro')
+    c.append('ldflags', '-ftls-model=initial-exec')
 
-c.append('ldflags', '-static-libstdc++ -static-libgcc')
+    c.append('ldflags', '-static-libstdc++ -static-libgcc')
+    c.append('ldflags', '-lrt')
 
 c.append('libs', '-lm -lpthread')
 c.append('libs', '-ldl')

@@ -3,7 +3,10 @@
 
 #include <pthread.h>
 #include <signal.h>
+
+#ifdef __linux__
 #include <sys/epoll.h>
+#endif
 
 #pragma once
 #ifndef MESH__REAL_H
@@ -15,8 +18,10 @@ namespace mesh {
 namespace real {
 void init();
 
+#ifdef __linux__
 DECLARE_REAL(epoll_pwait);
 DECLARE_REAL(epoll_wait);
+#endif
 
 DECLARE_REAL(pthread_create);
 
