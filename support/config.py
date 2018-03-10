@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-from sys import stderr, argv
+from sys import stdout, stderr, argv
 from subprocess import Popen, PIPE
 from os import environ, getcwd
 from datetime import datetime
@@ -84,7 +84,7 @@ class ConfigBuilder:
             self.cross_compiling = True
 
         if '--help' in argv:
-            print help_text
+            stdout.write(help_text)
             exit(0)
 
     def config(self, key, val):
@@ -97,7 +97,7 @@ class ConfigBuilder:
         env = self.env
         path = run_cmd('which %s' % (program))
         if len(path) is 0:
-            print >> stderr, 'required program "%s" not found.' % program
+            stderr.write('required program "%s" not found.\n' % program)
             exit(1)
 
         # single-quote stuff for pkg-config
@@ -108,7 +108,7 @@ class ConfigBuilder:
             # assumes a pkg-config-like program
             ret = run_cmd('%s --exists %s' % (program, lib), 'returncode')
             if ret != 0:
-                print >> stderr, 'required library %s not found' % lib
+                stderr.write('required library %s not found.\n' % lib)
                 exit(1)
 
         for info in ['cflags', 'libs', 'ldflags']:
@@ -150,4 +150,4 @@ class ConfigBuilder:
         if exe_available(preferred):
             self.env[cmd] = preferred
         else:
-            print 'warning: %s not found, using default cc' % preferred
+            stderr.write('warning: %s not found, using default cc\n' % preferred)
