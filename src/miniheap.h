@@ -372,7 +372,7 @@ protected:
   internal::Bitmap _bitmap;     // 16 bytes
 
   const uint32_t _objectSize;
-  const uint32_t _spanSize;
+  const uint32_t _spanSize; // max 4 GB span size/allocation size
   char *_span[kMaxMeshes];
   internal::BinToken _token;
 
