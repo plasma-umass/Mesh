@@ -31,7 +31,7 @@ ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
 void ThreadLocalHeap::attachFreelist(Freelist &freelist, size_t sizeClass) {
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
-  MiniHeap *mh = _global->allocMiniheap(sizeMax);
+  MiniHeap *mh = _global->allocSmallMiniheap(sizeMax);
 
   const auto allocCount = freelist.attach(_prng, mh);
   d_assert(freelist.isAttached());

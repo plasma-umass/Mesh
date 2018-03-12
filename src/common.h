@@ -30,6 +30,7 @@ static constexpr size_t kClassSizesMax = 96;
 static constexpr size_t kAlignment = 8;
 static constexpr int kMinAlign = 16;
 static constexpr int kPageSize = 4096;
+static constexpr size_t kMaxFastLargeSize = 256 * 1024;
 
 static constexpr int kNumBins = 25;  // 16Kb max object size
 static constexpr int kDefaultMeshPeriod = 10000;

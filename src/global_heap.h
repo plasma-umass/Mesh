@@ -74,7 +74,9 @@ public:
       _littleheaps[i].dumpStats(beDetailed);
   }
 
-  inline MiniHeap *allocMiniheap(size_t objectSize) {
+  void *allocFromArena(size_t sz);
+
+  inline MiniHeap *allocSmallMiniheap(size_t objectSize) {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
     d_assert(objectSize <= _maxObjectSize);
