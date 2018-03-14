@@ -80,7 +80,7 @@ public:
   }
 
   inline void *malloc(size_t sz) {
-    return map(sz, MAP_PRIVATE | MAP_ANONYMOUS, -1);
+    return map(sz, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1);
   }
 
   inline size_t getSize(void *ptr) const {
