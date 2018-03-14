@@ -76,34 +76,11 @@ public:
 
   void *allocFromArena(size_t sz);
 
-  inline MiniHeap *allocSmallMiniheap(size_t objectSize) {
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
-
-    d_assert(objectSize <= _maxObjectSize);
-
-    const int sizeClass = SizeMap::SizeClass(objectSize);
-    const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
-
-    d_assert_msg(objectSize == sizeMax, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize, sizeMax,
-                 sizeClass);
-    d_assert(sizeClass >= 0);
-    d_assert(sizeClass < kNumBins);
-
-    // check our bins for a miniheap to reuse
-    MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
-    if (existing != nullptr) {
-      return existing;
-    }
-
-    // if we have objects bigger than the size of a page, allocate
-    // multiple pages to amortize the cost of creating a
-    // miniheap/globally locking the heap.
-    size_t nObjects = max(HL::CPUInfo::PageSize / sizeMax, kMinStringLen);
-
-    const size_t nPages = PageCount(sizeMax * nObjects);
-    const size_t spanSize = HL::CPUInfo::PageSize * nPages;
+  inline MiniHeap *allocMiniheap(int sizeClass, size_t pageCount, size_t objectCount, size_t objectSize) {
+    const size_t spanSize = HL::CPUInfo::PageSize * pageCount;
     d_assert(0 < spanSize);
 
+    // allocate out of the arena
     void *span = Super::malloc(spanSize);
     if (unlikely(span == nullptr))
       abort();
@@ -114,16 +91,50 @@ public:
 
     // if (spanSize > 4096)
     //   mesh::debug("spana %p(%zu) %p (%zu)", span, spanSize, buf, objectSize);
-    MiniHeap *mh = new (buf) MiniHeap(span, nObjects, sizeMax, _fastPrng, spanSize);
-    Super::assoc(span, mh, nPages);
+    MiniHeap *mh = new (buf) MiniHeap(span, objectCount, objectSize, _fastPrng, spanSize);
+    Super::assoc(span, mh, pageCount);
 
-    trackMiniheapLocked(sizeClass, mh);
+    if (sizeClass >= 0)
+      trackMiniheapLocked(sizeClass, mh);
 
     _stats.mhAllocCount++;
     //_stats.mhHighWaterMark = max(_miniheaps.size(), _stats.mhHighWaterMark.load());
     //_stats.mhClassHWM[sizeClass] = max(_littleheapCounts[sizeClass], _stats.mhClassHWM[sizeClass].load());
 
     return mh;
+  }
+
+  inline MiniHeap *allocSmallMiniheap(size_t objectSize) {
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+
+    d_assert(objectSize <= _maxObjectSize);
+
+    const int sizeClass = SizeMap::SizeClass(objectSize);
+
+#ifndef NDEBUG
+    const size_t classMaxSize = SizeMap::ByteSizeForClass(sizeClass);
+
+    d_assert_msg(objectSize == classMaxSize, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize, classMaxSize,
+                 sizeClass);
+    d_assert(sizeClass >= 0);
+#endif
+    d_assert(sizeClass < kNumBins);
+
+    // check our bins for a miniheap to reuse
+    MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
+    if (existing != nullptr) {
+      existing->ref();
+      return existing;
+    }
+
+    // if we have objects bigger than the size of a page, allocate
+    // multiple pages to amortize the cost of creating a
+    // miniheap/globally locking the heap.  For example, asking for
+    // 2048 byte objects would allocate 4 4KB pages.
+    const size_t objectCount = max(HL::CPUInfo::PageSize / objectSize, kMinStringLen);
+    const size_t pageCount = PageCount(objectSize * objectCount);
+
+    return allocMiniheap(sizeClass, pageCount, objectCount, objectSize);
   }
 
   // large, page-multiple allocations

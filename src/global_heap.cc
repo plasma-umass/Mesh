@@ -6,7 +6,9 @@
 namespace mesh {
 
 void *GlobalHeap::allocFromArena(size_t sz) {
-  MiniHeap *mh = nullptr; // allocMiniheap(sz);
+  std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+
+  MiniHeap *mh = allocMiniheap(-1, PageCount(sz), 1, sz);
 
   d_assert(mh->maxCount() == 1);
   d_assert(mh->spanSize() == sz);
@@ -14,7 +16,9 @@ void *GlobalHeap::allocFromArena(size_t sz) {
 
   void *ptr = mh->mallocAtWithBitmap(0);
 
-  return nullptr;
+  mh->unref();
+
+  return ptr;
 }
 
 void *GlobalHeap::malloc(size_t sz) {

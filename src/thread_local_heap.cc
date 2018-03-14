@@ -41,6 +41,8 @@ void ThreadLocalHeap::attachFreelist(Freelist &freelist, size_t sizeClass) {
   mh->reattach(allocCount);
 
   d_assert(mh->isAttached());
+
+  mh->unref();
 }
 
 // we get here if the freelist is exhausted
