@@ -378,7 +378,7 @@ protected:
 
   atomic<uint32_t> _inUseCount{0};  // 60
 
-  mutable atomic<uint32_t> _refCount{0};
+  mutable atomic<uint32_t> _refCount{1};
   uint32_t _meshCount;  // : 7;
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;  // 16 bytes
