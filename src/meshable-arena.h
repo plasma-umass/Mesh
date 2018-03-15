@@ -72,6 +72,7 @@ public:
 
     const auto pageCount = sz / HL::CPUInfo::PageSize;
     d_assert(pageCount >= 2);
+    d_assert(pageCount <= 64);
 
     // FIXME: we could be smarter here
     size_t firstOff = 0;
