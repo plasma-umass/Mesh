@@ -209,7 +209,7 @@ public:
     mh->free(ptr);
 
     if (mh->objectSize() > kMaxSize) {
-      mh->unref();
+      freeMiniheapLocked(mh, false);
       return;
     }
 

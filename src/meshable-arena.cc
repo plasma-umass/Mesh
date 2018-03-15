@@ -49,8 +49,11 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{kArenaSize / CPUInfo::Page
   _fd = fd;
   _arenaBegin = SuperHeap::map(kArenaSize, MAP_SHARED, fd);
   _metadata = reinterpret_cast<atomic<uintptr_t> *>(SuperHeap::map(metadataSize(), MAP_ANONYMOUS | MAP_PRIVATE));
-  if (unlikely(_arenaBegin == nullptr || _metadata == nullptr))
-    abort();
+
+  hard_assert(_arenaBegin != nullptr);
+  hard_assert(_metadata != nullptr);
+
+  madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
 
   // debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
 

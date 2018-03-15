@@ -74,43 +74,48 @@ public:
     d_assert(pageCount >= 2);
     d_assert(pageCount <= 64);
 
-    // FIXME: we could be smarter here
-    size_t firstOff = 0;
-    bool found = false;
-    while (!found) {
-      firstOff = _bitmap.setFirstEmpty(firstOff);
-      found = true;
-      // check that enough pages after the first empty page are available.
-      for (size_t i = 1; i < pageCount; i++) {
-        // if one of the pages we need is already in use, bump our
-        // offset into the page index up and try again
-        if (_bitmap.isSet(firstOff + i)) {
-          _bitmap.unset(firstOff);  // don't 'leak' this empty page
-          firstOff += i + 1;
-          found = false;
-          break;
-        }
-      }
+    uint64_t pattern = 0; // (1 << pageCount) - 1;
+    for (size_t i = 0; i < pageCount; i++) {
+      pattern |= 1 << i;
     }
 
-    d_assert(getMetadataFlags(firstOff) == 0 && getMetadataPtr(firstOff) == 0);
-    setMetadata(firstOff, internal::PageType::Identity);
+    // get a view of the underlying bits as chars
+    auto bits = reinterpret_cast<const uint8_t *>(_bitmap.bitmap());
+    const auto bitCount = _bitmap.bitCount();
+
+    // debug("searching for %p\n", reinterpret_cast<void *>(pattern));
+
+    size_t byteOff = 0;
+    for (; byteOff < (bitCount - pageCount)/8; byteOff++) {
+      uint64_t longBits = *reinterpret_cast<const uint64_t *>(bits + byteOff);
+      // a contiguous run of pages is available
+      if (((~longBits) & pattern) == pattern) {
+        break;
+      }
+    }
+    
+    const size_t off = byteOff * 8;
+
+    d_assert(getMetadataFlags(off) == 0 && getMetadataPtr(off) == 0);
+    setMetadata(off, internal::PageType::Identity);
 
     // now that we know they are available, set the empty pages to
     // in-use.  This is safe because this whole function is called
     // under the GlobalHeap lock, so there is no chance of concurrent
     // modification between the loop above and the one below.
     for (size_t i = 1; i < pageCount; i++) {
-      bool ok = _bitmap.tryToSet(firstOff + i);
-      if (!ok) {
-        debug("hard assertion failue");
-        abort();
-      }
-      d_assert(getMetadataFlags(firstOff + i) == 0 && getMetadataPtr(firstOff + i) == 0);
-      setMetadata(firstOff + i, internal::PageType::Identity);
+      bool ok = _bitmap.tryToSet(off + i);
+      hard_assert(ok);
+
+      d_assert(getMetadataFlags(off + i) == 0 && getMetadataPtr(off + i) == 0);
+      setMetadata(off + i, internal::PageType::Identity);
     }
 
-    return ptrFromOffset(firstOff);
+    void *ptr = ptrFromOffset(off);
+
+    madvise(ptr, sz, MADV_DODUMP);
+
+    return ptr;
   }
 
   inline void freePhys(void *ptr, size_t sz) {
@@ -142,6 +147,7 @@ public:
     const uint8_t flags = getMetadataFlags(off);
     if (flags == internal::PageType::Identity) {
       madvise(ptr, sz, MADV_DONTNEED);
+      madvise(ptr, sz, MADV_DONTDUMP);
       freePhys(ptr, sz);
     } else {
       // restore identity mapping
@@ -155,6 +161,8 @@ public:
       setMetadata(off + i, 0);
       _bitmap.unset(off + i);
     }
+
+    debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
   }
 
   inline void assoc(const void *span, void *miniheap, size_t pageCount) {
