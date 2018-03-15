@@ -53,7 +53,9 @@ MeshableArena::MeshableArena() : SuperHeap(), _bitmap{kArenaSize / CPUInfo::Page
   hard_assert(_arenaBegin != nullptr);
   hard_assert(_metadata != nullptr);
 
-  madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
+  if (kAdviseDump) {
+    madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
+  }
 
   // debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
 
