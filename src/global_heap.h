@@ -166,9 +166,10 @@ public:
 
   // called with lock held
   void freeMiniheapAfterMeshLocked(MiniHeap *mh, bool untrack = true) {
-    const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
-    if (untrack)
+    if (untrack) {
+      const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
       untrackMiniheapLocked(sizeClass, mh);
+    }
 
     mh->MiniHeap::~MiniHeap();
     internal::Heap().free(mh);

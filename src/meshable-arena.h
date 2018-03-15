@@ -97,13 +97,12 @@ public:
     const size_t off = byteOff * 8;
 
     d_assert(getMetadataFlags(off) == 0 && getMetadataPtr(off) == 0);
-    setMetadata(off, internal::PageType::Identity);
 
     // now that we know they are available, set the empty pages to
     // in-use.  This is safe because this whole function is called
     // under the GlobalHeap lock, so there is no chance of concurrent
     // modification between the loop above and the one below.
-    for (size_t i = 1; i < pageCount; i++) {
+    for (size_t i = 0; i < pageCount; i++) {
       bool ok = _bitmap.tryToSet(off + i);
       hard_assert(ok);
 
