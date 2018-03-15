@@ -16,6 +16,8 @@ void *GlobalHeap::allocFromArena(size_t sz) {
 
   void *ptr = mh->mallocAtWithBitmap(0);
 
+  // miniheaps are created attached, detach immediately
+  mh->detach();
   mh->unref();
 
   return ptr;
@@ -36,9 +38,9 @@ void *GlobalHeap::malloc(size_t sz) {
     return nullptr;
   }
 
-  // if (likely(sz <= kMaxFastLargeSize)) {
-  //   return allocFromArena(sz);
-  // }
+  if (likely(sz <= kMaxFastLargeSize)) {
+    return allocFromArena(sz);
+  }
 
   std::lock_guard<std::mutex> lock(_bigMutex);
   return _bigheap.malloc(sz);

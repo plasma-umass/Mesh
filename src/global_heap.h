@@ -207,6 +207,12 @@ public:
 
     _lastMeshEffective = 1;
     mh->free(ptr);
+
+    if (mh->objectSize() > kMaxSize) {
+      mh->unref();
+      return;
+    }
+
     bool shouldConsiderMesh = !mh->isEmpty();
     // unreffed by the bin tracker
     // mh->unref();
