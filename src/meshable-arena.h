@@ -112,7 +112,9 @@ public:
 
     void *ptr = ptrFromOffset(off);
 
-    madvise(ptr, sz, MADV_DODUMP);
+    if (kAdviseDump) {
+      madvise(ptr, sz, MADV_DODUMP);
+    }
 
     return ptr;
   }
@@ -146,7 +148,9 @@ public:
     const uint8_t flags = getMetadataFlags(off);
     if (flags == internal::PageType::Identity) {
       madvise(ptr, sz, MADV_DONTNEED);
-      madvise(ptr, sz, MADV_DONTDUMP);
+      if (kAdviseDump) {
+        madvise(ptr, sz, MADV_DONTDUMP);
+      }
       freePhys(ptr, sz);
     } else {
       // restore identity mapping
@@ -161,7 +165,7 @@ public:
       _bitmap.unset(off + i);
     }
 
-    debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
+    // debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
   }
 
   inline void assoc(const void *span, void *miniheap, size_t pageCount) {

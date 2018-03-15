@@ -42,6 +42,9 @@ static constexpr size_t kMinStringLen = 8;
 static constexpr size_t kMaxFreelistLength = sizeof(uint8_t) << 8;  // 256
 static constexpr bool kEnableShuffleFreelist = true;
 
+// madvise(DONTDUMP) the heap to make reasonable coredumps
+static constexpr bool kAdviseDump = false;
+
 static const double kMeshPeriodSecs = .1;
 
 // controls aspects of miniheaps
