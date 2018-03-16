@@ -76,6 +76,7 @@ public:
 
   void *allocFromArena(size_t sz);
 
+  // must be called with exclusive _mhRWLock held
   inline MiniHeap *allocMiniheap(int sizeClass, size_t pageCount, size_t objectCount, size_t objectSize) {
     const size_t spanSize = HL::CPUInfo::PageSize * pageCount;
     d_assert(0 < spanSize);
@@ -373,6 +374,7 @@ public:
   }
 
   size_t getAllocatedMiniheapCount() const {
+    std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
     return Super::bitmap().inUseCount();
   }
 
