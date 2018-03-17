@@ -15,14 +15,12 @@
 #include "bitmap.h"
 #include "meshing.h"
 
-using mesh::Bitmap;
+using mesh::internal::Bitmap;
 using std::make_unique;
 using std::stoi;
 using std::string;
 using std::unique_ptr;
 using std::vector;
-
-typedef std::basic_string<char, std::char_traits<char>, STLAllocator<char, MallocHeap>> internal_string;
 
 DEFINE_bool(v, false, "verbose debugging output");
 
@@ -55,8 +53,8 @@ public:
     d_assert(occupancy > 0);
     d_assert(nStrings > 0);
   }
-  vector<Bitmap<MallocHeap>> bitmaps{};
-  vector<internal_string> strings{};
+  vector<Bitmap> bitmaps{};
+  vector<mesh::internal::string> strings{};
 
   size_t length;  // string length
   size_t occupancy;
@@ -122,7 +120,7 @@ unique_ptr<MeshTestcase> openTestcase(const char *path) {
       testcase->expectedResult = stoi(&line[1]);
       loop = false;
     } else {
-      internal_string sline{line};
+      mesh::internal::string sline{line};
       d_assert(sline.length() == testcase->length);
 
       testcase->bitmaps.emplace_back(sline);
@@ -145,7 +143,7 @@ unique_ptr<MeshTestcase> openTestcase(const char *path) {
 bool validate(const unique_ptr<MeshTestcase> &testcase) {
   ssize_t result = 0;
   if (testcase->method == "dumb") {
-    result = mesh::method::simple<MallocHeap>(testcase->bitmaps);
+    result = mesh::method::simple(testcase->bitmaps);
     if (result == testcase->expectedResult)
       return true;
   } else {

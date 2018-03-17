@@ -31,8 +31,7 @@ static constexpr double OccupancyCutoff = .8;
 
 namespace method {
 
-template <typename Heap, typename T>
-inline ssize_t simple(const vector<Bitmap<T>> &bitmaps) noexcept {
+inline ssize_t simple(const vector<internal::Bitmap> &bitmaps) noexcept {
   if (bitmaps.size() == 0)
     return 0;
 
