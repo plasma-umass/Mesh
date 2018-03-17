@@ -18,8 +18,6 @@
 
 #include "heaplayers.h"
 
-#include "bitmap.h"
-
 namespace mesh {
 
 static inline constexpr size_t PageCount(size_t sz) {
@@ -123,8 +121,6 @@ typename Map::iterator greatest_leq(Map &m, typename Map::key_type const &k) {
   }
   return m.end();
 }
-
-typedef Bitmap<Heap> Bitmap;
 
 // BinTokens are stored on MiniHeaps and used by the BinTracker to
 // store occupancy metadata.  They are opaque to the MiniHeap, but

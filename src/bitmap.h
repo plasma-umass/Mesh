@@ -17,11 +17,14 @@
 #include <cstring>
 
 #include "common.h"
+#include "internal.h"
+
 #include "static/staticlog.h"
 
 #include "heaplayers.h"
 
 namespace mesh {
+namespace internal {
 
 using std::atomic_size_t;
 
@@ -60,8 +63,7 @@ private:
  * @param Heap  the source of memory for the bitmap.
  */
 
-template <typename Heap>
-class Bitmap : private Heap {
+class Bitmap {
 private:
   DISALLOW_COPY_AND_ASSIGN(Bitmap);
 
@@ -77,11 +79,6 @@ private:
   }
 
 public:
-  template <typename T>
-  using InternalAllocator = STLAllocator<T, Heap>;
-
-  typedef std::basic_string<char, std::char_traits<char>, InternalAllocator<char>> internal_string;
-
   typedef BitmapIter<Bitmap, size_t> iterator;
   typedef BitmapIter<Bitmap, size_t> const const_iterator;
 
@@ -100,7 +97,7 @@ public:
     }
   }
 
-  explicit Bitmap(const internal_string &str) : Bitmap() {
+  explicit Bitmap(const internal::string &str) : Bitmap() {
     reserve(str.length());
 
     for (size_t i = 0; i < str.length(); ++i) {
@@ -119,16 +116,16 @@ public:
 
   ~Bitmap() {
     if (_bitarray)
-      Heap::free(_bitarray);
+      internal::Heap().free(_bitarray);
     _bitarray = nullptr;
   }
 
-  internal_string to_string(ssize_t nElements = -1) const {
+  internal::string to_string(ssize_t nElements = -1) const {
     if (nElements == -1)
       nElements = _elements;
     d_assert(0 <= nElements && static_cast<size_t>(nElements) <= _elements);
 
-    internal_string s(nElements, '0');
+    internal::string s(nElements, '0');
 
     for (ssize_t i = 0; i < nElements; i++) {
       if (isSet(i))
@@ -142,14 +139,14 @@ public:
   /// @param nelts the number of elements needed.
   void reserve(uint64_t nelts) {
     if (_bitarray) {
-      Heap::free(_bitarray);
+      internal::Heap().free(_bitarray);
     }
     // Round up the number of elements.
     _elements = nelts;
     // mesh::debug("Bitmap(%zu): %zu bytes", nelts, byteCount());
 
     // Allocate the right number of bytes.
-    _bitarray = reinterpret_cast<atomic_size_t *>(Heap::malloc(byteCount()));
+    _bitarray = reinterpret_cast<atomic_size_t *>(internal::Heap().malloc(byteCount()));
     d_assert(_bitarray != nullptr);
 
     clear();
@@ -171,7 +168,7 @@ public:
   /// Clears out the bitmap array.
   void clear(void) {
     if (_bitarray != nullptr) {
-      const auto wordCount = byteCount()/sizeof(size_t);
+      const auto wordCount = byteCount() / sizeof(size_t);
       // use an explicit array since these are atomic_size_t's
       for (size_t i = 0; i < wordCount; i++) {
         _bitarray[i] = 0;
@@ -368,6 +365,7 @@ private:
   /// The number of elements (bits) in the array.
   size_t _elements{0};
 };
+}  // namespace internal
 }  // namespace mesh
 
 #endif  // MESH__BITMAP_H

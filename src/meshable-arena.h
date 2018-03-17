@@ -28,6 +28,8 @@
 
 #include "internal.h"
 
+#include "bitmap.h"
+
 #include "mmapheap.h"
 
 namespace mesh {
@@ -270,6 +272,8 @@ private:
 
   // indexed by offset
   atomic<uintptr_t> *_metadata{nullptr};
+
+  // internal::vector<DeferredDeallocs> _freelist;
 
   int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
