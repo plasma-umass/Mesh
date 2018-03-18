@@ -28,7 +28,8 @@ namespace internal {
 
 using std::atomic_size_t;
 
-template <typename Container, typename size_t>
+// enables iteration through the set bits of the bitmap
+template <typename Container>
 class BitmapIter : public std::iterator<std::forward_iterator_tag, size_t> {
 public:
   BitmapIter(const Container &a, const size_t i) : _i(i), _cont(a) {
@@ -43,10 +44,10 @@ public:
     return *this;
   }
   bool operator==(const BitmapIter &rhs) const {
-    return _cont.bitmap() == rhs._cont.bitmap() && _i == rhs._i;
+    return _cont.bits() == rhs._cont.bits() && _i == rhs._i;
   }
   bool operator!=(const BitmapIter &rhs) const {
-    return _cont.bitmap() != rhs._cont.bitmap() || _i != rhs._i;
+    return _cont.bits() != rhs._cont.bits() || _i != rhs._i;
   }
   size_t &operator*() {
     return _i;
@@ -57,37 +58,88 @@ private:
   const Container &_cont;
 };
 
-/**
- * @class Bitmap
- * @brief Manages a dynamically-sized bitmap.
- * @param Heap  the source of memory for the bitmap.
- */
+/// To find the bit in a word, do this: word & getMask(bitPosition)
+/// @return a "mask" for the given position.
+static inline size_t getMask(uint64_t pos) {
+  return 1UL << pos;
+}
 
-class Bitmap {
+static inline bool atomicSet(atomic_size_t *bits, uint32_t item, uint32_t position) {
+  const auto mask = getMask(position);
+
+  size_t oldValue = bits[item];
+  while (!std::atomic_compare_exchange_weak(&bits[item],  // address of word
+                                            &oldValue,    // old val
+                                            oldValue | mask)) {
+  }
+
+  return !(oldValue & mask);
+}
+
+static inline bool atomicUnset(atomic_size_t *bits, uint32_t item, uint32_t position) {
+  const auto mask = getMask(position);
+
+  size_t oldValue = bits[item];
+  while (!std::atomic_compare_exchange_weak(&bits[item],  // address of word
+                                            &oldValue,    // old val
+                                            oldValue & ~mask)) {
+  }
+
+  return !(oldValue & mask);
+}
+
+static inline bool relaxedSet(size_t *bits, uint32_t item, uint32_t position) {
+  const auto mask = getMask(position);
+
+  size_t oldValue = bits[item];
+  bits[item] = oldValue | mask;
+
+  return !(oldValue & mask);
+}
+
+/// Clears the bit at the given index.
+inline bool relaxedUnset(size_t *bits, uint32_t item, uint32_t position) {
+  const auto mask = getMask(position);
+
+  size_t oldValue = bits[item];
+  bits[item] = oldValue & ~mask;
+
+  return !(oldValue & mask);
+}
+
+template <typename word_t, bool (*setAt)(word_t *bits, uint32_t item, uint32_t position),
+          bool (*unsetAt)(word_t *bits, uint32_t item, uint32_t position)>
+class BitmapBase {
 private:
-  DISALLOW_COPY_AND_ASSIGN(Bitmap);
+  DISALLOW_COPY_AND_ASSIGN(BitmapBase);
+
+  typedef BitmapBase<word_t, setAt, unsetAt> Bitmap;
 
   static_assert(sizeof(size_t) == sizeof(atomic_size_t), "no overhead atomics");
+  static_assert(sizeof(word_t) == sizeof(size_t), "word_t should be size_t");
 
   /// A synonym for the datatype corresponding to a word.
-  enum { WORDBITS = sizeof(size_t) * 8 };
-  enum { WORDBYTES = sizeof(size_t) };
+  enum { WORD_BITS = sizeof(word_t) * 8 };
+  enum { WORD_BYTES = sizeof(word_t) };
   /// The log of the number of bits in a size_t, for shifting.
-  enum { WORDBITSHIFT = staticlog(WORDBITS) };
+  enum { WORD_BITSHIFT = staticlog(WORD_BITS) };
 
-  explicit Bitmap() {
-  }
+  BitmapBase() = delete;
 
 public:
-  typedef BitmapIter<Bitmap, size_t> iterator;
-  typedef BitmapIter<Bitmap, size_t> const const_iterator;
+  typedef BitmapIter<Bitmap> iterator;
+  typedef BitmapIter<Bitmap> const const_iterator;
 
-  explicit Bitmap(size_t nBits) : Bitmap() {
-    reserve(nBits);
+  explicit BitmapBase(size_t bitCount)
+      : _bitCount(bitCount), _bitarray(reinterpret_cast<word_t *>(internal::Heap().malloc(byteCount()))) {
+    d_assert(_bitarray != nullptr);
+    clear();
   }
 
-  explicit Bitmap(const std::string &str) : Bitmap() {
-    reserve(str.length());
+  explicit BitmapBase(const std::string &str)
+      : _bitCount(str.length()), _bitarray(reinterpret_cast<word_t *>(internal::Heap().malloc(byteCount()))) {
+    d_assert(_bitarray != nullptr);
+    clear();
 
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
@@ -97,8 +149,10 @@ public:
     }
   }
 
-  explicit Bitmap(const internal::string &str) : Bitmap() {
-    reserve(str.length());
+  explicit BitmapBase(const internal::string &str)
+      : _bitCount(str.length()), _bitarray(reinterpret_cast<word_t *>(internal::Heap().malloc(byteCount()))) {
+    d_assert(_bitarray != nullptr);
+    clear();
 
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
@@ -108,26 +162,24 @@ public:
     }
   }
 
-  Bitmap(Bitmap &&rhs) {
-    _elements = rhs._elements;
-    _bitarray = rhs._bitarray;
+  BitmapBase(BitmapBase &&rhs) : _bitCount(rhs._bitCount), _bitarray(rhs._bitarray) {
     rhs._bitarray = nullptr;
   }
 
-  ~Bitmap() {
+  ~BitmapBase() {
     if (_bitarray)
       internal::Heap().free(_bitarray);
     _bitarray = nullptr;
   }
 
-  internal::string to_string(ssize_t nElements = -1) const {
-    if (nElements == -1)
-      nElements = _elements;
-    d_assert(0 <= nElements && static_cast<size_t>(nElements) <= _elements);
+  internal::string to_string(ssize_t bitCount = -1) const {
+    if (bitCount == -1)
+      bitCount = _bitCount;
+    d_assert(0 <= bitCount && static_cast<size_t>(bitCount) <= _bitCount);
 
-    internal::string s(nElements, '0');
+    internal::string s(bitCount, '0');
 
-    for (ssize_t i = 0; i < nElements; i++) {
+    for (ssize_t i = 0; i < bitCount; i++) {
       if (isSet(i))
         s[i] = '1';
     }
@@ -135,33 +187,16 @@ public:
     return s;
   }
 
-  /// @brief Sets aside space for a certain number of elements.
-  /// @param nelts the number of elements needed.
-  void reserve(uint64_t nelts) {
-    if (_bitarray) {
-      internal::Heap().free(_bitarray);
-    }
-    // Round up the number of elements.
-    _elements = nelts;
-    // mesh::debug("Bitmap(%zu): %zu bytes", nelts, byteCount());
-
-    // Allocate the right number of bytes.
-    _bitarray = reinterpret_cast<atomic_size_t *>(internal::Heap().malloc(byteCount()));
-    d_assert(_bitarray != nullptr);
-
-    clear();
-  }
-
-  // number of bytes used to store the bitmap
+  // number of bytes used to store the bitmap -- rounds up to nearest sizeof(size_t)
   inline size_t byteCount() const {
-    return WORDBITS * ((_elements + WORDBITS - 1) / WORDBITS) / 8;
+    return WORD_BITS * ((_bitCount + WORD_BITS - 1) / WORD_BITS) / 8;
   }
 
   inline size_t bitCount() const {
-    return _elements;
+    return _bitCount;
   }
 
-  const atomic_size_t *bitmap() const {
+  const word_t *bits() const {
     return _bitarray;
   }
 
@@ -206,14 +241,14 @@ public:
       // debug("unset bits: %zx (off: %u, startingAt: %llu", unsetBits, off, startingAt);
 
       size_t off = __builtin_ffsll(unsetBits) - 1;
-      const bool ok = tryToSetAt(i, off);
+      const bool ok = setAt(_bitarray, i, off);
       // if we couldn't set the bit, we raced with a different thread.  try again.
       if (!ok) {
         off++;
         continue;
       }
 
-      return WORDBITS * i + off;
+      return WORD_BITS * i + off;
     }
 
     debug("mesh: bitmap completely full, aborting.\n");
@@ -224,14 +259,7 @@ public:
   inline bool tryToSet(uint64_t index) {
     uint32_t item, position;
     computeItemPosition(index, item, position);
-    return tryToSetAt(item, position);
-  }
-
-  /// @return true iff the bit was not set (but it is now).
-  inline bool tryToSetRelaxed(uint64_t index) {
-    uint32_t item, position;
-    computeItemPosition(index, item, position);
-    return tryToSetAtRelaxed(item, position);
+    return setAt(_bitarray, item, position);
   }
 
   /// Clears the bit at the given index.
@@ -239,34 +267,14 @@ public:
     uint32_t item, position;
     computeItemPosition(index, item, position);
 
-    auto atomic_bitarray = reinterpret_cast<atomic_size_t *>(_bitarray);
-
-    const auto mask = getMask(position);
-    size_t oldValue = atomic_bitarray[item];
-    while (!std::atomic_compare_exchange_weak(&atomic_bitarray[item],  // address of word
-                                              &oldValue,               // old val
-                                              oldValue & ~mask)) {
-    }
-
-    return !(oldValue & mask);
-  }
-
-  /// Clears the bit at the given index.
-  inline bool unsetRelaxed(uint64_t index) {
-    uint32_t item, position;
-    computeItemPosition(index, item, position);
-
-    const auto mask = getMask(position);
-    size_t oldValue = _bitarray[item];
-    _bitarray[item] = oldValue & ~mask;
-
-    return !(oldValue & mask);
+    return unsetAt(_bitarray, item, position);
   }
 
   // FIXME: who uses this? bad idea with atomics
   inline bool isSet(uint64_t index) const {
     uint32_t item, position;
     computeItemPosition(index, item, position);
+
     return _bitarray[item] & getMask(position);
   }
 
@@ -302,8 +310,7 @@ public:
     uint32_t startWord, startOff;
     computeItemPosition(startingAt, startWord, startOff);
 
-    const size_t nBytes = byteCount();
-    for (size_t i = startWord; i < nBytes; i++) {
+    for (size_t i = startWord; i < byteCount(); i++) {
       const auto mask = ~((1UL << startOff) - 1);
       const auto bits = _bitarray[i] & mask;
       startOff = 0;
@@ -313,7 +320,7 @@ public:
 
       const size_t off = __builtin_ffsl(bits) - 1;
 
-      const auto bit = WORDBITS * i + off;
+      const auto bit = WORD_BITS * i + off;
       return bit < bitCount() ? bit : bitCount();
     }
 
@@ -321,50 +328,23 @@ public:
   }
 
 private:
-  inline bool tryToSetAt(uint32_t item, uint32_t position) {
-    const auto mask = getMask(position);
-
-    auto atomic_bitarray = reinterpret_cast<atomic_size_t *>(_bitarray);
-
-    size_t oldValue = atomic_bitarray[item];
-    while (!std::atomic_compare_exchange_weak(&atomic_bitarray[item],  // address of word
-                                              &oldValue,               // old val
-                                              oldValue | mask)) {
-    }
-
-    return !(oldValue & mask);
-  }
-
-  inline bool tryToSetAtRelaxed(uint32_t item, uint32_t position) {
-    const auto mask = getMask(position);
-    size_t oldValue = _bitarray[item];
-
-    _bitarray[item] = oldValue | mask;
-
-    return !(oldValue & mask);
-  }
-
   /// Given an index, compute its item (word) and position within the word.
   inline void computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
-    d_assert(index < _elements);
-    item = index >> WORDBITSHIFT;
-    position = index & (WORDBITS - 1);
-    d_assert(position == index - (item << WORDBITSHIFT));
+    d_assert(index < _bitCount);
+    item = index >> WORD_BITSHIFT;
+    position = index & (WORD_BITS - 1);
+    d_assert(position == index - (item << WORD_BITSHIFT));
     d_assert(item < byteCount() / 8);
   }
 
-  /// To find the bit in a word, do this: word & getMask(bitPosition)
-  /// @return a "mask" for the given position.
-  inline static size_t getMask(uint64_t pos) {
-    return 1UL << pos;
-  }
-
-  /// The bit array itself.
-  atomic_size_t *_bitarray{nullptr};
-
-  /// The number of elements (bits) in the array.
-  size_t _elements{0};
+  const size_t _bitCount{0};
+  word_t *_bitarray{nullptr};
 };
+
+typedef BitmapBase<atomic_size_t, atomicSet, atomicUnset> Bitmap;
+
+static_assert(sizeof(Bitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
+
 }  // namespace internal
 }  // namespace mesh
 

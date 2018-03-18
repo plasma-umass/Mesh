@@ -39,8 +39,8 @@ inline ssize_t simple(const vector<internal::Bitmap> &bitmaps) noexcept {
   const auto len = bitmaps[0].byteCount();
 
   for (size_t i = 0; i + 1 < bitmaps.size(); i += 2) {
-    const auto bitmap1 = bitmaps[i].bitmap();
-    const auto bitmap2 = bitmaps[i + 1].bitmap();
+    const auto bitmap1 = bitmaps[i].bits();
+    const auto bitmap2 = bitmaps[i + 1].bits();
 
     if (bitmapsMeshable(bitmap1, bitmap2, len))
       meshes++;
@@ -77,8 +77,8 @@ inline void randomSort(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
     d_assert(!h2->isAttached());
 
     const auto len = h1->bitmap().byteCount();
-    const auto bitmap1 = h1->bitmap().bitmap();
-    const auto bitmap2 = h2->bitmap().bitmap();
+    const auto bitmap1 = h1->bitmap().bits();
+    const auto bitmap2 = h2->bitmap().bits();
     const auto len2 = h2->bitmap().byteCount();
     d_assert_msg(len == h2->bitmap().byteCount(), "mismatched lengths? %zu != %zu", len, len2);
 
@@ -197,7 +197,7 @@ inline void unbalancedSplit(mt19937_64 &prng, BinnedTracker<T> &miniheaps, inter
   const size_t halfBits = nBits / 2;
 
   const auto splitStr = splitString(nBits);
-  const auto splitBitmap = splitStr.bitmap();
+  const auto splitBitmap = splitStr.bits();
 
   internal::vector<T *> bucket = miniheaps.meshingCandidates(OccupancyCutoff);
   for (size_t i = 0; i < bucket.size(); i++) {
@@ -205,7 +205,7 @@ inline void unbalancedSplit(mt19937_64 &prng, BinnedTracker<T> &miniheaps, inter
     if (!mh->isMeshingCandidate() || mh->fullness() >= OccupancyCutoff)
       continue;
 
-    const auto mhBitmap = mh->bitmap().bitmap();
+    const auto mhBitmap = mh->bitmap().bits();
     const auto distance = mesh::hammingDistance(splitBitmap, mhBitmap, nBits);
     if (distance > halfBits) {
       right.push_back(mh);
@@ -252,8 +252,8 @@ inline void simpleGreedySplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
       auto h1 = bucket[i];
       auto h2 = bucket[j];
 
-      const auto bitmap1 = h1->bitmap().bitmap();
-      const auto bitmap2 = h2->bitmap().bitmap();
+      const auto bitmap1 = h1->bitmap().bits();
+      const auto bitmap2 = h2->bitmap().bits();
 
       if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes)) {
         std::pair<T *, T *> heaps{h1, h2};
@@ -292,8 +292,8 @@ inline void greedySplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
       auto h1 = leftBucket[i];
       auto h2 = rightBucket[j];
 
-      const auto bitmap1 = h1->bitmap().bitmap();
-      const auto bitmap2 = h2->bitmap().bitmap();
+      const auto bitmap1 = h1->bitmap().bits();
+      const auto bitmap2 = h2->bitmap().bits();
 
       if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes)) {
         std::pair<T *, T *> heaps{h1, h2};
@@ -335,8 +335,8 @@ inline void shiftedSplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
       if (h1 == nullptr || h2 == nullptr)
         continue;
 
-      const auto bitmap1 = h1->bitmap().bitmap();
-      const auto bitmap2 = h2->bitmap().bitmap();
+      const auto bitmap1 = h1->bitmap().bits();
+      const auto bitmap2 = h2->bitmap().bits();
 
       if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes)) {
         std::pair<T *, T *> heaps{h1, h2};
