@@ -82,7 +82,7 @@ public:
     }
 
     // get a view of the underlying bits as chars
-    auto bits = reinterpret_cast<const uint8_t *>(_bitmap.bitmap());
+    auto bits = reinterpret_cast<const uint8_t *>(_bitmap.bits());
     const auto bitCount = _bitmap.bitCount();
 
     // debug("searching for %p\n", reinterpret_cast<void *>(pattern));

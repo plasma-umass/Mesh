@@ -63,8 +63,8 @@ static void meshTest(bool invert) {
     mh2 = tmp;
   }
 
-  const auto bitmap1 = mh1->bitmap().bitmap();
-  const auto bitmap2 = mh2->bitmap().bitmap();
+  const auto bitmap1 = mh1->bitmap().bits();
+  const auto bitmap2 = mh2->bitmap().bits();
   const auto len = mh1->bitmap().byteCount();
   ASSERT_EQ(len, mh2->bitmap().byteCount());
 

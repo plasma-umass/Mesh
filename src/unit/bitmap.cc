@@ -48,43 +48,6 @@ TEST(BitmapTest, SetGet) {
   }
 }
 
-TEST(BitmapTest, SetGetRelaxed) {
-  const int NTRIALS = 1000;
-
-  for (int n = 10; n < 10000; n *= 2) {
-    mesh::internal::Bitmap b{static_cast<size_t>(n)};
-
-    for (int k = 0; k < NTRIALS; k++) {
-      // Generate a random stream of bits.
-      int *rnd = reinterpret_cast<int *>(calloc(n, sizeof(int)));
-      ASSERT_NE(rnd, nullptr);
-
-      for (int i = 0; i < n; i++) {
-        rnd[i] = lrand48() % 2;
-      }
-
-      for (int i = 0; i < n; i++) {
-        if (rnd[i] == 0) {
-          bool r = b.tryToSetRelaxed(i);
-          ASSERT_TRUE(r);
-        } else {
-          ASSERT_FALSE(b.isSet(i));
-          b.unsetRelaxed(i);
-        }
-      }
-      for (int i = 0; i < n; i++) {
-        if (rnd[i] == 0) {
-          ASSERT_TRUE(b.isSet(i));
-          b.unsetRelaxed(i);
-        } else {
-          ASSERT_FALSE(b.isSet(i));
-        }
-      }
-      free(rnd);
-    }
-  }
-}
-
 TEST(BitmapTest, Builtins) {
   mesh::internal::Bitmap b{1024};
 
