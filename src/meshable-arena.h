@@ -261,7 +261,7 @@ private:
   void afterForkParent();
   void afterForkChild();
 
-  void *arenaEnd() {
+  void *arenaEnd() const {
     return reinterpret_cast<char *>(_arenaBegin) + kArenaSize;
   }
 
