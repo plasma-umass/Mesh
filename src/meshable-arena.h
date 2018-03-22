@@ -51,8 +51,33 @@ struct Span {
   explicit Span(Offset _offset, Length _length) : offset(_offset), length(_length) {
   }
 
-  const Offset offset;
-  const Length length;
+  Span(const Span &rhs) : offset(rhs.offset), length(rhs.length) {
+  }
+
+  constexpr Span& operator=(const Span& rhs) {
+    offset = rhs.offset;
+    length = rhs.length;
+    return *this;
+  }
+
+  Span(Span &&rhs) : offset(rhs.offset), length(rhs.length) {
+  }
+
+  bool empty() const {
+    return length == 0;
+  }
+
+  // reduce the size of this span to pageCount, return another span
+  // with the rest of the pages.
+  Span split(Length pageCount) {
+    d_assert(pageCount <= length);
+    auto restPageCount = length - pageCount;
+    length = pageCount;
+    return Span(offset + pageCount, restPageCount);
+  }
+
+  Offset offset;
+  Length length;
 };
 
 class MeshableArena : public mesh::OneWayMmapHeap {
@@ -72,6 +97,8 @@ public:
   }
 
 private:
+  void expandArena(Length minPagesAdded);
+  bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result);
   Span reservePages(Length pageCount);
   void freeSpan(Span span);
   void freePhys(void *ptr, size_t sz);
