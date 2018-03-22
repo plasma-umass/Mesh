@@ -58,71 +58,12 @@ private:
   const Container &_cont;
 };
 
-
-class AtomicBitmapBase {}
-
-
-/// To find the bit in a word, do this: word & getMask(bitPosition)
-/// @return a "mask" for the given position.
-static inline size_t getMask(uint64_t pos) {
-  return 1UL << pos;
-}
-
-static inline bool atomicSet(atomic_size_t *bits, uint32_t item, uint32_t position) {
-  const auto mask = getMask(position);
-
-  size_t oldValue = bits[item];
-  while (!std::atomic_compare_exchange_weak(&bits[item],  // address of word
-                                            &oldValue,    // old val
-                                            oldValue | mask)) {
-  }
-
-  return !(oldValue & mask);
-}
-
-static inline bool atomicUnset(atomic_size_t *bits, uint32_t item, uint32_t position) {
-  const auto mask = getMask(position);
-
-  size_t oldValue = bits[item];
-  while (!std::atomic_compare_exchange_weak(&bits[item],  // address of word
-                                            &oldValue,    // old val
-                                            oldValue & ~mask)) {
-  }
-
-  return !(oldValue & mask);
-}
-
-static inline bool relaxedSet(size_t *bits, uint32_t item, uint32_t position) {
-  const auto mask = getMask(position);
-
-  size_t oldValue = bits[item];
-  bits[item] = oldValue | mask;
-
-  return !(oldValue & mask);
-}
-
-/// Clears the bit at the given index.
-static inline bool relaxedUnset(size_t *bits, uint32_t item, uint32_t position) {
-  const auto mask = getMask(position);
-
-  size_t oldValue = bits[item];
-  bits[item] = oldValue & ~mask;
-
-  return !(oldValue & mask);
-}
-
-template <
-  typename word_t,
-  bool (*setAt)(word_t *bits, uint32_t item, uint32_t position),
-  bool (*unsetAt)(word_t *bits, uint32_t item, uint32_t position)>
-class BitmapBase {
+class AtomicBitmapBase {
 private:
-  DISALLOW_COPY_AND_ASSIGN(BitmapBase);
+  DISALLOW_COPY_AND_ASSIGN(AtomicBitmapBase);
 
-  typedef BitmapBase<word_t, setAt, unsetAt> Bitmap;
-
-  static_assert(sizeof(size_t) == sizeof(atomic_size_t), "no overhead atomics");
-  static_assert(sizeof(word_t) == sizeof(size_t), "word_t should be size_t");
+protected:
+  typedef atomic_size_t word_t;
 
   /// A synonym for the datatype corresponding to a word.
   enum { WORD_BITS = sizeof(word_t) * 8 };
@@ -130,21 +71,124 @@ private:
   /// The log of the number of bits in a size_t, for shifting.
   enum { WORD_BITSHIFT = staticlog(WORD_BITS) };
 
-  BitmapBase() = delete;
+  AtomicBitmapBase(size_t bitCount)
+      : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(internal::Heap().malloc(byteCount()))) {
+  }
+
+  // number of bytes used to store the bitmap -- rounds up to nearest sizeof(size_t)
+  inline size_t byteCount() const {
+    return WORD_BITS * ((_bitCount + WORD_BITS - 1) / WORD_BITS) / 8;
+  }
+
+  /// To find the bit in a word, do this: word & getMask(bitPosition)
+  /// @return a "mask" for the given position.
+  static inline size_t getMask(uint64_t pos) {
+    return 1UL << pos;
+  }
+
+  inline bool setAt(uint32_t item, uint32_t position) {
+    const auto mask = getMask(position);
+
+    size_t oldValue = _bits[item];
+    while (!std::atomic_compare_exchange_weak(&_bits[item],  // address of word
+                                              &oldValue,     // old val
+                                              oldValue | mask)) {
+    }
+
+    return !(oldValue & mask);
+  }
+
+  inline bool unsetAt(uint32_t item, uint32_t position) {
+    const auto mask = getMask(position);
+
+    size_t oldValue = _bits[item];
+    while (!std::atomic_compare_exchange_weak(&_bits[item],  // address of word
+                                              &oldValue,     // old val
+                                              oldValue & ~mask)) {
+    }
+
+    return !(oldValue & mask);
+  }
+
+  const size_t _bitCount;
+  word_t *_bits;
+};
+
+class RelaxedBitmapBase {
+private:
+  DISALLOW_COPY_AND_ASSIGN(RelaxedBitmapBase);
+
+  typedef size_t word_t;
+
+protected:
+  RelaxedBitmapBase(size_t bitCount)
+      : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(internal::Heap().malloc(byteCount()))) {
+  }
+
+  /// A synonym for the datatype corresponding to a word.
+  enum { WORD_BITS = sizeof(word_t) * 8 };
+  enum { WORD_BYTES = sizeof(word_t) };
+  /// The log of the number of bits in a size_t, for shifting.
+  enum { WORD_BITSHIFT = staticlog(WORD_BITS) };
+
+  // number of bytes used to store the bitmap -- rounds up to nearest sizeof(size_t)
+  inline size_t byteCount() const {
+    return WORD_BITS * ((_bitCount + WORD_BITS - 1) / WORD_BITS) / 8;
+  }
+
+  /// To find the bit in a word, do this: word & getMask(bitPosition)
+  /// @return a "mask" for the given position.
+  static inline size_t getMask(uint64_t pos) {
+    return 1UL << pos;
+  }
+
+  inline bool setAt(uint32_t item, uint32_t position) {
+    const auto mask = getMask(position);
+
+    size_t oldValue = _bits[item];
+    _bits[item] = oldValue | mask;
+
+    return !(oldValue & mask);
+  }
+
+  /// Clears the bit at the given index.
+  inline bool unsetAt(uint32_t item, uint32_t position) {
+    const auto mask = getMask(position);
+
+    size_t oldValue = _bits[item];
+    _bits[item] = oldValue & ~mask;
+
+    return !(oldValue & mask);
+  }
+
+  const size_t _bitCount;
+  word_t *_bits;
+};
+
+class Bitmap : AtomicBitmapBase {
+private:
+  DISALLOW_COPY_AND_ASSIGN(Bitmap);
+
+  typedef AtomicBitmapBase Super;
+  // typedef BitmapBase<Super> Bitmap;
+  // typedef typename Super::word_t word_t;
+
+  static_assert(sizeof(size_t) == sizeof(atomic_size_t), "no overhead atomics");
+  static_assert(sizeof(word_t) == sizeof(size_t), "word_t should be size_t");
+
+  Bitmap() = delete;
 
 public:
   typedef BitmapIter<Bitmap> iterator;
   typedef BitmapIter<Bitmap> const const_iterator;
 
-  explicit BitmapBase(size_t bitCount)
-      : _bitCount(bitCount), _bitarray(reinterpret_cast<word_t *>(internal::Heap().malloc(byteCount()))) {
-    d_assert(_bitarray != nullptr);
+  explicit Bitmap(size_t bitCount) : Super(bitCount) {
+    d_assert(_bits != nullptr);
     clear();
   }
 
-  explicit BitmapBase(const std::string &str)
-      : _bitCount(str.length()), _bitarray(reinterpret_cast<word_t *>(internal::Heap().malloc(byteCount()))) {
-    d_assert(_bitarray != nullptr);
+  explicit Bitmap(const std::string &str) : Super(str.length()) {
+    d_assert(_bits != nullptr);
     clear();
 
     for (size_t i = 0; i < str.length(); ++i) {
@@ -155,9 +199,8 @@ public:
     }
   }
 
-  explicit BitmapBase(const internal::string &str)
-      : _bitCount(str.length()), _bitarray(reinterpret_cast<word_t *>(internal::Heap().malloc(byteCount()))) {
-    d_assert(_bitarray != nullptr);
+  explicit Bitmap(const internal::string &str) : Super(str.length()) {
+    d_assert(_bits != nullptr);
     clear();
 
     for (size_t i = 0; i < str.length(); ++i) {
@@ -168,14 +211,14 @@ public:
     }
   }
 
-  BitmapBase(BitmapBase &&rhs) : _bitCount(rhs._bitCount), _bitarray(rhs._bitarray) {
-    rhs._bitarray = nullptr;
+  Bitmap(Bitmap &&rhs) : Super(rhs._bitCount) {
+    rhs._bits = nullptr;
   }
 
-  ~BitmapBase() {
-    if (_bitarray)
-      internal::Heap().free(_bitarray);
-    _bitarray = nullptr;
+  ~Bitmap() {
+    if (_bits)
+      internal::Heap().free(_bits);
+    _bits = nullptr;
   }
 
   internal::string to_string(ssize_t bitCount = -1) const {
@@ -203,16 +246,16 @@ public:
   }
 
   const word_t *bits() const {
-    return _bitarray;
+    return _bits;
   }
 
   /// Clears out the bitmap array.
   void clear(void) {
-    if (_bitarray != nullptr) {
+    if (_bits != nullptr) {
       const auto wordCount = byteCount() / sizeof(size_t);
       // use an explicit array since these are atomic_size_t's
       for (size_t i = 0; i < wordCount; i++) {
-        _bitarray[i] = 0;
+        _bits[i] = 0;
       }
     }
   }
@@ -223,7 +266,7 @@ public:
 
     const size_t words = byteCount();
     for (size_t i = startWord; i < words; i++) {
-      const size_t bits = _bitarray[i];
+      const size_t bits = _bits[i];
       if (bits == ~0UL) {
         off = 0;
         continue;
@@ -247,7 +290,7 @@ public:
       // debug("unset bits: %zx (off: %u, startingAt: %llu", unsetBits, off, startingAt);
 
       size_t off = __builtin_ffsll(unsetBits) - 1;
-      const bool ok = setAt(_bitarray, i, off);
+      const bool ok = setAt(i, off);
       // if we couldn't set the bit, we raced with a different thread.  try again.
       if (!ok) {
         off++;
@@ -265,7 +308,7 @@ public:
   inline bool tryToSet(uint64_t index) {
     uint32_t item, position;
     computeItemPosition(index, item, position);
-    return setAt(_bitarray, item, position);
+    return setAt(item, position);
   }
 
   /// Clears the bit at the given index.
@@ -273,7 +316,7 @@ public:
     uint32_t item, position;
     computeItemPosition(index, item, position);
 
-    return unsetAt(_bitarray, item, position);
+    return unsetAt(item, position);
   }
 
   // FIXME: who uses this? bad idea with atomics
@@ -281,14 +324,14 @@ public:
     uint32_t item, position;
     computeItemPosition(index, item, position);
 
-    return _bitarray[item] & getMask(position);
+    return _bits[item] & getMask(position);
   }
 
   inline uint64_t inUseCount() const {
     const auto wordCount = byteCount() / 8;
     uint64_t count = 0;
     for (size_t i = 0; i < wordCount; i++) {
-      count += __builtin_popcountl(_bitarray[i]);
+      count += __builtin_popcountl(_bits[i]);
     }
     return count;
   }
@@ -318,7 +361,7 @@ public:
 
     for (size_t i = startWord; i < byteCount(); i++) {
       const auto mask = ~((1UL << startOff) - 1);
-      const auto bits = _bitarray[i] & mask;
+      const auto bits = _bits[i] & mask;
       startOff = 0;
 
       if (bits == 0ULL)
@@ -342,13 +385,10 @@ private:
     d_assert(position == index - (item << WORD_BITSHIFT));
     d_assert(item < byteCount() / 8);
   }
-
-  const size_t _bitCount{0};
-  word_t *_bitarray{nullptr};
 };
 
 // typedef BitmapBase<atomic_size_t, mesh::internal::atomicSet, mesh::internal::atomicUnset> Bitmap;
-typedef BitmapBase<size_t, mesh::internal::relaxedSet, mesh::internal::relaxedUnset> Bitmap;
+// typedef BitmapBase<AtomicBitmapBase> Bitmap;
 
 static_assert(sizeof(Bitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
 
