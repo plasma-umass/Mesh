@@ -19,7 +19,9 @@
 
 namespace mesh {
 
-using std::atomic_size_t;
+//using std::atomic_size_t;
+
+typedef size_t atomic_size_t;
 
 bool bitmapsMeshable(const atomic_size_t *__restrict__ bitmap1, const atomic_size_t *__restrict__ bitmap2,
                      size_t len) noexcept;

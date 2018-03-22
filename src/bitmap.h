@@ -58,6 +58,10 @@ private:
   const Container &_cont;
 };
 
+
+class AtomicBitmapBase {}
+
+
 /// To find the bit in a word, do this: word & getMask(bitPosition)
 /// @return a "mask" for the given position.
 static inline size_t getMask(uint64_t pos) {
@@ -98,7 +102,7 @@ static inline bool relaxedSet(size_t *bits, uint32_t item, uint32_t position) {
 }
 
 /// Clears the bit at the given index.
-inline bool relaxedUnset(size_t *bits, uint32_t item, uint32_t position) {
+static inline bool relaxedUnset(size_t *bits, uint32_t item, uint32_t position) {
   const auto mask = getMask(position);
 
   size_t oldValue = bits[item];
@@ -107,8 +111,10 @@ inline bool relaxedUnset(size_t *bits, uint32_t item, uint32_t position) {
   return !(oldValue & mask);
 }
 
-template <typename word_t, bool (*setAt)(word_t *bits, uint32_t item, uint32_t position),
-          bool (*unsetAt)(word_t *bits, uint32_t item, uint32_t position)>
+template <
+  typename word_t,
+  bool (*setAt)(word_t *bits, uint32_t item, uint32_t position),
+  bool (*unsetAt)(word_t *bits, uint32_t item, uint32_t position)>
 class BitmapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(BitmapBase);
@@ -341,7 +347,8 @@ private:
   word_t *_bitarray{nullptr};
 };
 
-typedef BitmapBase<atomic_size_t, atomicSet, atomicUnset> Bitmap;
+// typedef BitmapBase<atomic_size_t, mesh::internal::atomicSet, mesh::internal::atomicUnset> Bitmap;
+typedef BitmapBase<size_t, mesh::internal::relaxedSet, mesh::internal::relaxedUnset> Bitmap;
 
 static_assert(sizeof(Bitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
 

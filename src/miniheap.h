@@ -188,11 +188,11 @@ public:
     return static_cast<double>(_inUseCount) / static_cast<double>(maxCount());
   }
 
-  const mesh::internal::Bitmap &bitmap() const {
+  const internal::Bitmap &bitmap() const {
     return _bitmap;
   }
 
-  mesh::internal::Bitmap &writableBitmap() {
+  internal::Bitmap &writableBitmap() {
     return _bitmap;
   }
 
