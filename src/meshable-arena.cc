@@ -32,7 +32,7 @@ static const char *const TMP_DIRS[] = {
     "/tmp",
 };
 
-MeshableArena::MeshableArena() : SuperHeap(), _bitmap{kArenaSize / CPUInfo::PageSize} {
+MeshableArena::MeshableArena() : SuperHeap() {
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
@@ -83,6 +83,100 @@ char *MeshableArena::openSpanDir(int pid) {
   }
 
   return nullptr;
+}
+
+Span MeshableArena::reservePages(Length pageCount) {
+  return Span(0, 0);
+}
+
+void MeshableArena::freeSpan(Span span) {
+}
+
+internal::Bitmap MeshableArena::allocatedBitmap() const {
+  return Bitmap(0);
+}
+
+void *MeshableArena::malloc(size_t sz) {
+  if (sz == 0)
+    return nullptr;
+
+  d_assert(_arenaBegin != nullptr);
+  d_assert_msg(sz % HL::CPUInfo::PageSize == 0, "multiple-page allocs only, sz bad: %zu", sz);
+
+  const auto pageCount = sz / HL::CPUInfo::PageSize;
+  d_assert(pageCount >= 1);
+  d_assert(pageCount < std::numeric_limits<Length>::max());
+
+  auto span = reservePages(pageCount);
+  const auto off = span.offset;
+
+  d_assert(getMetadataFlags(off) == 0 && getMetadataPtr(off) == 0);
+
+  // now that we know they are available, set the empty pages to
+  // in-use.  This is safe because this whole function is called
+  // under the GlobalHeap lock, so there is no chance of concurrent
+  // modification between the loop above and the one below.
+  for (size_t i = 0; i < pageCount; i++) {
+    d_assert(getMetadataFlags(off + i) == 0 && getMetadataPtr(off + i) == 0);
+    setMetadata(off + i, internal::PageType::Identity);
+  }
+
+  void *ptr = ptrFromOffset(off);
+
+  if (kAdviseDump) {
+    madvise(ptr, sz, MADV_DODUMP);
+  }
+
+  return ptr;
+}
+
+void MeshableArena::free(void *ptr, size_t sz) {
+  if (unlikely(!contains(ptr))) {
+    return;
+  }
+  d_assert(sz > 0);
+
+  d_assert(sz / CPUInfo::PageSize > 0);
+  d_assert(sz % CPUInfo::PageSize == 0);
+
+  const auto off = offsetFor(ptr);
+  const uint8_t flags = getMetadataFlags(off);
+  if (flags == internal::PageType::Identity) {
+    madvise(ptr, sz, MADV_DONTNEED);
+    if (kAdviseDump) {
+      madvise(ptr, sz, MADV_DONTDUMP);
+    }
+    freePhys(ptr, sz);
+  } else {
+    // restore identity mapping
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, off * CPUInfo::PageSize);
+  }
+
+  const auto pageCount = sz / CPUInfo::PageSize;
+  for (size_t i = 0; i < pageCount; i++) {
+    // clear the miniheap pointers we were tracking
+    setMetadata(off + i, 0);
+  }
+
+  freeSpan(Span(off, pageCount));
+
+  // debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
+}
+
+void MeshableArena::freePhys(void *ptr, size_t sz) {
+  d_assert(contains(ptr));
+  d_assert(sz > 0);
+
+  d_assert(sz / CPUInfo::PageSize > 0);
+  d_assert(sz % CPUInfo::PageSize == 0);
+
+  const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
+#ifndef __APPLE__
+  int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
+  d_assert(result == 0);
+#else
+#warning macOS version of fallocate goes here
+#endif
 }
 
 void MeshableArena::beginMesh(void *keep, void *remove, size_t sz) {
@@ -243,7 +337,8 @@ void MeshableArena::afterForkChild() {
 
   const int oldFd = _fd;
 
-  for (auto const &i : _bitmap) {
+  const auto bitmap = allocatedBitmap();
+  for (auto const &i : bitmap) {
     int result = internal::copyFile(newFd, oldFd, i * CPUInfo::PageSize, CPUInfo::PageSize);
     d_assert(result == CPUInfo::PageSize);
   }

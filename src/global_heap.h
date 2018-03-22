@@ -94,6 +94,7 @@ public:
     //   mesh::debug("spana %p(%zu) %p (%zu)", span, spanSize, buf, objectSize);
     MiniHeap *mh = new (buf) MiniHeap(span, objectCount, objectSize, _fastPrng, spanSize);
     Super::assoc(span, mh, pageCount);
+    _miniheapCount++;
 
     if (sizeClass >= 0)
       trackMiniheapLocked(sizeClass, mh);
@@ -115,8 +116,8 @@ public:
 #ifndef NDEBUG
     const size_t classMaxSize = SizeMap::ByteSizeForClass(sizeClass);
 
-    d_assert_msg(objectSize == classMaxSize, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize, classMaxSize,
-                 sizeClass);
+    d_assert_msg(objectSize == classMaxSize, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize,
+                 classMaxSize, sizeClass);
     d_assert(sizeClass >= 0);
 #endif
     d_assert(sizeClass < kNumBins);
@@ -174,6 +175,7 @@ public:
 
     mh->MiniHeap::~MiniHeap();
     internal::Heap().free(mh);
+    _miniheapCount--;
   }
 
   void freeMiniheap(MiniHeap *&mh, bool untrack = true) {
@@ -375,7 +377,7 @@ public:
 
   size_t getAllocatedMiniheapCount() const {
     std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
-    return Super::bitmap().inUseCount();
+    return _miniheapCount;
   }
 
   void setMeshPeriodSecs(double period) {
@@ -518,6 +520,9 @@ protected:
   const size_t _maxObjectSize;
   atomic_size_t _lastMeshEffective{0};
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};
+
+  // always accessed with the mhRWLock exclusively locked
+  size_t _miniheapCount{0};
 
   // The big heap is handles malloc requests for large objects.  We
   // define a separate class to handle these to segregate bookkeeping
