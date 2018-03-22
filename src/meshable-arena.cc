@@ -85,14 +85,73 @@ char *MeshableArena::openSpanDir(int pid) {
   return nullptr;
 }
 
+void MeshableArena::expandArena(Length minPagesAdded) {
+  if (minPagesAdded < kMinArenaExpansion)
+    minPagesAdded = kMinArenaExpansion;
+
+  Span expansion(_end, minPagesAdded);
+  _end += minPagesAdded;
+
+  _clean[kSpanClassCount - 1].push_back(expansion);
+}
+
+bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result) {
+  auto found = false;
+  for (size_t i = pageCount - 1; i < kSpanClassCount; i++) {
+    if (freeSpans[i].empty())
+      continue;
+
+    Span span = freeSpans[i].back();
+    freeSpans[i].pop_back();
+
+    // this invariant should be maintained
+    d_assert(span.length >= i + 1);
+    d_assert(span.length >= pageCount);
+
+    // put the part we don't need back in the reuse pile
+    Span rest = span.split(pageCount);
+    if (!rest.empty()) {
+      auto sizeClass = rest.length - 1;
+      if (sizeClass >= kSpanClassCount)
+        sizeClass = kSpanClassCount - 1;
+      freeSpans[sizeClass].push_back(rest);
+    }
+
+    result = span;
+    found = true;
+    break;
+  }
+
+  return found;
+}
+
 Span MeshableArena::reservePages(Length pageCount) {
-  return Span(0, 0);
+  d_assert(pageCount >= 1);
+
+  Span result(0, 0);
+  auto ok = findPages(_dirty, pageCount, result);
+  if (!ok) {
+    ok = findPages(_clean, pageCount, result);
+  }
+  if (!ok) {
+    expandArena(pageCount);
+    ok = findPages(_clean, pageCount, result);
+    hard_assert(ok);
+  }
+
+  d_assert(!result.empty());
+
+  return result;
 }
 
 void MeshableArena::freeSpan(Span span) {
 }
 
 internal::Bitmap MeshableArena::allocatedBitmap() const {
+  // we can build up a bitmap of in-use pages here by looking at the
+  // arena start and end addresses (to compute the number of
+  // bits/pages), set all bits to 1, then iterate through our _clean
+  // and _dirty lists unsetting pages that aren't in use.
   return Bitmap(0);
 }
 
