@@ -62,9 +62,10 @@ class AtomicBitmapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(AtomicBitmapBase);
 
-protected:
+public:
   typedef atomic_size_t word_t;
 
+protected:
   /// A synonym for the datatype corresponding to a word.
   enum { WORD_BITS = sizeof(word_t) * 8 };
   enum { WORD_BYTES = sizeof(word_t) };
@@ -118,18 +119,19 @@ class RelaxedBitmapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(RelaxedBitmapBase);
 
+public:
   typedef size_t word_t;
 
 protected:
-  RelaxedBitmapBase(size_t bitCount)
-      : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(internal::Heap().malloc(byteCount()))) {
-  }
-
   /// A synonym for the datatype corresponding to a word.
   enum { WORD_BITS = sizeof(word_t) * 8 };
   enum { WORD_BYTES = sizeof(word_t) };
   /// The log of the number of bits in a size_t, for shifting.
   enum { WORD_BITSHIFT = staticlog(WORD_BITS) };
+
+  RelaxedBitmapBase(size_t bitCount)
+      : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(internal::Heap().malloc(byteCount()))) {
+  }
 
   // number of bytes used to store the bitmap -- rounds up to nearest sizeof(size_t)
   inline size_t byteCount() const {
@@ -165,13 +167,12 @@ protected:
   word_t *_bits;
 };
 
-class Bitmap : AtomicBitmapBase {
+class Bitmap : public AtomicBitmapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(Bitmap);
 
   typedef AtomicBitmapBase Super;
-  // typedef BitmapBase<Super> Bitmap;
-  // typedef typename Super::word_t word_t;
+  // typedef RelaxedBitmapBase Super;
 
   static_assert(sizeof(size_t) == sizeof(atomic_size_t), "no overhead atomics");
   static_assert(sizeof(word_t) == sizeof(size_t), "word_t should be size_t");

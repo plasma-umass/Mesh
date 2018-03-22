@@ -5,15 +5,15 @@
 
 namespace mesh {
 
-bool bitmapsMeshable(const atomic_size_t *__restrict__ bitmap1, const atomic_size_t *__restrict__ bitmap2,
+bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
                      size_t byteLen) noexcept {
   // d_assert(reinterpret_cast<uintptr_t>(bitmap1) % 16 == 0);
   // d_assert(reinterpret_cast<uintptr_t>(bitmap2) % 16 == 0);
   d_assert(byteLen >= 8);
   d_assert(byteLen % 8 == 0);
 
-  bitmap1 = (const atomic_size_t *)__builtin_assume_aligned(bitmap1, 16);
-  bitmap2 = (const atomic_size_t *)__builtin_assume_aligned(bitmap2, 16);
+  bitmap1 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap1, 16);
+  bitmap2 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap2, 16);
 
   for (size_t i = 0; i < byteLen / 8; i++) {
     if ((bitmap1[i] & bitmap2[i]) != 0) {
@@ -25,15 +25,15 @@ bool bitmapsMeshable(const atomic_size_t *__restrict__ bitmap1, const atomic_siz
   return true;
 }
 
-size_t hammingDistance(const atomic_size_t *__restrict__ bitmap1, const atomic_size_t *__restrict__ bitmap2,
+size_t hammingDistance(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
                        size_t byteLen) noexcept {
   // d_assert(reinterpret_cast<uintptr_t>(bitmap1) % 16 == 0);
   // d_assert(reinterpret_cast<uintptr_t>(bitmap2) % 16 == 0);
   d_assert(byteLen >= 8);
   d_assert(byteLen % 8 == 0);
 
-  bitmap1 = (const atomic_size_t *)__builtin_assume_aligned(bitmap1, 16);
-  bitmap2 = (const atomic_size_t *)__builtin_assume_aligned(bitmap2, 16);
+  bitmap1 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap1, 16);
+  bitmap2 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap2, 16);
 
   size_t result = 0;
 

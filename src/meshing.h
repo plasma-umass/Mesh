@@ -19,12 +19,12 @@
 
 namespace mesh {
 
-using std::atomic_size_t;
+using internal::Bitmap;
 
-bool bitmapsMeshable(const atomic_size_t *__restrict__ bitmap1, const atomic_size_t *__restrict__ bitmap2,
+bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
                      size_t len) noexcept;
 
-size_t hammingDistance(const atomic_size_t *__restrict__ bitmap1, const atomic_size_t *__restrict__ bitmap2,
+size_t hammingDistance(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
                        size_t len) noexcept;
 
 static constexpr double OccupancyCutoff = .8;
@@ -160,7 +160,8 @@ private:
 
 inline CutoffTable *generateCutoffs(const size_t len, const double cutoffPercent) noexcept {
   d_assert(len <= 256);
-  static_assert(sizeof(CutoffTable) == sizeof(double) + sizeof(size_t) + sizeof(uint8_t *), "CutoffTable: expected packed size");
+  static_assert(sizeof(CutoffTable) == sizeof(double) + sizeof(size_t) + sizeof(uint8_t *),
+                "CutoffTable: expected packed size");
 
   void *buf = internal::Heap().malloc(sizeof(CutoffTable) + len * sizeof(uint8_t));
   uint8_t *table = reinterpret_cast<uint8_t *>(buf) + sizeof(CutoffTable);
