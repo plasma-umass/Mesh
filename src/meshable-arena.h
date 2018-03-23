@@ -54,7 +54,7 @@ struct Span {
   Span(const Span &rhs) : offset(rhs.offset), length(rhs.length) {
   }
 
-  constexpr Span& operator=(const Span& rhs) {
+  constexpr Span &operator=(const Span &rhs) {
     offset = rhs.offset;
     length = rhs.length;
     return *this;
@@ -208,7 +208,7 @@ private:
   internal::vector<Span> _clean[kSpanClassCount];
   internal::vector<Span> _dirty[kSpanClassCount];
 
-  Offset _end{};
+  Offset _end{};  // in pages
 
   // indexed by offset
   atomic<uintptr_t> *_metadata{nullptr};
