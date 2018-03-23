@@ -147,12 +147,37 @@ Span MeshableArena::reservePages(Length pageCount) {
 void MeshableArena::freeSpan(Span span) {
 }
 
+static void unmarkFreePages(const internal::vector<Span> freeSpans[kSpanClassCount], internal::Bitmap &bitmap) {
+  for (size_t i = 0; i < kSpanClassCount; i++) {
+    if (freeSpans[i].empty())
+      continue;
+
+    for (size_t j = 0; j < freeSpans[i].size(); j++) {
+      auto span = freeSpans[i][j];
+      for (size_t k = 0; k < span.length; k++) {
+        bitmap.unset(span.offset + k);
+      }
+    }
+  }
+}
+
 internal::Bitmap MeshableArena::allocatedBitmap() const {
+  Bitmap bitmap(_end);
+
   // we can build up a bitmap of in-use pages here by looking at the
   // arena start and end addresses (to compute the number of
   // bits/pages), set all bits to 1, then iterate through our _clean
   // and _dirty lists unsetting pages that aren't in use.
-  return Bitmap(0);
+
+  for (size_t i = 0; i < bitmap.bitCount(); i++) {
+    bitmap.tryToSet(i);
+  }
+
+  // TODO: refactor to use lambdas?
+  unmarkFreePages(_dirty, bitmap);
+  unmarkFreePages(_clean, bitmap);
+
+  return bitmap;
 }
 
 void *MeshableArena::malloc(size_t sz) {
