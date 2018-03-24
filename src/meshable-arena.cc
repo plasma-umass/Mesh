@@ -229,26 +229,23 @@ void MeshableArena::free(void *ptr, size_t sz) {
   d_assert(sz / CPUInfo::PageSize > 0);
   d_assert(sz % CPUInfo::PageSize == 0);
 
-  const auto off = offsetFor(ptr);
-  const uint8_t flags = getMetadataFlags(off);
+  const Span span(offsetFor(ptr), sz / kPageSize);
+  const uint8_t flags = getMetadataFlags(span.offset);
+
   if (flags == internal::PageType::Identity) {
     if (kAdviseDump) {
       madvise(ptr, sz, MADV_DONTDUMP);
     }
-    // madvise(ptr, sz, MADV_DONTNEED);
-    // freePhys(ptr, sz);
+    freeSpan(span);
   } else {
     // delay restoring the identity mapping
-    _toReset.push_back(Span(off, sz / kPageSize));
+    _toReset.push_back(span);
   }
 
-  const auto pageCount = sz / CPUInfo::PageSize;
-  for (size_t i = 0; i < pageCount; i++) {
+  for (size_t i = 0; i < span.length; i++) {
     // clear the miniheap pointers we were tracking
-    setMetadata(off + i, 0);
+    setMetadata(span.offset + i, 0);
   }
-
-  freeSpan(Span(off, pageCount));
 
   // debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
 }
