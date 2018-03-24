@@ -56,6 +56,9 @@ static inline void note(const char *note) {
 static void meshTestConcurrentWrite(bool invert) {
   GlobalHeap &gheap = runtime().heap();
 
+  // disable automatic meshing for this test
+  gheap.setMeshPeriodSecs(-1);
+
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
   // allocate two miniheaps for the same object size from our global heap
