@@ -237,6 +237,17 @@ public:
     return s;
   }
 
+  void invert() {
+    // TODO: there is probably a cleaner way to refactor this
+    const auto length = bitCount();
+    for (size_t i = 0; i < length; i++) {
+      if (isSet(i))
+        unset(i);
+      else
+        tryToSet(i);
+    }
+  }
+
   // number of bytes used to store the bitmap -- rounds up to nearest sizeof(size_t)
   inline size_t byteCount() const {
     return WORD_BITS * ((_bitCount + WORD_BITS - 1) / WORD_BITS) / 8;
@@ -392,7 +403,6 @@ private:
 // typedef BitmapBase<AtomicBitmapBase> Bitmap;
 
 static_assert(sizeof(Bitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
-
 }  // namespace internal
 }  // namespace mesh
 
