@@ -5,22 +5,6 @@
 
 namespace mesh {
 
-void *GlobalHeap::allocFromArena(size_t sz) {
-  std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
-
-  MiniHeap *mh = allocMiniheap(-1, PageCount(sz), 1, sz);
-
-  d_assert(mh->maxCount() == 1);
-  d_assert(mh->spanSize() == sz);
-  d_assert(mh->objectSize() == sz);
-
-  void *ptr = mh->mallocAtWithBitmap(0);
-
-  mh->unref();
-
-  return ptr;
-}
-
 void *GlobalHeap::malloc(size_t sz) {
 #ifndef NDEBUG
   if (unlikely(sz <= kMaxSize)) {
@@ -36,12 +20,19 @@ void *GlobalHeap::malloc(size_t sz) {
     return nullptr;
   }
 
-  if (likely(sz <= kMaxFastLargeSize)) {
-    return allocFromArena(sz);
-  }
+  std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
-  std::lock_guard<std::mutex> lock(_bigMutex);
-  return _bigheap.malloc(sz);
+  MiniHeap *mh = allocMiniheap(-1, PageCount(sz), 1, sz);
+
+  d_assert(mh->maxCount() == 1);
+  d_assert(mh->spanSize() == sz);
+  d_assert(mh->objectSize() == sz);
+
+  void *ptr = mh->mallocAtWithBitmap(0);
+
+  mh->unref();
+
+  return ptr;
 }
 
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
@@ -73,7 +64,7 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
     *statp = pss * 1024;  // originally in KB
   } else if (strcmp(name, "stats.active") == 0) {
     // all miniheaps at least partially full
-    size_t sz = _bigheap.arenaSize();
+    size_t sz = 0;
     for (size_t i = 0; i < kNumBins; i++) {
       const auto count = _littleheaps[i].nonEmptyCount();
       if (count == 0)
@@ -82,8 +73,9 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
     }
     *statp = sz;
   } else if (strcmp(name, "stats.allocated") == 0) {
+    // TODO: revisit this
     // same as active for us, for now -- memory not returned to the OS
-    size_t sz = _bigheap.arenaSize();
+    size_t sz = 0;
     for (size_t i = 0; i < kNumBins; i++) {
       const auto &bin = _littleheaps[i];
       const auto count = bin.nonEmptyCount();

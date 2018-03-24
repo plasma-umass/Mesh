@@ -74,8 +74,6 @@ public:
       _littleheaps[i].dumpStats(beDetailed);
   }
 
-  void *allocFromArena(size_t sz);
-
   // must be called with exclusive _mhRWLock held
   inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheap(int sizeClass, size_t pageCount, size_t objectCount,
                                                          size_t objectSize) {
@@ -208,11 +206,7 @@ public:
     // two possibilities: most likely the ptr is small (and therefor
     // owned by a miniheap), or is a large allocation
 
-    if (unlikely(!mh)) {
-      std::lock_guard<std::mutex> lock(_bigMutex);
-      _bigheap.free(ptr);
-      return;
-    }
+    hard_assert(mh != nullptr);
 
     _lastMeshEffective = 1;
     mh->free(ptr);
@@ -265,30 +259,20 @@ public:
       mh->unref();
       return size;
     } else {
-      std::lock_guard<std::mutex> lock(_bigMutex);
-      return _bigheap.getSize(ptr);
+      return 0;
     }
-  }
-
-  inline bool inBoundsSmall(void *ptr) const {
-    auto mh = miniheapFor(ptr);
-    if (likely(mh)) {
-      mh->unref();
-      return true;
-    }
-    return false;
   }
 
   inline bool inBounds(void *ptr) const {
     if (unlikely(ptr == nullptr))
       return false;
 
-    if (inBoundsSmall(ptr)) {
+    auto mh = miniheapFor(ptr);
+    if (likely(mh)) {
+      mh->unref();
       return true;
-    } else {
-      std::lock_guard<std::mutex> lock(_bigMutex);
-      return _bigheap.inBounds(ptr);
     }
+    return false;
   }
 
   int bitmapGet(enum mesh::BitType type, void *ptr) const {
@@ -346,11 +330,9 @@ public:
 
   void lock() {
     _mhRWLock.lock();
-    _bigMutex.lock();
   }
 
   void unlock() {
-    _bigMutex.unlock();
     _mhRWLock.unlock();
   }
 
@@ -407,7 +389,9 @@ public:
   }
 
   inline bool okToProceed(void *ptr) const {
-    return inBoundsSmall(ptr);
+    // call to inBounds won't return until it was able to grab the
+    // _mhRWLock, which isn't released until meshing is complete.
+    return inBounds(ptr);
   }
 
   inline void scavenge() {
@@ -489,18 +473,11 @@ protected:
   // always accessed with the mhRWLock exclusively locked
   size_t _miniheapCount{0};
 
-  // The big heap is handles malloc requests for large objects.  We
-  // define a separate class to handle these to segregate bookkeeping
-  // for large malloc requests from the ones used to back spans (which
-  // are allocated from the arena)
-  MmapHeap _bigheap{};
-
   mt19937_64 _prng;
   MWC _fastPrng;
 
   BinnedTracker<MiniHeap> _littleheaps[kNumBins];
 
-  mutable std::mutex _bigMutex{};
   mutable std::shared_timed_mutex _mhRWLock{};
 
   GlobalHeapStats _stats{};
