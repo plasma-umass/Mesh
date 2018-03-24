@@ -19,6 +19,8 @@
 
 #include <sys/ioctl.h>
 
+#include <algorithm>
+
 #include "meshable-arena.h"
 
 #include "runtime.h"
@@ -145,6 +147,9 @@ Span MeshableArena::reservePages(Length pageCount) {
 }
 
 void MeshableArena::freeSpan(Span span) {
+  d_assert(span.length > 0);
+  Length spanClass = std::min(span.length, static_cast<Length>(kSpanClassCount)) - 1;
+  _dirty[spanClass].push_back(span);
 }
 
 static void unmarkFreePages(const internal::vector<Span> freeSpans[kSpanClassCount], internal::Bitmap &bitmap) {
