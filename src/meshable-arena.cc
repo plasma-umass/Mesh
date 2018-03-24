@@ -50,7 +50,7 @@ MeshableArena::MeshableArena() : SuperHeap() {
   }
   _fd = fd;
   _arenaBegin = SuperHeap::map(kArenaSize, MAP_SHARED, fd);
-  _metadata = reinterpret_cast<atomic<uintptr_t> *>(SuperHeap::map(metadataSize(), MAP_ANONYMOUS | MAP_PRIVATE));
+  _metadata = reinterpret_cast<uintptr_t *>(SuperHeap::map(metadataSize(), MAP_ANONYMOUS | MAP_PRIVATE));
 
   hard_assert(_arenaBegin != nullptr);
   hard_assert(_metadata != nullptr);

@@ -226,8 +226,9 @@ private:
 
   Offset _end{};  // in pages
 
-  // indexed by offset
-  atomic<uintptr_t> *_metadata{nullptr};
+  // indexed by offset. no need to be atomic, because protected by
+  // _mhRWLock.
+  uintptr_t *_metadata{nullptr};
 
   // internal::vector<DeferredDeallocs> _freelist;
 
