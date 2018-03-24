@@ -45,4 +45,56 @@ void *GlobalHeap::malloc(size_t sz) {
   std::lock_guard<std::mutex> lock(_bigMutex);
   return _bigheap.malloc(sz);
 }
+
+int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+  std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+
+  if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
+    return -1;
+
+  auto statp = reinterpret_cast<size_t *>(oldp);
+
+  if (strcmp(name, "mesh.check_period") == 0) {
+    *statp = _meshPeriod;
+    if (!newp || newlen < sizeof(size_t))
+      return -1;
+    auto newVal = reinterpret_cast<size_t *>(newp);
+    _meshPeriod = *newVal;
+    // resetNextMeshCheck();
+  } else if (strcmp(name, "mesh.compact") == 0) {
+    sharedLock.unlock();
+    meshAllSizeClasses();
+    scavenge();
+    sharedLock.lock();
+  } else if (strcmp(name, "arena") == 0) {
+    // not sure what this should do
+  } else if (strcmp(name, "stats.resident") == 0) {
+    auto pss = internal::measurePssKiB();
+    // mesh::debug("measurePssKiB: %zu KiB", pss);
+
+    *statp = pss * 1024;  // originally in KB
+  } else if (strcmp(name, "stats.active") == 0) {
+    // all miniheaps at least partially full
+    size_t sz = _bigheap.arenaSize();
+    for (size_t i = 0; i < kNumBins; i++) {
+      const auto count = _littleheaps[i].nonEmptyCount();
+      if (count == 0)
+        continue;
+      sz += count * _littleheaps[i].objectSize() * _littleheaps[i].objectCount();
+    }
+    *statp = sz;
+  } else if (strcmp(name, "stats.allocated") == 0) {
+    // same as active for us, for now -- memory not returned to the OS
+    size_t sz = _bigheap.arenaSize();
+    for (size_t i = 0; i < kNumBins; i++) {
+      const auto &bin = _littleheaps[i];
+      const auto count = bin.nonEmptyCount();
+      if (count == 0)
+        continue;
+      sz += bin.objectSize() * bin.allocatedObjectCount();
+    }
+    *statp = sz;
+  }
+  return 0;
+}
 }  // namespace mesh
