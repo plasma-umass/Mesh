@@ -16,8 +16,6 @@ void *GlobalHeap::allocFromArena(size_t sz) {
 
   void *ptr = mh->mallocAtWithBitmap(0);
 
-  // miniheaps are created attached, detach immediately
-  mh->detach();
   mh->unref();
 
   return ptr;
