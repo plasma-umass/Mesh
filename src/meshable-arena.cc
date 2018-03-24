@@ -148,20 +148,19 @@ Span MeshableArena::reservePages(Length pageCount) {
 
 void MeshableArena::freeSpan(Span span) {
   d_assert(span.length > 0);
-  Length spanClass = std::min(span.length, static_cast<Length>(kSpanClassCount)) - 1;
+  Length spanClass = std::min(span.length, kSpanClassCount) - 1;
   _dirty[spanClass].push_back(span);
 }
 
-static void unmarkFreePages(const internal::vector<Span> freeSpans[kSpanClassCount], internal::Bitmap &bitmap) {
+template<typename Func>
+static void forEachFree(const internal::vector<Span> freeSpans[kSpanClassCount], const Func func) {
   for (size_t i = 0; i < kSpanClassCount; i++) {
     if (freeSpans[i].empty())
       continue;
 
     for (size_t j = 0; j < freeSpans[i].size(); j++) {
       auto span = freeSpans[i][j];
-      for (size_t k = 0; k < span.length; k++) {
-        bitmap.unset(span.offset + k);
-      }
+      func(span);
     }
   }
 }
@@ -178,9 +177,14 @@ internal::Bitmap MeshableArena::allocatedBitmap() const {
     bitmap.tryToSet(i);
   }
 
-  // TODO: refactor to use lambdas?
-  unmarkFreePages(_dirty, bitmap);
-  unmarkFreePages(_clean, bitmap);
+  auto unmarkPages = [&] (const Span span) {
+    for (size_t k = 0; k < span.length; k++) {
+      bitmap.unset(span.offset + k);
+    }
+  };
+
+  forEachFree(_dirty, unmarkPages);
+  forEachFree(_clean, unmarkPages);
 
   return bitmap;
 }
@@ -250,6 +254,9 @@ void MeshableArena::free(void *ptr, size_t sz) {
   freeSpan(Span(off, pageCount));
 
   // debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
+}
+
+void MeshableArena::scavenge() {
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {

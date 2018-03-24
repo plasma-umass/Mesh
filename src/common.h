@@ -32,7 +32,7 @@ static constexpr int kMinAlign = 16;
 static constexpr int kPageSize = 4096;
 static constexpr size_t kMaxFastLargeSize = 256 * 1024;  // 256Kb
 
-static constexpr size_t kSpanClassCount = 256;
+static constexpr uint32_t kSpanClassCount = 256;
 
 static constexpr int kNumBins = 25;  // 16Kb max object size
 static constexpr int kDefaultMeshPeriod = 10000;
