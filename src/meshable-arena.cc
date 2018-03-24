@@ -148,7 +148,7 @@ void MeshableArena::freeSpan(Span span) {
   _dirty[span.spanClass()].push_back(span);
 }
 
-template<typename Func>
+template <typename Func>
 static void forEachFree(const internal::vector<Span> freeSpans[kSpanClassCount], const Func func) {
   for (size_t i = 0; i < kSpanClassCount; i++) {
     if (freeSpans[i].empty())
@@ -174,7 +174,7 @@ internal::Bitmap MeshableArena::allocatedBitmap() const {
     bitmap.tryToSet(i);
   }
 
-  auto unmarkPages = [&] (const Span span) {
+  auto unmarkPages = [&](const Span span) {
     for (size_t k = 0; k < span.length; k++) {
       bitmap.unset(span.offset + k);
     }
@@ -232,14 +232,14 @@ void MeshableArena::free(void *ptr, size_t sz) {
   const auto off = offsetFor(ptr);
   const uint8_t flags = getMetadataFlags(off);
   if (flags == internal::PageType::Identity) {
-    madvise(ptr, sz, MADV_DONTNEED);
     if (kAdviseDump) {
       madvise(ptr, sz, MADV_DONTDUMP);
     }
-    freePhys(ptr, sz);
+    // madvise(ptr, sz, MADV_DONTNEED);
+    // freePhys(ptr, sz);
   } else {
-    // restore identity mapping
-    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, off * CPUInfo::PageSize);
+    // delay restoring the identity mapping
+    _toReset.push_back(Span(off, sz / kPageSize));
   }
 
   const auto pageCount = sz / CPUInfo::PageSize;
@@ -254,11 +254,28 @@ void MeshableArena::free(void *ptr, size_t sz) {
 }
 
 void MeshableArena::scavenge() {
-  // auto unmarkPages = [&] (const Span span) {
-  //   for (size_t k = 0; k < span.length; k++) {
-  //     bitmap.unset(span.offset + k);
-  //   }
-  // };
+  // for all of the virtual spans that were meshed, reset their mappings
+  std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
+    auto ptr = span.ptr(_arenaBegin);
+    auto sz = span.byteLength();
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * CPUInfo::PageSize);
+    _clean[span.spanClass()].push_back(span);
+  });
+
+  _toReset.clear();
+
+  forEachFree(_dirty, [&](const Span span) {
+    auto ptr = span.ptr(_arenaBegin);
+    auto sz = span.byteLength();
+    madvise(ptr, sz, MADV_DONTNEED);
+    freePhys(ptr, sz);
+    _clean[span.spanClass()].push_back(span);
+  });
+
+  // we've cleaned all the dirty spans
+  for (size_t i = 0; i < kSpanClassCount; i++) {
+    _dirty[i].clear();
+  }
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {
