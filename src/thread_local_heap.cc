@@ -65,15 +65,23 @@ void *ThreadLocalHeap::mallocSlowpath(size_t sizeClass, size_t sz) {
 }
 
 void ThreadLocalHeap::freeSlowpath(void *ptr) {
-  for (size_t i = 0; i < kNumBins; i++) {
-    Freelist &freelist = _freelist[i];
-    if (freelist.contains(ptr)) {
-      freelist.free(ptr);
-      _last = &freelist;
-      return;
-    }
+  // we used to loop over all attached miniheaps here. Instead, just
+  // lookup the miniheap through the meshable-arena's metadata array.
+  // We end up having to grab the mh RW lock read-only and frob the
+  // miniheap's atomic reference, but we avoid a potentially poorly
+  // predicted loop over all 25 attached feelists.  Performance
+  // results seem to be a wash, and I like the simple non-loopy nature
+  // of this approach.
+  auto mh = _global->miniheapFor(ptr);
+  if (likely(mh && mh->isOwnedBy(pthread_self()))) {
+    const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
+    mh->unref();
+    Freelist &freelist = _freelist[sizeClass];
+    freelist.free(ptr);
+    _last = &freelist;
+    return;
   }
 
-  _global->free(ptr);
+  _global->freeFrom(mh, ptr);
 }
 }  // namespace mesh
