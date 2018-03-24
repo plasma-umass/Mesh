@@ -77,7 +77,8 @@ public:
   void *allocFromArena(size_t sz);
 
   // must be called with exclusive _mhRWLock held
-  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheap(int sizeClass, size_t pageCount, size_t objectCount, size_t objectSize) {
+  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheap(int sizeClass, size_t pageCount, size_t objectCount,
+                                                         size_t objectSize) {
     const size_t spanSize = HL::CPUInfo::PageSize * pageCount;
     d_assert(0 < spanSize);
 
@@ -198,11 +199,15 @@ public:
     mh = nullptr;
   }
 
-  void free(void *ptr) {
+  inline void free(void *ptr) {
+    auto mh = miniheapFor(ptr);
+    freeFrom(mh, ptr);
+  }
+
+  inline void freeFrom(MiniHeap *mh, void *ptr) {
     // two possibilities: most likely the ptr is small (and therefor
     // owned by a miniheap), or is a large allocation
 
-    auto mh = miniheapFor(ptr);
     if (unlikely(!mh)) {
       std::lock_guard<std::mutex> lock(_bigMutex);
       _bigheap.free(ptr);
@@ -225,7 +230,7 @@ public:
     // unreffed by the bin tracker
     // mh->unref();
 
-    const auto szClass = SizeMap::SizeClass(mh->objectSize());
+    const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
 
     bool shouldFlush = false;
     {
@@ -233,14 +238,14 @@ public:
       std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
       // this may free the miniheap -- we can't safely access it after
       // this point.
-      shouldFlush = _littleheaps[szClass].postFree(mh);
+      shouldFlush = _littleheaps[sizeClass].postFree(mh);
       mh = nullptr;
     }
 
     if (unlikely(shouldFlush)) {
       std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
-      auto emptyMiniheaps = _littleheaps[szClass].getFreeMiniheaps();
+      auto emptyMiniheaps = _littleheaps[sizeClass].getFreeMiniheaps();
       for (size_t i = 0; i < emptyMiniheaps.size(); i++) {
         freeMiniheapLocked(emptyMiniheaps[i], false);
       }
