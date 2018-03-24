@@ -27,7 +27,7 @@ private:
 
 public:
   MiniHeap(void *span, size_t objectCount, size_t objectSize, MWC &fastPrng, size_t expectedSpanSize)
-      : _attached(pthread_self()),
+      : _attached(0),
         _maxCount(objectCount),
         _bitmap(maxCount()),
         _objectSize(objectSize),
