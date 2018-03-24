@@ -76,6 +76,10 @@ struct Span {
     return Span(offset + pageCount, restPageCount);
   }
 
+  uint32_t spanClass() const {
+    return std::min(length, kSpanClassCount) - 1;
+  }
+
   Offset offset;
   Length length;
 };
