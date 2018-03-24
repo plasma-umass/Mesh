@@ -294,7 +294,7 @@ void MeshableArena::scavenge() {
     // should only be empty the first time/iteration through
     if (!current.empty()) {
       _clean[current.spanClass()].push_back(current);
-      debug("  clean: %4zu/%4zu\n", current.offset, current.length);
+      // debug("  clean: %4zu/%4zu\n", current.offset, current.length);
     }
 
     current = Span(i, 1);
@@ -303,7 +303,7 @@ void MeshableArena::scavenge() {
   // should only be empty the first time/iteration through
   if (!current.empty()) {
     _clean[current.spanClass()].push_back(current);
-    debug("  clean: %4zu/%4zu\n", current.offset, current.length);
+    // debug("  clean: %4zu/%4zu\n", current.offset, current.length);
   }
 }
 
