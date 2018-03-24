@@ -77,7 +77,7 @@ public:
   void *allocFromArena(size_t sz);
 
   // must be called with exclusive _mhRWLock held
-  inline MiniHeap *allocMiniheap(int sizeClass, size_t pageCount, size_t objectCount, size_t objectSize) {
+  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheap(int sizeClass, size_t pageCount, size_t objectCount, size_t objectSize) {
     const size_t spanSize = HL::CPUInfo::PageSize * pageCount;
     d_assert(0 < spanSize);
 
@@ -142,7 +142,7 @@ public:
   // large, page-multiple allocations
   void *malloc(size_t sz);
 
-  inline MiniHeap *UNSAFEMiniheapFor(const void *ptr) const {
+  inline MiniHeap *miniheapForLocked(const void *ptr) const {
     return reinterpret_cast<MiniHeap *>(Super::lookup(ptr));
   }
 
@@ -150,7 +150,7 @@ public:
   inline MiniHeap *miniheapFor(const void *ptr) const {
     std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
 
-    auto mh = reinterpret_cast<MiniHeap *>(Super::lookup(ptr));
+    auto mh = miniheapForLocked(ptr);
     if (mh != nullptr)
       mh->ref();
 
@@ -212,8 +212,12 @@ public:
     _lastMeshEffective = 1;
     mh->free(ptr);
 
+    // large objects don't trigger meshing, because they are multiples
+    // of the page size
     if (mh->objectSize() > kMaxSize) {
-      freeMiniheapLocked(mh, false);
+      // we need to grab the exclusive lock here, as the read-only
+      // lock we took in miniheapFor has already been released
+      freeMiniheap(mh, false);
       return;
     }
 
