@@ -329,7 +329,7 @@ public:
   }
 
   inline uint64_t inUseCount() const {
-    const auto wordCount = byteCount() / 8;
+    const auto wordCount = byteCount() / sizeof(size_t);
     uint64_t count = 0;
     for (size_t i = 0; i < wordCount; i++) {
       count += __builtin_popcountl(_bits[i]);

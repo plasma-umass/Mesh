@@ -57,6 +57,9 @@ static void meshTest(bool invert) {
   ASSERT_EQ(mh1->inUseCount(), 1UL);
   ASSERT_EQ(mh2->inUseCount(), 1UL);
 
+  ASSERT_EQ(mh1->bitmap().inUseCount(), 1UL);
+  ASSERT_EQ(mh2->bitmap().inUseCount(), 1UL);
+
   if (invert) {
     MiniHeap *tmp = mh1;
     mh1 = mh2;
