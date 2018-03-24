@@ -80,6 +80,15 @@ struct Span {
     return std::min(length, kSpanClassCount) - 1;
   }
 
+  void *ptr(void *base) const {
+    auto baseVal = reinterpret_cast<uintptr_t>(base);
+    return reinterpret_cast<void *>(baseVal + offset * kPageSize);
+  }
+
+  size_t byteLength() const {
+    return length * kPageSize;
+  }
+
   Offset offset;
   Length length;
 };
@@ -100,8 +109,9 @@ public:
     return arena <= ptrval && ptrval < arena + kArenaSize;
   }
 
-private:
+protected:
   void scavenge();
+private:
   void expandArena(Length minPagesAdded);
   bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result);
   Span reservePages(Length pageCount);

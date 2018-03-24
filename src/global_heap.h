@@ -449,6 +449,10 @@ public:
     return inBoundsSmall(ptr);
   }
 
+  inline void scavenge() {
+    // Super::scavenge();
+  }
+
 protected:
   void performMeshing(internal::vector<std::pair<MiniHeap *, MiniHeap *>> &mergeSets) {
     for (auto &mergeSet : mergeSets) {

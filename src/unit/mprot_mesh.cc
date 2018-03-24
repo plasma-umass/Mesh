@@ -87,8 +87,8 @@ static void meshTestConcurrentWrite(bool invert) {
   // copy these strings so we can check the contents after meshing
   char *v1 = strdup(s1);
   char *v2 = strdup(s2);
-  ASSERT_TRUE(strcmp(s1, v1) == 0);
-  ASSERT_TRUE(strcmp(s2, v2) == 0);
+  ASSERT_STREQ(s1, v1);
+  ASSERT_STREQ(s2, v2);
 
   ASSERT_EQ(mh1->inUseCount(), 1UL);
   ASSERT_EQ(mh2->inUseCount(), 1UL);
@@ -123,13 +123,13 @@ static void meshTestConcurrentWrite(bool invert) {
   ASSERT_EQ(mh1->inUseCount(), 2UL);
 
   // check that our two allocated objects still look right
-  ASSERT_TRUE(strcmp(s1, v1) == 0);
-  ASSERT_TRUE(strcmp(s2, v2) == 0);
+  ASSERT_STREQ(s1, v1);
+  ASSERT_STREQ(s2, v2);
 
   // get an aliased pointer to the second string by pointer arithmatic
   // on the first string
   char *s3 = s1 + (ObjCount - 1) * StrLen;
-  ASSERT_TRUE(strcmp(s2, s3) == 0);
+  ASSERT_STREQ(s2, s3);
 
   ShouldExit = 1;
   writer.join();
@@ -148,6 +148,7 @@ static void meshTestConcurrentWrite(bool invert) {
 
   note("ABOUT TO FREE");
   gheap.freeMiniheap(mh1);
+  gheap.scavenge();
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 }
