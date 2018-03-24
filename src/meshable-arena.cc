@@ -94,7 +94,7 @@ void MeshableArena::expandArena(Length minPagesAdded) {
   Span expansion(_end, minPagesAdded);
   _end += minPagesAdded;
 
-  _clean[kSpanClassCount - 1].push_back(expansion);
+  _clean[expansion.spanClass()].push_back(expansion);
 }
 
 bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result) {
@@ -113,10 +113,7 @@ bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount],
     // put the part we don't need back in the reuse pile
     Span rest = span.split(pageCount);
     if (!rest.empty()) {
-      auto sizeClass = rest.length - 1;
-      if (sizeClass >= kSpanClassCount)
-        sizeClass = kSpanClassCount - 1;
-      freeSpans[sizeClass].push_back(rest);
+      freeSpans[rest.spanClass()].push_back(rest);
     }
 
     result = span;
@@ -148,8 +145,7 @@ Span MeshableArena::reservePages(Length pageCount) {
 
 void MeshableArena::freeSpan(Span span) {
   d_assert(span.length > 0);
-  Length spanClass = std::min(span.length, kSpanClassCount) - 1;
-  _dirty[spanClass].push_back(span);
+  _dirty[span.spanClass()].push_back(span);
 }
 
 template<typename Func>
@@ -173,6 +169,7 @@ internal::Bitmap MeshableArena::allocatedBitmap() const {
   // bits/pages), set all bits to 1, then iterate through our _clean
   // and _dirty lists unsetting pages that aren't in use.
 
+  // TODO: add a 'set all' method to bitmap?
   for (size_t i = 0; i < bitmap.bitCount(); i++) {
     bitmap.tryToSet(i);
   }
@@ -257,6 +254,11 @@ void MeshableArena::free(void *ptr, size_t sz) {
 }
 
 void MeshableArena::scavenge() {
+  // auto unmarkPages = [&] (const Span span) {
+  //   for (size_t k = 0; k < span.length; k++) {
+  //     bitmap.unset(span.offset + k);
+  //   }
+  // };
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {
