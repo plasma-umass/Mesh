@@ -88,23 +88,41 @@ char *MeshableArena::openSpanDir(int pid) {
 }
 
 void MeshableArena::expandArena(Length minPagesAdded) {
-  if (minPagesAdded < kMinArenaExpansion)
-    minPagesAdded = kMinArenaExpansion;
+  const size_t pageCount = std::max(minPagesAdded, kMinArenaExpansion);
 
-  Span expansion(_end, minPagesAdded);
-  _end += minPagesAdded;
+  Span expansion(_end, pageCount);
+  _end += pageCount;
 
   _clean[expansion.spanClass()].push_back(expansion);
 }
 
 bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result) {
   auto found = false;
-  for (size_t i = pageCount - 1; i < kSpanClassCount; i++) {
-    if (freeSpans[i].empty())
+  for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
+    auto &spanList = freeSpans[i];
+    if (spanList.empty())
       continue;
 
-    Span span = freeSpans[i].back();
-    freeSpans[i].pop_back();
+    if (i == kSpanClassCount - 1 && spanList.back().length < pageCount) {
+      // the final span class contains (and is the only class to
+      // contain) variable-size spans, so we need to make sure we
+      // search through all candidates in this case.
+      for (size_t i = 0; i < spanList.size(); i++) {
+        if (spanList[i].length < pageCount)
+          continue;
+
+        std::swap(spanList[i], spanList.back());
+        break;
+      }
+
+      // this would be our last loop iteration anyway
+      if (spanList.back().length < pageCount) {
+        return false;
+      }
+    }
+
+    Span span = spanList.back();
+    spanList.pop_back();
 
     // this invariant should be maintained
     d_assert(span.length >= i + 1);
