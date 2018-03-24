@@ -111,6 +111,7 @@ public:
 
 protected:
   void scavenge();
+
 private:
   void expandArena(Length minPagesAdded);
   bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result);

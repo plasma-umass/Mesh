@@ -273,6 +273,38 @@ void MeshableArena::scavenge() {
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _dirty[i].clear();
   }
+
+  // the inverse of the allocated bitmap is all of the spans in _clear
+  // (since we just MADV_DONTNEED'ed everything in dirty)
+  auto bitmap = allocatedBitmap();
+  bitmap.invert();
+
+  for (size_t i = 0; i < kSpanClassCount; i++) {
+    _clean[i].clear();
+  }
+
+  // coalesce adjacent spans
+  Span current(0, 0);
+  for (auto const &i : bitmap) {
+    if (i == current.offset + current.length) {
+      current.length++;
+      continue;
+    }
+
+    // should only be empty the first time/iteration through
+    if (!current.empty()) {
+      _clean[current.spanClass()].push_back(current);
+      debug("  clean: %4zu/%4zu\n", current.offset, current.length);
+    }
+
+    current = Span(i, 1);
+  }
+
+  // should only be empty the first time/iteration through
+  if (!current.empty()) {
+    _clean[current.spanClass()].push_back(current);
+    debug("  clean: %4zu/%4zu\n", current.offset, current.length);
+  }
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {
@@ -451,7 +483,7 @@ void MeshableArena::afterForkChild() {
 
   const auto bitmap = allocatedBitmap();
   for (auto const &i : bitmap) {
-    int result = internal::copyFile(newFd, oldFd, i * CPUInfo::PageSize, CPUInfo::PageSize);
+    int result = internal::copyFile(newFd, oldFd, i * kPageSize, kPageSize);
     d_assert(result == CPUInfo::PageSize);
   }
 
