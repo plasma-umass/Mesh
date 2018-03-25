@@ -254,6 +254,7 @@ public:
     if (unlikely(shouldFlush)) {
       std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
       flushBinLocked(sizeClass);
+      Super::scavenge();
     }
 
     if (shouldConsiderMesh)
@@ -404,17 +405,13 @@ public:
     return inBounds(ptr);
   }
 
-  inline void scavenge() {
-    Super::scavenge();
-  }
-
 protected:
   // check for meshes in all size classes -- must be called unlocked
   void meshAllSizeClasses() {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
     if (!_lastMeshEffective) {
-      scavenge();
+      Super::scavenge();
       return;
     }
 
@@ -450,7 +447,7 @@ protected:
     _lastMeshEffective = mergeSets.size() > 256;
 
     if (mergeSets.size() == 0) {
-      scavenge();
+      Super::scavenge();
       // debug("nothing to mesh.");
       return;
     }
@@ -471,7 +468,7 @@ protected:
     // const std::chrono::duration<double> duration = _lastMesh - start;
     // debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
 
-    scavenge();
+    Super::scavenge();
   }
 
   const size_t _maxObjectSize;
