@@ -61,6 +61,7 @@ public:
   }
 
   ~MiniHeap() {
+    _meshCount = ~0;
     // if (_meshCount > 1)
     //   dumpDebug();
   }

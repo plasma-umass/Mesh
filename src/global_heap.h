@@ -178,6 +178,7 @@ public:
     }
 
     mh->MiniHeap::~MiniHeap();
+    memset(reinterpret_cast<char *>(mh), 0, 128);
     _mhAllocator.free(mh);
     _miniheapCount--;
   }

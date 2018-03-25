@@ -124,7 +124,6 @@ private:
   void expandArena(Length minPagesAdded);
   bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result);
   Span reservePages(Length pageCount);
-  void freeSpan(Span span);
   void freePhys(void *ptr, size_t sz);
   internal::RelaxedBitmap allocatedBitmap() const;
 
