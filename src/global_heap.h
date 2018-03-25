@@ -201,6 +201,13 @@ public:
     mh = nullptr;
   }
 
+  inline void flushBinLocked(size_t sizeClass) {
+      auto emptyMiniheaps = _littleheaps[sizeClass].getFreeMiniheaps();
+      for (size_t i = 0; i < emptyMiniheaps.size(); i++) {
+        freeMiniheapLocked(emptyMiniheaps[i], false);
+      }
+  }
+
   inline void free(void *ptr) {
     auto mh = miniheapFor(ptr);
     freeFrom(mh, ptr);
@@ -246,11 +253,7 @@ public:
 
     if (unlikely(shouldFlush)) {
       std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
-
-      auto emptyMiniheaps = _littleheaps[sizeClass].getFreeMiniheaps();
-      for (size_t i = 0; i < emptyMiniheaps.size(); i++) {
-        freeMiniheapLocked(emptyMiniheaps[i], false);
-      }
+      flushBinLocked(sizeClass);
     }
 
     if (shouldConsiderMesh)
@@ -393,7 +396,6 @@ public:
 
     _lastMesh = now;
     meshAllSizeClasses();
-    scavenge();
   }
 
   inline bool okToProceed(void *ptr) const {
@@ -407,23 +409,14 @@ public:
   }
 
 protected:
-  void performMeshing(internal::vector<std::pair<MiniHeap *, MiniHeap *>> &mergeSets) {
-    for (auto &mergeSet : mergeSets) {
-      // merge _into_ the one with a larger mesh count, potentiall
-      // swapping the order of the pair
-      if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
-        mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
-
-      meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
-    }
-  }
-
   // check for meshes in all size classes -- must be called unlocked
   void meshAllSizeClasses() {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
-    if (!_lastMeshEffective)
+    if (!_lastMeshEffective) {
+      scavenge();
       return;
+    }
 
     _lastMeshEffective = 1;
 
@@ -434,10 +427,7 @@ protected:
 
     // first, clear out any free memory we might have
     for (size_t i = 0; i < kNumBins; i++) {
-      auto emptyMiniheaps = _littleheaps[i].getFreeMiniheaps();
-      for (size_t i = 0; i < emptyMiniheaps.size(); i++) {
-        freeMiniheapLocked(emptyMiniheaps[i], false);
-      }
+      flushBinLocked(i);
     }
 
     // FIXME: is it safe to have this function not use internal::allocator?
@@ -460,18 +450,28 @@ protected:
     _lastMeshEffective = mergeSets.size() > 256;
 
     if (mergeSets.size() == 0) {
+      scavenge();
       // debug("nothing to mesh.");
       return;
     }
 
     _stats.meshCount += mergeSets.size();
 
-    performMeshing(mergeSets);
+    for (auto &mergeSet : mergeSets) {
+      // merge _into_ the one with a larger mesh count, potentially
+      // swapping the order of the pair
+      if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
+        mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
+
+      meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
+    }
 
     _lastMesh = std::chrono::high_resolution_clock::now();
 
     // const std::chrono::duration<double> duration = _lastMesh - start;
     // debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
+
+    scavenge();
   }
 
   const size_t _maxObjectSize;

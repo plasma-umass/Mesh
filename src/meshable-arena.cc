@@ -300,6 +300,8 @@ void MeshableArena::free(void *ptr, size_t sz) {
 }
 
 void MeshableArena::scavenge() {
+  lock_guard<mutex> lock(_mutex);
+
   // for all of the virtual spans that were meshed, reset their mappings
   std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
     auto ptr = ptrFromOffset(span.offset);
