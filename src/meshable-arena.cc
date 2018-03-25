@@ -23,6 +23,8 @@
 
 #include "meshable-arena.h"
 
+#include "miniheap.h"
+
 #include "runtime.h"
 
 namespace mesh {
@@ -50,7 +52,7 @@ MeshableArena::MeshableArena() : SuperHeap() {
   }
   _fd = fd;
   _arenaBegin = SuperHeap::map(kArenaSize, MAP_SHARED, fd);
-  _metadata = reinterpret_cast<uintptr_t *>(SuperHeap::map(metadataSize(), MAP_ANONYMOUS | MAP_PRIVATE));
+  _metadata = reinterpret_cast<atomic<uintptr_t> *>(SuperHeap::map(metadataSize(), MAP_ANONYMOUS | MAP_PRIVATE));
 
   hard_assert(_arenaBegin != nullptr);
   hard_assert(_metadata != nullptr);
@@ -103,6 +105,8 @@ bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount],
     if (spanList.empty())
       continue;
 
+    size_t oldLen = spanList.size();
+
     if (i == kSpanClassCount - 1 && spanList.back().length < pageCount) {
       // the final span class contains (and is the only class to
       // contain) variable-size spans, so we need to make sure we
@@ -124,12 +128,19 @@ bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount],
     Span span = spanList.back();
     spanList.pop_back();
 
+#ifndef NDEBUG
+    d_assert_msg(oldLen == spanList.size() + 1, "pageCount:%zu,%zu -- %zu/%zu", pageCount, i, oldLen, spanList.size());
+    for (size_t j = 0; j < spanList.size(); j++) {
+      d_assert(spanList[j] != span);
+    }
+#endif
+
     // this invariant should be maintained
     d_assert(span.length >= i + 1);
     d_assert(span.length >= pageCount);
 
     // put the part we don't need back in the reuse pile
-    Span rest = span.split(pageCount);
+    Span rest = span.splitAfter(pageCount);
     if (!rest.empty()) {
       freeSpans[rest.spanClass()].push_back(rest);
     }
@@ -219,14 +230,26 @@ void *MeshableArena::malloc(size_t sz) {
   const auto off = span.offset;
 
   d_assert(span.ptr(_arenaBegin) < arenaEnd());
-  d_assert_msg(getMetadataFlags(off) == 0 && getMetadataPtr(off) == 0, "expected no metadata, found %p/%zu", getMetadataPtr(off), getMetadataFlags(off));
+  if (getMetadataPtr(off) != 0) {
+    mesh::debug("----\n");
+    auto mh = reinterpret_cast<MiniHeap *>(getMetadataPtr(off));
+    mh->dumpDebug();
+  }
+  d_assert_msg(getMetadataFlags(off) == 0 && getMetadataPtr(off) == 0, "expected no metadata, found %p/%zu",
+               getMetadataPtr(off), getMetadataFlags(off));
 
   // now that we know they are available, set the empty pages to
   // in-use.  This is safe because this whole function is called
   // under the GlobalHeap lock, so there is no chance of concurrent
   // modification between the loop above and the one below.
   for (size_t i = 0; i < pageCount; i++) {
-    d_assert(getMetadataFlags(off + i) == 0 && getMetadataPtr(off + i) == 0);
+    if (getMetadataPtr(off + i) != 0) {
+      mesh::debug("----!\n");
+      auto mh = reinterpret_cast<MiniHeap *>(getMetadataPtr(off + i));
+      mh->dumpDebug();
+    }
+    d_assert_msg(getMetadataFlags(off + i) == 0 && getMetadataPtr(off + i) == 0, "expected no metadata, found %p/%zu",
+                 getMetadataPtr(off + i), getMetadataFlags(off + i));
     setMetadata(off + i, internal::PageType::Identity);
   }
 
@@ -323,6 +346,20 @@ void MeshableArena::scavenge() {
   if (!current.empty()) {
     _clean[current.spanClass()].push_back(current);
     // debug("  clean: %4zu/%4zu\n", current.offset, current.length);
+  }
+
+  auto newBitmap = allocatedBitmap();
+  newBitmap.invert();
+
+  const size_t *bits1 = bitmap.bits();
+  const size_t *bits2 = newBitmap.bits();
+  for (size_t i = 0; i < bitmap.byteCount() / sizeof(size_t); i++) {
+    if (bits1[i] != bits2[i]) {
+      debug("bitmaps don't match %zu:\n", i);
+      debug("\t%s\n", bitmap.to_string().c_str());
+      debug("\t%s\n", newBitmap.to_string().c_str());
+      hard_assert(false);
+    }
   }
 }
 

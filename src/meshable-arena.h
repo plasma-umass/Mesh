@@ -69,7 +69,7 @@ struct Span {
 
   // reduce the size of this span to pageCount, return another span
   // with the rest of the pages.
-  Span split(Length pageCount) {
+  Span splitAfter(Length pageCount) {
     d_assert(pageCount <= length);
     auto restPageCount = length - pageCount;
     length = pageCount;
@@ -87,6 +87,14 @@ struct Span {
 
   size_t byteLength() const {
     return length * kPageSize;
+  }
+
+  inline bool operator==(const Span &rhs) {
+    return offset == rhs.offset && length == rhs.length;
+  }
+
+  inline bool operator!=(const Span &rhs) {
+    return !(*this == rhs);
   }
 
   Offset offset;
@@ -228,9 +236,7 @@ private:
 
   // indexed by offset. no need to be atomic, because protected by
   // _mhRWLock.
-  uintptr_t *_metadata{nullptr};
-
-  // internal::vector<DeferredDeallocs> _freelist;
+  atomic<uintptr_t> *_metadata{nullptr};
 
   int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
