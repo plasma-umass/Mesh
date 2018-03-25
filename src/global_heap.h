@@ -207,13 +207,13 @@ public:
   }
 
   inline void freeFrom(MiniHeap *mh, void *ptr) {
-    // two possibilities: most likely the ptr is small (and therefor
-    // owned by a miniheap), or is a large allocation
+    if (!mh) {
+      // FIXME: we should warn/error or something here after we add an
+      // aligned allocate API
+      return;
+    }
 
     hard_assert(mh != nullptr);
-
-    _lastMeshEffective = 1;
-    mh->free(ptr);
 
     // large objects don't trigger meshing, because they are multiples
     // of the page size
@@ -224,7 +224,11 @@ public:
       return;
     }
 
+    _lastMeshEffective = 1;
+    mh->free(ptr);
+
     bool shouldConsiderMesh = !mh->isEmpty();
+
     // unreffed by the bin tracker
     // mh->unref();
 
