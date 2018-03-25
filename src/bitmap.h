@@ -221,10 +221,6 @@ public:
     rhs.Super::_bits = nullptr;
   }
 
-  ~BitmapBase() {
-    Super::~Super();
-  }
-
   internal::string to_string(ssize_t bitCount = -1) const {
     if (bitCount == -1)
       bitCount = this->bitCount();
