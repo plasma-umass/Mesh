@@ -388,11 +388,11 @@ protected:
 
 static_assert(sizeof(pthread_t) == 8, "pthread_t too big");
 
-static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
+static_assert(sizeof(mesh::internal::Bitmap) == 40, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
-static_assert(sizeof(MiniHeap) == 160, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
 #else
-static_assert(sizeof(MiniHeap) == 88, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 112, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 

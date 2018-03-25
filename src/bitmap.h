@@ -31,12 +31,15 @@ static constexpr size_t kWordBytes = sizeof(size_t);
 /// The log of the number of bits in a size_t, for shifting.
 static constexpr size_t kWordBitshift = staticlog(kWordBits);
 // number of bytes used to store the bitmap -- rounds up to nearest sizeof(size_t)
-static inline size_t ATTRIBUTE_ALWAYS_INLINE representationSize(size_t bitCount) {
+static inline constexpr size_t ATTRIBUTE_ALWAYS_INLINE representationSize(size_t bitCount) {
   return kWordBits * ((bitCount + kWordBits - 1) / kWordBits) / 8;
+}
+static inline constexpr size_t ATTRIBUTE_ALWAYS_INLINE wordCount(size_t byteCount) {
+  return byteCount / kWordBytes;
 }
 /// To find the bit in a word, do this: word & getMask(bitPosition)
 /// @return a "mask" for the given position.
-static inline size_t ATTRIBUTE_ALWAYS_INLINE getMask(uint64_t pos) {
+static inline constexpr size_t ATTRIBUTE_ALWAYS_INLINE getMask(uint64_t pos) {
   return 1UL << pos;
 }
 
@@ -72,6 +75,7 @@ private:
   const Container &_cont;
 };
 
+template <size_t maxBits>
 class AtomicBitmapBase {
 private:
   DISALLOW_COPY_AND_ASSIGN(AtomicBitmapBase);
@@ -79,15 +83,15 @@ private:
 public:
   typedef atomic_size_t word_t;
 
+  enum { MaxBitCount = maxBits };
+
 protected:
   AtomicBitmapBase(size_t bitCount)
-      : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(internal::Heap().malloc(representationSize(bitCount)))) {
+      : _bitCount(bitCount) {
+    d_assert_msg(_bitCount <= maxBits, "max bits (%zu) exceeded: %zu", maxBits, _bitCount);
   }
 
   ~AtomicBitmapBase() {
-    if (_bits)
-      internal::Heap().free(_bits);
-    _bits = nullptr;
   }
 
 public:
@@ -116,8 +120,11 @@ public:
   }
 
 protected:
+  inline void nullBits() {
+  }
+
   const size_t _bitCount;
-  word_t *_bits;
+  word_t _bits[wordCount(representationSize(maxBits))] = {};
 };
 
 class RelaxedBitmapBase {
@@ -126,6 +133,8 @@ private:
 
 public:
   typedef size_t word_t;
+
+  enum { MaxBitCount = std::numeric_limits<uint64_t>::max() };
 
 protected:
   RelaxedBitmapBase(size_t bitCount)
@@ -218,7 +227,7 @@ public:
   }
 
   BitmapBase(Bitmap &&rhs) : Super(rhs.bitCount()) {
-    rhs.Super::_bits = nullptr;
+    rhs.Super::nullBits();
   }
 
   internal::string to_string(ssize_t bitCount = -1) const {
@@ -401,10 +410,10 @@ private:
 }  // namespace bitmap
 
 namespace internal {
-typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase> Bitmap;
+typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase<256>> Bitmap;
 typedef bitmap::BitmapBase<bitmap::RelaxedBitmapBase> RelaxedBitmap;
 
-static_assert(sizeof(Bitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
+static_assert(sizeof(Bitmap) == sizeof(size_t) * 5, "Bitmap unexpected size");
 static_assert(sizeof(RelaxedBitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
 }  // namespace internal
 }  // namespace mesh
