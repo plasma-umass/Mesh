@@ -80,11 +80,6 @@ struct Span {
     return std::min(length, kSpanClassCount) - 1;
   }
 
-  void *ptr(void *base) const {
-    auto baseVal = reinterpret_cast<uintptr_t>(base);
-    return reinterpret_cast<void *>(baseVal + offset * kPageSize);
-  }
-
   size_t byteLength() const {
     return length * kPageSize;
   }
@@ -107,7 +102,7 @@ private:
   typedef OneWayMmapHeap SuperHeap;
 
 public:
-  enum { Alignment = MmapWrapper::Alignment };
+  enum { Alignment = kPageSize };
 
   explicit MeshableArena();
 
@@ -117,37 +112,8 @@ public:
     return arena <= ptrval && ptrval < arena + kArenaSize;
   }
 
-protected:
-  void scavenge();
-
-private:
-  void expandArena(Length minPagesAdded);
-  bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result);
-  Span reservePages(Length pageCount);
-  void freePhys(void *ptr, size_t sz);
-  internal::RelaxedBitmap allocatedBitmap() const;
-
-public:
-  void *malloc(size_t sz);
+  void *pageAlloc(size_t pageCount, void *owner);
   void free(void *ptr, size_t sz);
-
-  inline void assoc(const void *span, void *miniheap, size_t pageCount) {
-    if (unlikely(!contains(span))) {
-      mesh::debug("assoc failure %p", span);
-      abort();
-      return;
-    }
-
-    const auto off = offsetFor(span);
-    // this non-atomic update is safe because this is only called
-    // under the MH writer-lock in global heap
-    uintptr_t mh = reinterpret_cast<uintptr_t>(miniheap);
-    for (size_t i = 0; i < pageCount; i++) {
-      setMetadata(off + i, mh | getMetadataFlags(off));
-    }
-
-    // mesh::debug("assoc %p(%zu) %p | %u", span, off, miniheap, getMetadataFlags(off));
-  }
 
   inline void *lookup(const void *ptr) const {
     if (unlikely(!contains(ptr))) {
@@ -164,7 +130,18 @@ public:
   void beginMesh(void *keep, void *remove, size_t sz);
   void finalizeMesh(void *keep, void *remove, size_t sz);
 
+protected:
+  void scavenge();
+
 private:
+  void expandArena(Length minPagesAdded);
+  bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result);
+  Span reservePages(Length pageCount);
+  void freePhys(void *ptr, size_t sz);
+  internal::RelaxedBitmap allocatedBitmap() const;
+
+  void *malloc(size_t sz) = delete;
+
   static constexpr inline size_t metadataSize() {
     // one pointer per page in our arena
     return sizeof(uintptr_t) * (kArenaSize / CPUInfo::PageSize);
