@@ -200,7 +200,7 @@ public:
   }
 
   void trackMeshedSpan(uintptr_t spanStart) {
-    if (_meshCount >= kMaxMeshes) {
+    if (unlikely(_meshCount >= kMaxMeshes)) {
       mesh::debug("fatal: too many meshes for one miniheap");
       dumpDebug();
       abort();
