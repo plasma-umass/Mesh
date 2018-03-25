@@ -118,7 +118,7 @@ private:
   Span reservePages(Length pageCount);
   void freeSpan(Span span);
   void freePhys(void *ptr, size_t sz);
-  internal::Bitmap allocatedBitmap() const;
+  internal::RelaxedBitmap allocatedBitmap() const;
 
 public:
   void *malloc(size_t sz);
