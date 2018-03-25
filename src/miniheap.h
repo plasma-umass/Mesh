@@ -97,7 +97,7 @@ public:
       d_assert(!_bitmap.isSet(off));
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize());
       // need to ensure we update the bitmap and in-use count
-      void *dstObject = mallocAtWithBitmap(off);
+      void *dstObject = mallocAt(off);
       d_assert(dstObject != nullptr);
       memcpy(dstObject, srcObject, objectSize());
     }
@@ -224,7 +224,7 @@ public:
   }
 
   /// public for meshTest only
-  inline void *mallocAtWithBitmap(size_t off) {
+  inline void *mallocAt(size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
