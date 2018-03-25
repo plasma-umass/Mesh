@@ -28,35 +28,25 @@ ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
   return heap;
 }
 
-void ThreadLocalHeap::attachFreelist(Freelist &freelist, size_t sizeClass) {
+// we get here if the freelist is exhausted
+void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
+  Freelist &freelist = _freelist[sizeClass];
+
+  if (likely(freelist.isAttached())) {
+    freelist.detach();
+  }
+
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
   MiniHeap *mh = _global->allocSmallMiniheap(sizeMax);
 
-  const auto allocCount = freelist.attach(_prng, mh);
+  freelist.attach(_prng, mh);
+
   d_assert(freelist.isAttached());
   d_assert(!freelist.isExhausted());
-
-  // tell the miniheap how many offsets we pulled out/preallocated into our freelist
-  mh->reattach(allocCount);
-
   d_assert(mh->isAttached());
 
   mh->unref();
-}
-
-// we get here if the freelist is exhausted
-void *ThreadLocalHeap::mallocSlowpath(size_t sizeClass, size_t sz) {
-  Freelist &freelist = _freelist[sizeClass];
-
-  if (&freelist == _last) {
-    _last = nullptr;
-  }
-  if (freelist.isAttached()) {
-    freelist.detach();
-  }
-
-  attachFreelist(freelist, sizeClass);
 
   void *ptr = freelist.malloc();
   _last = &freelist;

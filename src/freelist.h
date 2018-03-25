@@ -137,14 +137,17 @@ public:
     return _attachedMiniheap != nullptr;
   }
 
-  inline size_t attach(MWC &prng, MiniHeap *mh) {
+  inline void attach(MWC &prng, MiniHeap *mh) {
     d_assert(_attachedMiniheap == nullptr);
     _attachedMiniheap = mh;
 
     _start = mh->getSpanStart();
     _end = _start + mh->spanSize();
 
-    return init(prng, mh->writableBitmap());
+    const auto allocCount = init(prng, mh->writableBitmap());
+
+    // tell the miniheap how many offsets we pulled out/preallocated into our freelist
+    mh->incrementInUseCount(allocCount);
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE contains(void *ptr) const {
