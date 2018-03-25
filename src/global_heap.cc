@@ -36,7 +36,7 @@ void *GlobalHeap::malloc(size_t sz) {
 }
 
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-  std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+  std::unique_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
 
   if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
     return -1;
