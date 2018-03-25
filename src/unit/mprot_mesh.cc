@@ -75,8 +75,8 @@ static void meshTestConcurrentWrite(bool invert) {
   ASSERT_EQ(mh1->maxCount(), ObjCount);
 
   // allocate two c strings, one from each miniheap at different offsets
-  s1 = reinterpret_cast<char *>(mh1->mallocAtWithBitmap(0));
-  s2 = reinterpret_cast<char *>(mh2->mallocAtWithBitmap(ObjCount - 1));
+  s1 = reinterpret_cast<char *>(mh1->mallocAt(0));
+  s2 = reinterpret_cast<char *>(mh2->mallocAt(ObjCount - 1));
 
   ASSERT_TRUE(s1 != nullptr);
   ASSERT_TRUE(s2 != nullptr);

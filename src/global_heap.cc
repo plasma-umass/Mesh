@@ -28,7 +28,7 @@ void *GlobalHeap::malloc(size_t sz) {
   d_assert(mh->spanSize() == sz);
   d_assert(mh->objectSize() == sz);
 
-  void *ptr = mh->mallocAtWithBitmap(0);
+  void *ptr = mh->mallocAt(0);
 
   mh->unref();
 
