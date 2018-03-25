@@ -179,8 +179,8 @@ static void forEachFree(const internal::vector<Span> freeSpans[kSpanClassCount],
   }
 }
 
-internal::Bitmap MeshableArena::allocatedBitmap() const {
-  Bitmap bitmap(_end);
+internal::RelaxedBitmap MeshableArena::allocatedBitmap() const {
+  internal::RelaxedBitmap bitmap(_end);
 
   // we can build up a bitmap of in-use pages here by looking at the
   // arena start and end addresses (to compute the number of

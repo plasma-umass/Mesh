@@ -401,10 +401,11 @@ private:
 }  // namespace bitmap
 
 namespace internal {
-// typedef BitmapBase<atomic_size_t, mesh::internal::atomicSet, mesh::internal::atomicUnset> Bitmap;
 typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase> Bitmap;
+typedef bitmap::BitmapBase<bitmap::RelaxedBitmapBase> RelaxedBitmap;
 
 static_assert(sizeof(Bitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
+static_assert(sizeof(RelaxedBitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
 }  // namespace internal
 }  // namespace mesh
 
