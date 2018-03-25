@@ -49,9 +49,7 @@ public:
     d_assert(_global != nullptr);
   }
 
-  void attachFreelist(Freelist &freelist, size_t sizeClass);
-
-  void *mallocSlowpath(size_t sizeClass, size_t sz);
+  void *smallAllocSlowpath(size_t sizeClass);
 
   // semiansiheap ensures we never see size == 0
   inline void *ATTRIBUTE_ALWAYS_INLINE malloc(size_t sz) {
@@ -64,7 +62,7 @@ public:
 
     Freelist &freelist = _freelist[sizeClass];
     if (unlikely(freelist.isExhausted())) {
-      return mallocSlowpath(sizeClass, sz);
+      return smallAllocSlowpath(sizeClass);
     }
 
     void *ptr = freelist.malloc();

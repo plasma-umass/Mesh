@@ -140,9 +140,12 @@ public:
     return reinterpret_cast<uintptr_t>(_span[0]);
   }
 
-  inline void reattach(size_t additionalInUse) {
-    _attached = pthread_self();
+  inline void incrementInUseCount(size_t additionalInUse) {
     _inUseCount += additionalInUse;
+  }
+
+  inline void reattach() {
+    _attached = pthread_self();
   }
 
   /// called when a LocalHeap is done with a MiniHeap (it is
@@ -247,8 +250,8 @@ public:
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = _inUseCount;
     const size_t meshCount = _meshCount;
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, mesh: %zu)\t%p-%p\n", this,
-                _objectSize, maxCount(), heapPages, inUseCount, meshCount, _span[0],
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, mesh: %zu)\t%p-%p\n", this, _objectSize,
+                maxCount(), heapPages, inUseCount, meshCount, _span[0],
                 reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
   }
@@ -367,10 +370,10 @@ protected:
   }
 
   atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding
-  internal::Bitmap _bitmap;     // 16 bytes
+  internal::Bitmap _bitmap;     // 40 bytes
 
   const uint32_t _objectSize;
-  const uint32_t _spanSize; // max 4 GB span size/allocation size
+  const uint32_t _spanSize;  // max 4 GB span size/allocation size
   char *_span[kMaxMeshes];
   internal::BinToken _token;
 
@@ -395,7 +398,6 @@ static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
 static_assert(sizeof(MiniHeap) == 112, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
-
 }  // namespace mesh
 
 #endif  // MESH__MINIHEAP_H

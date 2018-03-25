@@ -110,6 +110,7 @@ public:
 
     d_assert(objectSize <= _maxObjectSize);
 
+    // TODO: pass in as a parameter
     const int sizeClass = SizeMap::SizeClass(objectSize);
 
 #ifndef NDEBUG
@@ -125,6 +126,7 @@ public:
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
     if (existing != nullptr) {
       existing->ref();
+      existing->reattach();
       return existing;
     }
 
@@ -135,7 +137,9 @@ public:
     const size_t objectCount = max(HL::CPUInfo::PageSize / objectSize, kMinStringLen);
     const size_t pageCount = PageCount(objectSize * objectCount);
 
-    return allocMiniheap(sizeClass, pageCount, objectCount, objectSize);
+    auto mh = allocMiniheap(sizeClass, pageCount, objectCount, objectSize);
+    mh->reattach();
+    return mh;
   }
 
   // large, page-multiple allocations
