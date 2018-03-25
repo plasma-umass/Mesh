@@ -21,11 +21,11 @@
 namespace mesh {
 
 static inline constexpr size_t PageCount(size_t sz) {
-  return (sz + (HL::CPUInfo::PageSize - 1)) / HL::CPUInfo::PageSize;
+  return (sz + (kPageSize - 1)) / kPageSize;
 }
 
 static inline constexpr size_t RoundUpToPage(size_t sz) {
-  return HL::CPUInfo::PageSize * PageCount(sz);
+  return kPageSize * PageCount(sz);
 }
 
 // keep in-sync with the version in plasma/mesh.h

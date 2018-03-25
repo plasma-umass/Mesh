@@ -68,7 +68,7 @@ public:
       return nullptr;
 
     // Round up to the size of a page.
-    sz = (sz + CPUInfo::PageSize - 1) & (size_t) ~(CPUInfo::PageSize - 1);
+    sz = (sz + kPageSize - 1) & (size_t) ~(kPageSize - 1);
 
     void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, flags, fd, 0);
     if (ptr == MAP_FAILED)
