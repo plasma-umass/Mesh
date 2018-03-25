@@ -214,21 +214,20 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap() const {
   return bitmap;
 }
 
-void *MeshableArena::malloc(size_t sz) {
-  if (sz == 0)
+void *MeshableArena::pageAlloc(size_t pageCount, void *owner) {
+  if (pageCount == 0) {
     return nullptr;
+  }
 
   d_assert(_arenaBegin != nullptr);
-  d_assert_msg(sz % kPageSize == 0, "multiple-page allocs only, sz bad: %zu", sz);
 
-  const auto pageCount = sz / kPageSize;
   d_assert(pageCount >= 1);
   d_assert(pageCount < std::numeric_limits<Length>::max());
 
   auto span = reservePages(pageCount);
   const auto off = span.offset;
 
-  d_assert(span.ptr(_arenaBegin) < arenaEnd());
+  d_assert(ptrFromOffset(span.offset) < arenaEnd());
   if (getMetadataPtr(off) != 0) {
     mesh::debug("----\n");
     auto mh = reinterpret_cast<MiniHeap *>(getMetadataPtr(off));
@@ -236,6 +235,9 @@ void *MeshableArena::malloc(size_t sz) {
   }
   d_assert_msg(getMetadataFlags(off) == 0 && getMetadataPtr(off) == 0, "expected no metadata, found %p/%zu",
                getMetadataPtr(off), getMetadataFlags(off));
+
+  const auto ownerVal = reinterpret_cast<uintptr_t>(owner);
+  d_assert((ownerVal & 0x07) == 0);
 
   // now that we know they are available, set the empty pages to
   // in-use.  This is safe because this whole function is called
@@ -249,13 +251,13 @@ void *MeshableArena::malloc(size_t sz) {
     }
     d_assert_msg(getMetadataFlags(off + i) == 0 && getMetadataPtr(off + i) == 0, "expected no metadata, found %p/%zu",
                  getMetadataPtr(off + i), getMetadataFlags(off + i));
-    setMetadata(off + i, internal::PageType::Identity);
+    setMetadata(off + i, internal::PageType::Identity | ownerVal);
   }
 
   void *ptr = ptrFromOffset(off);
 
   if (kAdviseDump) {
-    madvise(ptr, sz, MADV_DODUMP);
+    madvise(ptr, pageCount * kPageSize, MADV_DODUMP);
   }
 
   return ptr;

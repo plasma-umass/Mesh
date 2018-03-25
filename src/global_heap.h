@@ -79,21 +79,19 @@ public:
   // must be called with exclusive _mhRWLock held
   inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheap(int sizeClass, size_t pageCount, size_t objectCount,
                                                          size_t objectSize) {
-    const size_t spanSize = HL::CPUInfo::PageSize * pageCount;
-    d_assert(0 < spanSize);
-
-    // allocate out of the arena
-    void *span = Super::malloc(spanSize);
-    if (unlikely(span == nullptr))
-      abort();
 
     void *buf = _mhAllocator.alloc();
-    d_assert(buf != nullptr);
+    hard_assert(buf != nullptr);
 
-    // if (spanSize > 4096)
-    //   mesh::debug("spana %p(%zu) %p (%zu)", span, spanSize, buf, objectSize);
+    // allocate out of the arena
+    void *span = Super::pageAlloc(pageCount, buf);
+    hard_assert(span != nullptr);
+
+    const size_t spanSize = kPageSize * pageCount;
+    d_assert(0 < spanSize);
+
     MiniHeap *mh = new (buf) MiniHeap(span, objectCount, objectSize, _fastPrng, spanSize);
-    Super::assoc(span, mh, pageCount);
+
     _miniheapCount++;
 
     if (sizeClass >= 0)
