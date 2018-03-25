@@ -52,7 +52,7 @@ MeshableArena::MeshableArena() : SuperHeap() {
   }
   _fd = fd;
   _arenaBegin = SuperHeap::map(kArenaSize, MAP_SHARED, fd);
-  _metadata = reinterpret_cast<atomic<uintptr_t> *>(SuperHeap::map(metadataSize(), MAP_ANONYMOUS | MAP_PRIVATE));
+  _metadata = reinterpret_cast<atomic<uintptr_t> *>(SuperHeap::malloc(metadataSize()));
 
   hard_assert(_arenaBegin != nullptr);
   hard_assert(_metadata != nullptr);
@@ -111,15 +111,15 @@ bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount],
       // the final span class contains (and is the only class to
       // contain) variable-size spans, so we need to make sure we
       // search through all candidates in this case.
-      for (size_t i = 0; i < spanList.size(); i++) {
-        if (spanList[i].length < pageCount)
-          continue;
-
-        std::swap(spanList[i], spanList.back());
-        break;
+      for (size_t j = 0; j < spanList.size() - 1; j++) {
+        if (spanList[j].length >= pageCount) {
+          std::swap(spanList[j], spanList.back());
+          break;
+        }
       }
 
-      // this would be our last loop iteration anyway
+      // check that we found something in the above loop.this would be
+      // our last loop iteration anyway
       if (spanList.back().length < pageCount) {
         return false;
       }
@@ -144,6 +144,7 @@ bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount],
     if (!rest.empty()) {
       freeSpans[rest.spanClass()].push_back(rest);
     }
+    d_assert(span.length == pageCount);
 
     result = span;
     found = true;
@@ -170,11 +171,6 @@ Span MeshableArena::reservePages(Length pageCount) {
   d_assert(!result.empty());
 
   return result;
-}
-
-void MeshableArena::freeSpan(Span span) {
-  d_assert(span.length > 0);
-  _dirty[span.spanClass()].push_back(span);
 }
 
 template <typename Func>
@@ -205,6 +201,9 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap() const {
 
   auto unmarkPages = [&](const Span span) {
     for (size_t k = 0; k < span.length; k++) {
+      if (!bitmap.isSet(span.offset + k)) {
+        debug("arena: bit %zu already unset\n", k);
+      }
       bitmap.unset(span.offset + k);
     }
   };
@@ -220,9 +219,9 @@ void *MeshableArena::malloc(size_t sz) {
     return nullptr;
 
   d_assert(_arenaBegin != nullptr);
-  d_assert_msg(sz % HL::CPUInfo::PageSize == 0, "multiple-page allocs only, sz bad: %zu", sz);
+  d_assert_msg(sz % kPageSize == 0, "multiple-page allocs only, sz bad: %zu", sz);
 
-  const auto pageCount = sz / HL::CPUInfo::PageSize;
+  const auto pageCount = sz / kPageSize;
   d_assert(pageCount >= 1);
   d_assert(pageCount < std::numeric_limits<Length>::max());
 
@@ -264,40 +263,45 @@ void *MeshableArena::malloc(size_t sz) {
 
 void MeshableArena::free(void *ptr, size_t sz) {
   if (unlikely(!contains(ptr))) {
+    debug("invalid free of %p/%zu", ptr, sz);
     return;
   }
   d_assert(sz > 0);
 
-  d_assert(sz / CPUInfo::PageSize > 0);
-  d_assert(sz % CPUInfo::PageSize == 0);
+  d_assert(sz / kPageSize > 0);
+  d_assert(sz % kPageSize == 0);
 
   const Span span(offsetFor(ptr), sz / kPageSize);
   const uint8_t flags = getMetadataFlags(span.offset);
-
-  if (flags == internal::PageType::Identity) {
-    if (kAdviseDump) {
-      madvise(ptr, sz, MADV_DONTDUMP);
-    }
-    freeSpan(span);
-  } else {
-    // delay restoring the identity mapping
-    _toReset.push_back(span);
-  }
 
   for (size_t i = 0; i < span.length; i++) {
     // clear the miniheap pointers we were tracking
     setMetadata(span.offset + i, 0);
   }
 
+  if (flags == internal::PageType::Identity) {
+    if (kAdviseDump) {
+      madvise(ptr, sz, MADV_DONTDUMP);
+    }
+    d_assert(span.length > 0);
+    _dirty[span.spanClass()].push_back(span);
+  } else {
+    // delay restoring the identity mapping
+    _toReset.push_back(span);
+  }
+
   // debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
 }
 
 void MeshableArena::scavenge() {
+  _toReset.clear();
+
+#if 0
   // for all of the virtual spans that were meshed, reset their mappings
   std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
     auto ptr = span.ptr(_arenaBegin);
     auto sz = span.byteLength();
-    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * CPUInfo::PageSize);
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
     _clean[span.spanClass()].push_back(span);
   });
 
@@ -315,6 +319,9 @@ void MeshableArena::scavenge() {
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _dirty[i].clear();
   }
+
+  if (true)
+    return;
 
   // the inverse of the allocated bitmap is all of the spans in _clear
   // (since we just MADV_DONTNEED'ed everything in dirty)
@@ -361,6 +368,7 @@ void MeshableArena::scavenge() {
       hard_assert(false);
     }
   }
+#endif
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {
@@ -387,15 +395,16 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   // debug("keep: %p, remove: %p\n", keep, remove);
   const auto keepOff = offsetFor(keep);
   const auto removeOff = offsetFor(remove);
+
   d_assert(getMetadataFlags(keepOff) == internal::PageType::Identity);
   d_assert(getMetadataFlags(removeOff) != internal::PageType::Unallocated);
 
-  const auto pageCount = sz / CPUInfo::PageSize;
+  const auto pageCount = sz / kPageSize;
   for (size_t i = 0; i < pageCount; i++) {
     setMetadata(removeOff + i, internal::PageType::Meshed | getMetadataPtr(keepOff));
   }
 
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * CPUInfo::PageSize);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * kPageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
   freePhys(remove, sz);
 
