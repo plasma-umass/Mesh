@@ -116,6 +116,8 @@ public:
   void free(void *ptr, size_t sz);
 
   inline void *lookup(const void *ptr) const {
+    lock_guard<mutex> lock(_mutex);
+
     if (unlikely(!contains(ptr))) {
       return nullptr;
     }
@@ -198,6 +200,8 @@ private:
   void *arenaEnd() const {
     return reinterpret_cast<char *>(_arenaBegin) + kArenaSize;
   }
+
+  mutable mutex _mutex{};
 
   void *_arenaBegin{nullptr};
 

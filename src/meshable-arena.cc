@@ -215,6 +215,8 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap() const {
 }
 
 void *MeshableArena::pageAlloc(size_t pageCount, void *owner) {
+  lock_guard<mutex> lock(_mutex);
+
   if (pageCount == 0) {
     return nullptr;
   }
@@ -264,6 +266,8 @@ void *MeshableArena::pageAlloc(size_t pageCount, void *owner) {
 }
 
 void MeshableArena::free(void *ptr, size_t sz) {
+  lock_guard<mutex> lock(_mutex);
+
   if (unlikely(!contains(ptr))) {
     debug("invalid free of %p/%zu", ptr, sz);
     return;
@@ -296,12 +300,9 @@ void MeshableArena::free(void *ptr, size_t sz) {
 }
 
 void MeshableArena::scavenge() {
-  _toReset.clear();
-
-#if 0
   // for all of the virtual spans that were meshed, reset their mappings
   std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
-    auto ptr = span.ptr(_arenaBegin);
+    auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
     mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
     _clean[span.spanClass()].push_back(span);
@@ -310,7 +311,7 @@ void MeshableArena::scavenge() {
   _toReset.clear();
 
   forEachFree(_dirty, [&](const Span span) {
-    auto ptr = span.ptr(_arenaBegin);
+    auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
     madvise(ptr, sz, MADV_DONTNEED);
     freePhys(ptr, sz);
@@ -321,9 +322,6 @@ void MeshableArena::scavenge() {
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _dirty[i].clear();
   }
-
-  if (true)
-    return;
 
   // the inverse of the allocated bitmap is all of the spans in _clear
   // (since we just MADV_DONTNEED'ed everything in dirty)
@@ -370,7 +368,6 @@ void MeshableArena::scavenge() {
       hard_assert(false);
     }
   }
-#endif
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {
@@ -390,10 +387,14 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
 }
 
 void MeshableArena::beginMesh(void *keep, void *remove, size_t sz) {
+  lock_guard<mutex> lock(_mutex);
+
   mprotect(remove, sz, PROT_READ);
 }
 
 void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
+  lock_guard<mutex> lock(_mutex);
+
   // debug("keep: %p, remove: %p\n", keep, remove);
   const auto keepOff = offsetFor(keep);
   const auto removeOff = offsetFor(remove);
