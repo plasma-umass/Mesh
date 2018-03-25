@@ -21,12 +21,26 @@ private:
   static_assert(allocSize % 2 == 0);
 
 public:
-  enum { Alignment = MmapWrapper::Alignment };
+  // cacheline-sized alignment
+  enum { Alignment = 64 };
 
   CheapHeap() : SuperHeap() {
+    // TODO: check allocSize + maxCount doesn't overflow?
+    _arena = reinterpret_cast<char *>(SuperHeap::malloc(allocSize * maxCount));
+    _freelist = reinterpret_cast<void **>(SuperHeap::malloc(maxCount * sizeof(void *)));
+    hard_assert(_arena != nullptr);
+    hard_assert(_freelist != nullptr);
+    d_assert(_arena % Alignment == 0);
+    d_assert(_freelist % Alignment == 0);
   }
 
-  inline void *malloc(size_t sz) {
+  inline void *alloc() {
+    if (likely(_nextFreelistOff > 0)) {
+      return _freelist[--_nextFreelistOff];
+    }
+
+    char *ptr = _arena + _arenaOff;
+    _arenaOff += allocSize;
 
     return ptr;
   }
@@ -38,6 +52,8 @@ public:
   inline void free(void *ptr) {
     d_assert(ptr >= _arena);
     d_assert(ptr < arenaEnd());
+
+    _freelist[_nextFreelistOff++] = ptr;
   }
 
   inline char *arenaEnd() const {
@@ -46,9 +62,9 @@ public:
 
 protected:
   char *_arena{nullptr};
-  void *_freelist{nullptr};
+  void **_freelist{nullptr};
   size_t _arenaOff{0};
-  size_t _freelistOff{0};
+  size_t _nextFreelistOff{0};
 };
 }  // namespace mesh
 

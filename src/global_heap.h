@@ -15,6 +15,8 @@
 #include "meshing.h"
 #include "miniheap.h"
 
+#include "cheap_heap.h"
+
 #include "heaplayers.h"
 
 using namespace HL;
@@ -85,9 +87,8 @@ public:
     if (unlikely(span == nullptr))
       abort();
 
-    void *buf = internal::Heap().malloc(sizeof(MiniHeap));
-    if (unlikely(buf == nullptr))
-      abort();
+    void *buf = _mhAllocator.alloc();
+    d_assert(buf != nullptr);
 
     // if (spanSize > 4096)
     //   mesh::debug("spana %p(%zu) %p (%zu)", span, spanSize, buf, objectSize);
@@ -177,7 +178,7 @@ public:
     }
 
     mh->MiniHeap::~MiniHeap();
-    internal::Heap().free(mh);
+    _mhAllocator.free(mh);
     _miniheapCount--;
   }
 
@@ -479,6 +480,8 @@ protected:
 
   mt19937_64 _prng;
   MWC _fastPrng;
+
+  CheapHeap<128, kArenaSize / kPageSize> _mhAllocator{};
 
   BinnedTracker<MiniHeap> _littleheaps[kNumBins];
 
