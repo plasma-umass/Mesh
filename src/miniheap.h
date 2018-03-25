@@ -28,8 +28,7 @@ private:
 public:
   MiniHeap(void *span, size_t objectCount, size_t objectSize, MWC &fastPrng, size_t expectedSpanSize)
       : _attached(0),
-        _maxCount(objectCount),
-        _bitmap(maxCount()),
+        _bitmap(objectCount),
         _objectSize(objectSize),
         _spanSize(dynamicSpanSize()),
         _span{reinterpret_cast<char *>(span)},
@@ -123,7 +122,7 @@ public:
   }
 
   inline size_t maxCount() const {
-    return _maxCount;
+    return _bitmap.bitCount();
   }
 
   inline size_t objectSize() const {
@@ -368,7 +367,6 @@ protected:
   }
 
   atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding
-  uint32_t _maxCount;
   internal::Bitmap _bitmap;     // 16 bytes
 
   const uint32_t _objectSize;
@@ -392,9 +390,9 @@ static_assert(sizeof(pthread_t) == 8, "pthread_t too big");
 
 static_assert(sizeof(mesh::internal::Bitmap) == 16, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
-static_assert(sizeof(MiniHeap) == 168, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 160, "MiniHeap too big!");
 #else
-static_assert(sizeof(MiniHeap) == 96, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 88, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 
