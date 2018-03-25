@@ -38,6 +38,9 @@ static void meshTest(bool invert) {
   ASSERT_EQ(mh1->maxCount(), mh2->maxCount());
   ASSERT_EQ(mh1->maxCount(), ObjCount);
 
+  ASSERT_EQ(mh1->bitmap().inUseCount(), 0UL);
+  ASSERT_EQ(mh2->bitmap().inUseCount(), 0UL);
+
   // allocate two c strings, one from each miniheap at different offsets
   char *s1 = reinterpret_cast<char *>(mh1->mallocAtWithBitmap(0));
   char *s2 = reinterpret_cast<char *>(mh2->mallocAtWithBitmap(ObjCount - 1));

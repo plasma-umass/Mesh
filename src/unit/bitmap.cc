@@ -11,6 +11,12 @@
 
 #include <heaplayers.h>
 
+TEST(BitmapTest, RepresentationSize) {
+  ASSERT_EQ(0, mesh::bitmap::representationSize(0));
+  ASSERT_EQ(8, mesh::bitmap::representationSize(1));
+  ASSERT_EQ(8, mesh::bitmap::representationSize(64));
+}
+
 TEST(BitmapTest, SetGet) {
   const int NTRIALS = 1000;
 

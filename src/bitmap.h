@@ -189,7 +189,7 @@ public:
   typedef BitmapIter<Bitmap> const const_iterator;
 
   explicit BitmapBase(size_t bitCount) : Super(bitCount) {
-    d_assert(Super::bits() != nullptr);
+    d_assert(Super::_bits != nullptr);
     clear();
   }
 
@@ -206,7 +206,7 @@ public:
   }
 
   explicit BitmapBase(const internal::string &str) : Super(str.length()) {
-    d_assert(Super::bits() != nullptr);
+    d_assert(Super::_bits != nullptr);
     clear();
 
     for (size_t i = 0; i < str.length(); ++i) {
@@ -262,11 +262,13 @@ public:
 
   /// Clears out the bitmap array.
   void clear(void) {
-    if (Super::_bits == nullptr)
+    if (unlikely(Super::_bits == nullptr))
       return;
 
-    for (size_t i = 0; i < bitCount(); i++) {
-      unset(i);
+    const auto wordCount = byteCount() / sizeof(size_t);
+    // use an explicit array since these may be atomic_size_t's
+    for (size_t i = 0; i < wordCount; i++) {
+      Super::_bits[i] = 0;
     }
   }
 
@@ -393,7 +395,7 @@ public:
 private:
   /// Given an index, compute its item (word) and position within the word.
   inline void computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
-    d_assert(index < _bitCount);
+    d_assert(index < Super::_bitCount);
     item = index >> kWordBitshift;
     position = index & (kWordBits - 1);
     d_assert(position == index - (item << kWordBitshift));
