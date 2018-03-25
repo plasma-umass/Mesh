@@ -218,7 +218,8 @@ void *MeshableArena::malloc(size_t sz) {
   auto span = reservePages(pageCount);
   const auto off = span.offset;
 
-  d_assert(getMetadataFlags(off) == 0 && getMetadataPtr(off) == 0);
+  d_assert(span.ptr(_arenaBegin) < arenaEnd());
+  d_assert_msg(getMetadataFlags(off) == 0 && getMetadataPtr(off) == 0, "expected no metadata, found %p/%zu", getMetadataPtr(off), getMetadataFlags(off));
 
   // now that we know they are available, set the empty pages to
   // in-use.  This is safe because this whole function is called
