@@ -181,9 +181,7 @@ public:
   }
 
   inline bool isMeshingCandidate() const {
-    if (_refCount > 0)
-      mesh::debug("skipping due to MH reference (%zu)", _refCount.load());
-    return !isAttached() && _refCount == 0 && objectSize() < 4096;
+    return !isAttached() && _refCount == 0 && objectSize() < kPageSize;
   }
 
   /// Returns the fraction full (in the range [0, 1]) that this miniheap is.

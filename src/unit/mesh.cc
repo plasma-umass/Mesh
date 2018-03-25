@@ -113,7 +113,6 @@ static void meshTest(bool invert) {
 
   note("ABOUT TO FREE");
   gheap.freeMiniheap(mh1);
-  gheap.scavenge();
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 }
