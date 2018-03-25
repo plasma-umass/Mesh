@@ -15,12 +15,14 @@ TEST(BitmapTest, RepresentationSize) {
   ASSERT_EQ(0, mesh::bitmap::representationSize(0));
   ASSERT_EQ(8, mesh::bitmap::representationSize(1));
   ASSERT_EQ(8, mesh::bitmap::representationSize(64));
+  ASSERT_EQ(32, mesh::bitmap::representationSize(256));
+  ASSERT_EQ(4, mesh::bitmap::representationSize(256)/sizeof(size_t));
 }
 
 TEST(BitmapTest, SetGet) {
   const int NTRIALS = 1000;
 
-  for (int n = 10; n < 10000; n *= 2) {
+  for (int n = 2; n <= mesh::internal::Bitmap::MaxBitCount; n *= 2) {
     mesh::internal::Bitmap b{static_cast<size_t>(n)};
 
     for (int k = 0; k < NTRIALS; k++) {
@@ -54,8 +56,45 @@ TEST(BitmapTest, SetGet) {
   }
 }
 
+TEST(BitmapTest, SetGetRelaxed) {
+  const int NTRIALS = 1000;
+
+  for (int n = 10; n < 10000; n *= 2) {
+    mesh::internal::RelaxedBitmap b{static_cast<size_t>(n)};
+
+    for (int k = 0; k < NTRIALS; k++) {
+      // Generate a random stream of bits.
+      int *rnd = reinterpret_cast<int *>(calloc(n, sizeof(int)));
+      ASSERT_NE(rnd, nullptr);
+
+      for (int i = 0; i < n; i++) {
+        rnd[i] = lrand48() % 2;
+      }
+
+      for (int i = 0; i < n; i++) {
+        if (rnd[i] == 0) {
+          bool r = b.tryToSet(i);
+          ASSERT_TRUE(r);
+        } else {
+          ASSERT_FALSE(b.isSet(i));
+          b.unset(i);
+        }
+      }
+      for (int i = 0; i < n; i++) {
+        if (rnd[i] == 0) {
+          ASSERT_TRUE(b.isSet(i));
+          b.unset(i);
+        } else {
+          ASSERT_FALSE(b.isSet(i));
+        }
+      }
+      free(rnd);
+    }
+  }
+}
+
 TEST(BitmapTest, Builtins) {
-  mesh::internal::Bitmap b{1024};
+  mesh::internal::Bitmap b{256};
 
   uint64_t i = b.setFirstEmpty();
   ASSERT_EQ(i, 0ULL);
@@ -85,7 +124,7 @@ TEST(BitmapTest, Builtins) {
 }
 
 TEST(BitmapTest, Iter) {
-  mesh::internal::Bitmap b{512};
+  mesh::internal::RelaxedBitmap b{512};
 
   b.tryToSet(0);
   b.tryToSet(200);
@@ -112,7 +151,7 @@ TEST(BitmapTest, Iter) {
 }
 
 TEST(BitmapTest, Iter2) {
-  mesh::internal::Bitmap b{512};
+  mesh::internal::RelaxedBitmap b{512};
 
   b.tryToSet(200);
   b.tryToSet(500);
@@ -140,7 +179,7 @@ TEST(BitmapTest, SetHalf) {
   for (size_t i = 2; i <= 2048; i *= 2) {
     const auto nBits = i;
 
-    mesh::internal::Bitmap bitmap{nBits};
+    mesh::internal::RelaxedBitmap bitmap{nBits};
 
     ASSERT_TRUE(bitmap.byteCount() >= nBits / 8);
 
