@@ -215,8 +215,6 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap() const {
 }
 
 void *MeshableArena::pageAlloc(size_t pageCount, void *owner) {
-  lock_guard<mutex> lock(_mutex);
-
   if (pageCount == 0) {
     return nullptr;
   }
@@ -230,11 +228,13 @@ void *MeshableArena::pageAlloc(size_t pageCount, void *owner) {
   const auto off = span.offset;
 
   d_assert(ptrFromOffset(span.offset) < arenaEnd());
+#ifndef NDEBUG
   if (getMetadataPtr(off) != 0) {
     mesh::debug("----\n");
     auto mh = reinterpret_cast<MiniHeap *>(getMetadataPtr(off));
     mh->dumpDebug();
   }
+#endif
   d_assert_msg(getMetadataFlags(off) == 0 && getMetadataPtr(off) == 0, "expected no metadata, found %p/%zu",
                getMetadataPtr(off), getMetadataFlags(off));
 
@@ -246,11 +246,13 @@ void *MeshableArena::pageAlloc(size_t pageCount, void *owner) {
   // under the GlobalHeap lock, so there is no chance of concurrent
   // modification between the loop above and the one below.
   for (size_t i = 0; i < pageCount; i++) {
+#ifndef NDEBUG
     if (getMetadataPtr(off + i) != 0) {
       mesh::debug("----!\n");
       auto mh = reinterpret_cast<MiniHeap *>(getMetadataPtr(off + i));
       mh->dumpDebug();
     }
+#endif
     d_assert_msg(getMetadataFlags(off + i) == 0 && getMetadataPtr(off + i) == 0, "expected no metadata, found %p/%zu",
                  getMetadataPtr(off + i), getMetadataFlags(off + i));
     setMetadata(off + i, internal::PageType::Identity | ownerVal);
@@ -266,8 +268,6 @@ void *MeshableArena::pageAlloc(size_t pageCount, void *owner) {
 }
 
 void MeshableArena::free(void *ptr, size_t sz) {
-  lock_guard<mutex> lock(_mutex);
-
   if (unlikely(!contains(ptr))) {
     debug("invalid free of %p/%zu", ptr, sz);
     return;
@@ -300,8 +300,6 @@ void MeshableArena::free(void *ptr, size_t sz) {
 }
 
 void MeshableArena::scavenge() {
-  lock_guard<mutex> lock(_mutex);
-
   // for all of the virtual spans that were meshed, reset their mappings
   std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
     auto ptr = ptrFromOffset(span.offset);
@@ -356,7 +354,7 @@ void MeshableArena::scavenge() {
     _clean[current.spanClass()].push_back(current);
     // debug("  clean: %4zu/%4zu\n", current.offset, current.length);
   }
-
+#ifndef NDEBUG
   auto newBitmap = allocatedBitmap();
   newBitmap.invert();
 
@@ -370,6 +368,7 @@ void MeshableArena::scavenge() {
       hard_assert(false);
     }
   }
+#endif
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {
@@ -389,14 +388,10 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
 }
 
 void MeshableArena::beginMesh(void *keep, void *remove, size_t sz) {
-  lock_guard<mutex> lock(_mutex);
-
   mprotect(remove, sz, PROT_READ);
 }
 
 void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
-  lock_guard<mutex> lock(_mutex);
-
   // debug("keep: %p, remove: %p\n", keep, remove);
   const auto keepOff = offsetFor(keep);
   const auto removeOff = offsetFor(remove);
