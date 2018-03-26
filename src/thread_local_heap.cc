@@ -63,7 +63,7 @@ void ThreadLocalHeap::freeSlowpath(void *ptr) {
   // results seem to be a wash, and I like the simple non-loopy nature
   // of this approach.
   auto mh = _global->miniheapFor(ptr);
-  if (likely(mh)) {
+  if (likely(mh) && mh->isAttached()) {
     const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
     Freelist &freelist = _freelist[sizeClass];
     if (likely(freelist.getAttached() == mh)) {
