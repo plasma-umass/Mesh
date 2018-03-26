@@ -56,6 +56,7 @@ public:
     // off == maxCount means 'empty'
     _off = _maxCount;
 
+    // TODO: iterate over the bitmap?
     for (size_t i = 0; i < _maxCount; i++) {
       // if we were passed in a bitmap and the current object is
       // already allocated, don't add its offset to the freelist
