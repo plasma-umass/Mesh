@@ -149,6 +149,7 @@ public:
     _end = _start + mh->spanSize();
 
     const auto allocCount = init(prng, mh->writableBitmap());
+    d_assert(allocCount > 0);
 
     // tell the miniheap how many offsets we pulled out/preallocated into our freelist
     mh->incrementInUseCount(allocCount);
