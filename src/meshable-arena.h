@@ -138,7 +138,7 @@ private:
   bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result);
   Span reservePages(Length pageCount);
   void freePhys(void *ptr, size_t sz);
-  internal::RelaxedBitmap allocatedBitmap() const;
+  internal::RelaxedBitmap allocatedBitmap(bool includeDirty = true) const;
 
   void *malloc(size_t sz) = delete;
 

@@ -258,7 +258,14 @@ void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
     return;
   }
 
-  debug("TODO: check for + call program's handler\n");
+  if (siginfo->si_code == SEGV_MAPERR && siginfo->si_addr == nullptr) {
+    debug("libmesh: caught null pointer dereference");
+    abort();
+  }
+
+  // debug("TODO: check for + call program's handler\n");
+  debug("segfault (%u/%p): in arena? %d\n", siginfo->si_code, siginfo->si_addr,
+        runtime().heap().contains(siginfo->si_addr));
   abort();
 }
 
