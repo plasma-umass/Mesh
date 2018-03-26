@@ -212,7 +212,7 @@ private:
 
   // indexed by offset. no need to be atomic, because protected by
   // _mhRWLock.
-  atomic<uintptr_t> *_metadata{nullptr};
+  uintptr_t *_metadata{nullptr};
 
   int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
