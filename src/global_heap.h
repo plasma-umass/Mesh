@@ -274,6 +274,8 @@ public:
   }
 
   inline bool inBounds(void *ptr) const {
+    debug("TODO: I don't think this is correct.");
+
     if (unlikely(ptr == nullptr))
       return false;
 
@@ -398,9 +400,12 @@ public:
   }
 
   inline bool okToProceed(void *ptr) const {
-    // call to inBounds won't return until it was able to grab the
-    // _mhRWLock, which isn't released until meshing is complete.
-    return inBounds(ptr);
+    std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+
+    if (ptr == nullptr)
+      return false;
+
+    return miniheapForLocked(ptr) != nullptr;
   }
 
 protected:
