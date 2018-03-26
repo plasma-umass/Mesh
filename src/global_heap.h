@@ -125,7 +125,6 @@ public:
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
     if (existing != nullptr) {
       existing->ref();
-      existing->reattach();
       return existing;
     }
 
@@ -137,7 +136,6 @@ public:
     const size_t pageCount = PageCount(objectSize * objectCount);
 
     auto mh = allocMiniheap(sizeClass, pageCount, objectCount, objectSize);
-    mh->reattach();
     return mh;
   }
 

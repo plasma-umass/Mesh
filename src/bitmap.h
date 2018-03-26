@@ -123,8 +123,8 @@ protected:
   inline void nullBits() {
   }
 
-  const size_t _bitCount;
   word_t _bits[wordCount(representationSize(maxBits))] = {};
+  const size_t _bitCount;
 };
 
 class RelaxedBitmapBase {

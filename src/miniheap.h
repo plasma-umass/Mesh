@@ -27,8 +27,8 @@ private:
 
 public:
   MiniHeap(void *span, size_t objectCount, size_t objectSize, MWC &fastPrng, size_t expectedSpanSize)
-      : _attached(0),
-        _bitmap(objectCount),
+      : _bitmap(objectCount),
+        _attached(0),
         _objectSize(objectSize),
         _spanSize(dynamicSpanSize()),
         _span{reinterpret_cast<char *>(span)},
@@ -146,7 +146,7 @@ public:
   }
 
   inline void reattach() {
-    _attached = pthread_self();
+    _attached = 1;
   }
 
   /// called when a LocalHeap is done with a MiniHeap (it is
@@ -158,10 +158,6 @@ public:
 
   inline bool isAttached() const {
     return !!_attached;
-  }
-
-  inline bool isOwnedBy(pthread_t thread) const {
-    return pthread_equal(_attached, thread);
   }
 
   inline bool isEmpty() const {
@@ -368,8 +364,8 @@ protected:
     return 0;
   }
 
-  atomic<pthread_t> _attached;  // FIXME: this adds 4 bytes of additional padding
   internal::Bitmap _bitmap;     // 40 bytes
+  atomic<int32_t> _attached;  // FIXME: this adds 4 bytes of additional padding
 
   const uint32_t _objectSize;
   const uint32_t _spanSize;  // max 4 GB span size/allocation size

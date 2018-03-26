@@ -133,6 +133,10 @@ public:
     push(off);
   }
 
+  inline MiniHeap *getAttached() const {
+    return _attachedMiniheap;
+  }
+
   inline bool isAttached() const {
     return _attachedMiniheap != nullptr;
   }
@@ -148,6 +152,7 @@ public:
 
     // tell the miniheap how many offsets we pulled out/preallocated into our freelist
     mh->incrementInUseCount(allocCount);
+    mh->reattach();
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE contains(void *ptr) const {
