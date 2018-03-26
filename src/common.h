@@ -54,8 +54,7 @@ static const double kMeshPeriodSecs = .1;
 // controls aspects of miniheaps
 static constexpr size_t kMaxMeshes = 4;
 
-// static constexpr size_t ArenaSize = 1UL << 35;        // 32 GB
-static constexpr size_t kArenaSize = 1UL << 30;       // 32 GB
+static constexpr size_t kArenaSize = 1UL << 33;       // 8 GB
 static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 #define SIGDUMP (SIGRTMIN + 8)
