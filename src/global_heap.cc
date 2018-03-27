@@ -22,7 +22,7 @@ void *GlobalHeap::malloc(size_t sz) {
 
   std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
-  MiniHeap *mh = allocMiniheap(-1, PageCount(sz), 1, sz);
+  MiniHeap *mh = allocMiniheapLocked(-1, PageCount(sz), 1, sz);
 
   d_assert(mh->maxCount() == 1);
   d_assert(mh->spanSize() == sz);

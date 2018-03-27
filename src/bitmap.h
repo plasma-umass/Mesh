@@ -124,7 +124,7 @@ protected:
   }
 
   word_t _bits[wordCount(representationSize(maxBits))] = {};
-  const size_t _bitCount;
+  const uint32_t _bitCount;
 };
 
 class RelaxedBitmapBase {

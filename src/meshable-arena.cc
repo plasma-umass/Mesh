@@ -203,7 +203,7 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
     for (size_t k = 0; k < span.length; k++) {
 #ifdef NDEBUG
       if (!bitmap.isSet(span.offset + k)) {
-        debug("arena: bit %zu already unset\n", k);
+        debug("arena: bit %zu already unset 1 (%zu/%zu)\n", k, span.offset, span.length);
       }
 #endif
       bitmap.unset(span.offset + k);
@@ -306,21 +306,19 @@ void MeshableArena::free(void *ptr, size_t sz) {
 void MeshableArena::scavenge() {
   // the inverse of the allocated bitmap is all of the spans in _clear
   // (since we just MADV_DONTNEED'ed everything in dirty)
-  auto bitmap = allocatedBitmap();
+  auto bitmap = allocatedBitmap(false);
   bitmap.invert();
 
   auto markPages = [&](const Span span) {
     for (size_t k = 0; k < span.length; k++) {
 #ifndef NDEBUG
       if (bitmap.isSet(span.offset + k)) {
-        debug("arena: bit %zu already unset\n", k);
+        debug("arena: bit %zu already set (%zu/%zu) %zu\n", k, span.offset, span.length, bitmap.bitCount());
       }
 #endif
       bitmap.tryToSet(span.offset + k);
     }
   };
-
-  debug("toReset length: %zu\n", _toReset.size());
 
   // for all of the virtual spans that were meshed, reset their mappings
   std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
