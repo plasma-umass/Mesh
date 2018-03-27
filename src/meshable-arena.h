@@ -142,9 +142,9 @@ private:
 
   void *malloc(size_t sz) = delete;
 
-  static constexpr inline size_t metadataSize() {
+  static constexpr size_t metadataSize() {
     // one pointer per page in our arena
-    return sizeof(uintptr_t) * (kArenaSize / CPUInfo::PageSize);
+    return sizeof(uintptr_t) * (kArenaSize / kPageSize);
   }
 
   int openSpanFile(size_t sz);
@@ -154,11 +154,14 @@ private:
   size_t offsetFor(const void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     const auto arena = reinterpret_cast<uintptr_t>(_arenaBegin);
-    return (ptrval - arena) / CPUInfo::PageSize;
+
+    d_assert(ptrval >= arena);
+
+    return (ptrval - arena) / kPageSize;
   }
 
   void *ptrFromOffset(size_t off) const {
-    return reinterpret_cast<char *>(_arenaBegin) + CPUInfo::PageSize * off;
+    return reinterpret_cast<char *>(_arenaBegin) + off * kPageSize;
   }
 
   inline void setMetadata(size_t off, uintptr_t val) {

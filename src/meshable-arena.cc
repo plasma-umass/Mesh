@@ -324,8 +324,8 @@ void MeshableArena::scavenge() {
   std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
-    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
-    markPages(span);
+    // mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
+    // markPages(span);
   });
 
   _toReset.clear();
@@ -333,8 +333,8 @@ void MeshableArena::scavenge() {
   forEachFree(_dirty, [&](const Span span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
-    madvise(ptr, sz, MADV_DONTNEED);
-    freePhys(ptr, sz);
+    // madvise(ptr, sz, MADV_DONTNEED);
+    // freePhys(ptr, sz);
     markPages(span);
   });
 
