@@ -77,7 +77,7 @@ public:
   }
 
   // must be called with exclusive _mhRWLock held
-  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheap(int sizeClass, size_t pageCount, size_t objectCount,
+  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheapLocked(int sizeClass, size_t pageCount, size_t objectCount,
                                                          size_t objectSize) {
 
     void *buf = _mhAllocator.alloc();
@@ -135,7 +135,7 @@ public:
     const size_t objectCount = max(HL::CPUInfo::PageSize / objectSize, kMinStringLen);
     const size_t pageCount = PageCount(objectSize * objectCount);
 
-    auto mh = allocMiniheap(sizeClass, pageCount, objectCount, objectSize);
+    auto mh = allocMiniheapLocked(sizeClass, pageCount, objectCount, objectSize);
     return mh;
   }
 
@@ -190,6 +190,8 @@ public:
 
     const auto meshCount = mh->meshCount();
     for (size_t i = 0; i < meshCount; i++) {
+      if (i > 0)
+        debug("Super::freeing meshed span\n");
       Super::free(reinterpret_cast<void *>(spans[i]), spanSize);
     }
 
@@ -212,13 +214,11 @@ public:
   }
 
   inline void freeFrom(MiniHeap *mh, void *ptr) {
-    if (!mh) {
+    if (unlikely(!mh)) {
       // FIXME: we should warn/error or something here after we add an
       // aligned allocate API
       return;
     }
-
-    hard_assert(mh != nullptr);
 
     // large objects don't trigger meshing, because they are multiples
     // of the page size

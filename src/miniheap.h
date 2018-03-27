@@ -364,17 +364,18 @@ protected:
     return 0;
   }
 
-  internal::Bitmap _bitmap;     // 40 bytes
-  atomic<int32_t> _attached;  // FIXME: this adds 4 bytes of additional padding
+  internal::Bitmap _bitmap;     // 36 bytes
+  atomic<int32_t> _attached;    // 40
+  mutable atomic<uint32_t> _refCount{1}; // 44
+
+  atomic<uint32_t> _inUseCount{0};  // 48
 
   const uint32_t _objectSize;
-  const uint32_t _spanSize;  // max 4 GB span size/allocation size
+  const uint32_t _spanSize;  // max 4 GB span size/allocation size, 56
   char *_span[kMaxMeshes];
   internal::BinToken _token;
 
-  atomic<uint32_t> _inUseCount{0};  // 60
 
-  mutable atomic<uint32_t> _refCount{1};
   uint32_t _meshCount;  // : 7;
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;  // 16 bytes
@@ -383,8 +384,6 @@ protected:
   internal::Bitmap _bitmap3;  // 16 bytes
 #endif
 };
-
-static_assert(sizeof(pthread_t) == 8, "pthread_t too big");
 
 static_assert(sizeof(mesh::internal::Bitmap) == 40, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
