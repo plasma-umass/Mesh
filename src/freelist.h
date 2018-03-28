@@ -150,7 +150,12 @@ public:
     _end = _start + mh->spanSize();
 
     const auto allocCount = init(prng, mh->writableBitmap());
-    d_assert(allocCount > 0);
+#ifndef NDEBUG
+    if (allocCount == 0) {
+      mh->dumpDebug();
+    }
+#endif
+    d_assert_msg(allocCount > 0, "no free bits in MH %p", mh->getSpanStart());
 
     // tell the miniheap how many offsets we pulled out/preallocated into our freelist
     mh->incrementInUseCount(allocCount);
