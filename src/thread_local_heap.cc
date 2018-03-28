@@ -38,7 +38,7 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
 
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
-  MiniHeap *mh = _global->allocSmallMiniheap(sizeMax);
+  MiniHeap *mh = _global->allocSmallMiniheap(sizeClass, sizeMax);
 
   freelist.attach(_prng, mh);
 

@@ -104,13 +104,10 @@ public:
     return mh;
   }
 
-  inline MiniHeap *allocSmallMiniheap(size_t objectSize) {
+  inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize) {
     std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
     d_assert(objectSize <= _maxObjectSize);
-
-    // TODO: pass in as a parameter
-    const int sizeClass = SizeMap::SizeClass(objectSize);
 
 #ifndef NDEBUG
     const size_t classMaxSize = SizeMap::ByteSizeForClass(sizeClass);
@@ -132,7 +129,7 @@ public:
     // multiple pages to amortize the cost of creating a
     // miniheap/globally locking the heap.  For example, asking for
     // 2048 byte objects would allocate 4 4KB pages.
-    const size_t objectCount = max(HL::CPUInfo::PageSize / objectSize, kMinStringLen);
+    const size_t objectCount = max(kPageSize / objectSize, kMinStringLen);
     const size_t pageCount = PageCount(objectSize * objectCount);
 
     auto mh = allocMiniheapLocked(sizeClass, pageCount, objectCount, objectSize);
