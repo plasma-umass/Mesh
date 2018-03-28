@@ -35,12 +35,14 @@ public:
   }
 
   inline void *alloc() {
-    if (likely(_nextFreelistOff > 0)) {
-      return _freelist[--_nextFreelistOff];
+    if (likely(_freelistOff >= 0)) {
+      const auto ptr = _freelist[_freelistOff];
+      _freelistOff--;
+      return ptr;
     }
 
-    char *ptr = _arena + _arenaOff;
-    _arenaOff += allocSize;
+    char *ptr = _arena + _arenaOff * allocSize;
+    _arenaOff++;
 
     return ptr;
   }
@@ -53,7 +55,8 @@ public:
     d_assert(ptr >= _arena);
     d_assert(ptr < arenaEnd());
 
-    _freelist[_nextFreelistOff++] = ptr;
+    _freelistOff++;
+    _freelist[_freelistOff] = ptr;
   }
 
   inline char *arenaEnd() const {
@@ -64,7 +67,7 @@ protected:
   char *_arena{nullptr};
   void **_freelist{nullptr};
   size_t _arenaOff{0};
-  size_t _nextFreelistOff{0};
+  ssize_t _freelistOff{-1};
 };
 }  // namespace mesh
 
