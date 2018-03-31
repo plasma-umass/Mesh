@@ -82,7 +82,7 @@ public:
     d_assert(_attachedMiniheap != nullptr);
     // auto list = _list;
     // _list = nullptr;
-    _attachedMiniheap->detach();
+    _attachedMiniheap->unref();
     _attachedMiniheap = nullptr;
     _start = 0;
     _end = 0;
@@ -142,8 +142,10 @@ public:
     return _attachedMiniheap != nullptr;
   }
 
+  // an attach takes ownership of the reference to mh
   inline void attach(MWC &prng, MiniHeap *mh) {
     d_assert(_attachedMiniheap == nullptr);
+    d_assert(mh->refcount() > 0);
     _attachedMiniheap = mh;
 
     _start = mh->getSpanStart();
@@ -159,7 +161,6 @@ public:
 
     // tell the miniheap how many offsets we pulled out/preallocated into our freelist
     mh->incrementInUseCount(allocCount);
-    mh->reattach();
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE contains(void *ptr) const {

@@ -32,6 +32,9 @@ ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
 void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
   Freelist &freelist = _freelist[sizeClass];
 
+  // we are in the slowlist because we couldn't allocate out of this
+  // freelist.  If there was an attached miniheap it is now full, so
+  // detach it
   if (likely(freelist.isAttached())) {
     freelist.detach();
   }
@@ -44,11 +47,11 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
 
   d_assert(freelist.isAttached());
   d_assert(!freelist.isExhausted());
-  d_assert(mh->isAttached());
-
-  mh->unref();
+  d_assert(mh->refcount() > 0);
 
   void *ptr = freelist.malloc();
+  d_assert(ptr != nullptr);
+
   _last = &freelist;
 
   return ptr;
@@ -63,11 +66,13 @@ void ThreadLocalHeap::freeSlowpath(void *ptr) {
   // results seem to be a wash, and I like the simple non-loopy nature
   // of this approach.
   auto mh = _global->miniheapFor(ptr);
-  if (likely(mh) && mh->isAttached()) {
+  if (likely(mh) && mh->maxCount() > 1) {
     const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
     Freelist &freelist = _freelist[sizeClass];
     if (likely(freelist.getAttached() == mh)) {
+      d_assert(mh->refcount() > 1);
       mh->unref();
+      d_assert(mh->refcount() > 0);
       freelist.free(ptr);
       _last = &freelist;
       return;

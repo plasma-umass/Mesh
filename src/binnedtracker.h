@@ -112,38 +112,24 @@ public:
   // called after a free through the global heap has happened --
   // miniheap must be unreffed by return
   bool postFree(MiniHeap *mh) {
-    const auto inUseCount = mh->inUseCount();
-    if (unlikely(inUseCount == _objectCount)) {
+    if (mh->refcount() > 1) {
       mh->unref();
       return false;
     }
 
-    if (mh->isAttached()) {
-      mh->unref();
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    const auto oldBinId = mh->getBinToken().bin();
+    const auto newBinId = getBinId(mh->inUseCount());
+
+    mh->unref();
+
+    if (likely(newBinId == oldBinId))
       return false;
-    }
 
-    uint32_t oldBinId;
-    uint32_t newBinId;
+    move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
 
-    {
-      std::lock_guard<std::mutex> lock(_mutex);
-
-      oldBinId = mh->getBinToken().bin();
-      newBinId = getBinId(inUseCount);
-
-      mh->unref();
-
-      if (likely(newBinId == oldBinId))
-        return false;
-
-      move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
-
-      if (newBinId != internal::BinToken::FlagEmpty || _empty.size() < kBinnedTrackerMaxEmpty)
-        return false;
-    }
-
-    return true;
+    return newBinId == internal::BinToken::FlagEmpty && _empty.size() >= kBinnedTrackerMaxEmpty;
   }
 
   void add(MiniHeap *mh) {
@@ -184,7 +170,7 @@ public:
       auto partial = _partial[i];
       for (size_t j = 0; j < partial.size(); j++) {
         MiniHeap *mh = partial[j];
-        if (mh != nullptr && !mh->isAttached())
+        if (mh != nullptr)
           sz += mh->inUseCount();
       }
     }
@@ -228,7 +214,7 @@ public:
       auto partial = _partial[i];
       for (size_t j = 0; j < partial.size(); j++) {
         MiniHeap *mh = partial[j];
-        if (mh != nullptr && !mh->isAttached())
+        if (mh != nullptr)
           mh->printOccupancy();
       }
     }

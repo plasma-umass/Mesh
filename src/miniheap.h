@@ -28,7 +28,6 @@ private:
 public:
   MiniHeap(void *span, size_t objectCount, size_t objectSize, MWC &fastPrng, size_t expectedSpanSize)
       : _bitmap(objectCount),
-        _attached(0),
         _objectSize(objectSize),
         _spanSize(dynamicSpanSize()),
         _span{reinterpret_cast<char *>(span)},
@@ -145,27 +144,16 @@ public:
     _inUseCount += additionalInUse;
   }
 
-  inline void reattach() {
-    _attached = 1;
-  }
-
-  /// called when a LocalHeap is done with a MiniHeap (it is
-  /// "detaching" it and releasing it back to the global heap)
-  inline void detach() {
-    _attached = 0;
-    // atomic_thread_fence(memory_order_seq_cst);
-  }
-
-  inline bool isAttached() const {
-    return !!_attached;
-  }
-
   inline bool isEmpty() const {
     return _inUseCount == 0;
   }
 
   inline size_t inUseCount() const {
     return _inUseCount;
+  }
+
+  inline uint32_t refcount() const {
+    return _refCount.load();
   }
 
   inline void ref() const {
@@ -177,7 +165,7 @@ public:
   }
 
   inline bool isMeshingCandidate() const {
-    return !isAttached() && _refCount == 0 && objectSize() < kPageSize;
+    return _refCount == 0 && objectSize() < kPageSize;
   }
 
   /// Returns the fraction full (in the range [0, 1]) that this miniheap is.
@@ -365,8 +353,7 @@ protected:
   }
 
   internal::Bitmap _bitmap;               // 36 bytes
-  atomic<int32_t> _attached;              // 40
-  mutable atomic<uint32_t> _refCount{1};  // 44
+  mutable atomic<uint32_t> _refCount{1};  // 40?
 
   atomic<uint32_t> _inUseCount{0};  // 48
 
@@ -388,7 +375,7 @@ static_assert(sizeof(mesh::internal::Bitmap) == 40, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
 static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
 #else
-static_assert(sizeof(MiniHeap) == 112, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 }  // namespace mesh

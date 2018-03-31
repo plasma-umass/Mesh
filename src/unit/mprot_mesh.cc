@@ -64,8 +64,6 @@ static void meshTestConcurrentWrite(bool invert) {
   // allocate two miniheaps for the same object size from our global heap
   MiniHeap *mh1 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen);
   MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen);
-  mh1->reattach();
-  mh2->reattach();
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 2UL);
 
