@@ -417,7 +417,7 @@ protected:
 
     _lastMeshEffective = 1;
 
-    // const auto start = std::chrono::high_resolution_clock::now();
+    const auto start = std::chrono::high_resolution_clock::now();
     size_t partialCount = 0;
 
     internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
@@ -463,12 +463,13 @@ protected:
       meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
     }
 
+    Super::scavenge();
+
     _lastMesh = std::chrono::high_resolution_clock::now();
 
-    // const std::chrono::duration<double> duration = _lastMesh - start;
-    // debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
+    const std::chrono::duration<double> duration = _lastMesh - start;
+    debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
 
-    Super::scavenge();
   }
 
   const size_t _maxObjectSize;
