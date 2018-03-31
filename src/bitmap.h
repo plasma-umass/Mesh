@@ -86,8 +86,7 @@ public:
   enum { MaxBitCount = maxBits };
 
 protected:
-  AtomicBitmapBase(size_t bitCount)
-      : _bitCount(bitCount) {
+  AtomicBitmapBase(size_t bitCount) : _bitCount(bitCount) {
     d_assert_msg(_bitCount <= maxBits, "max bits (%zu) exceeded: %zu", maxBits, _bitCount);
   }
 

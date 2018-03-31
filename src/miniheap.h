@@ -364,9 +364,9 @@ protected:
     return 0;
   }
 
-  internal::Bitmap _bitmap;     // 36 bytes
-  atomic<int32_t> _attached;    // 40
-  mutable atomic<uint32_t> _refCount{1}; // 44
+  internal::Bitmap _bitmap;               // 36 bytes
+  atomic<int32_t> _attached;              // 40
+  mutable atomic<uint32_t> _refCount{1};  // 44
 
   atomic<uint32_t> _inUseCount{0};  // 48
 
@@ -374,7 +374,6 @@ protected:
   const uint32_t _spanSize;  // max 4 GB span size/allocation size, 56
   char *_span[kMaxMeshes];
   internal::BinToken _token;
-
 
   uint32_t _meshCount;  // : 7;
 #ifdef MESH_EXTRA_BITS

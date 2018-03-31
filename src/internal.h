@@ -177,7 +177,6 @@ private:
 };
 
 static_assert(sizeof(BinToken) == 8, "BinToken too big!");
-
 }  // namespace internal
 }  // namespace mesh
 
