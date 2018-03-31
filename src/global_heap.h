@@ -78,8 +78,7 @@ public:
 
   // must be called with exclusive _mhRWLock held
   inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheapLocked(int sizeClass, size_t pageCount, size_t objectCount,
-                                                         size_t objectSize) {
-
+                                                               size_t objectSize) {
     void *buf = _mhAllocator.alloc();
     hard_assert(buf != nullptr);
 
@@ -199,10 +198,10 @@ public:
   }
 
   inline void flushBinLocked(size_t sizeClass) {
-      auto emptyMiniheaps = _littleheaps[sizeClass].getFreeMiniheaps();
-      for (size_t i = 0; i < emptyMiniheaps.size(); i++) {
-        freeMiniheapLocked(emptyMiniheaps[i], false);
-      }
+    auto emptyMiniheaps = _littleheaps[sizeClass].getFreeMiniheaps();
+    for (size_t i = 0; i < emptyMiniheaps.size(); i++) {
+      freeMiniheapLocked(emptyMiniheaps[i], false);
+    }
   }
 
   inline void free(void *ptr) {
@@ -469,7 +468,6 @@ protected:
 
     const std::chrono::duration<double> duration = _lastMesh - start;
     debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
-
   }
 
   const size_t _maxObjectSize;
