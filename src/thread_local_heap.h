@@ -94,7 +94,7 @@ public:
 
     for (size_t i = 0; i < kNumBins; i++) {
       Freelist &freelist = _freelist[i];
-      if (freelist.contains(ptr)) {
+      if (likely(freelist.isAttached() && freelist.contains(ptr))) {
         _last = &freelist;
         return freelist.getSize();
       }

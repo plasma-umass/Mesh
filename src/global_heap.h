@@ -121,6 +121,7 @@ public:
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
     if (existing != nullptr) {
       existing->ref();
+      d_assert(existing->refcount() == 1);
       return existing;
     }
 
@@ -225,6 +226,8 @@ public:
       freeMiniheap(mh, false);
       return;
     }
+
+    d_assert(mh->maxCount() > 1);
 
     _lastMeshEffective = 1;
     mh->free(ptr);
