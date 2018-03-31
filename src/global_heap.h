@@ -147,8 +147,9 @@ public:
     std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
 
     auto mh = miniheapForLocked(ptr);
-    if (mh != nullptr)
+    if (likely(mh != nullptr)) {
       mh->ref();
+    }
 
     return mh;
   }
