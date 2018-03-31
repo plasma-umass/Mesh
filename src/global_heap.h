@@ -375,6 +375,7 @@ public:
 
     // make sure we adjust what bin the destination is in -- it might
     // now be full and not a candidate for meshing
+    d_assert(dst->refcount() == 0);
     dst->ref();
     _littleheaps[SizeMap::SizeClass(dst->objectSize())].postFree(dst);
     freeMiniheapAfterMeshLocked(src);
