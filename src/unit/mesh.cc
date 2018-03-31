@@ -79,6 +79,9 @@ static void meshTest(bool invert) {
 
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2, len));
 
+  mh1->unref();
+  mh2->unref();
+
   note("ABOUT TO MESH");
   // mesh the two miniheaps together
   gheap.meshLocked(mh1, mh2);

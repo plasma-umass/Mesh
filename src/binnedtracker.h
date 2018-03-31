@@ -78,9 +78,12 @@ public:
         // this can happen because in use count is updated outside the
         // bin tracker lock -- it may be queued up for reuse.
         if (unlikely(mh->inUseCount() == mh->maxCount())) {
+          debug("I don't know how this could happen");
           continue;
         }
-        return mh;
+        if (likely(mh != nullptr)) {
+          return mh;
+        }
       }
     }
 
@@ -277,15 +280,21 @@ public:
 private:
   // remove and return a MiniHeap uniformly at random from the given vector
   MiniHeap *popRandomLocked(internal::vector<MiniHeap *> &vec) {
-    std::uniform_int_distribution<size_t> distribution(0, vec.size() - 1);
-    const size_t off = distribution(_prng);
+    for (size_t i = 0; i < 8; i++) {
+      std::uniform_int_distribution<size_t> distribution(0, vec.size() - 1);
+      const size_t off = distribution(_prng);
 
-    MiniHeap *mh = vec[off];
-    // when we pop for reuse, we effectively "top off" a MiniHeap, so
-    // it moves into the full bin
-    move(_full, vec, mh, internal::BinToken::FlagFull);
+      MiniHeap *mh = vec[off];
+      if (unlikely(mh->refcount() > 0)) {
+        continue;
+      }
+      // when we pop for reuse, we effectively "top off" a MiniHeap, so
+      // it moves into the full bin
+      move(_full, vec, mh, internal::BinToken::FlagFull);
 
-    return mh;
+      return mh;
+    }
+    return nullptr;
   }
 
   void setMetadata(MiniHeap *mh) {
