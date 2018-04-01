@@ -188,8 +188,8 @@ public:
 
     const auto meshCount = mh->meshCount();
     for (size_t i = 0; i < meshCount; i++) {
-      if (i > 0)
-        debug("Super::freeing meshed span\n");
+      // if (i > 0)
+      //   debug("Super::freeing meshed span\n");
       Super::free(reinterpret_cast<void *>(spans[i]), spanSize);
     }
 

@@ -68,14 +68,10 @@ void ThreadLocalHeap::freeSlowpath(void *ptr) {
     }
   }
   auto mh = _global->miniheapFor(ptr);
+  _global->freeFrom(mh, ptr);
 #else
-  // we used to loop over all attached miniheaps here. Instead, just
-  // lookup the miniheap through the meshable-arena's metadata array.
-  // We end up having to grab the mh RW lock read-only and frob the
-  // miniheap's atomic reference, but we avoid a potentially poorly
-  // predicted loop over all 25 attached feelists.  Performance
-  // results seem to be a wash, and I like the simple non-loopy nature
-  // of this approach.
+  // TODO: I like that this doesn't loop, but it causes us to crash
+  // and I have no idea why.
   auto mh = _global->miniheapFor(ptr);
   if (likely(mh) && mh->maxCount() > 1) {
     const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
@@ -89,8 +85,7 @@ void ThreadLocalHeap::freeSlowpath(void *ptr) {
       return;
     }
   }
-#endif
-
   _global->freeFrom(mh, ptr);
+#endif
 }
 }  // namespace mesh
