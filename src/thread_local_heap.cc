@@ -67,8 +67,7 @@ void ThreadLocalHeap::freeSlowpath(void *ptr) {
       return;
     }
   }
-  auto mh = _global->miniheapFor(ptr);
-  _global->freeFrom(mh, ptr);
+  _global->free(ptr);
 #else
   // TODO: I like that this doesn't loop, but it causes us to crash
   // and I have no idea why.

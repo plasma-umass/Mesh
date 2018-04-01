@@ -139,7 +139,9 @@ public:
   void *malloc(size_t sz);
 
   inline MiniHeap *miniheapForLocked(const void *ptr) const {
-    return reinterpret_cast<MiniHeap *>(Super::lookup(ptr));
+    auto mh = reinterpret_cast<MiniHeap *>(Super::lookup(ptr));
+    __builtin_prefetch(mh, 1, 2);
+    return mh;
   }
 
   // if the MiniHeap is non-null, its reference count is increased by one
@@ -206,11 +208,9 @@ public:
   }
 
   inline void free(void *ptr) {
-    auto mh = miniheapFor(ptr);
-    freeFrom(mh, ptr);
-  }
+    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
 
-  inline void freeFrom(MiniHeap *mh, void *ptr) {
+    auto mh = miniheapForLocked(ptr);
     if (unlikely(!mh)) {
       // FIXME: we should warn/error or something here after we add an
       // aligned allocate API
@@ -222,7 +222,7 @@ public:
     if (mh->objectSize() > kMaxSize) {
       // we need to grab the exclusive lock here, as the read-only
       // lock we took in miniheapFor has already been released
-      freeMiniheap(mh, false);
+      freeMiniheapLocked(mh, false);
       return;
     }
 
@@ -233,23 +233,16 @@ public:
 
     bool shouldConsiderMesh = !mh->isEmpty();
 
-    // unreffed by the bin tracker
-    // mh->unref();
-
     const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
 
-    bool shouldFlush = false;
-    {
-      std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
-      // this may free the miniheap -- we can't safely access it after
-      // this point.
-      shouldFlush = _littleheaps[sizeClass].postFree(mh);
-      mh = nullptr;
+    // this may free the miniheap -- we can't safely access it after
+    // this point.
+    bool shouldFlush = _littleheaps[sizeClass].postFree(mh);
+    mh = nullptr;
 
-      if (unlikely(shouldFlush)) {
-        flushBinLocked(sizeClass);
-        Super::scavenge();
-      }
+    if (unlikely(shouldFlush)) {
+      flushBinLocked(sizeClass);
+      Super::scavenge();
     }
 
     if (shouldConsiderMesh)
@@ -373,7 +366,6 @@ public:
     // make sure we adjust what bin the destination is in -- it might
     // now be full and not a candidate for meshing
     d_assert(dst->refcount() == 0);
-    dst->ref();
     _littleheaps[SizeMap::SizeClass(dst->objectSize())].postFree(dst);
     freeMiniheapAfterMeshLocked(src);
     src = nullptr;
@@ -409,8 +401,6 @@ public:
 protected:
   // check for meshes in all size classes -- must be called unlocked
   void meshAllSizeClasses() {
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
-
     if (!_lastMeshEffective) {
       Super::scavenge();
       return;
