@@ -20,7 +20,7 @@ void *GlobalHeap::malloc(size_t sz) {
     return nullptr;
   }
 
-  std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+  lock_guard<mutex> lock(_miniheapLock);
 
   MiniHeap *mh = allocMiniheapLocked(-1, PageCount(sz), 1, sz);
 
@@ -36,7 +36,7 @@ void *GlobalHeap::malloc(size_t sz) {
 }
 
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-  std::unique_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+  unique_lock<mutex> lock(_miniheapLock);
 
   if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
     return -1;
@@ -51,10 +51,10 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
     _meshPeriod = *newVal;
     // resetNextMeshCheck();
   } else if (strcmp(name, "mesh.compact") == 0) {
-    sharedLock.unlock();
+    lock.unlock();
     meshAllSizeClasses();
     scavenge();
-    sharedLock.lock();
+    lock.lock();
   } else if (strcmp(name, "arena") == 0) {
     // not sure what this should do
   } else if (strcmp(name, "stats.resident") == 0) {

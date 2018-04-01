@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <mutex>
-#include <shared_mutex>
 
 #include "binnedtracker.h"
 #include "internal.h"
@@ -55,7 +54,7 @@ public:
   }
 
   inline void dumpStrings() const {
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    lock_guard<mutex> lock(_miniheapLock);
 
     for (size_t i = 0; i < kNumBins; i++) {
       _littleheaps[i].printOccupancy();
@@ -66,7 +65,7 @@ public:
     if (level < 1)
       return;
 
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    lock_guard<mutex> lock(_miniheapLock);
 
     debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
     debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
@@ -103,7 +102,7 @@ public:
   }
 
   inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize) {
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    lock_guard<mutex> lock(_miniheapLock);
 
     d_assert(objectSize <= _maxObjectSize);
 
@@ -146,7 +145,7 @@ public:
 
   // if the MiniHeap is non-null, its reference count is increased by one
   inline MiniHeap *miniheapFor(const void *ptr) const {
-    std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+    lock_guard<mutex> lock(_miniheapLock);
 
     auto mh = miniheapForLocked(ptr);
     if (likely(mh != nullptr)) {
@@ -179,7 +178,7 @@ public:
   }
 
   void freeMiniheap(MiniHeap *&mh, bool untrack = true) {
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    lock_guard<mutex> lock(_miniheapLock);
     freeMiniheapLocked(mh, untrack);
   }
 
@@ -208,7 +207,7 @@ public:
   }
 
   inline void free(void *ptr) {
-    std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
+    lock_guard<mutex> lock(_miniheapLock);
 
     auto mh = miniheapForLocked(ptr);
     if (unlikely(!mh)) {
@@ -322,7 +321,7 @@ public:
   int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
   size_t getAllocatedMiniheapCount() const {
-    std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+    lock_guard<mutex> lock(_miniheapLock);
     return _miniheapCount;
   }
 
@@ -331,11 +330,13 @@ public:
   }
 
   void lock() {
-    _mhRWLock.lock();
+    _miniheapLock.lock();
+    internal::Heap().lock();
   }
 
   void unlock() {
-    _mhRWLock.unlock();
+    internal::Heap().unlock();
+    _miniheapLock.unlock();
   }
 
   // PUBLIC ONLY FOR TESTING
@@ -390,7 +391,7 @@ public:
   }
 
   inline bool okToProceed(void *ptr) const {
-    std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+    lock_guard<mutex> lock(_miniheapLock);
 
     if (ptr == nullptr)
       return false;
@@ -476,7 +477,7 @@ protected:
 
   BinnedTracker<MiniHeap> _littleheaps[kNumBins];
 
-  mutable std::shared_timed_mutex _mhRWLock{};
+  mutable mutex _miniheapLock{};
 
   GlobalHeapStats _stats{};
 
