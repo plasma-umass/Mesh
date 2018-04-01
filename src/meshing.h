@@ -323,7 +323,7 @@ inline void greedySplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
   }
 }
 
-template <typename T, size_t t = 256>
+template <typename T, size_t t = 64>
 inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
                              const function<void(std::pair<T *, T *> &&)> &meshFound) noexcept {
   if (miniheaps.partialSize() == 0)
@@ -356,7 +356,7 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
       const auto bitmap1 = h1->bitmap().bits();
       const auto bitmap2 = h2->bitmap().bits();
 
-      if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes)) {
+      if (unlikely(mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes))) {
         std::pair<T *, T *> heaps{h1, h2};
         meshFound(std::move(heaps));
         leftBucket[idxLeft] = nullptr;
