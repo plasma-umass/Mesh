@@ -4,8 +4,6 @@
 #ifndef MESH__BINNEDTRACKER_H
 #define MESH__BINNEDTRACKER_H
 
-#include <mutex>
-
 #include "internal.h"
 
 #include "rng/mwc.h"
@@ -45,8 +43,6 @@ public:
 
 #if 0
   MiniHeap *selectForReuse() {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     const auto partialCount = partialSize();
 
     // no partial miniheaps means we should reuse an empty span
@@ -71,8 +67,6 @@ public:
   }
 #else
   MiniHeap *selectForReuse() {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     for (int i = kBinnedTrackerBinCount - 1; i >= 0; i--) {
       while (_partial[i].size() > 0) {
         auto mh = popRandomLocked(_partial[i]);
@@ -98,8 +92,6 @@ public:
 #endif
 
   internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     internal::vector<MiniHeap *> bucket{};
 
     // consider all of our partially filled miniheaps
@@ -126,8 +118,6 @@ public:
       return false;
     }
 
-    std::lock_guard<std::mutex> lock(_mutex);
-
     const auto oldBinId = mh->getBinToken().bin();
     const auto newBinId = getBinId(mh->inUseCount());
 
@@ -142,8 +132,6 @@ public:
   }
 
   void add(MiniHeap *mh) {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     d_assert(mh != nullptr);
 
     if (unlikely(!_hasMetadata))
@@ -154,8 +142,6 @@ public:
   }
 
   void remove(MiniHeap *mh) {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     if (unlikely(!mh->getBinToken().valid())) {
       mesh::debug("ERROR: bad bin token");
       return;
@@ -166,8 +152,6 @@ public:
   }
 
   size_t allocatedObjectCount() const {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     size_t sz = 0;
 
     for (size_t i = 0; i < _full.size(); i++) {
@@ -189,17 +173,14 @@ public:
 
   // number of MiniHeaps we are tracking
   size_t count() const {
-    std::lock_guard<std::mutex> lock(_mutex);
     return _empty.size() + _full.size() + partialSizeLocked();
   }
 
   size_t nonEmptyCount() const {
-    std::lock_guard<std::mutex> lock(_mutex);
     return _full.size() + partialSizeLocked();
   }
 
   size_t partialSize() const {
-    std::lock_guard<std::mutex> lock(_mutex);
     return partialSizeLocked();
   }
 
@@ -212,8 +193,6 @@ public:
   }
 
   void printOccupancy() const {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     for (size_t i = 0; i < _full.size(); i++) {
       if (_full[i] != nullptr)
         _full[i]->printOccupancy();
@@ -232,8 +211,6 @@ public:
   }
 
   void dumpStats(bool beDetailed) const {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     const auto mhCount = count();
 
     if (mhCount == 0) {
@@ -269,16 +246,11 @@ public:
   internal::vector<MiniHeap *> getFreeMiniheaps() {
     internal::vector<MiniHeap *> toFree;
 
-    // ensure we don't call back into the GlobalMeshingHeap with our lock held
-    {
-      std::lock_guard<std::mutex> lock(_mutex);
-
-      for (size_t i = 0; i < _empty.size(); i++) {
-        toFree.push_back(_empty[i]);
-      }
-
-      _empty.clear();
+    for (size_t i = 0; i < _empty.size(); i++) {
+      toFree.push_back(_empty[i]);
     }
+
+    _empty.clear();
 
     return toFree;
   }
@@ -325,7 +297,6 @@ private:
     addTo(to, mh);
   }
 
-  // must be called with _mutex held
   void addTo(internal::vector<MiniHeap *> &vec, MiniHeap *mh) {
     const size_t endOff = vec.size();
 
@@ -340,7 +311,6 @@ private:
     swapTokens(vec[swapOff], vec[endOff]);
   }
 
-  // must be called with _mutex held
   void removeFrom(internal::vector<MiniHeap *> &vec, MiniHeap *mh) {
     // a bug if we try to remove a miniheap from an empty vector
     d_assert(vec.size() > 0);
@@ -398,8 +368,6 @@ private:
   atomic_size_t _highWaterMark{0};
 
   MWC _fastPrng;
-
-  mutable std::mutex _mutex{};
 
   bool _hasMetadata{false};
 };
