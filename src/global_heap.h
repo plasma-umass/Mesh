@@ -241,18 +241,16 @@ public:
 
     bool shouldFlush = false;
     {
-      // FIXME: inefficient
-      std::shared_lock<std::shared_timed_mutex> sharedLock(_mhRWLock);
+      std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
       // this may free the miniheap -- we can't safely access it after
       // this point.
       shouldFlush = _littleheaps[sizeClass].postFree(mh);
       mh = nullptr;
-    }
 
-    if (unlikely(shouldFlush)) {
-      std::unique_lock<std::shared_timed_mutex> exclusiveLock(_mhRWLock);
-      flushBinLocked(sizeClass);
-      Super::scavenge();
+      if (unlikely(shouldFlush)) {
+        flushBinLocked(sizeClass);
+        Super::scavenge();
+      }
     }
 
     if (shouldConsiderMesh)
@@ -421,7 +419,7 @@ protected:
 
     _lastMeshEffective = 1;
 
-    const auto start = std::chrono::high_resolution_clock::now();
+    // const auto start = std::chrono::high_resolution_clock::now();
     size_t partialCount = 0;
 
     internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
@@ -471,8 +469,8 @@ protected:
 
     _lastMesh = std::chrono::high_resolution_clock::now();
 
-    const std::chrono::duration<double> duration = _lastMesh - start;
-    debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
+    // const std::chrono::duration<double> duration = _lastMesh - start;
+    // debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
   }
 
   const size_t _maxObjectSize;
