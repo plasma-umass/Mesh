@@ -148,6 +148,10 @@ public:
     return _inUseCount == 0;
   }
 
+  inline bool isFull() const {
+    return _inUseCount == maxCount();
+  }
+
   inline size_t inUseCount() const {
     return _inUseCount;
   }
