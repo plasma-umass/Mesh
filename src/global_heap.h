@@ -89,7 +89,7 @@ public:
     const size_t spanSize = kPageSize * pageCount;
     d_assert(0 < spanSize);
 
-    MiniHeap *mh = new (buf) MiniHeap(span, objectCount, objectSize, _fastPrng, spanSize);
+    MiniHeap *mh = new (buf) MiniHeap(span, objectCount, objectSize, spanSize);
 
     _miniheapCount++;
 
