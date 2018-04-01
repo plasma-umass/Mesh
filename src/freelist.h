@@ -20,21 +20,6 @@ using mesh::debug;
 
 namespace mesh {
 
-// based on LLVM's libcxx std::shuffle
-template <class _RandomAccessIterator, class _RNG>
-void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RNG &__rng) {
-  typedef typename iterator_traits<_RandomAccessIterator>::difference_type difference_type;
-
-  difference_type __d = __last - __first;
-  if (__d > 1) {
-    for (--__last, --__d; __first < __last; ++__first, --__d) {
-      difference_type __i = __rng.inRange(0, __d);
-      if (__i != difference_type(0))
-        swap(*__first, *(__first + __i));
-    }
-  }
-}
-
 class Freelist {
 private:
   DISALLOW_COPY_AND_ASSIGN(Freelist);
@@ -72,7 +57,7 @@ public:
     }
 
     if (kEnableShuffleFreelist) {
-      mwcShuffle(&_list[_off], &_list[_maxCount], fastPrng);
+      internal::mwcShuffle(&_list[_off], &_list[_maxCount], fastPrng);
     }
 
     return length();

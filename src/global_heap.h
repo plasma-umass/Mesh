@@ -441,7 +441,7 @@ protected:
       // method::greedySplitting(_prng, _littleheaps[i], meshFound);
       // method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
       partialCount += _littleheaps[i].partialSize();
-      method::shiftedSplitting(_prng, _littleheaps[i], meshFound);
+      method::shiftedSplitting(_fastPrng, _littleheaps[i], meshFound);
     }
 
     // more than ~ 1 MB saved
