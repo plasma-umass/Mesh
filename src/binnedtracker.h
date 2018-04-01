@@ -113,15 +113,12 @@ public:
   // called after a free through the global heap has happened --
   // miniheap must be unreffed by return
   bool postFree(MiniHeap *mh) {
-    if (mh->refcount() > 1) {
-      mh->unref();
+    if (mh->refcount() > 0) {
       return false;
     }
 
     const auto oldBinId = mh->getBinToken().bin();
     const auto newBinId = getBinId(mh->inUseCount());
-
-    mh->unref();
 
     if (likely(newBinId == oldBinId))
       return false;
