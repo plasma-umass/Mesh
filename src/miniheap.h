@@ -30,7 +30,7 @@ public:
       : _bitmap(objectCount),
         _objectSize(objectSize),
         _spanSize(dynamicSpanSize()),
-        _span{reinterpret_cast<char *>(span)},
+        _span{reinterpret_cast<char *>(span), 0, 0, 0},
         _meshCount(1)
 #ifdef MESH_EXTRABITS
         ,
@@ -42,8 +42,6 @@ public:
   {
     if (!_span[0])
       abort();
-
-    _inUseCount = 0;
 
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),

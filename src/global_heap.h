@@ -91,12 +91,11 @@ public:
 
     MiniHeap *mh = new (buf) MiniHeap(span, objectCount, objectSize, spanSize);
 
-    _miniheapCount++;
-
     if (sizeClass >= 0)
       trackMiniheapLocked(sizeClass, mh);
 
-    _stats.mhAllocCount++;
+    _miniheapCount++;
+    // _stats.mhAllocCount++;
     //_stats.mhHighWaterMark = max(_miniheaps.size(), _stats.mhHighWaterMark.load());
     //_stats.mhClassHWM[sizeClass] = max(_littleheapCounts[sizeClass], _stats.mhClassHWM[sizeClass].load());
 
