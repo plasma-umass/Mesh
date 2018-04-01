@@ -57,7 +57,7 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
   return ptr;
 }
 
-void ThreadLocalHeap::freeSlowpath(void *ptr) {
+void __attribute__((optimize("unroll-loops"))) ThreadLocalHeap::freeSlowpath(void *ptr) {
 #if 1
   for (size_t i = 0; i < kNumBins; i++) {
     Freelist &freelist = _freelist[i];

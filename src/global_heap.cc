@@ -35,6 +35,48 @@ void *GlobalHeap::malloc(size_t sz) {
   return ptr;
 }
 
+void GlobalHeap::free(void *ptr) {
+  lock_guard<mutex> lock(_miniheapLock);
+
+  auto mh = miniheapForLocked(ptr);
+  if (unlikely(!mh)) {
+    // FIXME: we should warn/error or something here after we add an
+    // aligned allocate API
+    return;
+  }
+
+  // large objects don't trigger meshing, because they are multiples
+  // of the page size
+  if (mh->objectSize() > kMaxSize) {
+    // we need to grab the exclusive lock here, as the read-only
+    // lock we took in miniheapFor has already been released
+    freeMiniheapLocked(mh, false);
+    return;
+  }
+
+  d_assert(mh->maxCount() > 1);
+
+  _lastMeshEffective = 1;
+  mh->free(ptr);
+
+  bool shouldConsiderMesh = !mh->isEmpty();
+
+  const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
+
+  // this may free the miniheap -- we can't safely access it after
+  // this point.
+  bool shouldFlush = _littleheaps[sizeClass].postFree(mh);
+  mh = nullptr;
+
+  if (unlikely(shouldFlush)) {
+    flushBinLocked(sizeClass);
+    Super::scavenge();
+  }
+
+  if (shouldConsiderMesh)
+    maybeMesh();
+}
+
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
   unique_lock<mutex> lock(_miniheapLock);
 
