@@ -58,6 +58,17 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
 }
 
 void ThreadLocalHeap::freeSlowpath(void *ptr) {
+#if 1
+  for (size_t i = 0; i < kNumBins; i++) {
+    Freelist &freelist = _freelist[i];
+    if (freelist.contains(ptr)) {
+      freelist.free(ptr);
+      _last = &freelist;
+      return;
+    }
+  }
+  auto mh = _global->miniheapFor(ptr);
+#else
   // we used to loop over all attached miniheaps here. Instead, just
   // lookup the miniheap through the meshable-arena's metadata array.
   // We end up having to grab the mh RW lock read-only and frob the
@@ -78,6 +89,7 @@ void ThreadLocalHeap::freeSlowpath(void *ptr) {
       return;
     }
   }
+#endif
 
   _global->freeFrom(mh, ptr);
 }
