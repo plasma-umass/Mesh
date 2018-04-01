@@ -295,7 +295,7 @@ void MeshableArena::free(void *ptr, size_t sz) {
     d_assert(span.length > 0);
     _dirty[span.spanClass()].push_back(span);
   } else {
-    debug("delaying resetting meshed mapping\n");
+    //debug("delaying resetting meshed mapping\n");
     // delay restoring the identity mapping
     _toReset.push_back(span);
   }
@@ -324,8 +324,8 @@ void MeshableArena::scavenge() {
   std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
-    // mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
-    // markPages(span);
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
+    markPages(span);
   });
 
   _toReset.clear();
@@ -333,8 +333,8 @@ void MeshableArena::scavenge() {
   forEachFree(_dirty, [&](const Span span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
-    // madvise(ptr, sz, MADV_DONTNEED);
-    // freePhys(ptr, sz);
+     madvise(ptr, sz, MADV_DONTNEED);
+    freePhys(ptr, sz);
     markPages(span);
   });
 
