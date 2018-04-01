@@ -356,8 +356,8 @@ protected:
     return 0;
   }
 
-  internal::Bitmap _bitmap;               // 36 bytes
-  mutable atomic<uint32_t> _refCount{1};  // 40?
+  internal::Bitmap _bitmap;               // 40 bytes
+  mutable atomic<uint32_t> _refCount{1};  // 44
 
   atomic<uint32_t> _inUseCount{0};  // 48
 
