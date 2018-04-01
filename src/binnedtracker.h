@@ -75,15 +75,20 @@ public:
     for (int i = kBinnedTrackerBinCount - 1; i >= 0; i--) {
       while (_partial[i].size() > 0) {
         auto mh = popRandomLocked(_partial[i]);
+        // if we didn't find something in popRandom, break out of the
+        // while loop and try the next fullness size
+        if (unlikely(mh == nullptr)) {
+          break;
+        }
+
         // this can happen because in use count is updated outside the
         // bin tracker lock -- it may be queued up for reuse.
-        if (unlikely(mh->inUseCount() == mh->maxCount())) {
+        if (unlikely(mh->isFull())) {
           debug("I don't know how this could happen");
           continue;
         }
-        if (likely(mh != nullptr)) {
-          return mh;
-        }
+
+        return mh;
       }
     }
 
@@ -280,14 +285,19 @@ public:
 private:
   // remove and return a MiniHeap uniformly at random from the given vector
   MiniHeap *popRandomLocked(internal::vector<MiniHeap *> &vec) {
-    for (size_t i = 0; i < 8; i++) {
+    for (size_t i = 0; i < 16; i++) {
       std::uniform_int_distribution<size_t> distribution(0, vec.size() - 1);
       const size_t off = distribution(_prng);
 
       MiniHeap *mh = vec[off];
+      // we hold the mhRWLock exclusively at this point.  If refcount
+      // is > 0, it means that it is either attached to a freelist or
+      // another thread has a handle to it.  it is not a candidate for
+      // allocation in any case.
       if (unlikely(mh->refcount() > 0)) {
         continue;
       }
+
       // when we pop for reuse, we effectively "top off" a MiniHeap, so
       // it moves into the full bin
       move(_full, vec, mh, internal::BinToken::FlagFull);
