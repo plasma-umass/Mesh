@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #include "common.h"
+#include "rng/mwc.h"
 
 // never allocate exeecutable heap
 #define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)
@@ -120,6 +121,21 @@ typename Map::iterator greatest_leq(Map &m, typename Map::key_type const &k) {
     return --it;
   }
   return m.end();
+}
+
+// based on LLVM's libcxx std::shuffle
+template <class _RandomAccessIterator, class _RNG>
+void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RNG &__rng) {
+  typedef typename iterator_traits<_RandomAccessIterator>::difference_type difference_type;
+
+  difference_type __d = __last - __first;
+  if (__d > 1) {
+    for (--__last, --__d; __first < __last; ++__first, --__d) {
+      difference_type __i = __rng.inRange(0, __d);
+      if (__i != difference_type(0))
+        swap(*__first, *(__first + __i));
+    }
+  }
 }
 
 // BinTokens are stored on MiniHeaps and used by the BinTracker to

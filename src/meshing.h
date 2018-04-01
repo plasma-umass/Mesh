@@ -21,8 +21,25 @@ namespace mesh {
 
 using internal::Bitmap;
 
-bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
-                     size_t len) noexcept;
+inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
+                     size_t byteLen) noexcept {
+  d_assert(reinterpret_cast<uintptr_t>(bitmap1) % 16 == 0);
+  d_assert(reinterpret_cast<uintptr_t>(bitmap2) % 16 == 0);
+  d_assert(byteLen >= 8);
+  d_assert(byteLen % 8 == 0);
+
+  bitmap1 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap1, 16);
+  bitmap2 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap2, 16);
+
+  for (size_t i = 0; i < byteLen / sizeof(size_t); i++) {
+    if ((bitmap1[i] & bitmap2[i]) != 0) {
+      // debug("%zu/%zu bitmap cmp failed: %zx & %zx != 0 (%zx)", i, byteLen, bitmap1[i].load(), bitmap2[i].load(),
+      //       bitmap1[i].load() & bitmap2[i].load());
+      return false;
+    }
+  }
+  return true;
+}
 
 size_t hammingDistance(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
                        size_t len) noexcept;
@@ -171,11 +188,11 @@ inline CutoffTable *generateCutoffs(const size_t len, const double cutoffPercent
 
 // split miniheaps into two lists in a random order
 template <typename T>
-inline void halfSplit(mt19937_64 &prng, BinnedTracker<T> &miniheaps, internal::vector<T *> &left,
+inline void halfSplit(MWC &prng, BinnedTracker<T> &miniheaps, internal::vector<T *> &left,
                       internal::vector<T *> &right) noexcept {
   internal::vector<T *> bucket = miniheaps.meshingCandidates(OccupancyCutoff);
 
-  std::shuffle(bucket.begin(), bucket.end(), prng);
+  internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
 
   for (size_t i = 0; i < bucket.size(); i++) {
     auto mh = bucket[i];
@@ -307,7 +324,7 @@ inline void greedySplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
 }
 
 template <typename T, size_t t = 256>
-inline void shiftedSplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
+inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
                              const function<void(std::pair<T *, T *> &&)> &meshFound) noexcept {
   if (miniheaps.partialSize() == 0)
     return;
