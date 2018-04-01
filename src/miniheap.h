@@ -26,7 +26,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeap);
 
 public:
-  MiniHeap(void *span, size_t objectCount, size_t objectSize, MWC &fastPrng, size_t expectedSpanSize)
+  MiniHeap(void *span, size_t objectCount, size_t objectSize, size_t expectedSpanSize)
       : _bitmap(objectCount),
         _objectSize(objectSize),
         _spanSize(dynamicSpanSize()),

@@ -8,6 +8,8 @@
 
 #include "internal.h"
 
+#include "rng/mwc.h"
+
 // invariants:
 // - MiniHeap only in one one bin in one BinnedTracker
 
@@ -26,7 +28,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(BinnedTracker);
 
 public:
-  BinnedTracker() : _prng(internal::seed()) {
+  BinnedTracker() : _fastPrng(internal::seed(), internal::seed()) {
   }
 
   size_t objectCount() const {
@@ -55,8 +57,7 @@ public:
       return popRandomLocked(_empty);
     }
 
-    std::uniform_int_distribution<size_t> distribution(0, partialCount - 1);
-    const size_t off = distribution(_prng);
+    const size_t off = _fastPrng(0, partialCount - 1);
 
     size_t count = 0;
     for (size_t i = 0; i < kBinnedTrackerBinCount; i++) {
@@ -286,8 +287,7 @@ private:
   // remove and return a MiniHeap uniformly at random from the given vector
   MiniHeap *popRandomLocked(internal::vector<MiniHeap *> &vec) {
     for (size_t i = 0; i < 16; i++) {
-      std::uniform_int_distribution<size_t> distribution(0, vec.size() - 1);
-      const size_t off = distribution(_prng);
+      const size_t off = _fastPrng.inRange(0, vec.size() - 1);
 
       MiniHeap *mh = vec[off];
       // we hold the mhRWLock exclusively at this point.  If refcount
@@ -334,9 +334,7 @@ private:
 
     // endpoint is _inclusive_, so we subtract 1 from size since we're
     // dealing with 0-indexed offsets
-    std::uniform_int_distribution<size_t> distribution(0, vec.size() - 1);
-
-    const size_t swapOff = distribution(_prng);
+    const size_t swapOff = _fastPrng.inRange(0, vec.size() - 1);
 
     std::swap(vec[swapOff], vec[endOff]);
     swapTokens(vec[swapOff], vec[endOff]);
@@ -399,7 +397,8 @@ private:
 
   atomic_size_t _highWaterMark{0};
 
-  mt19937_64 _prng;
+  MWC _fastPrng;
+
   mutable std::mutex _mutex{};
 
   bool _hasMetadata{false};
