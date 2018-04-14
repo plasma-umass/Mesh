@@ -98,7 +98,7 @@ void MeshableArena::expandArena(Length minPagesAdded) {
   _clean[expansion.spanClass()].push_back(expansion);
 }
 
-bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result) {
+bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Length pageAlignment, Span &result) {
   auto found = false;
   for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
     auto &spanList = freeSpans[i];
@@ -112,7 +112,7 @@ bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount],
       // contain) variable-size spans, so we need to make sure we
       // search through all candidates in this case.
       for (size_t j = 0; j < spanList.size() - 1; j++) {
-        if (spanList[j].length >= pageCount) {
+        if (spanList[j].length >= pageCount && (spanList[j].offset % pageAlignment == 0)) {
           std::swap(spanList[j], spanList.back());
           break;
         }
@@ -154,7 +154,7 @@ bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount],
   return found;
 }
 
-Span MeshableArena::reservePages(Length pageCount) {
+Span MeshableArena::reservePages(Length pageCount, Length pageAlignment) {
   d_assert(pageCount >= 1);
 
   Span result(0, 0);
@@ -217,7 +217,7 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
   return bitmap;
 }
 
-void *MeshableArena::pageAlloc(size_t pageCount, void *owner) {
+void *MeshableArena::pageAllocAligned(size_t pageCount, void *owner, size_t pageAlignment) {
   if (pageCount == 0) {
     return nullptr;
   }
@@ -227,7 +227,7 @@ void *MeshableArena::pageAlloc(size_t pageCount, void *owner) {
   d_assert(pageCount >= 1);
   d_assert(pageCount < std::numeric_limits<Length>::max());
 
-  auto span = reservePages(pageCount);
+  auto span = reservePages(pageCount, pageAlignment);
   const auto off = span.offset;
 
   d_assert(ptrFromOffset(span.offset) < arenaEnd());

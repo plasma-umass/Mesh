@@ -97,6 +97,27 @@ extern "C" CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr) {
 }
 #define xxmalloc_usable_size mesh_malloc_usable_size
 
+extern "C" CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment, size_t size)
+#if !defined(__FreeBSD__) && !defined(__SVR4)
+    throw()
+#endif
+{
+  // Check for non power-of-two alignment.
+  if ((alignment == 0) || (alignment & (alignment - 1))) {
+    return nullptr;
+  }
+
+  if (alignment == sizeof(double) || (size <= kPageSize && alignment <= size)) {
+    // the requested alignment will be naturally satisfied by our
+    // malloc implementation.
+    return mesh_malloc(size);
+  } else {
+    const size_t pageAlignment = alignment / kPageSize;
+    const size_t pageCount = PageCount(size);
+    return runtime().heap().pageAlignedAlloc(pageAlignment, pageCount);
+  }
+}
+
 extern "C" {
 size_t mesh_usable_size(void *ptr) {
   return xxmalloc_usable_size(ptr);
