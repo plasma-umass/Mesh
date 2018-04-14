@@ -188,8 +188,6 @@ Span MeshableArena::reservePages(Length pageCount, Length pageAlignment) {
     const auto excess = alignedResult.splitAfter(pageCount);
     freeSpan(excess);
     result = alignedResult;
-    debug("made a real nice aligned alloc of %zu pages w/ %zu alignment: %p", pageCount, pageAlignment,
-          ptrFromOffset(result.offset));
   }
 
   return result;
