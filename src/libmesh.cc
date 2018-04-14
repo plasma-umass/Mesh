@@ -107,12 +107,18 @@ extern "C" CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment, size_t siz
     return nullptr;
   }
 
-  if (alignment == sizeof(double) || (size <= kPageSize && alignment <= size)) {
+  uint32_t sizeClass = 0;
+  const bool isSmall = SizeMap::GetSizeClass(size, &sizeClass);
+  if (alignment == sizeof(double) || (isSmall && SizeMap::ByteSizeForClass(sizeClass) <= kPageSize &&
+                                      alignment <= SizeMap::ByteSizeForClass(sizeClass))) {
     // the requested alignment will be naturally satisfied by our
     // malloc implementation.
-    return mesh_malloc(size);
+    auto ptr = mesh_malloc(size);
+    // but double-check that...
+    d_assert((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0);
+    return ptr;
   } else {
-    const size_t pageAlignment = alignment / kPageSize;
+    const size_t pageAlignment = (alignment + kPageSize - 1) / kPageSize;
     const size_t pageCount = PageCount(size);
     return runtime().heap().pageAlignedAlloc(pageAlignment, pageCount);
   }
