@@ -27,8 +27,7 @@ void GlobalHeap::free(void *ptr) {
 
   auto mh = miniheapForLocked(ptr);
   if (unlikely(!mh)) {
-    // FIXME: we should warn/error or something here after we add an
-    // aligned allocate API
+    debug("FIXME: free of untracked ptr %p", ptr);
     return;
   }
 
