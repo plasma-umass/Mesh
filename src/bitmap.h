@@ -140,6 +140,10 @@ protected:
       : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(internal::Heap().malloc(representationSize(bitCount)))) {
   }
 
+  RelaxedBitmapBase(size_t bitCount, char *backingMemory)
+      : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(backingMemory)) {
+  }
+
   ~RelaxedBitmapBase() {
     if (_bits)
       internal::Heap().free(_bits);
@@ -197,6 +201,11 @@ public:
   typedef BitmapIter<Bitmap> const const_iterator;
 
   explicit BitmapBase(size_t bitCount) : Super(bitCount) {
+    d_assert(Super::_bits != nullptr);
+    clear();
+  }
+
+  explicit BitmapBase(size_t bitCount, char *backingMemory) : Super(bitCount) {
     d_assert(Super::_bits != nullptr);
     clear();
   }
@@ -379,7 +388,8 @@ public:
     uint32_t startWord, startOff;
     computeItemPosition(startingAt, startWord, startOff);
 
-    for (size_t i = startWord; i < byteCount(); i++) {
+    const auto wordCount = byteCount() / sizeof(size_t);
+    for (size_t i = startWord; i < wordCount; i++) {
       const auto mask = ~((1UL << startOff) - 1);
       const auto bits = Super::_bits[i] & mask;
       startOff = 0;
