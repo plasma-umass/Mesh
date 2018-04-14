@@ -6,6 +6,7 @@
 #define MESH__INTERNAL_H
 
 #include <atomic>
+#include <unordered_set>
 
 #include <signal.h>
 #include <stdint.h>
@@ -94,6 +95,9 @@ extern STLAllocator<char, Heap> allocator;
 
 template <typename K, typename V>
 using unordered_map = std::unordered_map<K, V, hash<K>, equal_to<K>, STLAllocator<pair<const K, V>, Heap>>;
+
+template <typename K>
+using unordered_set = std::unordered_set<K, hash<K>, equal_to<K>, STLAllocator<K, Heap>>;
 
 template <typename K, typename V>
 using map = std::map<K, V, std::less<K>, STLAllocator<pair<const K, V>, Heap>>;
