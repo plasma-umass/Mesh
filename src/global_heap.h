@@ -101,6 +101,26 @@ public:
     return mh;
   }
 
+  inline void *pageAlignedAlloc(size_t pageAlignment, size_t pageCount) {
+    lock_guard<mutex> lock(_miniheapLock);
+
+    // get pageCount + 2 * pageAlignment
+
+    // Try to just allocate an object of the requested size.
+    // If it happens to be aligned properly, just return it.
+    void *ptr = xxmalloc(size);
+    if (((size_t)ptr & ~(alignment - 1)) == (size_t)ptr) {
+      // It is already aligned just fine; return it.
+      return ptr;
+    }
+    // It was not aligned as requested: free the object and allocate a big one.
+    CUSTOM_FREE(ptr);
+    ptr = xxmalloc(size + 2 * alignment);
+    void *alignedPtr = (void *)(((size_t)ptr + alignment - 1) & ~(alignment - 1));
+    return alignedPtr;
+
+  }
+
   inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize) {
     lock_guard<mutex> lock(_miniheapLock);
 

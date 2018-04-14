@@ -112,7 +112,7 @@ public:
     return arena <= ptrval && ptrval < arena + kArenaSize;
   }
 
-  void *pageAlloc(size_t pageCount, void *owner);
+  void *pageAlloc(size_t pageCount, void *owner, size_t pageAlignment = 1);
   void free(void *ptr, size_t sz);
 
   inline void *lookup(const void *ptr) const {
@@ -135,8 +135,8 @@ protected:
 
 private:
   void expandArena(Length minPagesAdded);
-  bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result);
-  Span reservePages(Length pageCount);
+  bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Length pageAlignment, Span &result);
+  Span reservePages(Length pageCount, Length pageAlignment);
   void freePhys(void *ptr, size_t sz);
   internal::RelaxedBitmap allocatedBitmap(bool includeDirty = true) const;
 
