@@ -182,9 +182,9 @@ private:
   char *openSpanDir(int pid);
 
   // pointer must already have been checked by `contains()` for bounds
-  inline size_t offsetFor(const void *ptr) const {
-    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    const auto arena = reinterpret_cast<uintptr_t>(_arenaBegin);
+  inline Length offsetFor(const void *ptr) const {
+    const uintptr_t ptrval = reinterpret_cast<uintptr_t>(ptr);
+    const uintptr_t arena = reinterpret_cast<uintptr_t>(_arenaBegin);
 
     d_assert(ptrval >= arena);
 
@@ -229,6 +229,20 @@ private:
     }
   }
 
+  inline void trackMeshed(Span span) {
+    for (size_t i = 0; i < span.length; i++) {
+      d_assert(!_meshedBitmap.isSet(span.offset + i));
+      _meshedBitmap.tryToSet(span.offset + i);
+    }
+  }
+
+  inline void untrackMeshed(Span span) {
+    for (size_t i = 0; i < span.length; i++) {
+      d_assert(_meshedBitmap.isSet(span.offset + i));
+      _meshedBitmap.unset(span.offset + i);
+    }
+  }
+
   void prepareForFork();
   void afterForkParent();
   void afterForkChild();
@@ -247,6 +261,9 @@ private:
   internal::vector<Span> _dirty[kSpanClassCount];
 
   Offset _end{};  // in pages
+
+  internal::RelaxedBitmap _meshedBitmap{kArenaSize / kPageSize,
+                                        reinterpret_cast<char *>(OneWayMmapHeap().malloc(kArenaSize / kPageSize / 8))};
 
   // indexed by offset. no need to be atomic, because protected by
   // _mhRWLock.

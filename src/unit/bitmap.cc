@@ -19,6 +19,16 @@ TEST(BitmapTest, RepresentationSize) {
   ASSERT_EQ(4, mesh::bitmap::representationSize(256)/sizeof(size_t));
 }
 
+TEST(BitmapTest, LowestSetBitAt) {
+  mesh::internal::RelaxedBitmap bits{128};
+
+  bits.tryToSet(6);
+  ASSERT_EQ(6, bits.lowestSetBitAt(0));
+  ASSERT_EQ(6, bits.lowestSetBitAt(5));
+  ASSERT_EQ(6, bits.lowestSetBitAt(6));
+  ASSERT_EQ(128, bits.lowestSetBitAt(7));
+}
+
 TEST(BitmapTest, SetGet) {
   const int NTRIALS = 1000;
 

@@ -321,14 +321,36 @@ void MeshableArena::scavenge() {
     }
   };
 
-  // for all of the virtual spans that were meshed, reset their mappings
+  // first, untrack the spans in the meshed bitmap and mark them in
+  // the (method-local) unallocated bitmap
   std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
-    auto ptr = ptrFromOffset(span.offset);
-    auto sz = span.byteLength();
-    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
+    untrackMeshed(span);
     markPages(span);
   });
 
+  {
+    internal::unordered_set<Offset> remappedStarts{};
+
+    std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
+      // TODO: find the last unset bit <= span.offset, and first unset bit > span
+
+      Offset nextMeshedOffset = _meshedBitmap.lowestSetBitAt(span.offset + span.length);
+      if (nextMeshedOffset > _end)
+        nextMeshedOffset = _end;
+      const Span expandedSpan{span.offset, span.length};
+      if (remappedStarts.find(expandedSpan.offset) != remappedStarts.end()) {
+        debug("skipping span that has already been remapped.");
+      }
+
+      remappedStarts.insert(expandedSpan.offset);
+      auto ptr = ptrFromOffset(expandedSpan.offset);
+      auto sz = expandedSpan.byteLength();
+      mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
+    });
+  }
+
+  // now that we've finally reset to identity all delayed-reset
+  // mappings, empty the list
   _toReset.clear();
 
   forEachFree(_dirty, [&](const Span span) {
@@ -414,10 +436,15 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   d_assert(getMetadataFlags(keepOff) == internal::PageType::Identity);
   d_assert(getMetadataFlags(removeOff) != internal::PageType::Unallocated);
 
-  const auto pageCount = sz / kPageSize;
+  const Length pageCount = sz / kPageSize;
   for (size_t i = 0; i < pageCount; i++) {
+    // TODO: remove duplication of meshed metadata between the low
+    // bits here and the meshed bitmap
     setMetadata(removeOff + i, internal::PageType::Meshed | getMetadataPtr(keepOff));
   }
+
+  const Span removedSpan{removeOff, pageCount};
+  trackMeshed(removedSpan);
 
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * kPageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
