@@ -77,13 +77,14 @@ public:
 
   // must be called with exclusive _mhRWLock held
   inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheapLocked(int sizeClass, size_t pageCount, size_t objectCount,
-                                                               size_t objectSize) {
+                                                               size_t objectSize, size_t pageAlignment = 1) {
     void *buf = _mhAllocator.alloc();
     hard_assert(buf != nullptr);
 
     // allocate out of the arena
-    void *span = Super::pageAlloc(pageCount, buf);
+    void *span = Super::pageAlloc(pageCount, buf, pageAlignment);
     hard_assert(span != nullptr);
+    d_assert((reinterpret_cast<uintptr_t>(span) / kPageSize) % pageAlignment == 0);
 
     const size_t spanSize = kPageSize * pageCount;
     d_assert(0 < spanSize);
@@ -104,21 +105,17 @@ public:
   inline void *pageAlignedAlloc(size_t pageAlignment, size_t pageCount) {
     lock_guard<mutex> lock(_miniheapLock);
 
-    // get pageCount + 2 * pageAlignment
+    MiniHeap *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * kPageSize, pageAlignment);
 
-    // Try to just allocate an object of the requested size.
-    // If it happens to be aligned properly, just return it.
-    void *ptr = xxmalloc(size);
-    if (((size_t)ptr & ~(alignment - 1)) == (size_t)ptr) {
-      // It is already aligned just fine; return it.
-      return ptr;
-    }
-    // It was not aligned as requested: free the object and allocate a big one.
-    CUSTOM_FREE(ptr);
-    ptr = xxmalloc(size + 2 * alignment);
-    void *alignedPtr = (void *)(((size_t)ptr + alignment - 1) & ~(alignment - 1));
-    return alignedPtr;
+    d_assert(mh->maxCount() == 1);
+    d_assert(mh->spanSize() == pageCount * kPageSize);
+    d_assert(mh->objectSize() == pageCount * kPageSize);
 
+    void *ptr = mh->mallocAt(0);
+
+    mh->unref();
+
+    return ptr;
   }
 
   inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize) {

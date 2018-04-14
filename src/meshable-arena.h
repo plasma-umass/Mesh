@@ -135,23 +135,54 @@ protected:
 
 private:
   void expandArena(Length minPagesAdded);
-  bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Length pageAlignment, Span &result);
+  bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result);
   Span reservePages(Length pageCount, Length pageAlignment);
   void freePhys(void *ptr, size_t sz);
   internal::RelaxedBitmap allocatedBitmap(bool includeDirty = true) const;
 
   void *malloc(size_t sz) = delete;
 
+  inline bool isAligned(Span span, Length pageAlignment) const {
+    return ptrvalFromOffset(span.offset) % (pageAlignment * kPageSize) == 0;
+  }
+
   static constexpr size_t metadataSize() {
     // one pointer per page in our arena
     return sizeof(uintptr_t) * (kArenaSize / kPageSize);
+  }
+
+  inline void freeSpan(Span span) {
+    if (span.length == 0) {
+      return;
+    }
+
+    const uint8_t flags = getMetadataFlags(span.offset);
+
+    for (size_t i = 0; i < span.length; i++) {
+      // clear the miniheap pointers we were tracking
+      setMetadata(span.offset + i, 0);
+    }
+
+    if (flags == internal::PageType::Identity) {
+      if (kAdviseDump) {
+        madvise(ptrFromOffset(span.offset), span.length * kPageSize, MADV_DONTDUMP);
+      }
+      d_assert(span.length > 0);
+      _dirty[span.spanClass()].push_back(span);
+    } else {
+      // debug("delaying resetting meshed mapping\n");
+      // delay restoring the identity mapping
+      _toReset.push_back(span);
+    }
+
+    // debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
   }
 
   int openSpanFile(size_t sz);
   char *openSpanDir(int pid);
 
   // pointer must already have been checked by `contains()` for bounds
-  size_t offsetFor(const void *ptr) const {
+  inline size_t offsetFor(const void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     const auto arena = reinterpret_cast<uintptr_t>(_arenaBegin);
 
@@ -160,8 +191,12 @@ private:
     return (ptrval - arena) / kPageSize;
   }
 
-  void *ptrFromOffset(size_t off) const {
-    return reinterpret_cast<char *>(_arenaBegin) + off * kPageSize;
+  inline uintptr_t ptrvalFromOffset(size_t off) const {
+    return reinterpret_cast<uintptr_t>(_arenaBegin) + off * kPageSize;
+  }
+
+  inline void *ptrFromOffset(size_t off) const {
+    return reinterpret_cast<void *>(ptrvalFromOffset(off));
   }
 
   inline void setMetadata(size_t off, uintptr_t val) {

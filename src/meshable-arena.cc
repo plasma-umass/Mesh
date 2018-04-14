@@ -98,7 +98,7 @@ void MeshableArena::expandArena(Length minPagesAdded) {
   _clean[expansion.spanClass()].push_back(expansion);
 }
 
-bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Length pageAlignment, Span &result) {
+bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result) {
   auto found = false;
   for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
     auto &spanList = freeSpans[i];
@@ -112,7 +112,7 @@ bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount],
       // contain) variable-size spans, so we need to make sure we
       // search through all candidates in this case.
       for (size_t j = 0; j < spanList.size() - 1; j++) {
-        if (spanList[j].length >= pageCount && (spanList[j].offset % pageAlignment == 0)) {
+        if (spanList[j].length >= pageCount) {
           std::swap(spanList[j], spanList.back());
           break;
         }
@@ -170,6 +170,28 @@ Span MeshableArena::reservePages(Length pageCount, Length pageAlignment) {
 
   d_assert(!result.empty());
 
+  if (unlikely(pageAlignment > 1 && result.offset % pageAlignment != 0)) {
+    freeSpan(result);
+    // recurse once, asking for enough extra space that we are sure to
+    // be able to find an aligned offset of pageCount pages within.
+    result = reservePages(pageCount + 2 * pageAlignment, 1);
+
+    const size_t alignment = pageAlignment * kPageSize;
+    const uintptr_t alignedPtr = (ptrvalFromOffset(result.offset) + alignment - 1) & ~(alignment - 1);
+    const auto alignedOff = offsetFor(reinterpret_cast<void *>(alignedPtr));
+    d_assert(alignedOff >= result.offset);
+    d_assert(alignedOff < result.offset + result.length);
+    const auto unwantedPageCount = alignedOff - result.offset;
+    auto alignedResult = result.splitAfter(unwantedPageCount);
+    d_assert(alignedResult.offset == alignedOff);
+    freeSpan(result);
+    const auto excess = alignedResult.splitAfter(pageCount);
+    freeSpan(excess);
+    result = alignedResult;
+    debug("made a real nice aligned alloc of %zu pages w/ %zu alignment: %p", pageCount, pageAlignment,
+          ptrFromOffset(result.offset));
+  }
+
   return result;
 }
 
@@ -217,7 +239,7 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
   return bitmap;
 }
 
-void *MeshableArena::pageAllocAligned(size_t pageCount, void *owner, size_t pageAlignment) {
+void *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignment) {
   if (pageCount == 0) {
     return nullptr;
   }
@@ -281,26 +303,7 @@ void MeshableArena::free(void *ptr, size_t sz) {
   d_assert(sz % kPageSize == 0);
 
   const Span span(offsetFor(ptr), sz / kPageSize);
-  const uint8_t flags = getMetadataFlags(span.offset);
-
-  for (size_t i = 0; i < span.length; i++) {
-    // clear the miniheap pointers we were tracking
-    setMetadata(span.offset + i, 0);
-  }
-
-  if (flags == internal::PageType::Identity) {
-    if (kAdviseDump) {
-      madvise(ptr, sz, MADV_DONTDUMP);
-    }
-    d_assert(span.length > 0);
-    _dirty[span.spanClass()].push_back(span);
-  } else {
-    // debug("delaying resetting meshed mapping\n");
-    // delay restoring the identity mapping
-    _toReset.push_back(span);
-  }
-
-  // debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
+  freeSpan(span);
 }
 
 void MeshableArena::scavenge() {

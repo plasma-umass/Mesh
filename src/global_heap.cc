@@ -12,27 +12,14 @@ void *GlobalHeap::malloc(size_t sz) {
   }
 #endif
 
-  // ensure we are asking for a multiple of the page size
-  sz = RoundUpToPage(sz);
+  const auto pageCount = PageCount(sz);
 
   // prevent integer underflows
-  if (unlikely(sz > INT_MAX)) {
+  if (unlikely(pageCount * kPageSize > INT_MAX)) {
     return nullptr;
   }
 
-  lock_guard<mutex> lock(_miniheapLock);
-
-  MiniHeap *mh = allocMiniheapLocked(-1, PageCount(sz), 1, sz);
-
-  d_assert(mh->maxCount() == 1);
-  d_assert(mh->spanSize() == sz);
-  d_assert(mh->objectSize() == sz);
-
-  void *ptr = mh->mallocAt(0);
-
-  mh->unref();
-
-  return ptr;
+  return pageAlignedAlloc(1, pageCount);
 }
 
 void GlobalHeap::free(void *ptr) {
@@ -45,9 +32,11 @@ void GlobalHeap::free(void *ptr) {
     return;
   }
 
-  // large objects don't trigger meshing, because they are multiples
-  // of the page size
-  if (mh->objectSize() > kMaxSize) {
+  // large objects are tracked with a miniheap per object and don't
+  // trigger meshing, because they are multiples of the page size.
+  // This can also include, for example, single page allocations w/
+  // 16KB alignment.
+  if (mh->maxCount() == 1) {
     // we need to grab the exclusive lock here, as the read-only
     // lock we took in miniheapFor has already been released
     freeMiniheapLocked(mh, false);

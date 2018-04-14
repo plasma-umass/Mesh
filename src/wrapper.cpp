@@ -127,7 +127,6 @@ void xxmalloc_unlock();
 #include <stdio.h>
 
 extern "C" void *MYCDECL CUSTOM_MALLOC(size_t);
-extern "C" void *MYCDECL CUSTOM_CALLOC(size_t nelem, size_t elsize);
 
 extern "C" void *MYCDECL CUSTOM_CALLOC(size_t nelem, size_t elsize) {
   size_t n = nelem * elsize;
@@ -145,6 +144,7 @@ extern "C" void *MYCDECL CUSTOM_CALLOC(size_t nelem, size_t elsize) {
   return ptr;
 }
 
+#if !defined(_WIN32)
 extern "C" int CUSTOM_POSIX_MEMALIGN(void **memptr, size_t alignment, size_t size)
 #if !defined(__FreeBSD__) && !defined(__SVR4)
     throw()
