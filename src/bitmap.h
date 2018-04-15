@@ -406,6 +406,32 @@ public:
     return bitCount();
   }
 
+  size_t highestSetBitBeforeOrAt(uint64_t startingAt) const {
+    uint32_t startWord, startOff;
+    computeItemPosition(startingAt, startWord, startOff);
+
+    const auto wordCount = byteCount() / sizeof(size_t);
+    for (ssize_t i = startWord; i >= 0; i--) {
+      uint64_t mask = (1UL << (startOff + 1)) - 1;
+      if (startOff == 63) {
+        mask = ~0UL;
+      }
+      const auto bits = Super::_bits[i] & mask;
+      const auto origStartOff = startOff;
+      startOff = 63;
+
+      if (bits == 0ULL)
+        continue;
+
+      const size_t off = 64 - __builtin_clzl(bits) - 1;
+
+      const auto bit = kWordBits * i + off;
+      return bit < bitCount() ? bit : bitCount();
+    }
+
+    return 0;
+  }
+
 private:
   /// Given an index, compute its item (word) and position within the word.
   inline void computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
