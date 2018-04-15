@@ -27,6 +27,21 @@ TEST(BitmapTest, LowestSetBitAt) {
   ASSERT_EQ(6, bits.lowestSetBitAt(5));
   ASSERT_EQ(6, bits.lowestSetBitAt(6));
   ASSERT_EQ(128, bits.lowestSetBitAt(7));
+  bits.tryToSet(123);
+  ASSERT_EQ(123, bits.lowestSetBitAt(7));
+}
+
+TEST(BitmapTest, HighestSetBitAt) {
+  mesh::internal::RelaxedBitmap bits{128};
+
+  bits.tryToSet(6);
+  ASSERT_EQ(0, bits.highestSetBitBeforeOrAt(0));
+  ASSERT_EQ(0, bits.highestSetBitBeforeOrAt(5));
+  ASSERT_EQ(6, bits.highestSetBitBeforeOrAt(6));
+  ASSERT_EQ(6, bits.highestSetBitBeforeOrAt(7));
+  ASSERT_EQ(6, bits.highestSetBitBeforeOrAt(127));
+  bits.tryToSet(123);
+  ASSERT_EQ(123, bits.highestSetBitBeforeOrAt(127));
 }
 
 TEST(BitmapTest, SetGet) {
