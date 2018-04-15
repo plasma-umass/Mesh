@@ -170,7 +170,7 @@ Span MeshableArena::reservePages(Length pageCount, Length pageAlignment) {
 
   d_assert(!result.empty());
 
-  if (unlikely(pageAlignment > 1 && result.offset % pageAlignment != 0)) {
+  if (unlikely(pageAlignment > 1 && ((ptrvalFromOffset(result.offset) / kPageSize) % pageAlignment != 0))) {
     freeSpan(result);
     // recurse once, asking for enough extra space that we are sure to
     // be able to find an aligned offset of pageCount pages within.
@@ -248,6 +248,8 @@ void *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignme
   d_assert(pageCount < std::numeric_limits<Length>::max());
 
   auto span = reservePages(pageCount, pageAlignment);
+  d_assert((reinterpret_cast<uintptr_t>(ptrFromOffset(span.offset)) / kPageSize) % pageAlignment == 0);
+
   const auto off = span.offset;
 
   d_assert(ptrFromOffset(span.offset) < arenaEnd());
