@@ -332,20 +332,26 @@ void MeshableArena::scavenge() {
     internal::unordered_set<Offset> remappedStarts{};
 
     std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
-      // TODO: find the last unset bit <= span.offset, and first unset bit > span
-
+      Offset startMeshedOffset = _meshedBitmap.highestSetBitBeforeOrAt(span.offset);
+      // might be 0
+      if (_meshedBitmap.isSet(startMeshedOffset)) {
+        startMeshedOffset++;
+      }
       Offset nextMeshedOffset = _meshedBitmap.lowestSetBitAt(span.offset + span.length);
       if (nextMeshedOffset > _end)
         nextMeshedOffset = _end;
-      const Span expandedSpan{span.offset, span.length};
+      const Span expandedSpan{startMeshedOffset, nextMeshedOffset - startMeshedOffset};
+
+      debug("resetting mapping for %u-%u (%u pages, %u end)", expandedSpan.offset, expandedSpan.offset + expandedSpan.length, expandedSpan.length, _end);
       if (remappedStarts.find(expandedSpan.offset) != remappedStarts.end()) {
         debug("skipping span that has already been remapped.");
+        return;
       }
 
       remappedStarts.insert(expandedSpan.offset);
       auto ptr = ptrFromOffset(expandedSpan.offset);
       auto sz = expandedSpan.byteLength();
-      mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
+      mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, expandedSpan.offset * kPageSize);
     });
   }
 

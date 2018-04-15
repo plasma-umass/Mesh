@@ -231,7 +231,8 @@ private:
 
   inline void trackMeshed(Span span) {
     for (size_t i = 0; i < span.length; i++) {
-      d_assert(!_meshedBitmap.isSet(span.offset + i));
+      // this may already be 1 if it was a meshed virtual span that is
+      // now being re-meshed to a new owning miniheap
       _meshedBitmap.tryToSet(span.offset + i);
     }
   }
