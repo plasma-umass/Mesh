@@ -157,6 +157,12 @@ private:
     }
 
     const uint8_t flags = getMetadataFlags(span.offset);
+    // this happens when we are trying to get an aligned allocation
+    // and returning excess back to the arena
+    if (flags == internal::PageType::Unallocated) {
+      _clean[span.spanClass()].push_back(span);
+      return;
+    }
 
     for (size_t i = 0; i < span.length; i++) {
       // clear the miniheap pointers we were tracking
@@ -169,7 +175,7 @@ private:
       }
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
-    } else {
+    } else if (flags == internal::PageType::Meshed) {
       // debug("delaying resetting meshed mapping\n");
       // delay restoring the identity mapping
       _toReset.push_back(span);
@@ -263,8 +269,9 @@ private:
 
   Offset _end{};  // in pages
 
-  internal::RelaxedBitmap _meshedBitmap{kArenaSize / kPageSize,
-                                        reinterpret_cast<char *>(OneWayMmapHeap().malloc(kArenaSize / kPageSize / 8))};
+  internal::RelaxedBitmap _meshedBitmap{
+      kArenaSize / kPageSize,
+      reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSize)))};
 
   // indexed by offset. no need to be atomic, because protected by
   // _mhRWLock.

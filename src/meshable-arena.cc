@@ -344,7 +344,8 @@ void MeshableArena::scavenge() {
         nextMeshedOffset = _end;
       const Span expandedSpan{startMeshedOffset, nextMeshedOffset - startMeshedOffset};
 
-      debug("resetting mapping for %u-%u (%u pages, %u end)", expandedSpan.offset, expandedSpan.offset + expandedSpan.length, expandedSpan.length, _end);
+      debug("resetting mapping for %u-%u (%u pages, originally %u)", expandedSpan.offset,
+            expandedSpan.offset + expandedSpan.length, expandedSpan.length, span.length);
       if (remappedStarts.find(expandedSpan.offset) != remappedStarts.end()) {
         debug("skipping span that has already been remapped.");
         return;
