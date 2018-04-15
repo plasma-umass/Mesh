@@ -98,73 +98,77 @@ void MeshableArena::expandArena(Length minPagesAdded) {
   _clean[expansion.spanClass()].push_back(expansion);
 }
 
-bool MeshableArena::findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result) {
-  auto found = false;
-  for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
-    auto &spanList = freeSpans[i];
-    if (spanList.empty())
-      continue;
+bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i, Length pageCount, Span &result) {
+  internal::vector<Span> &spanList = freeSpans[i];
+  if (spanList.empty())
+    return false;
 
-    size_t oldLen = spanList.size();
+  size_t oldLen = spanList.size();
 
-    if (i == kSpanClassCount - 1 && spanList.back().length < pageCount) {
-      // the final span class contains (and is the only class to
-      // contain) variable-size spans, so we need to make sure we
-      // search through all candidates in this case.
-      for (size_t j = 0; j < spanList.size() - 1; j++) {
-        if (spanList[j].length >= pageCount) {
-          std::swap(spanList[j], spanList.back());
-          break;
-        }
-      }
-
-      // check that we found something in the above loop.this would be
-      // our last loop iteration anyway
-      if (spanList.back().length < pageCount) {
-        return false;
+  if (i == kSpanClassCount - 1 && spanList.back().length < pageCount) {
+    // the final span class contains (and is the only class to
+    // contain) variable-size spans, so we need to make sure we
+    // search through all candidates in this case.
+    for (size_t j = 0; j < spanList.size() - 1; j++) {
+      if (spanList[j].length >= pageCount) {
+        std::swap(spanList[j], spanList.back());
+        break;
       }
     }
 
-    Span span = spanList.back();
-    spanList.pop_back();
-
-#ifndef NDEBUG
-    d_assert_msg(oldLen == spanList.size() + 1, "pageCount:%zu,%zu -- %zu/%zu", pageCount, i, oldLen, spanList.size());
-    for (size_t j = 0; j < spanList.size(); j++) {
-      d_assert(spanList[j] != span);
+    // check that we found something in the above loop.this would be
+    // our last loop iteration anyway
+    if (spanList.back().length < pageCount) {
+      return false;
     }
-#endif
-
-    // this invariant should be maintained
-    d_assert(span.length >= i + 1);
-    d_assert(span.length >= pageCount);
-
-    // put the part we don't need back in the reuse pile
-    Span rest = span.splitAfter(pageCount);
-    if (!rest.empty()) {
-      freeSpans[rest.spanClass()].push_back(rest);
-    }
-    d_assert(span.length == pageCount);
-
-    result = span;
-    found = true;
-    break;
   }
 
-  return found;
+  Span span = spanList.back();
+  spanList.pop_back();
+
+#ifndef NDEBUG
+  d_assert_msg(oldLen == spanList.size() + 1, "pageCount:%zu,%zu -- %zu/%zu", pageCount, i, oldLen, spanList.size());
+  for (size_t j = 0; j < spanList.size(); j++) {
+    d_assert(spanList[j] != span);
+  }
+#endif
+
+  // this invariant should be maintained
+  d_assert(span.length >= i + 1);
+  d_assert(span.length >= pageCount);
+
+  // put the part we don't need back in the reuse pile
+  Span rest = span.splitAfter(pageCount);
+  if (!rest.empty()) {
+    freeSpans[rest.spanClass()].push_back(rest);
+  }
+  d_assert(span.length == pageCount);
+
+  result = span;
+  return true;
+}
+
+bool MeshableArena::findPages(Length pageCount, Span &result) {
+  for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
+    if (findPagesInner(_dirty, i, pageCount, result)) {
+      return true;
+    }
+    if (findPagesInner(_clean, i, pageCount, result)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 Span MeshableArena::reservePages(Length pageCount, Length pageAlignment) {
   d_assert(pageCount >= 1);
 
   Span result(0, 0);
-  auto ok = findPages(_dirty, pageCount, result);
-  if (!ok) {
-    ok = findPages(_clean, pageCount, result);
-  }
+  auto ok = findPages(pageCount, result);
   if (!ok) {
     expandArena(pageCount);
-    ok = findPages(_clean, pageCount, result);
+    ok = findPages(pageCount, result);
     hard_assert(ok);
   }
 

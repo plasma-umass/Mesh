@@ -135,7 +135,8 @@ protected:
 
 private:
   void expandArena(Length minPagesAdded);
-  bool findPages(internal::vector<Span> freeSpans[kSpanClassCount], Length pageCount, Span &result);
+  bool findPages(Length pageCount, Span &result);
+  bool findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i, Length pageCount, Span &result);
   Span reservePages(Length pageCount, Length pageAlignment);
   void freePhys(void *ptr, size_t sz);
   internal::RelaxedBitmap allocatedBitmap(bool includeDirty = true) const;
