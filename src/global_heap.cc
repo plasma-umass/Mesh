@@ -80,6 +80,10 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
     auto newVal = reinterpret_cast<size_t *>(newp);
     _meshPeriod = *newVal;
     // resetNextMeshCheck();
+  } else if (strcmp(name, "mesh.scavenge") == 0) {
+    lock.unlock();
+    scavenge();
+    lock.lock();
   } else if (strcmp(name, "mesh.compact") == 0) {
     lock.unlock();
     meshAllSizeClasses();
