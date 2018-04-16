@@ -384,6 +384,11 @@ protected:
       return;
     }
 
+    if (Super::aboveMeshThreshold()) {
+      Super::scavenge();
+      return;
+    }
+
     _lastMeshEffective = 1;
 
     // const auto start = std::chrono::high_resolution_clock::now();
