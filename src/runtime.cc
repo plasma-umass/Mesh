@@ -2,8 +2,10 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
 #include <dirent.h>
+#include <errno.h>
 #include <pthread.h>
 #include <sched.h>
+#include <stdlib.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 
@@ -80,6 +82,37 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 }
 
 Runtime::Runtime() {
+}
+
+void Runtime::initMaxMapCount() {
+  auto fd = open("/proc/sys/vm/max_map_count", O_RDONLY | O_CLOEXEC);
+  if (unlikely(fd < 0)) {
+    mesh::debug("initMaxMapCount: no proc file");
+    return;
+  }
+
+  static constexpr size_t BUF_LEN = 128;
+  char buf[BUF_LEN];
+  memset(buf, 0, BUF_LEN);
+
+  auto _ __attribute__((unused)) = read(fd, buf, BUF_LEN - 1);
+  close(fd);
+
+  errno = 0;
+  int64_t mapCount = strtoll(buf, nullptr, 10);
+  if (errno != 0) {
+    mesh::debug("strtoll: %s (%s)", strerror(errno), buf);
+    return;
+  }
+
+  if (mapCount <= 0) {
+    mesh::debug("expected positive mapCount, not %ll", mapCount);
+    return;
+  }
+
+  const auto meshCount = static_cast<size_t>(kMeshesPerMap * mapCount);
+
+  _heap.setMaxMeshCount(meshCount);
 }
 
 int Runtime::createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg) {

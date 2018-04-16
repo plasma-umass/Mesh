@@ -131,7 +131,16 @@ public:
   void finalizeMesh(void *keep, void *remove, size_t sz);
 
   inline bool aboveMeshThreshold() const {
-    return _meshedPageCount > kMaxMeshCount;
+    return _meshedPageCount > _maxMeshCount;
+  }
+
+  inline void setMaxMeshCount(size_t maxMeshCount) {
+    // debug("setting max map count: %zu", maxMeshCount);
+    _maxMeshCount = maxMeshCount;
+  }
+
+  inline size_t maxMeshCount() const {
+    return _maxMeshCount;
   }
 
 //protected:
@@ -287,6 +296,7 @@ private:
       kArenaSize / kPageSize,
       reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSize)))};
   size_t _meshedPageCount{0};
+  size_t _maxMeshCount{kDefaultMaxMeshCount};
 
   // indexed by offset. no need to be atomic, because protected by
   // _mhRWLock.

@@ -39,6 +39,7 @@ public:
   }
 
   void startBgThread();
+  void initMaxMapCount();
 
   // we need to wrap pthread_create so that we can safely implement a
   // stop-the-world quiescent period for the copy/mremap phase of
