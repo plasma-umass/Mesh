@@ -13,6 +13,7 @@ static __attribute__((constructor)) void libmesh_init() {
 
   runtime().createSignalFd();
   runtime().installSegfaultHandler();
+  runtime().initMaxMapCount();
 
   char *meshPeriodStr = getenv("MESH_PERIOD_SECS");
   if (meshPeriodStr) {

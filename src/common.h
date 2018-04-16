@@ -32,7 +32,11 @@ static constexpr int kMinAlign = 16;
 static constexpr int kPageSize = 4096;
 static constexpr size_t kMaxFastLargeSize = 256 * 1024;  // 256Kb
 
-static constexpr size_t kMaxMeshCount = 30000;
+// if we have, e.g. a kernel-imposed max_map_count of 2^16 (65k) we
+// can only safely have about 30k meshes before we are at risk of
+// hitting the max_map_count limit.
+static constexpr double kMeshesPerMap = .457;
+static constexpr size_t kDefaultMaxMeshCount = 30000;
 static constexpr size_t kMaxMeshesPerIteration = 2500;
 
 static constexpr uint32_t kSpanClassCount = 256;
