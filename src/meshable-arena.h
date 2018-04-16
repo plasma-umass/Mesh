@@ -130,6 +130,10 @@ public:
   void beginMesh(void *keep, void *remove, size_t sz);
   void finalizeMesh(void *keep, void *remove, size_t sz);
 
+  inline bool aboveMeshThreshold() const {
+    return _meshedPageCount > kMaxMeshCount;
+  }
+
 //protected:
   // public for testing
   void scavenge();
@@ -282,8 +286,7 @@ private:
   internal::RelaxedBitmap _meshedBitmap{
       kArenaSize / kPageSize,
       reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSize)))};
-  size_t _meshedPageCount1{0};
-  size_t _meshedPageCount2{0};
+  size_t _meshedPageCount{0};
 
   // indexed by offset. no need to be atomic, because protected by
   // _mhRWLock.

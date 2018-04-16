@@ -99,6 +99,9 @@ void NOINLINE basic_fragment(int64_t n, size_t m_total) {
 
   print_self_rss();
 
+  bench_free((voidptr)ptr_table);
+  bench_free((voidptr)retained_table);
+
   // mesh_mallctl("mesh.scavenge", nullptr, nullptr, nullptr, 0);
 }
 
@@ -122,7 +125,7 @@ int main(int argc, char *argv[]) {
 
   // print_self_rss();
 
-  sleep(700);
+  //sleep(700);
 
   return 0;
 }

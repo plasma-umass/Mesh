@@ -352,11 +352,10 @@ void MeshableArena::scavenge() {
       if (remappedStarts.find(expandedSpan.offset) != remappedStarts.end()) {
         return;
       }
-      debug("resetting mapping for %u-%u (%u pages, originally %u) %zu meshed pages", expandedSpan.offset,
-            expandedSpan.offset + expandedSpan.length, expandedSpan.length, span.length, _meshedPageCount2);
+      // debug("resetting mapping for %u-%u (%u pages, originally %u) %zu meshed pages", expandedSpan.offset,
+      //       expandedSpan.offset + expandedSpan.length, expandedSpan.length, span.length, _meshedPageCount);
 
       remappedStarts.insert(expandedSpan.offset);
-      _meshedPageCount1 -= span.length;
       resetSpanMapping(expandedSpan);
     });
   }
@@ -365,8 +364,7 @@ void MeshableArena::scavenge() {
   // mappings, empty the list
   _toReset.clear();
 
-  _meshedPageCount2 = _meshedBitmap.inUseCount();
-  debug("\t%zu/%zu", _meshedPageCount1, _meshedPageCount2);
+  _meshedPageCount = _meshedBitmap.inUseCount();
 
   forEachFree(_dirty, [&](const Span span) {
     auto ptr = ptrFromOffset(span.offset);
@@ -461,7 +459,6 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const Span removedSpan{removeOff, pageCount};
   trackMeshed(removedSpan);
 
-  _meshedPageCount1 += sz / kPageSize;
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * kPageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
   freePhys(remove, sz);
