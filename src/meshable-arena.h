@@ -130,7 +130,8 @@ public:
   void beginMesh(void *keep, void *remove, size_t sz);
   void finalizeMesh(void *keep, void *remove, size_t sz);
 
-protected:
+//protected:
+  // public for testing
   void scavenge();
 
 private:
@@ -180,6 +181,8 @@ private:
       // debug("delaying resetting meshed mapping\n");
       // delay restoring the identity mapping
       _toReset.push_back(span);
+      // resetSpanMapping(span);
+      // _clean[span.spanClass()].push_back(span);
     }
 
     // debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
@@ -251,6 +254,12 @@ private:
     }
   }
 
+  inline void resetSpanMapping(Span span) {
+    auto ptr = ptrFromOffset(span.offset);
+    auto sz = span.byteLength();
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
+  }
+
   void prepareForFork();
   void afterForkParent();
   void afterForkChild();
@@ -273,6 +282,8 @@ private:
   internal::RelaxedBitmap _meshedBitmap{
       kArenaSize / kPageSize,
       reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSize)))};
+  size_t _meshedPageCount1{0};
+  size_t _meshedPageCount2{0};
 
   // indexed by offset. no need to be atomic, because protected by
   // _mhRWLock.

@@ -344,27 +344,29 @@ void MeshableArena::scavenge() {
         startMeshedOffset++;
       }
       Offset nextMeshedOffset = _meshedBitmap.lowestSetBitAt(span.offset + span.length);
-      if (nextMeshedOffset > _end)
+      if (nextMeshedOffset > _end) {
         nextMeshedOffset = _end;
+      }
       const Span expandedSpan{startMeshedOffset, nextMeshedOffset - startMeshedOffset};
 
-      debug("resetting mapping for %u-%u (%u pages, originally %u)", expandedSpan.offset,
-            expandedSpan.offset + expandedSpan.length, expandedSpan.length, span.length);
       if (remappedStarts.find(expandedSpan.offset) != remappedStarts.end()) {
-        debug("skipping span that has already been remapped.");
         return;
       }
+      debug("resetting mapping for %u-%u (%u pages, originally %u) %zu meshed pages", expandedSpan.offset,
+            expandedSpan.offset + expandedSpan.length, expandedSpan.length, span.length, _meshedPageCount2);
 
       remappedStarts.insert(expandedSpan.offset);
-      auto ptr = ptrFromOffset(expandedSpan.offset);
-      auto sz = expandedSpan.byteLength();
-      mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, expandedSpan.offset * kPageSize);
+      _meshedPageCount1 -= span.length;
+      resetSpanMapping(expandedSpan);
     });
   }
 
   // now that we've finally reset to identity all delayed-reset
   // mappings, empty the list
   _toReset.clear();
+
+  _meshedPageCount2 = _meshedBitmap.inUseCount();
+  debug("\t%zu/%zu", _meshedPageCount1, _meshedPageCount2);
 
   forEachFree(_dirty, [&](const Span span) {
     auto ptr = ptrFromOffset(span.offset);
@@ -459,6 +461,7 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const Span removedSpan{removeOff, pageCount};
   trackMeshed(removedSpan);
 
+  _meshedPageCount1 += sz / kPageSize;
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * kPageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
   freePhys(remove, sz);
