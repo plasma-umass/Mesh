@@ -379,13 +379,12 @@ public:
 protected:
   // check for meshes in all size classes -- must be called unlocked
   void meshAllSizeClasses() {
+    Super::scavenge();
     if (!_lastMeshEffective) {
-      Super::scavenge();
       return;
     }
 
     if (Super::aboveMeshThreshold()) {
-      Super::scavenge();
       return;
     }
 
