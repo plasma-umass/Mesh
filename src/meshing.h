@@ -343,6 +343,7 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
 
   const size_t nBytes = leftBucket[0]->bitmap().byteCount();
 
+  size_t foundCount = 0;
   for (size_t j = 0; j < leftSize; j++) {
     for (size_t i = 0; i < t; i++) {
       const size_t idxLeft = j;
@@ -361,6 +362,10 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
         meshFound(std::move(heaps));
         leftBucket[idxLeft] = nullptr;
         rightBucket[idxRight] = nullptr;
+        foundCount++;
+        if (foundCount > kMaxMeshesPerIteration) {
+          return;
+        }
       }
     }
   }
