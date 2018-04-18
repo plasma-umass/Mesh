@@ -172,16 +172,17 @@ private:
     }
 
     const uint8_t flags = getMetadataFlags(span.offset);
+
+    for (size_t i = 0; i < span.length; i++) {
+      // clear the miniheap pointers we were tracking
+      setMetadata(span.offset + i, 0);
+    }
+
     // this happens when we are trying to get an aligned allocation
     // and returning excess back to the arena
     if (flags == internal::PageType::Unallocated) {
       _clean[span.spanClass()].push_back(span);
       return;
-    }
-
-    for (size_t i = 0; i < span.length; i++) {
-      // clear the miniheap pointers we were tracking
-      setMetadata(span.offset + i, 0);
     }
 
     if (flags == internal::PageType::Identity) {
@@ -300,7 +301,7 @@ private:
 
   // indexed by offset. no need to be atomic, because protected by
   // _mhRWLock.
-  uintptr_t *_metadata{nullptr};
+  atomic<uintptr_t> *_metadata{nullptr};
 
   int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
