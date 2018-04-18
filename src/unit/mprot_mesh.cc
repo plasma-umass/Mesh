@@ -48,6 +48,11 @@ static void writerThread() {
   debug("loop ended before ShouldExit\n");
 }
 
+// shows up in strace logs, but otherwise does nothing
+static inline void note(const char *note) {
+  int _ __attribute__((unused)) = write(-1, note, strlen(note));
+}
+
 static void meshTestConcurrentWrite(bool invert) {
   GlobalHeap &gheap = runtime().heap();
 
