@@ -14,6 +14,11 @@ using namespace mesh;
 static constexpr size_t StrLen = 128;
 static constexpr size_t ObjCount = 32;
 
+// shows up in strace logs, but otherwise does nothing
+static inline void note(const char *note) {
+  int _ __attribute__((unused)) = write(-1, note, strlen(note));
+}
+
 static void meshTest(bool invert) {
   GlobalHeap &gheap = runtime().heap();
 
