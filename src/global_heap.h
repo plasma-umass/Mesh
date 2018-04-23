@@ -308,11 +308,11 @@ public:
 
   void lock() {
     _miniheapLock.lock();
-    internal::Heap().lock();
+    // internal::Heap().lock();
   }
 
   void unlock() {
-    internal::Heap().unlock();
+    // internal::Heap().unlock();
     _miniheapLock.unlock();
   }
 
