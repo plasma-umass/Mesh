@@ -40,11 +40,6 @@ MeshableArena::MeshableArena() : SuperHeap() {
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
-#ifndef USE_MEMFD
-  _spanDir = openSpanDir(getpid());
-  d_assert(_spanDir != nullptr);
-#endif
-
   int fd = openSpanFile(kArenaSize);
   if (fd < 0) {
     debug("mesh: opening arena file failed.\n");
@@ -69,21 +64,32 @@ MeshableArena::MeshableArena() : SuperHeap() {
 }
 
 char *MeshableArena::openSpanDir(int pid) {
-  constexpr size_t buf_len = 64;
+  constexpr size_t buf_len = 128;
 
   for (auto tmpDir : TMP_DIRS) {
-    char buf[buf_len];
-    memset(buf, 0, buf_len);
+    for (size_t i = 0; i < 1024; i++) {
+      char buf[buf_len];
+      memset(buf, 0, buf_len);
 
-    snprintf(buf, buf_len - 1, "%s/alloc-mesh-%d", tmpDir, pid);
-    int result = mkdir(buf, 0755);
-    // we will get EEXIST if we have re-execed
-    if (result != 0 && errno != EEXIST)
-      continue;
+      snprintf(buf, buf_len - 1, "%s/alloc-mesh-%d.%zud", tmpDir, pid, i);
+      int result = mkdir(buf, 0755);
+      if (result != 0) {
+        if (errno == EEXIST) {
+          // we will get EEXIST if we have re-execed -- we need to use a
+          // new directory because we could have dropped priviledges in
+          // the meantime.
+          continue;
+        } else {
+          // otherwise it is likely that the parent tmp directory
+          // doesn't exist or we don't have permissions in it.
+          break;
+        }
+      }
 
-    char *spanDir = reinterpret_cast<char *>(internal::Heap().malloc(strlen(buf) + 1));
-    strcpy(spanDir, buf);
-    return spanDir;
+      char *spanDir = reinterpret_cast<char *>(internal::Heap().malloc(strlen(buf) + 1));
+      strcpy(spanDir, buf);
+      return spanDir;
+    }
   }
 
   return nullptr;
@@ -98,7 +104,8 @@ void MeshableArena::expandArena(Length minPagesAdded) {
   _clean[expansion.spanClass()].push_back(expansion);
 }
 
-bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i, Length pageCount, Span &result) {
+bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i, Length pageCount,
+                                   Span &result) {
   internal::vector<Span> &spanList = freeSpans[i];
   if (spanList.empty())
     return false;
@@ -466,36 +473,19 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   mprotect(remove, sz, PROT_READ | PROT_WRITE);
 }
 
-#ifdef USE_MEMFD
-static int sys_memfd_create(const char *name, unsigned int flags) {
-  return syscall(__NR_memfd_create, name, flags);
-}
-
-int MeshableArena::openSpanFile(size_t sz) {
-  errno = 0;
-  int fd = sys_memfd_create("mesh_arena", MFD_CLOEXEC);
-  d_assert_msg(fd >= 0, "memfd_create(%d) failed: %s", __NR_memfd_create, strerror(errno));
-
-  int err = ftruncate(fd, sz);
-  if (err != 0) {
-    debug("ftruncate: %d\n", errno);
-    abort();
-  }
-
-  return fd;
-}
-#else
-int MeshableArena::openSpanFile(size_t sz) {
+int MeshableArena::openShmSpanFile(size_t sz) {
   constexpr size_t buf_len = 64;
   char buf[buf_len];
   memset(buf, 0, buf_len);
 
+  _spanDir = openSpanDir(getpid());
   d_assert(_spanDir != nullptr);
+
   sprintf(buf, "%s/XXXXXX", _spanDir);
 
   int fd = mkstemp(buf);
   if (fd < 0) {
-    debug("mkstemp: %d\n", errno);
+    debug("mkstemp: %d (%s)\n", errno, strerror(errno));
     abort();
   }
 
@@ -521,6 +511,32 @@ int MeshableArena::openSpanFile(size_t sz) {
   }
 
   return fd;
+}
+
+#ifdef USE_MEMFD
+static int sys_memfd_create(const char *name, unsigned int flags) {
+  return syscall(__NR_memfd_create, name, flags);
+}
+
+int MeshableArena::openSpanFile(size_t sz) {
+  errno = 0;
+  int fd = sys_memfd_create("mesh_arena", MFD_CLOEXEC);
+  // the call to memfd failed -- fall back to opening a shm file
+  if (fd < 0) {
+    return openShmSpanFile(sz);
+  }
+
+  int err = ftruncate(fd, sz);
+  if (err != 0) {
+    debug("ftruncate: %d\n", errno);
+    abort();
+  }
+
+  return fd;
+}
+#else
+int MeshableArena::openSpanFile(size_t sz) {
+  return openShmSpanFile(sz);
 }
 #endif  // USE_MEMFD
 
