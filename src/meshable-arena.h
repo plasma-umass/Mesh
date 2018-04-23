@@ -201,6 +201,7 @@ private:
     // debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
   }
 
+  int openShmSpanFile(size_t sz);
   int openSpanFile(size_t sz);
   char *openSpanDir(int pid);
 
