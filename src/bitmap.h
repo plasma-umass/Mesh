@@ -243,11 +243,10 @@ public:
       bitCount = this->bitCount();
     d_assert(0 <= bitCount && static_cast<size_t>(bitCount) <= Super::_bitCount);
 
-    internal::string s(bitCount, '0');
+    internal::string s(bitCount+1, 0);
 
     for (ssize_t i = 0; i < bitCount; i++) {
-      if (isSet(i))
-        s[i] = '1';
+      s[i] = isSet(i) ? '1' : '0';
     }
 
     return s;
