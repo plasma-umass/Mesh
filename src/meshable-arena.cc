@@ -575,8 +575,6 @@ void MeshableArena::prepareForFork() {
 
 void MeshableArena::afterForkParent() {
   debug("%d: after fork parent", getpid());
-  runtime().unlock();
-  runtime().heap().unlock();
 
   close(_forkPipe[1]);
 
@@ -594,20 +592,17 @@ void MeshableArena::afterForkParent() {
   _forkPipe[1] = -1;
 
   d_assert(strcmp(buf, "ok") == 0);
+
+  runtime().unlock();
+  runtime().heap().unlock();
 }
 
 void MeshableArena::afterForkChild() {
   debug("%d: after fork child", getpid());
-  runtime().unlock();
-  runtime().heap().unlock();
 
   close(_forkPipe[0]);
 
   char *oldSpanDir = _spanDir;
-
-  // update our pid + spanDir
-  _spanDir = openSpanDir(getpid());
-  d_assert(_spanDir != nullptr);
 
   // open new file for the arena
   int newFd = openSpanFile(kArenaSize);
@@ -633,11 +628,16 @@ void MeshableArena::afterForkChild() {
 
   internal::Heap().free(oldSpanDir);
 
+  close(oldFd);
+
   while (write(_forkPipe[1], "ok", strlen("ok")) == EAGAIN) {
   }
   close(_forkPipe[1]);
 
   _forkPipe[0] = -1;
   _forkPipe[1] = -1;
+
+  runtime().unlock();
+  runtime().heap().unlock();
 }
 }  // namespace mesh
