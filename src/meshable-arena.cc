@@ -622,7 +622,33 @@ void MeshableArena::afterForkChild() {
 
   // remap the new region over the old
   void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
-  d_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
+  hard_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
+
+  // re-do the meshed mappings
+  {
+    internal::unordered_set<MiniHeap *> seenMiniheaps{};
+
+    for (auto const &i : _meshedBitmap) {
+      MiniHeap *mh = reinterpret_cast<MiniHeap *>(getMetadataPtr(i));
+      if (seenMiniheaps.find(mh) != seenMiniheaps.end()) {
+        continue;
+      }
+      seenMiniheaps.insert(mh);
+
+      const auto meshCount = mh->meshCount();
+      d_assert(meshCount > 1);
+
+      const auto sz = mh->spanSize();
+      const auto keep = mh->spans()[0];
+      const auto keepOff = offsetFor(keep);
+
+      for (size_t j = 1; j < meshCount; j++) {
+        const auto remove = mh->spans()[j];
+        void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * kPageSize);
+        hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
+      }
+    }
+  }
 
   _fd = newFd;
 
