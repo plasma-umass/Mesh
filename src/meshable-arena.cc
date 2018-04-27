@@ -644,7 +644,22 @@ void MeshableArena::afterForkChild() {
 
       for (size_t j = 1; j < meshCount; j++) {
         const auto remove = mh->spans()[j];
+        const auto removeOff = offsetFor(remove);
+
+        d_assert(getMetadataFlags(keepOff) == internal::PageType::Identity);
+        d_assert(getMetadataFlags(removeOff) != internal::PageType::Unallocated);
+
+#ifndef NDEBUG
+        const Length pageCount = sz / kPageSize;
+        for (size_t i = 0; i < pageCount; i++) {
+          // TODO: remove duplication of meshed metadata between the low
+          // bits here and the meshed bitmap
+          d_assert(_metadata[removeOff + i] == (internal::PageType::Meshed | getMetadataPtr(keepOff)));
+        }
+#endif
+
         void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * kPageSize);
+
         hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
       }
     }
