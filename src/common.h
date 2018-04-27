@@ -11,8 +11,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
-#include <unistd.h>
 
 #include <condition_variable>
 #include <functional>
@@ -95,11 +93,6 @@ using std::mutex;
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
   TypeName(const TypeName &);              \
   void operator=(const TypeName &)
-
-// shows up in strace logs, but otherwise does nothing
-static inline void note(const char *note) {
-  int _ __attribute__((unused)) = write(-1, note, strlen(note));
-}
 
 // runtime debug-level asserts
 #ifndef NDEBUG

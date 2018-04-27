@@ -47,7 +47,7 @@ MeshableArena::MeshableArena() : SuperHeap() {
   }
   _fd = fd;
   _arenaBegin = SuperHeap::map(kArenaSize, MAP_SHARED, fd);
-  _metadata = reinterpret_cast<atomic<uintptr_t> *>(SuperHeap::malloc(metadataSize()));
+  _metadata = reinterpret_cast<uintptr_t *>(SuperHeap::malloc(metadataSize()));
 
   hard_assert(_arenaBegin != nullptr);
   hard_assert(_metadata != nullptr);
@@ -318,7 +318,6 @@ void MeshableArena::free(void *ptr, size_t sz) {
 }
 
 void MeshableArena::scavenge() {
-  note("SCAVENGE BEGIN");
   // the inverse of the allocated bitmap is all of the spans in _clear
   // (since we just MADV_DONTNEED'ed everything in dirty)
   auto bitmap = allocatedBitmap(false);
@@ -420,14 +419,13 @@ void MeshableArena::scavenge() {
   const size_t *bits2 = newBitmap.bits();
   for (size_t i = 0; i < bitmap.byteCount() / sizeof(size_t); i++) {
     if (bits1[i] != bits2[i]) {
-      debug("bitmaps don't match %zu: %zu %zu\n", i, bits1[i], bits2[i]);
+      debug("bitmaps don't match %zu:\n", i);
       debug("\t%s\n", bitmap.to_string().c_str());
       debug("\t%s\n", newBitmap.to_string().c_str());
       hard_assert(false);
     }
   }
 #endif
-  note("SCAVENGE END");
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {
@@ -564,7 +562,7 @@ void MeshableArena::staticAfterForkChild() {
 }
 
 void MeshableArena::prepareForFork() {
-  debug("%d: prepare fork", getpid());
+  // debug("%d: prepare fork", getpid());
   runtime().heap().lock();
   runtime().lock();
 
@@ -574,7 +572,9 @@ void MeshableArena::prepareForFork() {
 }
 
 void MeshableArena::afterForkParent() {
-  debug("%d: after fork parent", getpid());
+  // debug("%d: after fork parent", getpid());
+  runtime().unlock();
+  runtime().heap().unlock();
 
   close(_forkPipe[1]);
 
@@ -598,7 +598,9 @@ void MeshableArena::afterForkParent() {
 }
 
 void MeshableArena::afterForkChild() {
-  debug("%d: after fork child", getpid());
+  // debug("%d: after fork child", getpid());
+  runtime().unlock();
+  runtime().heap().unlock();
 
   close(_forkPipe[0]);
 
