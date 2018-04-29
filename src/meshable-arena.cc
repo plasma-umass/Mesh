@@ -156,10 +156,18 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
 }
 
 bool MeshableArena::findPages(Length pageCount, Span &result) {
+  // Search through all dirty spans first.  We don't worry about
+  // fragmenting dirty pages, as being able to reuse dirty pages means
+  // we don't increase RSS.
   for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
     if (findPagesInner(_dirty, i, pageCount, result)) {
       return true;
     }
+  }
+
+  // if no dirty pages are avaiable, search clean pages.  An allocated
+  // clean page (once it is written to) means an increased RSS.
+  for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
     if (findPagesInner(_clean, i, pageCount, result)) {
       return true;
     }
