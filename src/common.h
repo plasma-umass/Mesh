@@ -39,6 +39,10 @@ static constexpr double kMeshesPerMap = .457;
 static constexpr size_t kDefaultMaxMeshCount = 30000;
 static constexpr size_t kMaxMeshesPerIteration = 2500;
 
+// maximum number of dirty pages to hold onto before we flush them
+// back to the OS (via MeshableArena::scavenge()
+static constexpr size_t kMaxDirtyPageThreshold = 1 << 15;  // 128 MB in pages
+
 static constexpr uint32_t kSpanClassCount = 256;
 
 static constexpr int kNumBins = 25;  // 16Kb max object size

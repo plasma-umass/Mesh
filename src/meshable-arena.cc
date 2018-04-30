@@ -325,6 +325,80 @@ void MeshableArena::free(void *ptr, size_t sz) {
   freeSpan(span);
 }
 
+void MeshableArena::partialScavenge() {
+  // the inverse of the allocated bitmap is all of the spans in _clear
+  // (since we just MADV_DONTNEED'ed everything in dirty)
+  auto bitmap = allocatedBitmap(false);
+  bitmap.invert();
+
+  auto markPages = [&](const Span span) {
+    for (size_t k = 0; k < span.length; k++) {
+#ifndef NDEBUG
+      if (bitmap.isSet(span.offset + k)) {
+        debug("arena: bit %zu already set (%zu/%zu) %zu\n", k, span.offset, span.length, bitmap.bitCount());
+      }
+#endif
+      bitmap.tryToSet(span.offset + k);
+    }
+  };
+
+  forEachFree(_dirty, [&](const Span span) {
+    auto ptr = ptrFromOffset(span.offset);
+    auto sz = span.byteLength();
+    madvise(ptr, sz, MADV_DONTNEED);
+    freePhys(ptr, sz);
+    markPages(span);
+  });
+
+  for (size_t i = 0; i < kSpanClassCount; i++) {
+    _dirty[i].clear();
+  }
+
+  _dirtyPageCount = 0;
+
+  for (size_t i = 0; i < kSpanClassCount; i++) {
+    _clean[i].clear();
+  }
+
+  // coalesce adjacent spans
+  Span current(0, 0);
+  for (auto const &i : bitmap) {
+    if (i == current.offset + current.length) {
+      current.length++;
+      continue;
+    }
+
+    // should only be empty the first time/iteration through
+    if (!current.empty()) {
+      _clean[current.spanClass()].push_back(current);
+      // debug("  clean: %4zu/%4zu\n", current.offset, current.length);
+    }
+
+    current = Span(i, 1);
+  }
+
+  // should only be empty the first time/iteration through
+  if (!current.empty()) {
+    _clean[current.spanClass()].push_back(current);
+    // debug("  clean: %4zu/%4zu\n", current.offset, current.length);
+  }
+#ifndef NDEBUG
+  auto newBitmap = allocatedBitmap();
+  newBitmap.invert();
+
+  const size_t *bits1 = bitmap.bits();
+  const size_t *bits2 = newBitmap.bits();
+  for (size_t i = 0; i < bitmap.byteCount() / sizeof(size_t); i++) {
+    if (bits1[i] != bits2[i]) {
+      debug("bitmaps don't match %zu:\n", i);
+      debug("\t%s\n", bitmap.to_string().c_str());
+      debug("\t%s\n", newBitmap.to_string().c_str());
+      hard_assert(false);
+    }
+  }
+#endif
+}
+
 void MeshableArena::scavenge() {
   // the inverse of the allocated bitmap is all of the spans in _clear
   // (since we just MADV_DONTNEED'ed everything in dirty)
@@ -392,6 +466,8 @@ void MeshableArena::scavenge() {
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _dirty[i].clear();
   }
+
+  _dirtyPageCount = 0;
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _clean[i].clear();
