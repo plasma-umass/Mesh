@@ -87,6 +87,49 @@ extern "C" CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
 }
 #define xxfree mesh_free
 
+extern "C" CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    localHeap = ThreadLocalHeap::GetHeap();
+    d_assert(localHeap != nullptr);
+  }
+
+  if (oldPtr == nullptr) {
+    return localHeap->malloc(newSize);
+  }
+  if (newSize == 0) {
+    localHeap->free(oldPtr);
+    return localHeap->malloc(newSize);
+  }
+
+  size_t oldSize = localHeap->getSize(oldPtr);
+
+  // the following is directly from tcmalloc, designed to avoid
+  // 'resizing ping pongs'
+  const size_t lowerBoundToGrow = oldSize + oldSize / 4ul;
+  const size_t upperBoundToShrink = oldSize / 2ul;
+
+  if (newSize > oldSize || newSize < upperBoundToShrink) {
+    void *newPtr = nullptr;
+    if (newSize > oldSize && newSize < lowerBoundToGrow) {
+      newPtr = localHeap->malloc(lowerBoundToGrow);
+    }
+    if (newPtr == nullptr) {
+      newPtr = localHeap->malloc(newSize);
+    }
+    if (unlikely(newPtr == nullptr)) {
+      return nullptr;
+    }
+    const size_t copySize = (oldSize < newSize) ? oldSize : newSize;
+    memcpy(newPtr, oldPtr, copySize);
+    localHeap->free(oldPtr);
+    return newPtr;
+  } else {
+    // the current allocation is good enough
+    return oldPtr;
+  }
+}
+
 extern "C" CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
 

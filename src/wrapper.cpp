@@ -188,47 +188,6 @@ extern "C" size_t MYCDECL CUSTOM_GOODSIZE(size_t sz) {
   return objSize;
 }
 
-extern "C" void *MYCDECL CUSTOM_REALLOC(void *ptr, size_t sz) {
-  if (ptr == NULL) {
-    ptr = xxmalloc(sz);
-    return ptr;
-  }
-  if (sz == 0) {
-    CUSTOM_FREE(ptr);
-#if defined(__APPLE__)
-    // 0 size = free. We return a small object.  This behavior is
-    // apparently required under Mac OS X and optional under POSIX.
-    return xxmalloc(1);
-#else
-    // For POSIX, don't return anything.
-    return NULL;
-#endif
-  }
-
-  size_t objSize = CUSTOM_GETSIZE(ptr);
-
-  void *buf = xxmalloc(sz);
-
-  if (buf != NULL) {
-    if (objSize == CUSTOM_GETSIZE(buf)) {
-      // The objects are the same actual size.
-      // Free the new object and return the original.
-      CUSTOM_FREE(buf);
-      return ptr;
-    }
-    // Copy the contents of the original object
-    // up to the size of the new block.
-    size_t minSize = (objSize < sz) ? objSize : sz;
-    memcpy(buf, ptr, minSize);
-  }
-
-  // Free the old block.
-  CUSTOM_FREE(ptr);
-
-  // Return a pointer to the new one.
-  return buf;
-}
-
 #if defined(__linux)
 
 extern "C" char *MYCDECL CUSTOM_STRNDUP(const char *s, size_t sz) {
