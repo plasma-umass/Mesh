@@ -143,9 +143,20 @@ public:
     return _maxMeshCount;
   }
 
-//protected:
+  // protected:
   // public for testing
   void scavenge();
+  // like a scavenge, but we only MADV_FREE
+  void partialScavenge();
+
+  inline bool maybeScavenge() {
+    if (_dirtyPageCount <= kMaxDirtyPageThreshold) {
+      return false;
+    }
+
+    partialScavenge();
+    return true;
+  }
 
 private:
   void expandArena(Length minPagesAdded);
@@ -190,6 +201,7 @@ private:
       }
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
+      _dirtyPageCount += span.length;
     } else if (flags == internal::PageType::Meshed) {
       // debug("delaying resetting meshed mapping\n");
       // delay restoring the identity mapping
@@ -290,6 +302,8 @@ private:
 
   internal::vector<Span> _clean[kSpanClassCount];
   internal::vector<Span> _dirty[kSpanClassCount];
+
+  size_t _dirtyPageCount{0};
 
   Offset _end{};  // in pages
 

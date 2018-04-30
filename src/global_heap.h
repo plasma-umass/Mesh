@@ -349,9 +349,9 @@ public:
     src = nullptr;
   }
 
-  inline void maybeMesh() {
+  inline bool maybeMesh() {
     if (_meshPeriod == 0)
-      return;
+      return false;
     // if (_smallFreeCount == 0)
     //   return;
 
@@ -359,12 +359,13 @@ public:
     const std::chrono::duration<double> duration = now - _lastMesh;
 
     if (unlikely(_meshPeriodSecs <= 0))
-      return;
+      return false;
     if (likely(duration.count() < _meshPeriodSecs))
-      return;
+      return false;
 
     _lastMesh = now;
     meshAllSizeClasses();
+    return true;
   }
 
   inline bool okToProceed(void *ptr) const {
