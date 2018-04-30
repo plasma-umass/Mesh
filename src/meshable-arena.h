@@ -202,6 +202,9 @@ private:
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
       _dirtyPageCount += span.length;
+      if (_dirtyPageCount > kMaxDirtyPageThreshold) {
+        partialScavenge();
+      }
     } else if (flags == internal::PageType::Meshed) {
       // debug("delaying resetting meshed mapping\n");
       // delay restoring the identity mapping

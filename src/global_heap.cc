@@ -39,7 +39,6 @@ void GlobalHeap::free(void *ptr) {
     // we need to grab the exclusive lock here, as the read-only
     // lock we took in miniheapFor has already been released
     freeMiniheapLocked(mh, false);
-    maybeScavenge();
     return;
   }
 
@@ -62,11 +61,8 @@ void GlobalHeap::free(void *ptr) {
     Super::scavenge();
   }
 
-  if (shouldConsiderMesh) {
-    maybeMesh() || maybeScavenge();
-  } else {
-    maybeScavenge();
-  }
+  if (shouldConsiderMesh)
+    maybeMesh();
 }
 
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
