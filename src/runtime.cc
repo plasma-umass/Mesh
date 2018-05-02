@@ -313,6 +313,8 @@ void Runtime::installSegfaultHandler() {
   action.sa_flags = SA_SIGINFO | SA_NODEFER;
   auto err = mesh::real::sigaction(SIGSEGV, &action, &old_action);
   hard_assert(err == 0);
+  err = mesh::real::sigaction(SIGBUS, &action, &old_action);
+  hard_assert(err == 0);
 
   // debug("TODO: check old_action is NULL");
 }

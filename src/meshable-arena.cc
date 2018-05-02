@@ -472,7 +472,10 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
 }
 
 void MeshableArena::beginMesh(void *keep, void *remove, size_t sz) {
-  mprotect(remove, sz, PROT_READ);
+  int r = mprotect(remove, sz, PROT_READ);
+  if (r) {
+    perror("MeshableArena::beginMesh mprotect failure");
+  }
 }
 
 void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
@@ -497,7 +500,10 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
   freePhys(remove, sz);
 
-  mprotect(remove, sz, PROT_READ | PROT_WRITE);
+  int r = mprotect(remove, sz, PROT_READ | PROT_WRITE);
+  if (r) {
+    perror("MeshableArena::finalizeMesh mprotect failure");
+  }
 }
 
 int MeshableArena::openShmSpanFile(size_t sz) {

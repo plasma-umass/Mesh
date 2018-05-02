@@ -10,6 +10,10 @@
 
 #include <gflags/gflags.h>
 
+#if defined(__APPLE__)
+#include <libgen.h>
+#endif
+
 #include "internal.h"
 
 #include "bitmap.h"
@@ -71,8 +75,9 @@ unique_ptr<MeshTestcase> openTestcase(const char *path) {
     exit(1);
   }
 
-  char *fname = strdup(basename(path));
-  char *dotPos = strrchr(fname, '.');
+  auto *bname = basename((char *) path);
+  auto *fname = strdup(bname);
+  auto *dotPos = strrchr(fname, '.');
   // remove the extension if it exists
   if (dotPos) {
     *dotPos = 0;
