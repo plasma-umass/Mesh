@@ -8,6 +8,18 @@ all:
 
 else
 
+ifeq ($(OS),Windows_NT)
+    LIB = libmesh.dll
+else
+    UNAME_S := $(shell uname -s)
+    UNAME_P := $(shell uname -p)
+    ifeq ($(UNAME_S),Darwin)
+	LIB              = libmesh.dylib
+    else
+	LIB              = libmesh.so
+    endif
+endif
+
 PREFIX = /usr
 
 ARCH             = x86_64
@@ -16,7 +28,6 @@ COMMON_SRCS      = src/thread_local_heap.cc src/global_heap.cc src/runtime.cc sr
 
 LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc
 LIB_OBJS         = $(addprefix build/,$(patsubst %.c,%.o,$(patsubst %.S,%.o,$(LIB_SRCS:.cc=.o))))
-LIB              = libmesh.so
 
 GTEST_SRCS       = src/vendor/googletest/googletest/src/gtest-all.cc \
                    src/vendor/googletest/googletest/src/gtest_main.cc
@@ -114,9 +125,13 @@ build/src/unit/%.o: src/unit/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
 
-$(LIB): $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
+libmesh.so: $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
 	@echo "  LD    $@"
 	$(CXX) -shared $(LDFLAGS) -o $@ $(LIB_OBJS) $(LIBS)
+
+libmesh.dylib: $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
+	@echo "  LD    $@"
+	$(CXX) -compatibility_version 1 -current_version 1 -dynamiclib $(LDFLAGS) -o $@ $(LIB_OBJS) $(LIBS)
 
 $(BENCH_BIN): $(HEAP_LAYERS) $(GFLAGS_LIB) $(BENCH_OBJS) $(CONFIG)
 	@echo "  LD    $@"
