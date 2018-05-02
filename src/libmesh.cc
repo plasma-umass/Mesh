@@ -208,6 +208,8 @@ int mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size
   return mesh::runtime().heap().mallctl(name, oldp, oldlenp, newp, newlen);
 }
 
+#ifdef __linux__
+
 int epoll_wait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {
   return mesh::runtime().epollWait(__epfd, __events, __maxevents, __timeout);
 }
@@ -215,6 +217,8 @@ int epoll_wait(int __epfd, struct epoll_event *__events, int __maxevents, int __
 int epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss) {
   return mesh::runtime().epollPwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
+
+#endif
 
 int mesh_in_bounds(void *ptr) {
   return mesh::runtime().heap().inBounds(ptr);
