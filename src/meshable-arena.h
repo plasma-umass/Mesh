@@ -32,6 +32,16 @@
 
 #include "mmapheap.h"
 
+
+#ifndef MADV_DONTDUMP
+#define MADV_DONTDUMP 0
+#endif
+
+#ifndef MADV_DODUMP
+#define MADV_DODUMP 0
+#endif
+
+
 namespace mesh {
 
 namespace internal {
