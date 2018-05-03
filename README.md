@@ -34,12 +34,7 @@ DEFINITIONS
 BUILDING
 --------
 
-Running `make` will build the library and run unit tests.  Executing
-`./run` after that will run `git status` with `libmesh` as the
-allocator:
+```
+$ git submodule update --init; ./configure --debug; make test
+```
 
-```
-$ ./configure
-$ make
-$ ./run
-```
