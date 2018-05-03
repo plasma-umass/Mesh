@@ -397,6 +397,10 @@ void MeshableArena::scavenge() {
   _toReset.clear();
 
   _meshedPageCount = _meshedBitmap.inUseCount();
+  if (_meshedPageCount > _meshedPageCountHWM) {
+    _meshedPageCountHWM = _meshedPageCount;
+    // TODO: find rss at peak
+  }
 
   forEachFree(_dirty, [&](const Span span) {
     auto ptr = ptrFromOffset(span.offset);
