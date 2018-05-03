@@ -5,12 +5,13 @@
 #ifndef MESH__COMMON_H
 #define MESH__COMMON_H
 
-#ifdef __APPLE__
-#include <sys/types.h>
-#endif
-
 #include <cstddef>
 #include <cstdint>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <condition_variable>
 #include <functional>
@@ -143,8 +144,12 @@ inline mt19937_64 *initSeed() {
   static_assert(sizeof(mt19937_64::result_type) == sizeof(uint64_t), "expected 64-bit result_type for PRNG");
 
   // seed this Mersenne Twister PRNG with entropy from the host OS
-  std::random_device rd;
-  return new (mtBuf) std::mt19937_64(rd());
+  int fd = open("/dev/urandom", O_RDONLY);
+  unsigned long buf;
+  auto sz = read(fd, (void *) &buf, sizeof(unsigned long));
+  //  std::random_device rd;
+  // return new (mtBuf) std::mt19937_64(rd());
+  return new (mtBuf) std::mt19937_64(buf);
 }
 
 // cryptographically-strong thread-safe PRNG seed
