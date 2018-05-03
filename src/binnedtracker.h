@@ -278,6 +278,7 @@ private:
 
   void setMetadata(MiniHeap *mh) {
     _objectCount = mh->maxCount();
+    _objectCountReciprocal = 1 / mh->maxCount();
     _objectSize = mh->objectSize();
     _hasMetadata = true;
   }
@@ -341,7 +342,7 @@ private:
     } else if (inUseCount == 0) {
       return internal::BinToken::FlagEmpty;
     } else {
-      return (inUseCount * kBinnedTrackerBinCount) / _objectCount;
+      return (inUseCount * kBinnedTrackerBinCount) * _objectCountReciprocal;
     }
   }
 
@@ -361,6 +362,7 @@ private:
 
   atomic_size_t _objectSize{0};
   atomic_size_t _objectCount{0};
+  float _objectCountReciprocal{0.0};
 
   atomic_size_t _highWaterMark{0};
 
