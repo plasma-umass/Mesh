@@ -24,7 +24,7 @@ PREFIX = /usr
 
 ARCH             = x86_64
 
-COMMON_SRCS      = src/thread_local_heap.cc src/global_heap.cc src/runtime.cc src/real.cc src/meshing.cc src/meshable-arena.cc src/d_assert.cc
+COMMON_SRCS      = src/thread_local_heap.cc src/global_heap.cc src/runtime.cc src/real.cc src/meshing.cc src/meshable-arena.cc src/d_assert.cc src/measure_rss.cc
 
 LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc
 LIB_OBJS         = $(addprefix build/,$(patsubst %.c,%.o,$(patsubst %.S,%.o,$(LIB_SRCS:.cc=.o))))
@@ -42,7 +42,7 @@ BENCH_SRCS       = src/meshing_benchmark.cc $(COMMON_SRCS)
 BENCH_OBJS       = $(addprefix build/,$(patsubst %.c,%.o,$(BENCH_SRCS:.cc=.o)))
 BENCH_BIN        = meshing-benchmark
 
-FRAG_SRCS        = src/fragmenter.cc src/measure_rss.c
+FRAG_SRCS        = src/fragmenter.cc src/measure_rss.cc
 FRAG_OBJS        = $(addprefix build/,$(patsubst %.c,%.o,$(FRAG_SRCS:.cc=.o)))
 FRAG_BIN         = fragmenter
 
