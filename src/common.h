@@ -45,7 +45,7 @@ static constexpr size_t kMaxDirtyPageThreshold = 1 << 14;  // 64 MB in pages
 
 static constexpr uint32_t kSpanClassCount = 256;
 
-static constexpr int kNumBins = 15; // 25;  // 16Kb max object size
+static constexpr int kNumBins = 25;  // 16Kb max object size
 static constexpr int kDefaultMeshPeriod = 10000;
 
 static constexpr uint32_t kMinArenaExpansion = 4096;  // 16 MB in pages
@@ -232,7 +232,7 @@ private:
   static const int32_t class_to_size_[kClassSizesMax];
 
 public:
-  static constexpr size_t num_size_classes = kNumBins;
+  static constexpr size_t num_size_classes = 25;
 
   // Constructor should do nothing since we rely on explicit Init()
   // call, which may or may not be called before the constructor runs.
