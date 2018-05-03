@@ -29,6 +29,7 @@ public:
   MiniHeap(void *span, size_t objectCount, size_t objectSize, size_t expectedSpanSize)
       : _bitmap(objectCount),
         _objectSize(objectSize),
+        _objectSizeReciprocal(1.0 / (float)objectSize),
         _spanSize(dynamicSpanSize()),
         _span{reinterpret_cast<char *>(span), 0, 0, 0},
         _meshCount(1)
@@ -314,7 +315,9 @@ public:
     d_assert(span != 0);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
-    const auto off = (ptrval - span) / _objectSize;
+    // const size_t off = (ptrval - span) / _objectSize;
+    const size_t off = (ptrval - span) * _objectSizeReciprocal;
+    // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
     // if (unlikely(span > ptrval || off >= maxCount())) {
     //   mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
     //   return -1;
@@ -360,6 +363,8 @@ protected:
   atomic<uint32_t> _inUseCount{0};  // 48
 
   const uint32_t _objectSize;
+  const float    _objectSizeReciprocal;
+
   const uint32_t _spanSize;  // max 4 GB span size/allocation size, 56
   char *_span[kMaxMeshes];
   internal::BinToken _token;
@@ -377,7 +382,7 @@ static_assert(sizeof(mesh::internal::Bitmap) == 40, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
 static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
 #else
-static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 112, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 }  // namespace mesh
