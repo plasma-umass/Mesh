@@ -41,7 +41,9 @@ public:
   inline unsigned int inRange(size_t min, size_t max) {
     size_t range = 1 + max - min;
 
-    return min + next() % range;
+    //    return min + next() % range;
+    // adapted from https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
+    return min + (((uint64_t) next() * (uint64_t) range) >> 32);
   }
 
 private:
