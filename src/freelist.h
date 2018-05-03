@@ -114,9 +114,9 @@ public:
 
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    const auto off = (ptrval - _start) / _objectSize;
-    const auto off2 = (ptrval - _start) * _objectSizeReciprocal;
-    hard_assert(off == off2);
+    // const size_t off = (ptrval - _start) / _objectSize;
+    const size_t off = (ptrval - _start) * _objectSizeReciprocal;
+    // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
 
     push(off);
   }
