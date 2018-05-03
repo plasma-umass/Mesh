@@ -121,4 +121,92 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
   }
   return 0;
 }
+
+void GlobalHeap::meshAllSizeClasses() {
+  Super::scavenge();
+  if (!_lastMeshEffective) {
+    return;
+  }
+
+  if (Super::aboveMeshThreshold()) {
+    return;
+  }
+
+  _lastMeshEffective = 1;
+
+  // const auto start = std::chrono::high_resolution_clock::now();
+  size_t partialCount = 0;
+
+  internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
+
+  // first, clear out any free memory we might have
+  for (size_t i = 0; i < kNumBins; i++) {
+    flushBinLocked(i);
+  }
+
+  // FIXME: is it safe to have this function not use internal::allocator?
+  auto meshFound = function<void(std::pair<MiniHeap *, MiniHeap *> &&)>(
+      // std::allocator_arg, internal::allocator,
+      [&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
+        if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<0>(miniheaps)->isMeshingCandidate())
+          mergeSets.push_back(std::move(miniheaps));
+      });
+
+  for (size_t i = 0; i < kNumBins; i++) {
+    // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
+    // method::greedySplitting(_prng, _littleheaps[i], meshFound);
+    // method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
+    partialCount += _littleheaps[i].partialSize();
+    method::shiftedSplitting(_fastPrng, _littleheaps[i], meshFound);
+  }
+
+  // more than ~ 1 MB saved
+  _lastMeshEffective = mergeSets.size() > 256;
+
+  if (mergeSets.size() == 0) {
+    Super::scavenge();
+    // debug("nothing to mesh.");
+    return;
+  }
+
+  _stats.meshCount += mergeSets.size();
+
+  for (auto &mergeSet : mergeSets) {
+    // merge _into_ the one with a larger mesh count, potentially
+    // swapping the order of the pair
+    if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
+      mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
+
+    meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
+  }
+
+  Super::scavenge();
+
+  _lastMesh = std::chrono::high_resolution_clock::now();
+
+  // const std::chrono::duration<double> duration = _lastMesh - start;
+  // debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
+}
+
+void GlobalHeap::dumpStats(int level, bool beDetailed) const {
+  if (level < 1)
+    return;
+
+  lock_guard<mutex> lock(_miniheapLock);
+
+  const auto meshedPageHWM = meshedPageHighWaterMark();
+
+  // debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
+  // debug("Meshed MB (total):  %.1f\n", (size_t)_stats.meshCount * 4096.0 / 1024.0 / 1024.0);
+  debug("Meshed pages HWM:   %zu\n", meshedPageHWM);
+  debug("Meshed MB HWM:      %.1f\n", meshedPageHWM * 4096.0 / 1024.0 / 1024.0);
+  // debug("Peak RSS reduction: %.2f\n", rssSavings);
+  debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
+  debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
+  debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
+  if (level > 1) {
+    for (size_t i = 0; i < kNumBins; i++)
+      _littleheaps[i].dumpStats(beDetailed);
+  }
+}
 }  // namespace mesh

@@ -211,7 +211,7 @@ public:
     const auto mhCount = count();
 
     if (mhCount == 0) {
-      debug("MH HWM (%5zu : %3zu):     %6zu/%6zu\n", _objectSize.load(), 0, 0, _highWaterMark.load());
+      debug("MH HWM (%5zu : %5zu):     %6zu/%6zu\n", _objectSize.load(), 0, 0, _highWaterMark.load());
       return;
     }
 
@@ -236,7 +236,7 @@ public:
       }
     }
 
-    debug("MH HWM (%5zu : %3zu):     %6zu/%6zu (occ: %f)\n", _objectSize.load(), totalObjects, mhCount,
+    debug("MH HWM (%5zu : %5zu):     %6zu/%6zu (occ: %f)\n", _objectSize.load(), totalObjects, mhCount,
           _highWaterMark.load(), inUseCount / totalObjects);
   }
 

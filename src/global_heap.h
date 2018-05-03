@@ -25,9 +25,9 @@ namespace mesh {
 class GlobalHeapStats {
 public:
   atomic_size_t meshCount;
-  atomic_size_t mhFreeCount;
-  atomic_size_t mhAllocCount;
-  atomic_size_t mhHighWaterMark;
+  size_t mhFreeCount;
+  size_t mhAllocCount;
+  size_t mhHighWaterMark;
 };
 
 class GlobalHeap : public MeshableArena {
@@ -61,19 +61,7 @@ public:
     }
   }
 
-  inline void dumpStats(int level, bool beDetailed) const {
-    if (level < 1)
-      return;
-
-    lock_guard<mutex> lock(_miniheapLock);
-
-    debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
-    debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
-    debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
-    debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
-    for (size_t i = 0; i < kNumBins; i++)
-      _littleheaps[i].dumpStats(beDetailed);
-  }
+  void dumpStats(int level, bool beDetailed) const;
 
   // must be called with exclusive _mhRWLock held
   inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheapLocked(int sizeClass, size_t pageCount, size_t objectCount,
@@ -95,8 +83,8 @@ public:
       trackMiniheapLocked(sizeClass, mh);
 
     _miniheapCount++;
-    // _stats.mhAllocCount++;
-    //_stats.mhHighWaterMark = max(_miniheaps.size(), _stats.mhHighWaterMark.load());
+    _stats.mhAllocCount++;
+    _stats.mhHighWaterMark = max(_miniheapCount, _stats.mhHighWaterMark);
     //_stats.mhClassHWM[sizeClass] = max(_littleheapCounts[sizeClass], _stats.mhClassHWM[sizeClass].load());
 
     return mh;
@@ -378,71 +366,7 @@ public:
 
 protected:
   // check for meshes in all size classes -- must be called unlocked
-  void meshAllSizeClasses() {
-    Super::scavenge();
-    if (!_lastMeshEffective) {
-      return;
-    }
-
-    if (Super::aboveMeshThreshold()) {
-      return;
-    }
-
-    _lastMeshEffective = 1;
-
-    // const auto start = std::chrono::high_resolution_clock::now();
-    size_t partialCount = 0;
-
-    internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
-
-    // first, clear out any free memory we might have
-    for (size_t i = 0; i < kNumBins; i++) {
-      flushBinLocked(i);
-    }
-
-    // FIXME: is it safe to have this function not use internal::allocator?
-    auto meshFound = function<void(std::pair<MiniHeap *, MiniHeap *> &&)>(
-        // std::allocator_arg, internal::allocator,
-        [&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
-          if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<0>(miniheaps)->isMeshingCandidate())
-            mergeSets.push_back(std::move(miniheaps));
-        });
-
-    for (size_t i = 0; i < kNumBins; i++) {
-      // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
-      // method::greedySplitting(_prng, _littleheaps[i], meshFound);
-      // method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
-      partialCount += _littleheaps[i].partialSize();
-      method::shiftedSplitting(_fastPrng, _littleheaps[i], meshFound);
-    }
-
-    // more than ~ 1 MB saved
-    _lastMeshEffective = mergeSets.size() > 256;
-
-    if (mergeSets.size() == 0) {
-      Super::scavenge();
-      // debug("nothing to mesh.");
-      return;
-    }
-
-    _stats.meshCount += mergeSets.size();
-
-    for (auto &mergeSet : mergeSets) {
-      // merge _into_ the one with a larger mesh count, potentially
-      // swapping the order of the pair
-      if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
-        mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
-
-      meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
-    }
-
-    Super::scavenge();
-
-    _lastMesh = std::chrono::high_resolution_clock::now();
-
-    // const std::chrono::duration<double> duration = _lastMesh - start;
-    // debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
-  }
+  void meshAllSizeClasses();
 
   const size_t _maxObjectSize;
   atomic_size_t _lastMeshEffective{0};

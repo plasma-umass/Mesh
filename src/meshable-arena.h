@@ -159,13 +159,14 @@ public:
   // like a scavenge, but we only MADV_FREE
   void partialScavenge();
 
-  inline bool maybeScavenge() {
-    if (_dirtyPageCount <= kMaxDirtyPageThreshold) {
-      return false;
-    }
+  // return the maximum number of pages we've had meshed (and thus our
+  // savings) at any point in time.
+  inline size_t meshedPageHighWaterMark() const {
+    return _meshedPageCountHWM;
+  }
 
-    partialScavenge();
-    return true;
+  inline size_t RSSAtHighWaterMark() const {
+    return _rssKbAtHWM;
   }
 
 private:
@@ -324,6 +325,8 @@ private:
       kArenaSize / kPageSize,
       reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSize)))};
   size_t _meshedPageCount{0};
+  size_t _meshedPageCountHWM{0};
+  size_t _rssKbAtHWM{0};
   size_t _maxMeshCount{kDefaultMaxMeshCount};
 
   // indexed by offset. no need to be atomic, because protected by
