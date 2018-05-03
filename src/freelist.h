@@ -115,6 +115,8 @@ public:
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     const auto off = (ptrval - _start) / _objectSize;
+    const auto off2 = (ptrval - _start) * _objectSizeReciprocal;
+    hard_assert(off == off2);
 
     push(off);
   }
@@ -170,6 +172,7 @@ public:
   // called once, on initialization of ThreadLocalHeap
   inline void setObjectSize(size_t sz) {
     _objectSize = sz;
+    _objectSizeReciprocal = 1.0 / (float) sz;
     _maxCount = max(HL::CPUInfo::PageSize / sz, kMinStringLen);
     // initially, we are unattached and therefor have no capacity.
     // Setting _off to _maxCount causes isExhausted() to return true
@@ -180,6 +183,7 @@ public:
 
 private:
   size_t _objectSize{0};
+  float _objectSizeReciprocal{0.0};
   uintptr_t _start{0};
   uintptr_t _end{0};
   MiniHeap *_attachedMiniheap{nullptr};
