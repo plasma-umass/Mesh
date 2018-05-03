@@ -473,9 +473,7 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
 
 void MeshableArena::beginMesh(void *keep, void *remove, size_t sz) {
   int r = mprotect(remove, sz, PROT_READ);
-  if (r) {
-    perror("MeshableArena::beginMesh mprotect failure");
-  }
+  hard_assert(r == 0);
 }
 
 void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
@@ -501,9 +499,7 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   freePhys(remove, sz);
 
   int r = mprotect(remove, sz, PROT_READ | PROT_WRITE);
-  if (r) {
-    perror("MeshableArena::finalizeMesh mprotect failure");
-  }
+  hard_assert(r == 0);
 }
 
 int MeshableArena::openShmSpanFile(size_t sz) {
