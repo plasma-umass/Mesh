@@ -13,6 +13,10 @@
 
 #include "measure_rss.h"
 
+void print_rss() {
+  printf("\trss:\t%10.3f MB\n", get_rss_kb() / 1024.0);
+}
+
 extern "C" {
 int mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 }
@@ -59,7 +63,7 @@ void NOINLINE basic_fragment(int64_t n, size_t m_total) {
 
   // show how much RSS we just burned through for the table of
   // pointers we just allocated
-  print_self_rss();
+  print_rss();
 
   for (int64_t i = 1; m_avail >= 2 * ci * n; i++) {
     ci *= 2;
@@ -87,17 +91,17 @@ void NOINLINE basic_fragment(int64_t n, size_t m_total) {
 
   fprintf(stderr, "allocated (and not freed) %f MB\n", ((double)m_usage) / MB);
 
-  print_self_rss();
+  print_rss();
 
   // mesh_mallctl("mesh.scavenge", nullptr, nullptr, nullptr, 0);
 
-  print_self_rss();
+  print_rss();
 
   for (size_t i = 0; i < ptr_table_len; i++) {
     bench_free((voidptr)retained_table[i]);
   }
 
-  print_self_rss();
+  print_rss();
 
   bench_free((voidptr)ptr_table);
   bench_free((voidptr)retained_table);
@@ -112,20 +116,20 @@ int main(int argc, char *argv[]) {
   gflags::SetUsageMessage(usage);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-  print_self_rss();
+  print_rss();
 
   basic_fragment(512, 128 * MB);
 
-  print_self_rss();
+  print_rss();
   // char *env = getenv("LD_PRELOAD");
   // if (env && strstr(env, "libmesh.so") != NULL) {
   //   fprintf(stderr, "meshing stuff\n");
   //   free((void *)MESH_MARKER);
   // }
 
-  // print_self_rss();
+  // print_rss();
 
-  //sleep(700);
+  // sleep(700);
 
   return 0;
 }
