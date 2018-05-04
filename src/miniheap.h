@@ -221,10 +221,10 @@ public:
 
     _inUseCount++;
 
-    return ptrForOffset(off);
+    return ptrFromOffset(off);
   }
 
-  inline void *ptrForOffset(size_t off) {
+  inline void *ptrFromOffset(size_t off) {
     return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
   }
 
