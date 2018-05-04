@@ -79,9 +79,21 @@ public:
 
     if (likely(_last != nullptr && _last->contains(ptr))) {
       _last->free(ptr);
-    } else {
-      freeSlowpath(ptr);
+      return;
     }
+
+    auto mh = _global->miniheapForLocked(ptr);
+    if (likely(mh) && mh->maxCount() > 1) {
+      const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
+      Freelist &freelist = _freelist[sizeClass];
+      if (likely(freelist.getAttached() == mh)) {
+        d_assert(mh->refcount() > 0);
+        freelist.free(ptr);
+        _last = &freelist;
+        return;
+      }
+    }
+    _global->free(ptr);
   }
 
   inline size_t getSize(void *ptr) {

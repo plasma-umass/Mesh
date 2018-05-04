@@ -47,10 +47,10 @@ MeshableArena::MeshableArena() : SuperHeap() {
   }
   _fd = fd;
   _arenaBegin = SuperHeap::map(kArenaSize, MAP_SHARED, fd);
-  _metadata = reinterpret_cast<uintptr_t *>(SuperHeap::malloc(metadataSize()));
+  _mhIndex = reinterpret_cast<atomic<Offset> *>(SuperHeap::malloc(indexSize()));
 
   hard_assert(_arenaBegin != nullptr);
-  hard_assert(_metadata != nullptr);
+  hard_assert(_mhIndex != nullptr);
 
   if (kAdviseDump) {
     madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
@@ -155,12 +155,13 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
   return true;
 }
 
-bool MeshableArena::findPages(Length pageCount, Span &result) {
+  bool MeshableArena::findPages(Length pageCount, Span &result, internal::PageType &type) {
   // Search through all dirty spans first.  We don't worry about
   // fragmenting dirty pages, as being able to reuse dirty pages means
   // we don't increase RSS.
   for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
     if (findPagesInner(_dirty, i, pageCount, result)) {
+      type = internal::PageType::Dirty;
       return true;
     }
   }
@@ -169,6 +170,7 @@ bool MeshableArena::findPages(Length pageCount, Span &result) {
   // clean page (once it is written to) means an increased RSS.
   for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
     if (findPagesInner(_clean, i, pageCount, result)) {
+      type = internal::PageType::Clean;
       return true;
     }
   }
@@ -179,18 +181,20 @@ bool MeshableArena::findPages(Length pageCount, Span &result) {
 Span MeshableArena::reservePages(Length pageCount, Length pageAlignment) {
   d_assert(pageCount >= 1);
 
+  internal::PageType flags(internal::PageType::Unknown);
   Span result(0, 0);
-  auto ok = findPages(pageCount, result);
+  auto ok = findPages(pageCount, result, flags);
   if (!ok) {
     expandArena(pageCount);
-    ok = findPages(pageCount, result);
+    ok = findPages(pageCount, result, flags);
     hard_assert(ok);
   }
 
   d_assert(!result.empty());
+  d_assert(flags != internal::PageType::Unknown);
 
   if (unlikely(pageAlignment > 1 && ((ptrvalFromOffset(result.offset) / kPageSize) % pageAlignment != 0))) {
-    freeSpan(result);
+    freeSpan(result, flags);
     // recurse once, asking for enough extra space that we are sure to
     // be able to find an aligned offset of pageCount pages within.
     result = reservePages(pageCount + 2 * pageAlignment, 1);
@@ -203,9 +207,9 @@ Span MeshableArena::reservePages(Length pageCount, Length pageAlignment) {
     const auto unwantedPageCount = alignedOff - result.offset;
     auto alignedResult = result.splitAfter(unwantedPageCount);
     d_assert(alignedResult.offset == alignedOff);
-    freeSpan(result);
+    freeSpan(result, flags);
     const auto excess = alignedResult.splitAfter(pageCount);
-    freeSpan(excess);
+    freeSpan(excess, flags);
     result = alignedResult;
   }
 
@@ -273,17 +277,14 @@ void *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignme
 
   d_assert(ptrFromOffset(span.offset) < arenaEnd());
 #ifndef NDEBUG
-  if (getMetadataPtr(off) != 0) {
+  if (lookupMiniheapOffset(off) != _mhAllocator.arenaBegin()) {
     mesh::debug("----\n");
-    auto mh = reinterpret_cast<MiniHeap *>(getMetadataPtr(off));
+    auto mh = reinterpret_cast<MiniHeap *>(lookupMiniheapOffset(off));
     mh->dumpDebug();
   }
 #endif
-  d_assert_msg(getMetadataFlags(off) == 0 && getMetadataPtr(off) == 0, "expected no metadata, found %p/%zu",
-               getMetadataPtr(off), getMetadataFlags(off));
 
-  const auto ownerVal = reinterpret_cast<uintptr_t>(owner);
-  d_assert((ownerVal & 0x07) == 0);
+  const auto ownerVal = _mhAllocator.offsetFor(owner);
 
   // now that we know they are available, set the empty pages to
   // in-use.  This is safe because this whole function is called
@@ -291,15 +292,13 @@ void *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignme
   // modification between the loop above and the one below.
   for (size_t i = 0; i < pageCount; i++) {
 #ifndef NDEBUG
-    if (getMetadataPtr(off + i) != 0) {
+    if (lookupMiniheapOffset(off + i) != _mhAllocator.arenaBegin()) {
       mesh::debug("----!\n");
-      auto mh = reinterpret_cast<MiniHeap *>(getMetadataPtr(off + i));
+      auto mh = reinterpret_cast<MiniHeap *>(lookupMiniheapOffset(off + i));
       mh->dumpDebug();
     }
 #endif
-    d_assert_msg(getMetadataFlags(off + i) == 0 && getMetadataPtr(off + i) == 0, "expected no metadata, found %p/%zu",
-                 getMetadataPtr(off + i), getMetadataFlags(off + i));
-    setMetadata(off + i, internal::PageType::Identity | ownerVal);
+    setIndex(off + i, ownerVal);
   }
 
   void *ptr = ptrFromOffset(off);
@@ -311,7 +310,7 @@ void *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignme
   return ptr;
 }
 
-void MeshableArena::free(void *ptr, size_t sz) {
+void MeshableArena::free(void *ptr, size_t sz, internal::PageType type) {
   if (unlikely(!contains(ptr))) {
     debug("invalid free of %p/%zu", ptr, sz);
     return;
@@ -322,7 +321,7 @@ void MeshableArena::free(void *ptr, size_t sz) {
   d_assert(sz % kPageSize == 0);
 
   const Span span(offsetFor(ptr), sz / kPageSize);
-  freeSpan(span);
+  freeSpan(span, type);
 }
 
 void MeshableArena::partialScavenge() {
@@ -485,14 +484,12 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const auto keepOff = offsetFor(keep);
   const auto removeOff = offsetFor(remove);
 
-  d_assert(getMetadataFlags(keepOff) == internal::PageType::Identity);
-  d_assert(getMetadataFlags(removeOff) != internal::PageType::Unallocated);
-
   const Length pageCount = sz / kPageSize;
+  const Offset keepMHOff = _mhIndex[keepOff];
   for (size_t i = 0; i < pageCount; i++) {
     // TODO: remove duplication of meshed metadata between the low
     // bits here and the meshed bitmap
-    setMetadata(removeOff + i, internal::PageType::Meshed | getMetadataPtr(keepOff));
+    setIndex(removeOff + i, keepMHOff);
   }
 
   const Span removedSpan{removeOff, pageCount};
@@ -664,7 +661,7 @@ void MeshableArena::afterForkChild() {
     internal::unordered_set<MiniHeap *> seenMiniheaps{};
 
     for (auto const &i : _meshedBitmap) {
-      MiniHeap *mh = reinterpret_cast<MiniHeap *>(getMetadataPtr(i));
+      MiniHeap *mh = reinterpret_cast<MiniHeap *>(lookupMiniheapOffset(i));
       if (seenMiniheaps.find(mh) != seenMiniheaps.end()) {
         continue;
       }
@@ -681,15 +678,10 @@ void MeshableArena::afterForkChild() {
         const auto remove = mh->spans()[j];
         const auto removeOff = offsetFor(remove);
 
-        d_assert(getMetadataFlags(keepOff) == internal::PageType::Identity);
-        d_assert(getMetadataFlags(removeOff) != internal::PageType::Unallocated);
-
 #ifndef NDEBUG
         const Length pageCount = sz / kPageSize;
         for (size_t i = 0; i < pageCount; i++) {
-          // TODO: remove duplication of meshed metadata between the low
-          // bits here and the meshed bitmap
-          d_assert(_metadata[removeOff + i] == (internal::PageType::Meshed | getMetadataPtr(keepOff)));
+          d_assert(_mhIndex[removeOff + i] == _mhIndex[keepOff]);
         }
 #endif
 

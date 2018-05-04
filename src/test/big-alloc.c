@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define SZ 32816
-#define NOBJS 20
+#define NOBJS 40
 
 volatile char *volatile var;
 
@@ -11,7 +11,7 @@ int main() {
   char *objects[NOBJS];
   memset(objects, 0, sizeof(*objects) * NOBJS);
 
-  for (size_t i = 0; i < 500000; i++) {
+  for (size_t i = 0; i < 1000000; i++) {
     var = malloc(SZ);
     memset((char *)var, 0x55, SZ);
     size_t off = i % NOBJS;
