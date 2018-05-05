@@ -274,8 +274,15 @@ public:
 
   /// Clears out the bitmap array.
   void clear(void) {
+#ifdef __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtautological-pointer-compare"
+#endif
     if (unlikely(Super::_bits == nullptr))
       return;
+#ifdef __clang__
+#pragma GCC diagnostic pop
+#endif
 
     const auto wordCount = byteCount() / sizeof(size_t);
     // use an explicit array since these may be atomic_size_t's
