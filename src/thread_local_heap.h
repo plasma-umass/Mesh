@@ -71,8 +71,6 @@ public:
     return ptr;
   }
 
-  void freeSlowpath(void *ptr);
-
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
     if (unlikely(ptr == nullptr))
       return;

@@ -259,7 +259,7 @@ private:
 
   inline void setIndex(size_t off, Offset val) {
     d_assert(off < indexSize());
-    _mhIndex[off] = val;
+    _mhIndex[off].store(val, std::memory_order_release);
   }
 
   static void staticAtExit();
