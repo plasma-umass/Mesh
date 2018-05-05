@@ -155,14 +155,14 @@ public:
     return ptrval >= _start && ptrval < _end;
   }
 
-  inline void *ATTRIBUTE_ALWAYS_INLINE ptrForOffset(size_t off) const {
+  inline void *ATTRIBUTE_ALWAYS_INLINE ptrFromOffset(size_t off) const {
     return reinterpret_cast<void *>(_start + off * _objectSize);
   }
 
   inline void *ATTRIBUTE_ALWAYS_INLINE malloc() {
     d_assert(!isExhausted());
     const auto off = pop();
-    return ptrForOffset(off);
+    return ptrFromOffset(off);
   }
 
   inline size_t getSize() {
