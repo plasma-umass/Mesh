@@ -56,21 +56,4 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
 
   return ptr;
 }
-
-void __attribute__((optimize("unroll-loops"))) ThreadLocalHeap::freeSlowpath(void *ptr) {
-#if 0
-  for (size_t i = 0; i < kNumBins; i++) {
-    Freelist &freelist = _freelist[i];
-    if (freelist.contains(ptr)) {
-      freelist.free(ptr);
-      _last = &freelist;
-      return;
-    }
-  }
-  _global->free(ptr);
-#else
-  // TODO: I like that this doesn't loop, but it causes us to crash
-  // and I have no idea why.
-#endif
-}
 }  // namespace mesh
