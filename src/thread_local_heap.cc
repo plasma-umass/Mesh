@@ -51,7 +51,6 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
 
   void *ptr = freelist.malloc();
   d_assert(ptr != nullptr);
-
   _last = &freelist;
 
   return ptr;
