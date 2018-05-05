@@ -8,9 +8,9 @@
 #include <cstddef>
 #include <cstdint>
 
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <condition_variable>
@@ -43,6 +43,7 @@ static constexpr size_t kMaxMeshesPerIteration = 2500;
 // maximum number of dirty pages to hold onto before we flush them
 // back to the OS (via MeshableArena::scavenge()
 static constexpr size_t kMaxDirtyPageThreshold = 1 << 14;  // 64 MB in pages
+static constexpr size_t kMinDirtyPageThreshold = 32;       // 128 KB in pages
 
 static constexpr uint32_t kSpanClassCount = 256;
 
@@ -146,7 +147,7 @@ inline mt19937_64 *initSeed() {
   // seed this Mersenne Twister PRNG with entropy from the host OS
   int fd = open("/dev/urandom", O_RDONLY);
   unsigned long buf;
-  auto sz = read(fd, (void *) &buf, sizeof(unsigned long));
+  auto sz = read(fd, (void *)&buf, sizeof(unsigned long));
   //  std::random_device rd;
   // return new (mtBuf) std::mt19937_64(rd());
   return new (mtBuf) std::mt19937_64(buf);

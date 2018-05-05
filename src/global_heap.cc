@@ -58,7 +58,6 @@ void GlobalHeap::free(void *ptr) {
 
   if (unlikely(shouldFlush)) {
     flushBinLocked(sizeClass);
-    Super::scavenge();
   }
 
   if (shouldConsiderMesh)

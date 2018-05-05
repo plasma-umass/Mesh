@@ -357,19 +357,15 @@ protected:
     return 0;
   }
 
-  internal::Bitmap _bitmap;               // 40 bytes
-  mutable atomic<uint32_t> _refCount{1};  // 44
-
-  atomic<uint32_t> _inUseCount{0};  // 48
-
-  const uint32_t _objectSize;
-  const float    _objectSizeReciprocal;
-
-  const uint32_t _spanSize;  // max 4 GB span size/allocation size, 56
-  char *_span[kMaxMeshes];
-  internal::BinToken _token;
-
-  uint32_t _meshCount;  // : 7;
+  internal::Bitmap _bitmap;               // 32 bytes 32
+  char *_span;                            // 8        40
+  internal::BinToken _token;              // 8        48
+  mutable atomic<uint32_t> _refCount{1};  // 4        52
+  Offset _nextMeshed;                     // 4        56
+  const uint32_t _objectCount;            // 4        60
+  const uint32_t _objectSize;             // 4        64
+  const float _objectSizeReciprocal;      // 4        68
+  const uint32_t _spanSize;               // 4        72 max 4 GB span size/allocation size
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;  // 16 bytes
   internal::Bitmap _bitmap1;  // 16 bytes

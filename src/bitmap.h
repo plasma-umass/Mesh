@@ -118,6 +118,15 @@ public:
     return !(oldValue & mask);
   }
 
+  inline uint64_t inUseCount() const {
+    uint64_t count =
+      __builtin_popcountl(_bits[0]) +
+      __builtin_popcountl(_bits[1]) +
+      __builtin_popcountl(_bits[2]) +
+      __builtin_popcountl(_bits[3]);
+    return count;
+  }
+
 protected:
   inline void nullBits() {
   }
@@ -168,6 +177,15 @@ public:
     _bits[item] = oldValue & ~mask;
 
     return !(oldValue & mask);
+  }
+
+  inline uint64_t inUseCount() const {
+    const auto wordCount = representationSize(_bitCount) / sizeof(size_t);
+    uint64_t count = 0;
+    for (size_t i = 0; i < wordCount; i++) {
+      count += __builtin_popcountl(_bits[i]);
+    }
+    return count;
   }
 
 protected:
@@ -356,15 +374,6 @@ public:
     computeItemPosition(index, item, position);
 
     return Super::_bits[item] & getMask(position);
-  }
-
-  inline uint64_t inUseCount() const {
-    const auto wordCount = byteCount() / sizeof(size_t);
-    uint64_t count = 0;
-    for (size_t i = 0; i < wordCount; i++) {
-      count += __builtin_popcountl(Super::_bits[i]);
-    }
-    return count;
   }
 
   const word_t *bits() const {
