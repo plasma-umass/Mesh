@@ -65,10 +65,8 @@ public:
       return smallAllocSlowpath(sizeClass);
     }
 
-    void *ptr = freelist.malloc();
     _last = &freelist;
-
-    return ptr;
+    return freelist.malloc();
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
@@ -86,8 +84,8 @@ public:
       Freelist &freelist = _freelist[sizeClass];
       if (likely(freelist.getAttached() == mh)) {
         d_assert(mh->refcount() > 0);
-        freelist.free(ptr);
         _last = &freelist;
+        freelist.free(ptr);
         return;
       }
     }
@@ -102,9 +100,11 @@ public:
       return _last->getSize();
     }
 
-    for (size_t i = 0; i < kNumBins; i++) {
-      Freelist &freelist = _freelist[i];
-      if (likely(freelist.isAttached() && freelist.contains(ptr))) {
+    auto mh = _global->miniheapForLocked(ptr);
+    if (likely(mh) && mh->maxCount() > 1) {
+      const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
+      Freelist &freelist = _freelist[sizeClass];
+      if (likely(freelist.getAttached() == mh)) {
         _last = &freelist;
         return freelist.getSize();
       }
