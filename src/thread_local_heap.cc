@@ -51,40 +51,8 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
 
   void *ptr = freelist.malloc();
   d_assert(ptr != nullptr);
-
   _last = &freelist;
 
   return ptr;
-}
-
-void __attribute__((optimize("unroll-loops"))) ThreadLocalHeap::freeSlowpath(void *ptr) {
-#if 1
-  for (size_t i = 0; i < kNumBins; i++) {
-    Freelist &freelist = _freelist[i];
-    if (freelist.contains(ptr)) {
-      freelist.free(ptr);
-      _last = &freelist;
-      return;
-    }
-  }
-  _global->free(ptr);
-#else
-  // TODO: I like that this doesn't loop, but it causes us to crash
-  // and I have no idea why.
-  auto mh = _global->miniheapFor(ptr);
-  if (likely(mh) && mh->maxCount() > 1) {
-    const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
-    Freelist &freelist = _freelist[sizeClass];
-    if (likely(freelist.getAttached() == mh)) {
-      d_assert(mh->refcount() > 1);
-      mh->unref();
-      d_assert(mh->refcount() > 0);
-      freelist.free(ptr);
-      _last = &freelist;
-      return;
-    }
-  }
-  _global->freeFrom(mh, ptr);
-#endif
 }
 }  // namespace mesh

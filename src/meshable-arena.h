@@ -28,10 +28,11 @@
 
 #include "internal.h"
 
+#include "cheap_heap.h"
+
 #include "bitmap.h"
 
 #include "mmapheap.h"
-
 
 #ifndef MADV_DONTDUMP
 #define MADV_DONTDUMP 0
@@ -41,15 +42,15 @@
 #define MADV_DODUMP 0
 #endif
 
-
 namespace mesh {
 
 namespace internal {
 
 enum PageType {
-  Unallocated = 0,
-  Identity = 1,
+  Clean = 0,
+  Dirty = 1,
   Meshed = 2,
+  Unknown = 3,
 };
 }  // namespace internal
 
@@ -123,18 +124,27 @@ public:
   }
 
   void *pageAlloc(size_t pageCount, void *owner, size_t pageAlignment = 1);
-  void free(void *ptr, size_t sz);
 
-  inline void *lookup(const void *ptr) const {
+  void free(void *ptr, size_t sz, internal::PageType type);
+
+  inline void *lookupMiniheapOffset(Offset off) const {
+    const Offset mhOff = _mhIndex[off];
+    const auto result = _mhAllocator.ptrFromOffset(mhOff);
+    // debug("lookup ok for (%zu) %zu %p\n", off, mhOff, result);
+
+    return result;
+  }
+
+  inline void *lookupMiniheap(const void *ptr) const {
     if (unlikely(!contains(ptr))) {
       return nullptr;
     }
 
+    // we've already checked contains, so we know this offset is
+    // within bounds
     const auto off = offsetFor(ptr);
-    const auto result = reinterpret_cast<void *>(getMetadataPtr(off));
-    // mesh::debug("lookup ok for %p(%zu) %p", ptr, off, result);
 
-    return result;
+    return lookupMiniheapOffset(off);
   }
 
   void beginMesh(void *keep, void *remove, size_t sz);
@@ -171,7 +181,7 @@ public:
 
 private:
   void expandArena(Length minPagesAdded);
-  bool findPages(Length pageCount, Span &result);
+  bool findPages(Length pageCount, Span &result, internal::PageType &type);
   bool findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i, Length pageCount, Span &result);
   Span reservePages(Length pageCount, Length pageAlignment);
   void freePhys(void *ptr, size_t sz);
@@ -183,30 +193,33 @@ private:
     return ptrvalFromOffset(span.offset) % (pageAlignment * kPageSize) == 0;
   }
 
-  static constexpr size_t metadataSize() {
+  static constexpr size_t indexSize() {
     // one pointer per page in our arena
-    return sizeof(uintptr_t) * (kArenaSize / kPageSize);
+    return sizeof(Offset) * (kArenaSize / kPageSize);
   }
 
-  inline void freeSpan(Span span) {
+  inline void clearIndex(const Span span) {
+    for (size_t i = 0; i < span.length; i++) {
+      // clear the miniheap pointers we were tracking
+      setIndex(span.offset + i, 0);
+    }
+  }
+
+  inline void freeSpan(Span span, internal::PageType flags) {
     if (span.length == 0) {
       return;
     }
 
-    const uint8_t flags = getMetadataFlags(span.offset);
     // this happens when we are trying to get an aligned allocation
     // and returning excess back to the arena
-    if (flags == internal::PageType::Unallocated) {
+    if (flags == internal::PageType::Clean) {
       _clean[span.spanClass()].push_back(span);
       return;
     }
 
-    for (size_t i = 0; i < span.length; i++) {
-      // clear the miniheap pointers we were tracking
-      setMetadata(span.offset + i, 0);
-    }
+    clearIndex(span);
 
-    if (flags == internal::PageType::Identity) {
+    if (flags == internal::PageType::Dirty) {
       if (kAdviseDump) {
         madvise(ptrFromOffset(span.offset), span.length * kPageSize, MADV_DONTDUMP);
       }
@@ -217,14 +230,9 @@ private:
         partialScavenge();
       }
     } else if (flags == internal::PageType::Meshed) {
-      // debug("delaying resetting meshed mapping\n");
       // delay restoring the identity mapping
       _toReset.push_back(span);
-      // resetSpanMapping(span);
-      // _clean[span.spanClass()].push_back(span);
     }
-
-    // debug("in use count after free of %p/%zu: %zu\n", ptr, sz, _bitmap.inUseCount());
   }
 
   int openShmSpanFile(size_t sz);
@@ -232,7 +240,7 @@ private:
   char *openSpanDir(int pid);
 
   // pointer must already have been checked by `contains()` for bounds
-  inline Length offsetFor(const void *ptr) const {
+  inline Offset offsetFor(const void *ptr) const {
     const uintptr_t ptrval = reinterpret_cast<uintptr_t>(ptr);
     const uintptr_t arena = reinterpret_cast<uintptr_t>(_arenaBegin);
 
@@ -249,20 +257,9 @@ private:
     return reinterpret_cast<void *>(ptrvalFromOffset(off));
   }
 
-  inline void setMetadata(size_t off, uintptr_t val) {
-    d_assert(off < metadataSize());
-    _metadata[off] = val;
-  }
-
-  inline uint8_t getMetadataFlags(size_t off) const {
-    // flags are stored in the bottom 3 bits of the metadata
-    uint8_t flags = _metadata[off] & 0x07;
-    return flags;
-  }
-
-  inline uintptr_t getMetadataPtr(size_t off) const {
-    // flags are stored in the bottom 3 bits of the metadata
-    return _metadata[off] & (uintptr_t)~0x07;
+  inline void setIndex(size_t off, Offset val) {
+    d_assert(off < indexSize());
+    _mhIndex[off].store(val, std::memory_order_release);
   }
 
   static void staticAtExit();
@@ -309,6 +306,14 @@ private:
   }
 
   void *_arenaBegin{nullptr};
+  // indexed by page offset.
+  atomic<Offset> *_mhIndex{nullptr};
+
+protected:
+  CheapHeap<128, kArenaSize / kPageSize> _mhAllocator{};
+
+private:
+  Offset _end{};  // in pages
 
   // spans that had been meshed, have been freed, and need to be reset
   // to identity mappings in the page tables.
@@ -319,8 +324,6 @@ private:
 
   size_t _dirtyPageCount{0};
 
-  Offset _end{};  // in pages
-
   internal::RelaxedBitmap _meshedBitmap{
       kArenaSize / kPageSize,
       reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSize)))};
@@ -328,10 +331,6 @@ private:
   size_t _meshedPageCountHWM{0};
   size_t _rssKbAtHWM{0};
   size_t _maxMeshCount{kDefaultMaxMeshCount};
-
-  // indexed by offset. no need to be atomic, because protected by
-  // _mhRWLock.
-  uintptr_t *_metadata{nullptr};
 
   int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork

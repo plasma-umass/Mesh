@@ -41,8 +41,8 @@ public:
       return ptr;
     }
 
-    char *ptr = _arena + _arenaOff * allocSize;
-    _arenaOff++;
+    const auto off = _arenaOff++;
+    char *ptr = ptrFromOffset(off);
 
     return ptr;
   }
@@ -59,6 +59,22 @@ public:
     _freelist[_freelistOff] = ptr;
   }
 
+  inline char *arenaBegin() const {
+    return _arena;
+  }
+
+  inline uint32_t offsetFor(void *ptr) const {
+    const uintptr_t ptrval = reinterpret_cast<uintptr_t>(ptr);
+    const uintptr_t arena = reinterpret_cast<uintptr_t>(_arena);
+    d_assert(ptrval >= arena);
+    return (ptrval - arena) / allocSize;
+  }
+
+  inline char *ptrFromOffset(size_t off) const {
+    d_assert(off < _arenaOff);
+    return _arena + off * allocSize;
+  }
+
   inline char *arenaEnd() const {
     return _arena + allocSize * maxCount;
   }
@@ -66,7 +82,7 @@ public:
 protected:
   char *_arena{nullptr};
   void **_freelist{nullptr};
-  size_t _arenaOff{0};
+  size_t _arenaOff{1};
   ssize_t _freelistOff{-1};
 };
 }  // namespace mesh

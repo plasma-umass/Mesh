@@ -14,8 +14,6 @@
 #include "meshing.h"
 #include "miniheap.h"
 
-#include "cheap_heap.h"
-
 #include "heaplayers.h"
 
 using namespace HL;
@@ -143,7 +141,7 @@ public:
   void *malloc(size_t sz);
 
   inline MiniHeap *miniheapForLocked(const void *ptr) const {
-    auto mh = reinterpret_cast<MiniHeap *>(Super::lookup(ptr));
+    auto mh = reinterpret_cast<MiniHeap *>(Super::lookupMiniheap(ptr));
     __builtin_prefetch(mh, 1, 2);
     return mh;
   }
@@ -177,7 +175,7 @@ public:
     }
 
     mh->MiniHeap::~MiniHeap();
-    // memset(reinterpret_cast<char *>(mh), 0, 128);
+    // memset(reinterpret_cast<char *>(mh), 0x77, 128);
     _mhAllocator.free(mh);
     _miniheapCount--;
   }
@@ -195,7 +193,8 @@ public:
     for (size_t i = 0; i < meshCount; i++) {
       // if (i > 0)
       //   debug("Super::freeing meshed span\n");
-      Super::free(reinterpret_cast<void *>(spans[i]), spanSize);
+      const auto type = i == 0 ? internal::PageType::Dirty : internal::PageType::Meshed;
+      Super::free(reinterpret_cast<void *>(spans[i]), spanSize, type);
     }
 
     _stats.mhFreeCount++;
@@ -377,8 +376,6 @@ protected:
 
   mt19937_64 _prng;
   MWC _fastPrng;
-
-  CheapHeap<128, kArenaSize / kPageSize> _mhAllocator{};
 
   BinnedTracker<MiniHeap> _littleheaps[kNumBins];
 
