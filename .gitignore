@@ -22,3 +22,10 @@ __pycache__
 /perf.data.old
 /src/test/local-alloc
 /src/test/local-alloc-glibc
+/src/test/big-alloc
+/src/test/big-alloc-glibc
+/src/test/big-alloc-hoard
+/src/test/local-alloc-hoard
+/src/test/local-alloc-tcmalloc
+/test/docker/*/mstatgcc
+/test/docker/*/mstat
