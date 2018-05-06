@@ -1,0 +1,1 @@
+python atsy/example/comp_analysis.py -c atsy/example/comp_analysis_conf_speedometer.py --content-processes 0 -b Firefox --per_tab_pause 200

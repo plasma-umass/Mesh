@@ -29,3 +29,4 @@ __pycache__
 /src/test/local-alloc-tcmalloc
 /test/docker/*/mstatgcc
 /test/docker/*/mstat
+/test/spec/data
