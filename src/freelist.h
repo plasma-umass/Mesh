@@ -172,7 +172,7 @@ public:
   // called once, on initialization of ThreadLocalHeap
   inline void setObjectSize(size_t sz) {
     _objectSize = sz;
-    _objectSizeReciprocal = 1.0 / (float) sz;
+    _objectSizeReciprocal = 1.0 / (float)sz;
     _maxCount = max(HL::CPUInfo::PageSize / sz, kMinStringLen);
     // initially, we are unattached and therefor have no capacity.
     // Setting _off to _maxCount causes isExhausted() to return true
@@ -182,17 +182,17 @@ public:
   }
 
 private:
-  size_t _objectSize{0};
-  float _objectSizeReciprocal{0.0};
-  uintptr_t _start{0};
-  uintptr_t _end{0};
-  MiniHeap *_attachedMiniheap{nullptr};
-  MWC _prng;
-  uint16_t _maxCount{0};
-  uint16_t _off{0};
-  volatile uint8_t _lastOff{0};
-  uint8_t __padding[7];
-  uint8_t _list[kMaxFreelistLength] CACHELINE_ALIGNED;
+  uint32_t _objectSize{0};                              // 4   4
+  float _objectSizeReciprocal{0.0};                     // 4   8
+  uintptr_t _start{0};                                  // 8   16
+  uintptr_t _end{0};                                    // 8   24
+  MiniHeap *_attachedMiniheap{nullptr};                 // 8   32
+  MWC _prng;                                            // 8   40
+  uint16_t _maxCount{0};                                // 2   42
+  uint16_t _off{0};                                     // 2   44
+  volatile uint8_t _lastOff{0};                         // 1   45
+  uint8_t __padding[15];                                // 15  64
+  uint8_t _list[kMaxFreelistLength] CACHELINE_ALIGNED;  // 256 320
 };
 
 static_assert(HL::gcd<sizeof(Freelist), CACHELINE_SIZE>::value == CACHELINE_SIZE,
