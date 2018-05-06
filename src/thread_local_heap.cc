@@ -43,7 +43,7 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
 
   MiniHeap *mh = _global->allocSmallMiniheap(sizeClass, sizeMax);
 
-  freelist.attach(_prng, mh);
+  freelist.attach(mh);
 
   d_assert(freelist.isAttached());
   d_assert(!freelist.isExhausted());
