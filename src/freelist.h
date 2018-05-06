@@ -34,7 +34,7 @@ public:
   }
 
   // post: list has the index of all bits set to 1 in it, in a random order
-  size_t init(MWC &fastPrng, internal::Bitmap &bitmap) {
+  size_t init(internal::Bitmap &bitmap) {
     d_assert(_maxCount > 0);
     d_assert_msg(_maxCount <= kMaxFreelistLength, "objCount? %zu <= %zu", _maxCount, kMaxFreelistLength);
 
@@ -57,7 +57,7 @@ public:
     }
 
     if (kEnableShuffleFreelist) {
-      internal::mwcShuffle(&_list[_off], &_list[_maxCount], fastPrng);
+      internal::mwcShuffle(&_list[_off], &_list[_maxCount], _prng);
     }
 
     return length();
@@ -130,7 +130,7 @@ public:
   }
 
   // an attach takes ownership of the reference to mh
-  inline void attach(MWC &prng, MiniHeap *mh) {
+  inline void attach(MiniHeap *mh) {
     d_assert(_attachedMiniheap == nullptr);
     d_assert(mh->refcount() > 0);
     _attachedMiniheap = mh;
@@ -138,7 +138,7 @@ public:
     _start = mh->getSpanStart();
     _end = _start + mh->spanSize();
 
-    const auto allocCount = init(prng, mh->writableBitmap());
+    const auto allocCount = init(mh->writableBitmap());
 #ifndef NDEBUG
     if (allocCount == 0) {
       mh->dumpDebug();
