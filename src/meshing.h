@@ -93,7 +93,7 @@ inline void randomSort(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
     d_assert(!h1->isAttached());
     d_assert(!h2->isAttached());
 
-    const auto len = h1->bitmap().byteCount();
+    constexpr auto len = 32; // 32 bytes is a max of 256 objects
     const auto bitmap1 = h1->bitmap().bits();
     const auto bitmap2 = h2->bitmap().bits();
     const auto len2 = h2->bitmap().byteCount();
@@ -105,10 +105,10 @@ inline void randomSort(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
 
       meshFound(std::move(heaps));
     } else {
-      // debug("----\n2 UNMESHABLE HEAPS!\n");
-      // h1->dumpDebug();
-      // h2->dumpDebug();
-      // debug("----\n");
+      debug("----\n2 UNMESHABLE HEAPS!\n");
+      h1->dumpDebug();
+      h2->dumpDebug();
+      debug("----\n");
     }
   }
 }
@@ -341,7 +341,7 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
   if (leftSize == 0 || rightSize == 0)
     return;
 
-  const size_t nBytes = leftBucket[0]->bitmap().byteCount();
+  const size_t nBytes = 32;
 
   size_t foundCount = 0;
   for (size_t j = 0; j < leftSize; j++) {
@@ -363,9 +363,15 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
         leftBucket[idxLeft] = nullptr;
         rightBucket[idxRight] = nullptr;
         foundCount++;
+        debug("----\nMESHABLE HEAPS!\n");
         if (foundCount > kMaxMeshesPerIteration) {
           return;
         }
+      } else {
+        // debug("----\n2 UNMESHABLE HEAPS!\n");
+        // h1->dumpDebug();
+        // h2->dumpDebug();
+        // debug("----\n");
       }
     }
   }
