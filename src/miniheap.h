@@ -28,11 +28,12 @@ private:
 public:
   MiniHeap(void *span, size_t objectCount, size_t objectSize, size_t expectedSpanSize)
       : _bitmap(objectCount),
+        _maxCount(objectCount),
         _objectSize(objectSize),
         _objectSizeReciprocal(1.0 / (float)objectSize),
         _spanSize(dynamicSpanSize()),
-        _span{reinterpret_cast<char *>(span), 0, 0, 0},
-        _meshCount(1)
+        _meshCount(1),
+        _span{reinterpret_cast<char *>(span), 0, 0, 0}
 #ifdef MESH_EXTRABITS
         ,
         _bitmap0(maxCount()),
@@ -73,18 +74,21 @@ public:
   // inline void *malloc();
   // inline void localFree(Freelist &freelist, MWC &prng, void *ptr);
 
-  inline void free(void *ptr) {
+  inline size_t free(void *ptr) {
     const ssize_t off = getOff(ptr);
     if (unlikely(off < 0))
-      return;
+      return _inUseCount;
 
     _bitmap.unset(off);
-    _inUseCount--;
+    const size_t prevInUse = _inUseCount.fetch_sub(1);
+    // not strictly true, but good for tests
+    d_assert(prevInUse - 1 == _inUseCount);
+    return prevInUse - 1;
   }
 
   /// Copies (for meshing) the contents of src into our span.
-  inline void consume(char *arenaBegin, const MiniHeap *src) {
-    const auto srcSpan = src->getSpanStart(arenaBegin);
+  inline void consume(const MiniHeap *src) {
+    const auto srcSpan = src->getSpanStart();
 
     // this would be bad
     d_assert(src != this);
@@ -121,7 +125,7 @@ public:
   }
 
   inline size_t maxCount() const {
-    return _bitmap.bitCount();
+    return _maxCount;
   }
 
   inline size_t objectSize() const {
@@ -135,8 +139,8 @@ public:
     return objectSize();
   }
 
-  inline uintptr_t getSpanStart(char *arenaBegin) const {
-    return reinterpret_cast<uintptr_t>(arenaBegin + _span*kPageSize);
+  inline uintptr_t getSpanStart() const {
+    return reinterpret_cast<uintptr_t>(_span[0]);
   }
 
   inline void incrementInUseCount(size_t additionalInUse) {
@@ -212,7 +216,7 @@ public:
   }
 
   /// public for meshTest only
-  inline void *mallocAt(char *arenaBegin, size_t off) {
+  inline void *mallocAt(size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
@@ -224,8 +228,8 @@ public:
     return ptrFromOffset(off);
   }
 
-  inline void *ptrFromOffset(char *arenaBegin, size_t off) {
-    return reinterpret_cast<void *>(getSpanStart(arenaBegin) + off * _objectSize);
+  inline void *ptrFromOffset(size_t off) {
+    return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
   }
 
   inline bool operator<(MiniHeap *&rhs) noexcept {
@@ -358,13 +362,16 @@ protected:
   }
 
   internal::Bitmap _bitmap;               // 32 bytes 32
-  atomic<internal::BinToken> _token;      // 8        40
+  internal::BinToken _token{};            // 8        40
   mutable atomic<uint32_t> _refCount{1};  // 4        44
-  Offset _span;                           // 4        48
-  Offset _nextMeshed;                     // 4        52
-  const atomic<uint32_t> _objectCount;    // 4        56 // add 1 << 31 when meshed
-  const float _objectSizeReciprocal;      // 4        60 // small object sizes
-  const uint32_t _spanSize;               // 4        64 max 4 GB span size/allocation size
+  atomic<uint32_t> _inUseCount{0};        // 4        48
+  const uint32_t _maxCount;               // 4        64
+  const uint32_t _objectSize;             // 4        52
+  const float _objectSizeReciprocal;      // 4        56
+  const uint32_t _spanSize;               // 4        60 max 4 GB span size/allocation size, 56
+  uint32_t _meshCount;                    // 4        68
+  char *_span[kMaxMeshes];
+
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;
   internal::Bitmap _bitmap1;
@@ -375,9 +382,9 @@ protected:
 
 static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
-static_assert(sizeof(MiniHeap) == 192, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
 #else
-static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 }  // namespace mesh
