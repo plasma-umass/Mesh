@@ -23,8 +23,6 @@ void *GlobalHeap::malloc(size_t sz) {
 }
 
 void GlobalHeap::free(void *ptr) {
-  lock_guard<mutex> lock(_miniheapLock);
-
   auto mh = miniheapForLocked(ptr);
   if (unlikely(!mh)) {
     debug("FIXME: free of untracked ptr %p", ptr);
@@ -36,8 +34,7 @@ void GlobalHeap::free(void *ptr) {
   // This can also include, for example, single page allocations w/
   // 16KB alignment.
   if (mh->maxCount() == 1) {
-    // we need to grab the exclusive lock here, as the read-only
-    // lock we took in miniheapFor has already been released
+    lock_guard<mutex> lock(_miniheapLock);
     freeMiniheapLocked(mh, false);
     return;
   }
@@ -45,18 +42,18 @@ void GlobalHeap::free(void *ptr) {
   d_assert(mh->maxCount() > 1);
 
   _lastMeshEffective = 1;
-  mh->free(ptr);
-
-  bool shouldConsiderMesh = !mh->isEmpty();
+  const auto remaining = mh->free(ptr);
+  const bool shouldConsiderMesh = remaining == 0;
 
   const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
 
   // this may free the miniheap -- we can't safely access it after
   // this point.
-  bool shouldFlush = _littleheaps[sizeClass].postFree(mh);
+  bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
   mh = nullptr;
 
   if (unlikely(shouldFlush)) {
+    lock_guard<mutex> lock(_miniheapLock);
     flushBinLocked(sizeClass);
   }
 
