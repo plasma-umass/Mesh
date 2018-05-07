@@ -86,8 +86,8 @@ public:
   enum { MaxBitCount = maxBits };
 
 protected:
-  AtomicBitmapBase(size_t bitCount) : _bitCount(bitCount) {
-    d_assert_msg(_bitCount <= maxBits, "max bits (%zu) exceeded: %zu", maxBits, _bitCount);
+  AtomicBitmapBase(size_t bitCount) {
+    d_assert_msg(bitCount <= maxBits, "max bits (%zu) exceeded: %zu", maxBits, bitCount);
   }
 
   ~AtomicBitmapBase() {
@@ -119,20 +119,25 @@ public:
   }
 
   inline uint64_t inUseCount() const {
-    uint64_t count =
-      __builtin_popcountl(_bits[0]) +
-      __builtin_popcountl(_bits[1]) +
-      __builtin_popcountl(_bits[2]) +
-      __builtin_popcountl(_bits[3]);
-    return count;
+    return __builtin_popcountl(_bits[0]) + __builtin_popcountl(_bits[1]) + __builtin_popcountl(_bits[2]) +
+           __builtin_popcountl(_bits[3]);
   }
 
 protected:
   inline void nullBits() {
   }
 
+  inline void fence() const {
+    std::atomic_thread_fence(std::memory_order_release);
+  }
+
+  inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
+    // d_assert(false);
+    // debug("warning, I don't think this does what you think this does.\n");
+    return maxBits;
+  }
+
   word_t _bits[wordCount(representationSize(maxBits))] = {};
-  const uint32_t _bitCount;
 };
 
 class RelaxedBitmapBase {
@@ -191,6 +196,13 @@ public:
 protected:
   inline void nullBits() {
     _bits = nullptr;
+  }
+
+  inline void fence() const {
+  }
+
+  inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
+    return _bitCount;
   }
 
   const size_t _bitCount;
@@ -259,9 +271,9 @@ public:
   internal::string to_string(ssize_t bitCount = -1) const {
     if (bitCount == -1)
       bitCount = this->bitCount();
-    d_assert(0 <= bitCount && static_cast<size_t>(bitCount) <= Super::_bitCount);
+    d_assert(0 <= bitCount && static_cast<size_t>(bitCount) <= this->bitCount());
 
-    internal::string s(bitCount+1, 0);
+    internal::string s(bitCount + 1, 0);
 
     for (ssize_t i = 0; i < bitCount; i++) {
       s[i] = isSet(i) ? '1' : '0';
@@ -287,7 +299,7 @@ public:
   }
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
-    return Super::_bitCount;
+    return Super::bitCount();
   }
 
   /// Clears out the bitmap array.
@@ -302,11 +314,21 @@ public:
 #pragma GCC diagnostic pop
 #endif
 
+#if 1
+    // when a bitmap is being initialized, it is exclusively owned +
+    // accessible by the thread initializing it.  We don't need
+    // sequential consistency for each bit, just to ensure the 0'ed
+    // bits are flushed at the end.
+    size_t *bits = reinterpret_cast<size_t *>(Super::_bits);
+    memset(bits, 0, byteCount());
+    Super::fence();
+#else
     const auto wordCount = byteCount() / sizeof(size_t);
     // use an explicit array since these may be atomic_size_t's
     for (size_t i = 0; i < wordCount; i++) {
       Super::_bits[i] = 0;
     }
+#endif
   }
 
   inline uint64_t setFirstEmpty(uint64_t startingAt = 0) {
@@ -450,7 +472,7 @@ public:
 private:
   /// Given an index, compute its item (word) and position within the word.
   inline void computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
-    d_assert(index < Super::_bitCount);
+    d_assert(index < bitCount());
     item = index >> kWordBitshift;
     position = index & (kWordBits - 1);
     d_assert(position == index - (item << kWordBitshift));
@@ -463,7 +485,7 @@ namespace internal {
 typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase<256>> Bitmap;
 typedef bitmap::BitmapBase<bitmap::RelaxedBitmapBase> RelaxedBitmap;
 
-static_assert(sizeof(Bitmap) == sizeof(size_t) * 5, "Bitmap unexpected size");
+static_assert(sizeof(Bitmap) == sizeof(size_t) * 4, "Bitmap unexpected size");
 static_assert(sizeof(RelaxedBitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
 }  // namespace internal
 }  // namespace mesh
