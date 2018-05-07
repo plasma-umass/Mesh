@@ -68,6 +68,7 @@ public:
     // auto list = _list;
     // _list = nullptr;
     _attachedMiniheap->unref();
+    d_assert(_attachedMiniheap->refcount() == 0);
     _attachedMiniheap = nullptr;
     _start = 0;
     _end = 0;

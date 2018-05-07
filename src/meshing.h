@@ -363,7 +363,6 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
         leftBucket[idxLeft] = nullptr;
         rightBucket[idxRight] = nullptr;
         foundCount++;
-        debug("----\nMESHABLE HEAPS!\n");
         if (foundCount > kMaxMeshesPerIteration) {
           return;
         }
