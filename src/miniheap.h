@@ -83,8 +83,8 @@ public:
   }
 
   /// Copies (for meshing) the contents of src into our span.
-  inline void consume(const MiniHeap *src) {
-    const auto srcSpan = src->getSpanStart();
+  inline void consume(char *arenaBegin, const MiniHeap *src) {
+    const auto srcSpan = src->getSpanStart(arenaBegin);
 
     // this would be bad
     d_assert(src != this);
@@ -135,8 +135,8 @@ public:
     return objectSize();
   }
 
-  inline uintptr_t getSpanStart() const {
-    return reinterpret_cast<uintptr_t>(_span[0]);
+  inline uintptr_t getSpanStart(char *arenaBegin) const {
+    return reinterpret_cast<uintptr_t>(arenaBegin + _span*kPageSize);
   }
 
   inline void incrementInUseCount(size_t additionalInUse) {
@@ -212,7 +212,7 @@ public:
   }
 
   /// public for meshTest only
-  inline void *mallocAt(size_t off) {
+  inline void *mallocAt(char *arenaBegin, size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
@@ -224,8 +224,8 @@ public:
     return ptrFromOffset(off);
   }
 
-  inline void *ptrFromOffset(size_t off) {
-    return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
+  inline void *ptrFromOffset(char *arenaBegin, size_t off) {
+    return reinterpret_cast<void *>(getSpanStart(arenaBegin) + off * _objectSize);
   }
 
   inline bool operator<(MiniHeap *&rhs) noexcept {
@@ -358,27 +358,26 @@ protected:
   }
 
   internal::Bitmap _bitmap;               // 32 bytes 32
-  char *_span;                            // 8        40
-  internal::BinToken _token;              // 8        48
-  mutable atomic<uint32_t> _refCount{1};  // 4        52
-  Offset _nextMeshed;                     // 4        56
-  const uint32_t _objectCount;            // 4        60
-  const uint32_t _objectSize;             // 4        64
-  const float _objectSizeReciprocal;      // 4        68
-  const uint32_t _spanSize;               // 4        72 max 4 GB span size/allocation size
+  atomic<internal::BinToken> _token;      // 8        40
+  mutable atomic<uint32_t> _refCount{1};  // 4        44
+  Offset _span;                           // 4        48
+  Offset _nextMeshed;                     // 4        52
+  const atomic<uint32_t> _objectCount;    // 4        56 // add 1 << 31 when meshed
+  const float _objectSizeReciprocal;      // 4        60 // small object sizes
+  const uint32_t _spanSize;               // 4        64 max 4 GB span size/allocation size
 #ifdef MESH_EXTRA_BITS
-  internal::Bitmap _bitmap0;  // 16 bytes
-  internal::Bitmap _bitmap1;  // 16 bytes
-  internal::Bitmap _bitmap2;  // 16 bytes
-  internal::Bitmap _bitmap3;  // 16 bytes
+  internal::Bitmap _bitmap0;
+  internal::Bitmap _bitmap1;
+  internal::Bitmap _bitmap2;
+  internal::Bitmap _bitmap3;
 #endif
 };
 
-static_assert(sizeof(mesh::internal::Bitmap) == 40, "Bitmap too big!");
+static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
-static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 192, "MiniHeap too big!");
 #else
-static_assert(sizeof(MiniHeap) == 112, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 }  // namespace mesh
