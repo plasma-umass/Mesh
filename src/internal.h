@@ -209,10 +209,10 @@ public:
   static constexpr inline Size FlagEmpty = numeric_limits<uint32_t>::max() - 2;
   static constexpr inline Size FlagNoOff = numeric_limits<uint32_t>::max();
 
-  BinToken() : _bin(Max), _off(Max) {
+  BinToken() noexcept : _bin(Max), _off(Max) {
   }
 
-  BinToken(Size bin, Size off) : _bin(bin), _off(off) {
+  BinToken(Size bin, Size off) noexcept : _bin(bin), _off(off) {
   }
 
   // whether this is a valid token, or just a default initialized one

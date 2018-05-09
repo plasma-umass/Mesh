@@ -77,13 +77,10 @@ public:
   inline size_t free(void *ptr) {
     const ssize_t off = getOff(ptr);
     if (unlikely(off < 0))
-      return _inUseCount;
+      return _bitmap.inUseCount();
 
     _bitmap.unset(off);
-    const size_t prevInUse = _inUseCount.fetch_sub(1);
-    // not strictly true, but good for tests
-    d_assert(prevInUse - 1 == _inUseCount);
-    return prevInUse - 1;
+    return _bitmap.inUseCount();
   }
 
   /// Copies (for meshing) the contents of src into our span.
@@ -143,20 +140,16 @@ public:
     return reinterpret_cast<uintptr_t>(_span[0]);
   }
 
-  inline void incrementInUseCount(size_t additionalInUse) {
-    _inUseCount += additionalInUse;
-  }
-
   inline bool isEmpty() const {
-    return _inUseCount == 0;
+    return _bitmap.inUseCount() == 0;
   }
 
   inline bool isFull() const {
-    return _inUseCount == maxCount();
+    return _bitmap.inUseCount() == maxCount();
   }
 
   inline size_t inUseCount() const {
-    return _inUseCount;
+    return _bitmap.inUseCount();
   }
 
   inline uint32_t refcount() const {
@@ -177,7 +170,7 @@ public:
 
   /// Returns the fraction full (in the range [0, 1]) that this miniheap is.
   inline double fullness() const {
-    return static_cast<double>(_inUseCount) / static_cast<double>(maxCount());
+    return static_cast<double>(inUseCount()) / static_cast<double>(maxCount());
   }
 
   const internal::Bitmap &bitmap() const {
@@ -223,8 +216,6 @@ public:
       return nullptr;
     }
 
-    _inUseCount++;
-
     return ptrFromOffset(off);
   }
 
@@ -238,7 +229,7 @@ public:
 
   void dumpDebug() const {
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
-    const size_t inUseCount = _inUseCount;
+    const size_t inUseCount = this->inUseCount();
     const size_t meshCount = _meshCount;
     mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, mesh: %zu)\t%p-%p\n", this, _objectSize,
                 maxCount(), heapPages, inUseCount, meshCount, _span[0],
@@ -364,7 +355,6 @@ protected:
   internal::Bitmap _bitmap;               // 32 bytes 32
   internal::BinToken _token{};            // 8        40
   mutable atomic<uint32_t> _refCount{1};  // 4        44
-  atomic<uint32_t> _inUseCount{0};        // 4        48
   const uint32_t _maxCount;               // 4        52
   const uint32_t _objectSize;             // 4        56
   const float _objectSizeReciprocal;      // 4        60
@@ -382,9 +372,9 @@ protected:
 
 static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
-static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
+//static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
 #else
-static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
+//static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 }  // namespace mesh
