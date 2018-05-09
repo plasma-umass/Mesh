@@ -21,21 +21,24 @@ namespace mesh {
 
 using internal::Bitmap;
 
-inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2) noexcept {
-  d_assert(reinterpret_cast<uintptr_t>(bitmap1) % 64 == 0);
-  d_assert(reinterpret_cast<uintptr_t>(bitmap2) % 64 == 0);
-  constexpr size_t byteLen = 32;
+inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
+                     size_t byteLen) noexcept {
+  d_assert(reinterpret_cast<uintptr_t>(bitmap1) % 16 == 0);
+  d_assert(reinterpret_cast<uintptr_t>(bitmap2) % 16 == 0);
   d_assert(byteLen >= 8);
   d_assert(byteLen % 8 == 0);
 
-  const size_t *__restrict__ bits1 = (const size_t *)__builtin_assume_aligned(bitmap1, 64);
-  const size_t *__restrict__ bits2 = (const size_t *)__builtin_assume_aligned(bitmap2, 64);
+  bitmap1 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap1, 16);
+  bitmap2 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap2, 16);
 
-  size_t result[4];
   for (size_t i = 0; i < byteLen / sizeof(size_t); i++) {
-    result[i] = bits1[i] & bits2[i];
+    if ((bitmap1[i] & bitmap2[i]) != 0) {
+      // debug("%zu/%zu bitmap cmp failed: %zx & %zx != 0 (%zx)", i, byteLen, bitmap1[i].load(), bitmap2[i].load(),
+      //       bitmap1[i].load() & bitmap2[i].load());
+      return false;
+    }
   }
-  return bitmap::fastPopcnt(result, 4) == 0;
+  return true;
 }
 
 size_t hammingDistance(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
@@ -56,7 +59,7 @@ inline ssize_t simple(const vector<internal::Bitmap> &bitmaps) noexcept {
     const auto bitmap1 = bitmaps[i].bits();
     const auto bitmap2 = bitmaps[i + 1].bits();
 
-    if (bitmapsMeshable(bitmap1, bitmap2))
+    if (bitmapsMeshable(bitmap1, bitmap2, len))
       meshes++;
   }
 
@@ -96,7 +99,7 @@ inline void randomSort(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
     const auto len2 = h2->bitmap().byteCount();
     d_assert_msg(len == h2->bitmap().byteCount(), "mismatched lengths? %zu != %zu", len, len2);
 
-    if (mesh::bitmapsMeshable(bitmap1, bitmap2)) {
+    if (mesh::bitmapsMeshable(bitmap1, bitmap2, len)) {
       internal::vector<T *> heaps{h1, h2};
       // debug("----\n2 MESHABLE HEAPS!\n");
 
@@ -270,7 +273,7 @@ inline void simpleGreedySplitting(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
       const auto bitmap1 = h1->bitmap().bits();
       const auto bitmap2 = h2->bitmap().bits();
 
-      if (mesh::bitmapsMeshable(bitmap1, bitmap2)) {
+      if (mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes)) {
         std::pair<T *, T *> heaps{h1, h2};
         meshFound(std::move(heaps));
         bucket[j] = nullptr;
@@ -354,7 +357,7 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
       const auto bitmap1 = h1->bitmap().bits();
       const auto bitmap2 = h2->bitmap().bits();
 
-      if (unlikely(mesh::bitmapsMeshable(bitmap1, bitmap2))) {
+      if (unlikely(mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes))) {
         std::pair<T *, T *> heaps{h1, h2};
         meshFound(std::move(heaps));
         leftBucket[idxLeft] = nullptr;

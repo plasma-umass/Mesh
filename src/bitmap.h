@@ -43,30 +43,6 @@ static inline constexpr size_t ATTRIBUTE_ALWAYS_INLINE getMask(uint64_t pos) {
   return 1UL << pos;
 }
 
-// from https://danluu.com/assembly-intrinsics/
-static inline uint32_t fastPopcnt(const uint64_t* buf, int len) {
-  d_assert(len % 4 == 0);
-  uint64_t cnt[4];
-  for (int i = 0; i < 4; ++i) {
-    cnt[i] = 0;
-  }
-
-  for (int i = 0; i < len; i+=4) {
-    __asm__(
-        "popcnt %4, %4  \n\t"
-        "add %4, %0     \n\t"
-        "popcnt %5, %5  \n\t"
-        "add %5, %1     \n\t"
-        "popcnt %6, %6  \n\t"
-        "add %6, %2     \n\t"
-        "popcnt %7, %7  \n\t"
-        "add %7, %3     \n\t" // +r means input/output, r means intput
-        : "+r" (cnt[0]), "+r" (cnt[1]), "+r" (cnt[2]), "+r" (cnt[3])
-        : "r"  (buf[i]), "r"  (buf[i+1]), "r"  (buf[i+2]), "r"  (buf[i+3]));
-  }
-  return cnt[0] + cnt[1] + cnt[2] + cnt[3];
-}
-
 using std::atomic_size_t;
 
 // enables iteration through the set bits of the bitmap
@@ -143,7 +119,8 @@ public:
   }
 
   inline uint64_t inUseCount() const {
-    return bitmap::fastPopcnt(reinterpret_cast<const uint64_t *>(_bits), 4);
+    return __builtin_popcountl(_bits[0]) + __builtin_popcountl(_bits[1]) + __builtin_popcountl(_bits[2]) +
+           __builtin_popcountl(_bits[3]);
   }
 
 protected:
@@ -152,14 +129,6 @@ protected:
 
   inline void fence() const {
     std::atomic_thread_fence(std::memory_order_release);
-  }
-
-  /// Clears out the bitmap array.
-  void clear(void) {
-    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
-      _bits[i].store(0, std::memory_order_relaxed);
-    }
-    fence();
   }
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
@@ -232,27 +201,6 @@ protected:
   inline void fence() const {
   }
 
-  /// Clears out the bitmap array.
-  void clear(void) {
-    if (unlikely(_bits == nullptr))
-      return;
-
-#if 1
-    // when a bitmap is being initialized, it is exclusively owned +
-    // accessible by the thread initializing it.  We don't need
-    // sequential consistency for each bit, just to ensure the 0'ed
-    // bits are flushed at the end.
-    size_t *bits = reinterpret_cast<size_t *>(_bits);
-    memset(bits, 0, representationSize(_bitCount));
-#else
-    const auto wordCount = byteCount() / sizeof(size_t);
-    // use an explicit array since these may be atomic_size_t's
-    for (size_t i = 0; i < wordCount; i++) {
-      _bits[i] = 0;
-    }
-#endif
-  }
-
   inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
     return _bitCount;
   }
@@ -284,17 +232,17 @@ public:
 
   explicit BitmapBase(size_t bitCount) : Super(bitCount) {
     d_assert(Super::_bits != nullptr);
-    Super::clear();
+    clear();
   }
 
   explicit BitmapBase(size_t bitCount, char *backingMemory) : Super(bitCount) {
     d_assert(Super::_bits != nullptr);
-    Super::clear();
+    clear();
   }
 
   explicit BitmapBase(const std::string &str) : Super(str.length()) {
     d_assert(Super::bits() != nullptr);
-    Super::clear();
+    clear();
 
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
@@ -306,7 +254,7 @@ public:
 
   explicit BitmapBase(const internal::string &str) : Super(str.length()) {
     d_assert(Super::_bits != nullptr);
-    Super::clear();
+    clear();
 
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
@@ -352,6 +300,35 @@ public:
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
     return Super::bitCount();
+  }
+
+  /// Clears out the bitmap array.
+  void clear(void) {
+#ifdef __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtautological-pointer-compare"
+#endif
+    if (unlikely(Super::_bits == nullptr))
+      return;
+#ifdef __clang__
+#pragma GCC diagnostic pop
+#endif
+
+#if 1
+    // when a bitmap is being initialized, it is exclusively owned +
+    // accessible by the thread initializing it.  We don't need
+    // sequential consistency for each bit, just to ensure the 0'ed
+    // bits are flushed at the end.
+    size_t *bits = reinterpret_cast<size_t *>(Super::_bits);
+    memset(bits, 0, byteCount());
+    Super::fence();
+#else
+    const auto wordCount = byteCount() / sizeof(size_t);
+    // use an explicit array since these may be atomic_size_t's
+    for (size_t i = 0; i < wordCount; i++) {
+      Super::_bits[i] = 0;
+    }
+#endif
   }
 
   inline uint64_t setFirstEmpty(uint64_t startingAt = 0) {
