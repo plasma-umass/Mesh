@@ -365,10 +365,10 @@ protected:
   internal::BinToken _token{};            // 8        40
   mutable atomic<uint32_t> _refCount{1};  // 4        44
   atomic<uint32_t> _inUseCount{0};        // 4        48
-  const uint32_t _maxCount;               // 4        64
-  const uint32_t _objectSize;             // 4        52
-  const float _objectSizeReciprocal;      // 4        56
-  const uint32_t _spanSize;               // 4        60 max 4 GB span size/allocation size, 56
+  const uint32_t _maxCount;               // 4        52
+  const uint32_t _objectSize;             // 4        56
+  const float _objectSizeReciprocal;      // 4        60
+  const uint32_t _spanSize;               // 4        64 max 4 GB span size/allocation size, 56
   uint32_t _meshCount;                    // 4        68
   char *_span[kMaxMeshes];
 
