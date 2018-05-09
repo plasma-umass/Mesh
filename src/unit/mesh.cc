@@ -77,7 +77,7 @@ static void meshTest(bool invert) {
   const auto len = mh1->bitmap().byteCount();
   ASSERT_EQ(len, mh2->bitmap().byteCount());
 
-  ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2));
+  ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2, len));
 
   mh1->unref();
   mh2->unref();
