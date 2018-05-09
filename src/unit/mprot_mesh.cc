@@ -110,7 +110,7 @@ static void meshTestConcurrentWrite(bool invert) {
   const auto len = mh1->bitmap().byteCount();
   ASSERT_EQ(len, mh2->bitmap().byteCount());
 
-  ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2, len));
+  ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2));
 
   mh1->unref();
   mh2->unref();
