@@ -74,13 +74,12 @@ public:
   // inline void *malloc();
   // inline void localFree(Freelist &freelist, MWC &prng, void *ptr);
 
-  inline size_t free(void *ptr) {
+  inline void free(void *ptr) {
     const ssize_t off = getOff(ptr);
     if (unlikely(off < 0))
-      return _bitmap.inUseCount();
+      return;
 
     _bitmap.unset(off);
-    return _bitmap.inUseCount();
   }
 
   /// Copies (for meshing) the contents of src into our span.

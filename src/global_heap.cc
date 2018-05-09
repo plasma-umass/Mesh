@@ -42,7 +42,8 @@ void GlobalHeap::free(void *ptr) {
   d_assert(mh->maxCount() > 1);
 
   _lastMeshEffective = 1;
-  const auto remaining = mh->free(ptr);
+  mh->free(ptr);
+  const auto remaining = mh->inUseCount();
   const bool shouldConsiderMesh = remaining > 0;
 
   const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
