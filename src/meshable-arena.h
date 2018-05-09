@@ -54,58 +54,6 @@ enum PageType {
 };
 }  // namespace internal
 
-typedef uint32_t Offset;
-typedef uint32_t Length;
-
-struct Span {
-  // offset and length are in pages
-  explicit Span(Offset _offset, Length _length) : offset(_offset), length(_length) {
-  }
-
-  Span(const Span &rhs) : offset(rhs.offset), length(rhs.length) {
-  }
-
-  constexpr Span &operator=(const Span &rhs) {
-    offset = rhs.offset;
-    length = rhs.length;
-    return *this;
-  }
-
-  Span(Span &&rhs) : offset(rhs.offset), length(rhs.length) {
-  }
-
-  bool empty() const {
-    return length == 0;
-  }
-
-  // reduce the size of this span to pageCount, return another span
-  // with the rest of the pages.
-  Span splitAfter(Length pageCount) {
-    d_assert(pageCount <= length);
-    auto restPageCount = length - pageCount;
-    length = pageCount;
-    return Span(offset + pageCount, restPageCount);
-  }
-
-  uint32_t spanClass() const {
-    return std::min(length, kSpanClassCount) - 1;
-  }
-
-  size_t byteLength() const {
-    return length * kPageSize;
-  }
-
-  inline bool operator==(const Span &rhs) {
-    return offset == rhs.offset && length == rhs.length;
-  }
-
-  inline bool operator!=(const Span &rhs) {
-    return !(*this == rhs);
-  }
-
-  Offset offset;
-  Length length;
-};
 
 class MeshableArena : public mesh::OneWayMmapHeap {
 private:
