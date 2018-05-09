@@ -132,6 +132,9 @@ public:
 
   // an attach takes ownership of the reference to mh
   inline void attach(MiniHeap *mh) {
+
+    // TODO: set attached(true); on mh
+
     d_assert(_attachedMiniheap == nullptr);
     d_assert(mh->refcount() > 0);
     _attachedMiniheap = mh;
@@ -146,9 +149,6 @@ public:
     }
 #endif
     d_assert_msg(allocCount > 0, "no free bits in MH %p", mh->getSpanStart());
-
-    // tell the miniheap how many offsets we pulled out/preallocated into our freelist
-    mh->incrementInUseCount(allocCount);
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE contains(void *ptr) const {

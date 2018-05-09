@@ -125,13 +125,21 @@ public:
       return false;
     }
 
-    const auto oldBinId = mh->getBinToken().bin();
-    const auto newBinId = getBinId(inUseCount);
+    std::atomic_thread_fence(std::memory_order_acquire);
+
+    auto oldBinId = mh->getBinToken().bin();
+    auto newBinId = getBinId(inUseCount);
 
     if (likely(newBinId == oldBinId))
       return false;
 
     std::lock_guard<std::mutex> lock(_mutex);
+
+    // double-check
+    oldBinId = mh->getBinToken().bin();
+    newBinId = getBinId(mh->inUseCount());
+    if (unlikely(newBinId == oldBinId))
+      return false;
 
     move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
 
@@ -148,6 +156,7 @@ public:
 
     mh->setBinToken(internal::BinToken::Full());
     addTo(_full, mh);
+    std::atomic_thread_fence(std::memory_order_release);
   }
 
   void remove(MiniHeap *mh) {
@@ -160,6 +169,7 @@ public:
 
     const auto bin = mh->getBinToken().bin();
     removeFrom(getBin(bin), mh);
+    std::atomic_thread_fence(std::memory_order_release);
   }
 
   size_t allocatedObjectCount() const {
@@ -315,12 +325,14 @@ private:
     const auto temp = mh1->getBinToken();
     mh1->setBinToken(mh2->getBinToken());
     mh2->setBinToken(temp);
+    std::atomic_thread_fence(std::memory_order_release);
   }
 
   void move(internal::vector<MiniHeap *> &to, internal::vector<MiniHeap *> &from, MiniHeap *mh, uint32_t size) {
     removeFrom(from, mh);
     mh->setBinToken(internal::BinToken(size, internal::BinToken::FlagNoOff));
     addTo(to, mh);
+    std::atomic_thread_fence(std::memory_order_release);
   }
 
   // must be called with _mutex held
