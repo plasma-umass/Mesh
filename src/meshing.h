@@ -28,17 +28,14 @@ inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bi
   d_assert(byteLen >= 8);
   d_assert(byteLen % 8 == 0);
 
-  bitmap1 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap1, 16);
-  bitmap2 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap2, 16);
+  const auto bits1 = (const size_t *)__builtin_assume_aligned(bitmap1, 16);
+  const auto bits2 = (const size_t *)__builtin_assume_aligned(bitmap2, 16);
 
+  size_t result = 0;
   for (size_t i = 0; i < byteLen / sizeof(size_t); i++) {
-    if ((bitmap1[i] & bitmap2[i]) != 0) {
-      // debug("%zu/%zu bitmap cmp failed: %zx & %zx != 0 (%zx)", i, byteLen, bitmap1[i].load(), bitmap2[i].load(),
-      //       bitmap1[i].load() & bitmap2[i].load());
-      return false;
-    }
+    result += bits1[i] & bits2[i];
   }
-  return true;
+  return result == 0;
 }
 
 size_t hammingDistance(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
@@ -341,18 +338,24 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
   if (leftSize == 0 || rightSize == 0)
     return;
 
-  const size_t nBytes = 32;
+  const size_t limit = rightSize < t ? rightSize : t;
+  constexpr size_t nBytes = 32;
 
   size_t foundCount = 0;
   for (size_t j = 0; j < leftSize; j++) {
-    for (size_t i = 0; i < t; i++) {
-      const size_t idxLeft = j;
-      const size_t idxRight = (j + i) % rightSize;
+    const size_t idxLeft = j;
+    size_t idxRight = j;
+    for (size_t i = 0; i < limit; i++, idxRight++) {
+      if (idxRight >= rightSize) {
+        idxRight %= rightSize;
+      }
+
       auto h1 = leftBucket[idxLeft];
       auto h2 = rightBucket[idxRight];
 
-      if (h1 == nullptr || h2 == nullptr)
+      if (h1 == nullptr || h2 == nullptr) {
         continue;
+      }
 
       const auto bitmap1 = h1->bitmap().bits();
       const auto bitmap2 = h2->bitmap().bits();
