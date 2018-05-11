@@ -83,7 +83,7 @@ public:
       const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
       Freelist &freelist = _freelist[sizeClass];
       if (likely(freelist.getAttached() == mh)) {
-        d_assert(mh->refcount() > 0);
+        d_assert(mh->isAttached());
         _last = &freelist;
         freelist.free(ptr);
         return;

@@ -3,7 +3,23 @@
 
 #include "global_heap.h"
 
+#include "runtime.h"
+
 namespace mesh {
+
+MiniHeap *GetMiniHeap(const MiniHeapID id) {
+  if (unlikely(id == 0))
+    return nullptr;
+
+  return runtime().heap().miniheapForID(id);
+}
+
+MiniHeapID GetMiniHeapID(const MiniHeap *mh) {
+  if (unlikely(mh == nullptr))
+    return 0;
+
+  return runtime().heap().miniheapIDFor(mh);
+}
 
 void *GlobalHeap::malloc(size_t sz) {
 #ifndef NDEBUG
@@ -34,7 +50,7 @@ void GlobalHeap::free(void *ptr) {
   // This can also include, for example, single page allocations w/
   // 16KB alignment.
   if (mh->maxCount() == 1) {
-    lock_guard<mutex> lock(_miniheapLock);
+    unique_lock<shared_mutex> lock(_miniheapLock);
     freeMiniheapLocked(mh, false);
     return;
   }
@@ -42,7 +58,7 @@ void GlobalHeap::free(void *ptr) {
   d_assert(mh->maxCount() > 1);
 
   _lastMeshEffective = 1;
-  mh->free(ptr);
+  mh->free(arenaBegin(), ptr);
   const auto remaining = mh->inUseCount();
   const bool shouldConsiderMesh = remaining > 0;
 
@@ -54,7 +70,7 @@ void GlobalHeap::free(void *ptr) {
   mh = nullptr;
 
   if (unlikely(shouldFlush)) {
-    lock_guard<mutex> lock(_miniheapLock);
+    unique_lock<shared_mutex> lock(_miniheapLock);
     flushBinLocked(sizeClass);
   }
 
@@ -63,7 +79,7 @@ void GlobalHeap::free(void *ptr) {
 }
 
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-  unique_lock<mutex> lock(_miniheapLock);
+  unique_lock<shared_mutex> lock(_miniheapLock);
 
   if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
     return -1;
@@ -189,7 +205,7 @@ void GlobalHeap::dumpStats(int level, bool beDetailed) const {
   if (level < 1)
     return;
 
-  lock_guard<mutex> lock(_miniheapLock);
+  unique_lock<shared_mutex> lock(_miniheapLock);
 
   const auto meshedPageHWM = meshedPageHighWaterMark();
 

@@ -63,7 +63,7 @@ public:
     return _arena;
   }
 
-  inline uint32_t offsetFor(void *ptr) const {
+  inline uint32_t offsetFor(const void *ptr) const {
     const uintptr_t ptrval = reinterpret_cast<uintptr_t>(ptr);
     const uintptr_t arena = reinterpret_cast<uintptr_t>(_arena);
     d_assert(ptrval >= arena);

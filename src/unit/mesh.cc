@@ -42,8 +42,8 @@ static void meshTest(bool invert) {
   ASSERT_EQ(mh2->bitmap().inUseCount(), 0UL);
 
   // allocate two c strings, one from each miniheap at different offsets
-  char *s1 = reinterpret_cast<char *>(mh1->mallocAt(0));
-  char *s2 = reinterpret_cast<char *>(mh2->mallocAt(ObjCount - 1));
+  char *s1 = reinterpret_cast<char *>(mh1->mallocAt(gheap.arenaBegin(), 0));
+  char *s2 = reinterpret_cast<char *>(mh2->mallocAt(gheap.arenaBegin(), ObjCount - 1));
 
   ASSERT_TRUE(s1 != nullptr);
   ASSERT_TRUE(s2 != nullptr);
@@ -78,9 +78,6 @@ static void meshTest(bool invert) {
   ASSERT_EQ(len, mh2->bitmap().byteCount());
 
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2, len));
-
-  mh1->unref();
-  mh2->unref();
 
   note("ABOUT TO MESH");
   // mesh the two miniheaps together

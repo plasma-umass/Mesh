@@ -63,17 +63,13 @@ public:
     return length();
   }
 
-  void detach() {
+  MiniHeap *detach() {
     d_assert(_attachedMiniheap != nullptr);
-    // auto list = _list;
-    // _list = nullptr;
-    _attachedMiniheap->unref();
-    d_assert(_attachedMiniheap->refcount() == 0);
+    const auto mh = _attachedMiniheap;
     _attachedMiniheap = nullptr;
     _start = 0;
     _end = 0;
-    // atomic_thread_fence(memory_order_seq_cst);
-    // mesh::internal::Heap().free(list);
+    return mh;
   }
 
   inline bool isExhausted() const {
@@ -131,15 +127,14 @@ public:
   }
 
   // an attach takes ownership of the reference to mh
-  inline void attach(MiniHeap *mh) {
+  inline void attach(void *arenaBegin, MiniHeap *mh) {
 
     // TODO: set attached(true); on mh
 
     d_assert(_attachedMiniheap == nullptr);
-    d_assert(mh->refcount() > 0);
     _attachedMiniheap = mh;
 
-    _start = mh->getSpanStart();
+    _start = mh->getSpanStart(arenaBegin);
     _end = _start + mh->spanSize();
 
     const auto allocCount = init(mh->writableBitmap());
@@ -148,7 +143,7 @@ public:
       mh->dumpDebug();
     }
 #endif
-    d_assert_msg(allocCount > 0, "no free bits in MH %p", mh->getSpanStart());
+    d_assert_msg(allocCount > 0, "no free bits in MH %p", mh->getSpanStart(arenaBegin));
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE contains(void *ptr) const {

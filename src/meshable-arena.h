@@ -44,17 +44,6 @@
 
 namespace mesh {
 
-namespace internal {
-
-enum PageType {
-  Clean = 0,
-  Dirty = 1,
-  Meshed = 2,
-  Unknown = 3,
-};
-}  // namespace internal
-
-
 class MeshableArena : public mesh::OneWayMmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MeshableArena);
@@ -71,7 +60,7 @@ public:
     return arena <= ptrval && ptrval < arena + kArenaSize;
   }
 
-  void *pageAlloc(size_t pageCount, void *owner, size_t pageAlignment = 1);
+  char *pageAlloc(size_t pageCount, void *owner, size_t pageAlignment = 1);
 
   void free(void *ptr, size_t sz, internal::PageType type);
 
@@ -125,6 +114,13 @@ public:
 
   inline size_t RSSAtHighWaterMark() const {
     return _rssKbAtHWM;
+  }
+
+  char *arenaBegin() const {
+    return reinterpret_cast<char *>(_arenaBegin);
+  }
+  void *arenaEnd() const {
+    return reinterpret_cast<char *>(_arenaBegin) + kArenaSize;
   }
 
 private:
@@ -248,10 +244,6 @@ private:
   void prepareForFork();
   void afterForkParent();
   void afterForkChild();
-
-  void *arenaEnd() const {
-    return reinterpret_cast<char *>(_arenaBegin) + kArenaSize;
-  }
 
   void *_arenaBegin{nullptr};
   // indexed by page offset.

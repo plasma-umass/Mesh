@@ -44,6 +44,7 @@ static inline constexpr size_t ATTRIBUTE_ALWAYS_INLINE getMask(uint64_t pos) {
 }
 
 using std::atomic_size_t;
+using std::atomic_compare_exchange_weak_explicit;
 
 // enables iteration through the set bits of the bitmap
 template <typename Container>

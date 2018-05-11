@@ -121,7 +121,7 @@ public:
   // called after a free through the global heap has happened --
   // miniheap must be unreffed by return
   bool postFree(MiniHeap *mh, uint32_t inUseCount) {
-    if (mh->refcount() > 0) {
+    if (mh->isAttached() > 0) {
       return false;
     }
 
@@ -297,11 +297,10 @@ private:
       const size_t off = _fastPrng.inRange(0, vec.size() - 1);
 
       MiniHeap *mh = vec[off];
-      // we hold the mhRWLock exclusively at this point.  If refcount
-      // is > 0, it means that it is either attached to a freelist or
-      // another thread has a handle to it.  it is not a candidate for
-      // allocation in any case.
-      if (unlikely(mh->refcount() > 0)) {
+      // we hold the mhRWLock exclusively at this point.  If a
+      // miniheap is attached to a freelist it is not a candidate for
+      // allocation.
+      if (unlikely(mh->isAttached())) {
         continue;
       }
 
