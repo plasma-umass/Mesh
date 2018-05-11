@@ -490,8 +490,6 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const Length pageCount = sz / kPageSize;
   const Offset keepMHOff = _mhIndex[keepOff];
   for (size_t i = 0; i < pageCount; i++) {
-    // TODO: remove duplication of meshed metadata between the low
-    // bits here and the meshed bitmap
     setIndex(removeOff + i, keepMHOff);
   }
 

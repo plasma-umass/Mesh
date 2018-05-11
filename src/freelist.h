@@ -128,9 +128,7 @@ public:
 
   // an attach takes ownership of the reference to mh
   inline void attach(void *arenaBegin, MiniHeap *mh) {
-
-    // TODO: set attached(true); on mh
-
+    mh->setAttached();
     d_assert(_attachedMiniheap == nullptr);
     _attachedMiniheap = mh;
 
