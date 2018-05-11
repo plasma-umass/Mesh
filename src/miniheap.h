@@ -43,29 +43,29 @@ public:
     set(AttachedOffset);
   }
 
-  inline void setMeshed() {
-    set(MeshedOffset);
-  }
-
   inline void unsetAttached() {
     unset(AttachedOffset);
-  }
-
-  inline void unsetMeshed() {
-    unset(MeshedOffset);
   }
 
   inline bool isAttached() const {
     return is(AttachedOffset);
   }
 
+  inline void setMeshed() {
+    set(MeshedOffset);
+  }
+
+  inline void unsetMeshed() {
+    unset(MeshedOffset);
+  }
+
   inline bool isMeshed() const {
-    return is(AttachedOffset);
+    return is(MeshedOffset);
   }
 
 private:
   inline bool is(size_t offset) const {
-    const auto mask = getMask(AttachedOffset);
+    const auto mask = getMask(offset);
     return (_flags.load(std::memory_order_acquire) & mask) == mask;
   }
 
@@ -234,7 +234,7 @@ public:
   }
 
   inline bool isMeshed() const {
-    return _flags.isAttached();
+    return _flags.isMeshed();
   }
 
   inline bool isMeshingCandidate() const {
