@@ -79,7 +79,7 @@ void GlobalHeap::free(void *ptr) {
 }
 
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-  lock_guard<mutex> lock(_miniheapLock);
+  unique_lock<mutex> lock(_miniheapLock);
 
   if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
     return -1;

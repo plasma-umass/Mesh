@@ -164,7 +164,8 @@ public:
 
   // called with lock held
   void freeMiniheapAfterMeshLocked(MiniHeap *mh, bool untrack = true) {
-    if (untrack) {
+    // don't untrack a meshed miniheap -- it has already been untracked
+    if (untrack && !mh->isMeshed()) {
       const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
       untrackMiniheapLocked(sizeClass, mh);
     }
@@ -192,7 +193,8 @@ public:
 
     for (size_t i = 0; i < last; i++) {
       MiniHeap *mh = toFree[i];
-      const auto type = mh->isMeshed() ? internal::PageType::Dirty : internal::PageType::Meshed;
+      const bool isMeshed = mh->isMeshed();
+      const auto type = isMeshed ? internal::PageType::Meshed : internal::PageType::Dirty;
       Super::free(reinterpret_cast<void *>(mh->getSpanStart(arenaBegin())), spanSize, type);
       _stats.mhFreeCount++;
       freeMiniheapAfterMeshLocked(mh, untrack);
@@ -320,8 +322,10 @@ public:
 
     // does the copying of objects and updating of span metadata
     dst->consume(arenaBegin(), src);
+    d_assert(src->isMeshed());
 
     src->forEachMeshed([&](const MiniHeap *mh) {
+      d_assert(mh->isMeshed());
       const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
       // frees physical memory + re-marks srcSpans as read/write
       Super::finalizeMesh(dstSpanStart, srcSpan, dstSpanSize);
@@ -331,13 +335,12 @@ public:
     // make sure we adjust what bin the destination is in -- it might
     // now be full and not a candidate for meshing
     _littleheaps[SizeMap::SizeClass(dst->objectSize())].postFree(dst, dst->inUseCount());
+    untrackMiniheapLocked(SizeMap::SizeClass(src->objectSize()), src);
   }
 
   inline void maybeMesh() {
     if (_meshPeriod == 0)
       return;
-    // if (_smallFreeCount == 0)
-    //   return;
 
     const auto now = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double> duration = now - _lastMesh;

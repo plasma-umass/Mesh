@@ -154,16 +154,24 @@ public:
     if (unlikely(off < 0))
       return;
 
+    freeOff(off);
+  }
+
+protected:
+  inline void freeOff(size_t off) {
+    d_assert(_bitmap.isSet(off));
     _bitmap.unset(off);
   }
 
+public:
   /// Copies (for meshing) the contents of src into our span.
   inline void consume(void *arenaBegin, MiniHeap *src) {
-    src->setMeshed();
-    const auto srcSpan = src->getSpanStart(arenaBegin);
-
     // this would be bad
     d_assert(src != this);
+    d_assert(objectSize() == src->objectSize());
+
+    src->setMeshed();
+    const auto srcSpan = src->getSpanStart(arenaBegin);
 
     // for each object in src, copy it to our backing span + update
     // our bitmap and in-use count
@@ -172,8 +180,12 @@ public:
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize());
       // need to ensure we update the bitmap and in-use count
       void *dstObject = mallocAt(arenaBegin, off);
+      // debug("meshing: %zu (%p <- %p, %zu)\n", off, dstObject, srcObject, objectSize());
       d_assert(dstObject != nullptr);
       memcpy(dstObject, srcObject, objectSize());
+      // debug("\t'%s'\n", dstObject);
+      // debug("\t'%s'\n", srcObject);
+      src->freeOff(off);
     }
 
     trackMeshedSpan(GetMiniHeapID(src));
@@ -297,7 +309,10 @@ public:
 
   size_t meshCount() const {
     size_t count = 0;
-    forEachMeshed([&](const MiniHeap *mh) { count++; return false; });
+    forEachMeshed([&](const MiniHeap *mh) {
+      count++;
+      return false;
+    });
     return count;
   }
 
@@ -434,22 +449,25 @@ protected:
     span = 0;
     // TODO: investigate un-unrolling the above
     forEachMeshed([&](const MiniHeap *mh) {
-        if (mh == this)
-          return false;
-
-        uintptr_t meshedSpan = beginval + mh->span().offset * kPageSize;
-        if (meshedSpan <= ptrval && ptrval < meshedSpan + len) {
-          span = meshedSpan;
-          return true;
-        }
+      if (mh == this)
         return false;
+
+      uintptr_t meshedSpan = beginval + mh->span().offset * kPageSize;
+      if (meshedSpan <= ptrval && ptrval < meshedSpan + len) {
+        span = meshedSpan;
+        return true;
+      }
+      return false;
     });
 
     return span;
   }
 
-  internal::Bitmap _bitmap;           // 32 bytes 32
-  internal::BinToken _token{internal::BinToken::Max, internal::BinToken::Max, };        // 8        40
+  internal::Bitmap _bitmap;  // 32 bytes 32
+  internal::BinToken _token{
+      internal::BinToken::Max,
+      internal::BinToken::Max,
+  };                                  // 8        40
   const Span _spanSpan;               // 8        48
   Flags _flags{};                     // 4        52
   const uint32_t _maxCount;           // 4        56
