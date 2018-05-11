@@ -84,9 +84,6 @@ static void meshTest(bool invert) {
   gheap.meshLocked(mh1, mh2);
   note("DONE MESHING");
 
-  // mh2 is consumed by mesh call, ensure it is now a null pointer
-  ASSERT_EQ(mh2, nullptr);
-
   // ensure the count of set bits looks right
   ASSERT_EQ(mh1->inUseCount(), 2UL);
 
