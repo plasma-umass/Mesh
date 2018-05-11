@@ -250,7 +250,7 @@ private:
   atomic<Offset> *_mhIndex{nullptr};
 
 protected:
-  CheapHeap<128, kArenaSize / kPageSize> _mhAllocator{};
+  CheapHeap<64, kArenaSize / kPageSize> _mhAllocator{};
 
 private:
   Offset _end{};  // in pages

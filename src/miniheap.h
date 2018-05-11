@@ -105,8 +105,7 @@ public:
       : _bitmap(objectCount),
         _span(span),
         _maxCount(objectCount),
-        _objectSizeReciprocal(1.0 / (float)objectSize),
-        _objectSize(objectSize)
+        _objectSizeReciprocal(1.0 / (float)objectSize)
 #ifdef MESH_EXTRABITS
         ,
         _bitmap0(maxCount()),
@@ -119,12 +118,10 @@ public:
 
     const auto expectedSpanSize = _span.byteLength();
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
-                 maxCount(), _objectSize);
-    d_assert_msg(expectedSpanSize == dynamicSpanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
-                 maxCount(), _objectSize);
+                 maxCount(), this->objectSize());
 
     // d_assert_msg(spanSize == static_cast<size_t>(_spanSize), "%zu != %hu", spanSize, _spanSize);
-    d_assert_msg(objectSize == static_cast<size_t>(_objectSize), "%zu != %hu", objectSize, _objectSize);
+    // d_assert_msg(objectSize == static_cast<size_t>(objectSize()), "%zu != %hu", objectSize, _objectSize);
 
     d_assert(_nextMiniHeap == 0);
 
@@ -195,17 +192,12 @@ public:
     return _span.byteLength();
   }
 
-  inline size_t dynamicSpanSize() const {
-    size_t bytesNeeded = static_cast<size_t>(_objectSize) * maxCount();
-    return mesh::RoundUpToPage(bytesNeeded);
-  }
-
   inline size_t maxCount() const {
     return _maxCount;
   }
 
   inline size_t objectSize() const {
-    return _objectSize;
+    return 1.0 / _objectSizeReciprocal;
   }
 
   inline size_t getSize() const {
@@ -339,7 +331,7 @@ public:
   }
 
   inline void *ptrFromOffset(void *arenaBegin, size_t off) {
-    return reinterpret_cast<void *>(getSpanStart(arenaBegin) + off * _objectSize);
+    return reinterpret_cast<void *>(getSpanStart(arenaBegin) + off * objectSize());
   }
 
   inline bool operator<(MiniHeap *&rhs) noexcept {
@@ -350,7 +342,7 @@ public:
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = this->inUseCount();
     const size_t meshCount = this->meshCount();
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, mesh: %zu)\t%p-%p\n", this, _objectSize,
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, mesh: %zu)\t%p-%p\n", this, objectSize(),
                 maxCount(), heapPages, inUseCount, meshCount, _span.offset * kPageSize,
                 _span.offset * kPageSize + spanSize());
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
@@ -473,7 +465,6 @@ protected:
   const uint32_t _maxCount;           // 4        56
   MiniHeapID _nextMiniHeap{0};        // 4        60
   const float _objectSizeReciprocal;  // 4        64
-  const uint32_t _objectSize;         // 4        68
 
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;
@@ -487,7 +478,7 @@ static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
 // static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
 #else
-// static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 }  // namespace mesh

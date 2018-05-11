@@ -96,7 +96,7 @@ public:
 
     d_assert(mh->maxCount() == 1);
     d_assert(mh->spanSize() == pageCount * kPageSize);
-    d_assert(mh->objectSize() == pageCount * kPageSize);
+    // d_assert(mh->objectSize() == pageCount * kPageSize);
 
     void *ptr = mh->mallocAt(arenaBegin(), 0);
 
