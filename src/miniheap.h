@@ -103,7 +103,7 @@ private:
 public:
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
       : _bitmap(objectCount),
-        _spanSpan(span),
+        _span(span),
         _maxCount(objectCount),
         _objectSizeReciprocal(1.0 / (float)objectSize),
         _objectSize(objectSize)
@@ -117,7 +117,7 @@ public:
   {
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
 
-    const auto expectedSpanSize = _spanSpan.byteLength();
+    const auto expectedSpanSize = _span.byteLength();
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
                  maxCount(), _objectSize);
     d_assert_msg(expectedSpanSize == dynamicSpanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
@@ -137,7 +137,7 @@ public:
   }
 
   inline Span span() const {
-    return _spanSpan;
+    return _span;
   }
 
   void printOccupancy() const {
@@ -192,7 +192,7 @@ public:
   }
 
   inline size_t spanSize() const {
-    return _spanSpan.byteLength();
+    return _span.byteLength();
   }
 
   inline size_t dynamicSpanSize() const {
@@ -214,7 +214,7 @@ public:
 
   inline uintptr_t getSpanStart(void *arenaBegin) const {
     const auto beginval = reinterpret_cast<uintptr_t>(arenaBegin);
-    return beginval + _spanSpan.offset * kPageSize;
+    return beginval + _span.offset * kPageSize;
   }
 
   inline bool isEmpty() const {
@@ -351,8 +351,8 @@ public:
     const size_t inUseCount = this->inUseCount();
     const size_t meshCount = this->meshCount();
     mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, mesh: %zu)\t%p-%p\n", this, _objectSize,
-                maxCount(), heapPages, inUseCount, meshCount, _spanSpan.offset * kPageSize,
-                _spanSpan.offset * kPageSize + spanSize());
+                maxCount(), heapPages, inUseCount, meshCount, _span.offset * kPageSize,
+                _span.offset * kPageSize + spanSize());
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
   }
 
@@ -438,11 +438,11 @@ protected:
   inline uintptr_t spanStart(void *arenaBegin, void *ptr) const {
     const auto beginval = reinterpret_cast<uintptr_t>(arenaBegin);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    const auto len = _spanSpan.byteLength();
+    const auto len = _span.byteLength();
 
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
-    uintptr_t span = beginval + _spanSpan.offset * kPageSize;
+    uintptr_t span = beginval + _span.offset * kPageSize;
     if (likely(span <= ptrval && ptrval < span + len))
       return span;
 
@@ -468,7 +468,7 @@ protected:
       internal::BinToken::Max,
       internal::BinToken::Max,
   };                                  // 8        40
-  const Span _spanSpan;               // 8        48
+  const Span _span;                   // 8        48
   Flags _flags{};                     // 4        52
   const uint32_t _maxCount;           // 4        56
   MiniHeapID _nextMiniHeap{0};        // 4        60
