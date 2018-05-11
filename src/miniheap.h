@@ -21,19 +21,92 @@
 
 namespace mesh {
 
+class MiniHeap;
+
+typedef void (*SpanCallback)(Span span, internal::PageType type);
+
+class Flags {
+private:
+  DISALLOW_COPY_AND_ASSIGN(Flags);
+
+  static inline constexpr uint32_t ATTRIBUTE_ALWAYS_INLINE getMask(uint32_t pos) {
+    return 1UL << pos;
+  }
+  static constexpr uint32_t MeshedOffset = 0;
+  static constexpr uint32_t AttachedOffset = 0;
+
+public:
+  explicit Flags() noexcept {
+  }
+
+  inline void setAttached() {
+    set(AttachedOffset);
+  }
+
+  inline void setMeshed() {
+    set(MeshedOffset);
+  }
+
+  inline void unsetAttached() {
+    unset(AttachedOffset);
+  }
+
+  inline void unsetMeshed() {
+    unset(MeshedOffset);
+  }
+
+  inline bool isAttached() const {
+    return is(AttachedOffset);
+  }
+
+  inline bool isMeshed() const {
+    return is(AttachedOffset);
+  }
+
+private:
+  inline bool is(size_t offset) const {
+    const auto mask = getMask(AttachedOffset);
+    return (_flags.load(std::memory_order_acquire) & mask) == mask;
+  }
+
+  inline void set(size_t offset) {
+    const uint32_t mask = getMask(offset);
+
+    uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(&_flags,
+                                                  &oldFlags,                  // old val
+                                                  oldFlags | mask,            // new val
+                                                  std::memory_order_release,  // success mem model
+                                                  std::memory_order_relaxed)) {
+    }
+  }
+
+  inline void unset(size_t offset) {
+    const uint32_t mask = getMask(offset);
+
+    uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(&_flags,
+                                                  &oldFlags,                  // old val
+                                                  oldFlags & ~mask,           // new val
+                                                  std::memory_order_release,  // success mem model
+                                                  std::memory_order_relaxed)) {
+    }
+  }
+
+  atomic_uint32_t _flags{0};
+};
+
 class MiniHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeap);
 
 public:
-  MiniHeap(void *span, size_t objectCount, size_t objectSize, size_t expectedSpanSize)
+  MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
       : _bitmap(objectCount),
+        _spanSpan(span),
         _maxCount(objectCount),
-        _objectSize(objectSize),
         _objectSizeReciprocal(1.0 / (float)objectSize),
-        _spanSize(dynamicSpanSize()),
-        _meshCount(1),
-        _span{reinterpret_cast<char *>(span), 0, 0, 0}
+        _objectSize(objectSize)
 #ifdef MESH_EXTRABITS
         ,
         _bitmap0(maxCount()),
@@ -42,10 +115,9 @@ public:
         _bitmap3(maxCount())
 #endif
   {
-    if (!_span[0])
-      abort();
-
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
+
+    const auto expectedSpanSize = _spanSpan.byteLength();
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
                  maxCount(), _objectSize);
     d_assert_msg(expectedSpanSize == dynamicSpanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
@@ -54,13 +126,12 @@ public:
     // d_assert_msg(spanSize == static_cast<size_t>(_spanSize), "%zu != %hu", spanSize, _spanSize);
     d_assert_msg(objectSize == static_cast<size_t>(_objectSize), "%zu != %hu", objectSize, _objectSize);
 
-    d_assert(_span[1] == nullptr);
+    d_assert(_nextMiniHeap == 0);
 
     // dumpDebug();
   }
 
   ~MiniHeap() {
-    _meshCount = ~0;
     // if (_meshCount > 1)
     //   dumpDebug();
   }
@@ -74,8 +145,8 @@ public:
   // inline void *malloc();
   // inline void localFree(Freelist &freelist, MWC &prng, void *ptr);
 
-  inline void free(void *ptr) {
-    const ssize_t off = getOff(ptr);
+  inline void free(void *arenaBegin, void *ptr) {
+    const ssize_t off = getOff(arenaBegin, ptr);
     if (unlikely(off < 0))
       return;
 
@@ -83,8 +154,9 @@ public:
   }
 
   /// Copies (for meshing) the contents of src into our span.
-  inline void consume(const MiniHeap *src) {
-    const auto srcSpan = src->getSpanStart();
+  inline void consume(void *arenaBegin, MiniHeap *src) {
+    src->setMeshed();
+    const auto srcSpan = src->getSpanStart(arenaBegin);
 
     // this would be bad
     d_assert(src != this);
@@ -95,24 +167,16 @@ public:
       d_assert(!_bitmap.isSet(off));
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize());
       // need to ensure we update the bitmap and in-use count
-      void *dstObject = mallocAt(off);
+      void *dstObject = mallocAt(arenaBegin, off);
       d_assert(dstObject != nullptr);
       memcpy(dstObject, srcObject, objectSize());
     }
 
-    const auto srcSpans = src->spans();
-    const auto srcMeshCount = src->meshCount();
-    for (size_t i = 0; i < srcMeshCount; i++) {
-      trackMeshedSpan(reinterpret_cast<uintptr_t>(srcSpans[i]));
-    }
-  }
-
-  inline bool contains(void *ptr) const {
-    return spanStart(ptr) != 0;
+    trackMeshedSpan(GetMiniHeapID(src));
   }
 
   inline size_t spanSize() const {
-    return _spanSize;
+    return _spanSpan.byteLength();
   }
 
   inline size_t dynamicSpanSize() const {
@@ -128,15 +192,13 @@ public:
     return _objectSize;
   }
 
-  inline size_t getSize(void *ptr) const {
-    d_assert_msg(contains(ptr), "span(%p) <= %p < %p", _span[0], ptr,
-                 reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
-
+  inline size_t getSize() const {
     return objectSize();
   }
 
-  inline uintptr_t getSpanStart() const {
-    return reinterpret_cast<uintptr_t>(_span[0]);
+  inline uintptr_t getSpanStart(void *arenaBegin) const {
+    const auto beginval = reinterpret_cast<uintptr_t>(arenaBegin);
+    return beginval + _spanSpan.offset * kPageSize;
   }
 
   inline bool isEmpty() const {
@@ -151,20 +213,28 @@ public:
     return _bitmap.inUseCount();
   }
 
-  inline uint32_t refcount() const {
-    return _refCount.load();
+  inline void setMeshed() {
+    _flags.setMeshed();
   }
 
-  inline void ref() const {
-    ++_refCount;
+  inline void setAttached() {
+    _flags.setAttached();
   }
 
-  inline void unref() const {
-    --_refCount;
+  inline void unsetAttached() {
+    _flags.unsetAttached();
+  }
+
+  inline bool isAttached() const {
+    return _flags.isAttached();
+  }
+
+  inline bool isMeshed() const {
+    return _flags.isAttached();
   }
 
   inline bool isMeshingCandidate() const {
-    return _refCount == 0 && objectSize() < kPageSize;
+    return !_flags.isAttached() && objectSize() < kPageSize;
   }
 
   /// Returns the fraction full (in the range [0, 1]) that this miniheap is.
@@ -180,23 +250,43 @@ public:
     return _bitmap;
   }
 
-  void trackMeshedSpan(uintptr_t spanStart) {
-    if (unlikely(_meshCount >= kMaxMeshes)) {
+  void trackMeshedSpan(MiniHeapID id) {
+    if (id == 0) {
+      return;
+    }
+
+    if (unlikely(meshCount() >= kMaxMeshes)) {
       mesh::debug("fatal: too many meshes for one miniheap");
       dumpDebug();
       abort();
     }
 
-    _span[_meshCount] = reinterpret_cast<char *>(spanStart);
-    _meshCount++;
+    if (_nextMiniHeap != 0) {
+      _nextMiniHeap = id;
+    } else {
+      GetMiniHeap(_nextMiniHeap)->trackMeshedSpan(id);
+    }
+  }
+
+public:
+  template <class Callback>
+  inline void forEachMeshed(Callback cb) const {
+    if (cb(this))
+      return;
+
+    if (_nextMiniHeap != 0) {
+      const auto mh = GetMiniHeap(_nextMiniHeap);
+      mh->forEachMeshed(cb);
+    }
   }
 
   size_t meshCount() const {
-    return _meshCount;
+    size_t count = 0;
+    forEachMeshed([&](const MiniHeap *mh) { count++; return false; });
+    return count;
   }
 
-  char *const *spans() const {
-    return _span;
+  inline void forEachSpan(SpanCallback cb) const {
   }
 
   internal::BinToken getBinToken() const {
@@ -208,18 +298,18 @@ public:
   }
 
   /// public for meshTest only
-  inline void *mallocAt(size_t off) {
+  inline void *mallocAt(void *arenaBegin, size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
       return nullptr;
     }
 
-    return ptrFromOffset(off);
+    return ptrFromOffset(arenaBegin, off);
   }
 
-  inline void *ptrFromOffset(size_t off) {
-    return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
+  inline void *ptrFromOffset(void *arenaBegin, size_t off) {
+    return reinterpret_cast<void *>(getSpanStart(arenaBegin) + off * _objectSize);
   }
 
   inline bool operator<(MiniHeap *&rhs) noexcept {
@@ -229,15 +319,15 @@ public:
   void dumpDebug() const {
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = this->inUseCount();
-    const size_t meshCount = _meshCount;
+    const size_t meshCount = this->meshCount();
     mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, mesh: %zu)\t%p-%p\n", this, _objectSize,
-                maxCount(), heapPages, inUseCount, meshCount, _span[0],
-                reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
+                maxCount(), heapPages, inUseCount, meshCount, _spanSpan.offset * kPageSize,
+                _spanSpan.offset * kPageSize + spanSize());
     mesh::debug("\t%s\n", _bitmap.to_string().c_str());
   }
 
-  inline int bitmapGet(enum mesh::BitType type, void *ptr) const {
-    const ssize_t off = getOff(ptr);
+  inline int bitmapGet(void *arenaBegin, enum mesh::BitType type, void *ptr) const {
+    const ssize_t off = getOff(arenaBegin, ptr);
     d_assert(off >= 0);
 
 #ifdef MESH_EXTRA_BITS
@@ -258,8 +348,8 @@ public:
     return -1;
   }
 
-  inline int bitmapSet(enum mesh::BitType type, void *ptr) {
-    const ssize_t off = getOff(ptr);
+  inline int bitmapSet(void *arenaBegin, enum mesh::BitType type, void *ptr) {
+    const ssize_t off = getOff(arenaBegin, ptr);
     d_assert(off >= 0);
 
 #ifdef MESH_EXTRA_BITS
@@ -280,8 +370,8 @@ public:
     return -1;
   }
 
-  inline int bitmapClear(enum mesh::BitType type, void *ptr) {
-    const ssize_t off = getOff(ptr);
+  inline int bitmapClear(void *arenaBegin, enum mesh::BitType type, void *ptr) {
+    const ssize_t off = getOff(arenaBegin, ptr);
     d_assert(off >= 0);
 
 #ifdef MESH_EXTRA_BITS
@@ -302,64 +392,55 @@ public:
     return -1;
   }
 
-  inline ssize_t getOff(void *ptr) const {
-    d_assert(getSize(ptr) == _objectSize);
-
-    const auto span = spanStart(ptr);
+  inline ssize_t getOff(void *arenaBegin, void *ptr) const {
+    const auto span = spanStart(arenaBegin, ptr);
     d_assert(span != 0);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
     // const size_t off = (ptrval - span) / _objectSize;
     const size_t off = (ptrval - span) * _objectSizeReciprocal;
     // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
-    // if (unlikely(span > ptrval || off >= maxCount())) {
-    //   mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
-    //   return -1;
-    // }
-
-    // if (unlikely(!_bitmap.isSet(off))) {
-    //   mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
-    //   dumpDebug();
-    //   return -1;
-    // }
 
     return off;
   }
 
 protected:
-  inline uintptr_t spanStart(void *ptr) const {
+  inline uintptr_t spanStart(void *arenaBegin, void *ptr) const {
+    const auto beginval = reinterpret_cast<uintptr_t>(arenaBegin);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    const auto len = _spanSize;
+    const auto len = _spanSpan.byteLength();
 
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
-    auto span = reinterpret_cast<uintptr_t>(_span[0]);
+    uintptr_t span = beginval + _spanSpan.offset * kPageSize;
     if (likely(span <= ptrval && ptrval < span + len))
       return span;
 
-    for (size_t i = 1; i < _meshCount; ++i) {
-      if (unlikely(_span[i] == nullptr)) {
-        mesh::debug("_span[%d] should be non-null (%zu)", i, _meshCount);
-        dumpDebug();
-        d_assert(false);
-      }
-      span = reinterpret_cast<uintptr_t>(_span[i]);
-      if (span <= ptrval && ptrval < span + len)
-        return span;
-    }
+    span = 0;
+    // TODO: investigate un-unrolling the above
+    forEachMeshed([&](const MiniHeap *mh) {
+        if (mh == this)
+          return false;
 
-    return 0;
+        uintptr_t meshedSpan = beginval + _spanSpan.offset * kPageSize;
+        if (meshedSpan <= ptrval && ptrval < meshedSpan + len) {
+          span = meshedSpan;
+          return true;
+        }
+        return false;
+    });
+
+    return span;
   }
 
-  internal::Bitmap _bitmap;               // 32 bytes 32
-  internal::BinToken _token{};            // 8        40
-  mutable atomic<uint32_t> _refCount{1};  // 4        44
-  const uint32_t _maxCount;               // 4        52
-  const uint32_t _objectSize;             // 4        56
-  const float _objectSizeReciprocal;      // 4        60
-  const uint32_t _spanSize;               // 4        64 max 4 GB span size/allocation size, 56
-  uint32_t _meshCount;                    // 4        68
-  char *_span[kMaxMeshes];
+  internal::Bitmap _bitmap;           // 32 bytes 32
+  internal::BinToken _token{};        // 8        40
+  const Span _spanSpan;               // 8        48
+  Flags _flags{};                     // 4        52
+  const uint32_t _maxCount;           // 4        56
+  MiniHeapID _nextMiniHeap{0};        // 4        60
+  const float _objectSizeReciprocal;  // 4        64
+  const uint32_t _objectSize;         // 4        68
 
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;
@@ -371,9 +452,9 @@ protected:
 
 static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
-//static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
+// static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
 #else
-//static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
+// static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 }  // namespace mesh

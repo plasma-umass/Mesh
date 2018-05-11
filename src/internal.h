@@ -30,6 +30,21 @@ static inline constexpr size_t RoundUpToPage(size_t sz) {
   return kPageSize * PageCount(sz);
 }
 
+namespace internal {
+enum PageType {
+  Clean = 0,
+  Dirty = 1,
+  Meshed = 2,
+  Unknown = 3,
+};
+}  // namespace internal
+
+typedef uint32_t MiniHeapID;
+
+class MiniHeap;
+MiniHeap *GetMiniHeap(const MiniHeapID id);
+MiniHeapID GetMiniHeapID(const MiniHeap *mh);
+
 typedef uint32_t Offset;
 typedef uint32_t Length;
 

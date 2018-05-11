@@ -52,7 +52,7 @@ public:
   }
 
   inline void dumpStrings() const {
-    lock_guard<mutex> lock(_miniheapLock);
+    unique_lock<shared_mutex> lock(_miniheapLock);
 
     for (size_t i = 0; i < kNumBins; i++) {
       _littleheaps[i].printOccupancy();
@@ -64,18 +64,20 @@ public:
   // must be called with exclusive _mhRWLock held
   inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheapLocked(int sizeClass, size_t pageCount, size_t objectCount,
                                                                size_t objectSize, size_t pageAlignment = 1) {
+    d_assert(0 < pageCount);
+
     void *buf = _mhAllocator.alloc();
-    hard_assert(buf != nullptr);
+    d_assert(buf != nullptr);
 
     // allocate out of the arena
-    void *span = Super::pageAlloc(pageCount, buf, pageAlignment);
-    hard_assert(span != nullptr);
-    d_assert((reinterpret_cast<uintptr_t>(span) / kPageSize) % pageAlignment == 0);
+    char *spanBegin = Super::pageAlloc(pageCount, buf, pageAlignment);
+    d_assert(spanBegin != nullptr);
+    d_assert((reinterpret_cast<uintptr_t>(spanBegin) / kPageSize) % pageAlignment == 0);
 
-    const size_t spanSize = kPageSize * pageCount;
-    d_assert(0 < spanSize);
+    size_t off = (spanBegin - arenaBegin()) / kPageSize;
+    Span span{static_cast<Offset>(off), static_cast<Length>(pageCount)};
 
-    MiniHeap *mh = new (buf) MiniHeap(span, objectCount, objectSize, spanSize);
+    MiniHeap *mh = new (buf) MiniHeap(arenaBegin(), span, objectCount, objectSize);
 
     if (sizeClass >= 0)
       trackMiniheapLocked(sizeClass, mh);
@@ -83,13 +85,12 @@ public:
     _miniheapCount++;
     _stats.mhAllocCount++;
     _stats.mhHighWaterMark = max(_miniheapCount, _stats.mhHighWaterMark);
-    //_stats.mhClassHWM[sizeClass] = max(_littleheapCounts[sizeClass], _stats.mhClassHWM[sizeClass].load());
 
     return mh;
   }
 
   inline void *pageAlignedAlloc(size_t pageAlignment, size_t pageCount) {
-    lock_guard<mutex> lock(_miniheapLock);
+    unique_lock<shared_mutex> lock(_miniheapLock);
 
     MiniHeap *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * kPageSize, pageAlignment);
 
@@ -97,15 +98,13 @@ public:
     d_assert(mh->spanSize() == pageCount * kPageSize);
     d_assert(mh->objectSize() == pageCount * kPageSize);
 
-    void *ptr = mh->mallocAt(0);
-
-    mh->unref();
+    void *ptr = mh->mallocAt(arenaBegin(), 0);
 
     return ptr;
   }
 
   inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize) {
-    lock_guard<mutex> lock(_miniheapLock);
+    unique_lock<shared_mutex> lock(_miniheapLock);
 
     d_assert(objectSize <= _maxObjectSize);
 
@@ -121,8 +120,6 @@ public:
     // check our bins for a miniheap to reuse
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
     if (existing != nullptr) {
-      existing->ref();
-      d_assert(existing->refcount() == 1);
       return existing;
     }
 
@@ -146,16 +143,14 @@ public:
     return mh;
   }
 
-  // if the MiniHeap is non-null, its reference count is increased by one
-  inline MiniHeap *miniheapFor(const void *ptr) const {
-    lock_guard<mutex> lock(_miniheapLock);
-
-    auto mh = miniheapForLocked(ptr);
-    if (likely(mh != nullptr)) {
-      mh->ref();
-    }
-
+  inline MiniHeap *miniheapForID(const MiniHeapID id) const {
+    auto mh = reinterpret_cast<MiniHeap *>(_mhAllocator.ptrFromOffset(id));
+    __builtin_prefetch(mh, 1, 2);
     return mh;
+  }
+
+  inline MiniHeapID miniheapIDFor(const MiniHeap *mh) const {
+    return _mhAllocator.offsetFor(mh);
   }
 
   void trackMiniheapLocked(size_t sizeClass, MiniHeap *mh) {
@@ -181,21 +176,17 @@ public:
   }
 
   void freeMiniheap(MiniHeap *&mh, bool untrack = true) {
-    lock_guard<mutex> lock(_miniheapLock);
+    unique_lock<shared_mutex> lock(_miniheapLock);
     freeMiniheapLocked(mh, untrack);
   }
 
   void freeMiniheapLocked(MiniHeap *&mh, bool untrack) {
-    const auto spans = mh->spans();
     const auto spanSize = mh->spanSize();
-
-    const auto meshCount = mh->meshCount();
-    for (size_t i = 0; i < meshCount; i++) {
-      // if (i > 0)
-      //   debug("Super::freeing meshed span\n");
-      const auto type = i == 0 ? internal::PageType::Dirty : internal::PageType::Meshed;
-      Super::free(reinterpret_cast<void *>(spans[i]), spanSize, type);
-    }
+    mh->forEachMeshed([&](const MiniHeap *mh) {
+      const auto type = mh->isMeshed() ? internal::PageType::Dirty : internal::PageType::Meshed;
+      Super::free(reinterpret_cast<void *>(mh->getSpanStart(arenaBegin())), spanSize, type);
+      return false;
+    });
 
     _stats.mhFreeCount++;
 
@@ -216,11 +207,10 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
-    auto mh = miniheapFor(ptr);
+    shared_lock<shared_mutex> lock(_miniheapLock);
+    auto mh = miniheapForLocked(ptr);
     if (likely(mh)) {
-      auto size = mh->getSize(ptr);
-      mh->unref();
-      return size;
+      return mh->getSize();
     } else {
       return 0;
     }
@@ -232,22 +222,19 @@ public:
     if (unlikely(ptr == nullptr))
       return false;
 
-    auto mh = miniheapFor(ptr);
-    if (likely(mh)) {
-      mh->unref();
-      return true;
-    }
-    return false;
+    shared_lock<shared_mutex> lock(_miniheapLock);
+    auto mh = miniheapForLocked(ptr);
+    return mh != nullptr;
   }
 
   int bitmapGet(enum mesh::BitType type, void *ptr) const {
     if (unlikely(ptr == nullptr))
       return 0;
 
-    auto mh = miniheapFor(ptr);
+    shared_lock<shared_mutex> lock(_miniheapLock);
+    auto mh = miniheapForLocked(ptr);
     if (likely(mh)) {
-      auto result = mh->bitmapGet(type, ptr);
-      mh->unref();
+      auto result = mh->bitmapGet(arenaBegin(), type, ptr);
       return result;
     } else {
       internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
@@ -258,10 +245,10 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
-    auto mh = miniheapFor(ptr);
+    shared_lock<shared_mutex> lock(_miniheapLock);
+    auto mh = miniheapForLocked(ptr);
     if (likely(mh)) {
-      auto result = mh->bitmapSet(type, ptr);
-      mh->unref();
+      auto result = mh->bitmapSet(arenaBegin(), type, ptr);
       return result;
     } else {
       internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
@@ -272,10 +259,10 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
-    auto mh = miniheapFor(ptr);
+    shared_lock<shared_mutex> lock(_miniheapLock);
+    auto mh = miniheapForLocked(ptr);
     if (likely(mh)) {
-      auto result = mh->bitmapClear(type, ptr);
-      mh->unref();
+      auto result = mh->bitmapClear(arenaBegin(), type, ptr);
       return result;
     } else {
       internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
@@ -285,7 +272,7 @@ public:
   int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
   size_t getAllocatedMiniheapCount() const {
-    lock_guard<mutex> lock(_miniheapLock);
+    unique_lock<shared_mutex> lock(_miniheapLock);
     return _miniheapCount;
   }
 
@@ -310,30 +297,28 @@ public:
       return;
 
     const size_t dstSpanSize = dst->spanSize();
-    const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart());
+    const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart(arenaBegin()));
 
-    const auto srcSpans = src->spans();
-    const auto srcMeshCount = src->meshCount();
-
-    for (size_t i = 0; i < srcMeshCount; i++) {
+    src->forEachMeshed([&](const MiniHeap *mh) {
       // marks srcSpans read-only
-      Super::beginMesh(dstSpanStart, srcSpans[i], dstSpanSize);
-    }
+      const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
+      Super::beginMesh(dstSpanStart, srcSpan, dstSpanSize);
+      return false;
+    });
 
     // does the copying of objects and updating of span metadata
-    dst->consume(src);
+    dst->consume(arenaBegin(), src);
 
-    for (size_t i = 0; i < srcMeshCount; i++) {
+    src->forEachMeshed([&](const MiniHeap *mh) {
+      const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
       // frees physical memory + re-marks srcSpans as read/write
-      Super::finalizeMesh(dstSpanStart, srcSpans[i], dstSpanSize);
-    }
+      Super::finalizeMesh(dstSpanStart, srcSpan, dstSpanSize);
+      return false;
+    });
 
     // make sure we adjust what bin the destination is in -- it might
     // now be full and not a candidate for meshing
-    d_assert(dst->refcount() == 0);
     _littleheaps[SizeMap::SizeClass(dst->objectSize())].postFree(dst, dst->inUseCount());
-    freeMiniheapAfterMeshLocked(src);
-    src = nullptr;
   }
 
   inline void maybeMesh() {
@@ -355,7 +340,7 @@ public:
   }
 
   inline bool okToProceed(void *ptr) const {
-    lock_guard<mutex> lock(_miniheapLock);
+    unique_lock<shared_mutex> lock(_miniheapLock);
 
     if (ptr == nullptr)
       return false;
@@ -379,7 +364,7 @@ protected:
 
   BinnedTracker<MiniHeap> _littleheaps[kNumBins];
 
-  mutable mutex _miniheapLock{};
+  mutable shared_mutex _miniheapLock{};
 
   GlobalHeapStats _stats{};
 

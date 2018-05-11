@@ -155,7 +155,7 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
   return true;
 }
 
-  bool MeshableArena::findPages(Length pageCount, Span &result, internal::PageType &type) {
+bool MeshableArena::findPages(Length pageCount, Span &result, internal::PageType &type) {
   // Search through all dirty spans first.  We don't worry about
   // fragmenting dirty pages, as being able to reuse dirty pages means
   // we don't increase RSS.
@@ -260,7 +260,7 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
   return bitmap;
 }
 
-void *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignment) {
+char *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignment) {
   if (pageCount == 0) {
     return nullptr;
   }
@@ -301,7 +301,7 @@ void *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignme
     setIndex(off + i, ownerVal);
   }
 
-  void *ptr = ptrFromOffset(off);
+  char *ptr = reinterpret_cast<char *>(ptrFromOffset(off));
 
   if (kAdviseDump) {
     madvise(ptr, pageCount * kPageSize, MADV_DODUMP);
@@ -674,11 +674,15 @@ void MeshableArena::afterForkChild() {
       d_assert(meshCount > 1);
 
       const auto sz = mh->spanSize();
-      const auto keep = mh->spans()[0];
+      const auto keep = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
       const auto keepOff = offsetFor(keep);
 
-      for (size_t j = 1; j < meshCount; j++) {
-        const auto remove = mh->spans()[j];
+      const auto base = mh;
+      base->forEachMeshed([&](const MiniHeap *mh) {
+        if (!mh->isMeshed())
+          return false;
+
+        const auto remove = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
         const auto removeOff = offsetFor(remove);
 
 #ifndef NDEBUG
@@ -691,7 +695,9 @@ void MeshableArena::afterForkChild() {
         void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * kPageSize);
 
         hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-      }
+
+        return false;
+      });
     }
   }
 
