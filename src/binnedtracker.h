@@ -164,6 +164,7 @@ public:
 
     if (unlikely(!mh->getBinToken().valid())) {
       mesh::debug("ERROR: bad bin token");
+      d_assert(false);
       return;
     }
 
