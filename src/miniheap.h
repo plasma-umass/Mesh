@@ -449,7 +449,7 @@ protected:
   }
 
   internal::Bitmap _bitmap;           // 32 bytes 32
-  internal::BinToken _token{};        // 8        40
+  internal::BinToken _token{internal::BinToken::Max, internal::BinToken::Max, };        // 8        40
   const Span _spanSpan;               // 8        48
   Flags _flags{};                     // 4        52
   const uint32_t _maxCount;           // 4        56

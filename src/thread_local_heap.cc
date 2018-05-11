@@ -46,8 +46,10 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
   d_assert(mh != nullptr);
 
   // TODO: maybe pass this to allocSmallMiniheap?
-  oldMH->unsetAttached();
-  oldMH = nullptr;
+  if (oldMH) {
+    oldMH->unsetAttached();
+    oldMH = nullptr;
+  }
 
   freelist.attach(_global->arenaBegin(), mh);
 

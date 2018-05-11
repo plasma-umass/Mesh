@@ -50,7 +50,7 @@ void GlobalHeap::free(void *ptr) {
   // This can also include, for example, single page allocations w/
   // 16KB alignment.
   if (mh->maxCount() == 1) {
-    unique_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
     freeMiniheapLocked(mh, false);
     return;
   }
@@ -70,7 +70,7 @@ void GlobalHeap::free(void *ptr) {
   mh = nullptr;
 
   if (unlikely(shouldFlush)) {
-    unique_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
     flushBinLocked(sizeClass);
   }
 
@@ -79,7 +79,7 @@ void GlobalHeap::free(void *ptr) {
 }
 
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-  unique_lock<shared_mutex> lock(_miniheapLock);
+  lock_guard<mutex> lock(_miniheapLock);
 
   if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
     return -1;
@@ -205,7 +205,7 @@ void GlobalHeap::dumpStats(int level, bool beDetailed) const {
   if (level < 1)
     return;
 
-  unique_lock<shared_mutex> lock(_miniheapLock);
+  lock_guard<mutex> lock(_miniheapLock);
 
   const auto meshedPageHWM = meshedPageHighWaterMark();
 

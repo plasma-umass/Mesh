@@ -52,7 +52,7 @@ public:
   }
 
   inline void dumpStrings() const {
-    unique_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
 
     for (size_t i = 0; i < kNumBins; i++) {
       _littleheaps[i].printOccupancy();
@@ -90,7 +90,7 @@ public:
   }
 
   inline void *pageAlignedAlloc(size_t pageAlignment, size_t pageCount) {
-    unique_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
 
     MiniHeap *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * kPageSize, pageAlignment);
 
@@ -104,7 +104,7 @@ public:
   }
 
   inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize) {
-    unique_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
 
     d_assert(objectSize <= _maxObjectSize);
 
@@ -176,7 +176,7 @@ public:
   }
 
   void freeMiniheap(MiniHeap *&mh, bool untrack = true) {
-    unique_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
     freeMiniheapLocked(mh, untrack);
   }
 
@@ -214,7 +214,8 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
-    shared_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
+    // shared_lock<shared_mutex> lock(_miniheapLock);
     auto mh = miniheapForLocked(ptr);
     if (likely(mh)) {
       return mh->getSize();
@@ -229,7 +230,8 @@ public:
     if (unlikely(ptr == nullptr))
       return false;
 
-    shared_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
+    // shared_lock<shared_mutex> lock(_miniheapLock);
     auto mh = miniheapForLocked(ptr);
     return mh != nullptr;
   }
@@ -238,7 +240,8 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
-    shared_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
+    // shared_lock<shared_mutex> lock(_miniheapLock);
     auto mh = miniheapForLocked(ptr);
     if (likely(mh)) {
       auto result = mh->bitmapGet(arenaBegin(), type, ptr);
@@ -252,7 +255,8 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
-    shared_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
+    // shared_lock<shared_mutex> lock(_miniheapLock);
     auto mh = miniheapForLocked(ptr);
     if (likely(mh)) {
       auto result = mh->bitmapSet(arenaBegin(), type, ptr);
@@ -266,7 +270,8 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
-    shared_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
+    // shared_lock<shared_mutex> lock(_miniheapLock);
     auto mh = miniheapForLocked(ptr);
     if (likely(mh)) {
       auto result = mh->bitmapClear(arenaBegin(), type, ptr);
@@ -279,7 +284,7 @@ public:
   int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
   size_t getAllocatedMiniheapCount() const {
-    unique_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
     return _miniheapCount;
   }
 
@@ -347,7 +352,7 @@ public:
   }
 
   inline bool okToProceed(void *ptr) const {
-    unique_lock<shared_mutex> lock(_miniheapLock);
+    lock_guard<mutex> lock(_miniheapLock);
 
     if (ptr == nullptr)
       return false;
@@ -371,7 +376,7 @@ protected:
 
   BinnedTracker<MiniHeap> _littleheaps[kNumBins];
 
-  mutable shared_mutex _miniheapLock{};
+  mutable mutex _miniheapLock{};
 
   GlobalHeapStats _stats{};
 
