@@ -33,7 +33,7 @@ private:
     return 1UL << pos;
   }
   static constexpr uint32_t MeshedOffset = 0;
-  static constexpr uint32_t AttachedOffset = 0;
+  static constexpr uint32_t AttachedOffset = 8;
 
 public:
   explicit Flags() noexcept {
@@ -134,6 +134,10 @@ public:
   ~MiniHeap() {
     // if (_meshCount > 1)
     //   dumpDebug();
+  }
+
+  inline Span span() const {
+    return _spanSpan;
   }
 
   void printOccupancy() const {
@@ -261,7 +265,7 @@ public:
       abort();
     }
 
-    if (_nextMiniHeap != 0) {
+    if (_nextMiniHeap == 0) {
       _nextMiniHeap = id;
     } else {
       GetMiniHeap(_nextMiniHeap)->trackMeshedSpan(id);
@@ -276,6 +280,17 @@ public:
 
     if (_nextMiniHeap != 0) {
       const auto mh = GetMiniHeap(_nextMiniHeap);
+      mh->forEachMeshed(cb);
+    }
+  }
+
+  template <class Callback>
+  inline void forEachMeshed(Callback cb) {
+    if (cb(this))
+      return;
+
+    if (_nextMiniHeap != 0) {
+      auto mh = GetMiniHeap(_nextMiniHeap);
       mh->forEachMeshed(cb);
     }
   }
@@ -422,7 +437,7 @@ protected:
         if (mh == this)
           return false;
 
-        uintptr_t meshedSpan = beginval + _spanSpan.offset * kPageSize;
+        uintptr_t meshedSpan = beginval + mh->span().offset * kPageSize;
         if (meshedSpan <= ptrval && ptrval < meshedSpan + len) {
           span = meshedSpan;
           return true;

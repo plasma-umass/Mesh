@@ -170,7 +170,7 @@ public:
     }
 
     mh->MiniHeap::~MiniHeap();
-    // memset(reinterpret_cast<char *>(mh), 0x77, 128);
+    memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
     _mhAllocator.free(mh);
     _miniheapCount--;
   }
@@ -182,15 +182,22 @@ public:
 
   void freeMiniheapLocked(MiniHeap *&mh, bool untrack) {
     const auto spanSize = mh->spanSize();
-    mh->forEachMeshed([&](const MiniHeap *mh) {
-      const auto type = mh->isMeshed() ? internal::PageType::Dirty : internal::PageType::Meshed;
-      Super::free(reinterpret_cast<void *>(mh->getSpanStart(arenaBegin())), spanSize, type);
+    MiniHeap *toFree[kMaxMeshes] = {0, 0, 0, 0};
+    size_t last = 0;
+
+    mh->forEachMeshed([&](MiniHeap *mh) {
+      toFree[last++] = mh;
       return false;
     });
 
-    _stats.mhFreeCount++;
+    for (size_t i = 0; i < last; i++) {
+      MiniHeap *mh = toFree[i];
+      const auto type = mh->isMeshed() ? internal::PageType::Dirty : internal::PageType::Meshed;
+      Super::free(reinterpret_cast<void *>(mh->getSpanStart(arenaBegin())), spanSize, type);
+      _stats.mhFreeCount++;
+      freeMiniheapAfterMeshLocked(mh, untrack);
+    }
 
-    freeMiniheapAfterMeshLocked(mh, untrack);
     mh = nullptr;
   }
 
