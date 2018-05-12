@@ -341,8 +341,8 @@ void MeshableArena::partialScavenge() {
   _dirtyPageCount = 0;
 }
 
-void MeshableArena::scavenge() {
-  if (_dirtyPageCount < kMinDirtyPageThreshold)
+void MeshableArena::scavenge(bool force) {
+  if (!force && _dirtyPageCount < kMinDirtyPageThreshold)
     return;
 
   // the inverse of the allocated bitmap is all of the spans in _clear

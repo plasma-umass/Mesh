@@ -59,6 +59,12 @@ public:
     }
   }
 
+  void scavenge(bool force = false) {
+    lock_guard<mutex> lock(_miniheapLock);
+
+    Super::scavenge(force);
+  }
+
   void dumpStats(int level, bool beDetailed) const;
 
   // must be called with exclusive _mhRWLock held

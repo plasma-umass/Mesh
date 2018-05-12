@@ -102,7 +102,7 @@ public:
 
   // protected:
   // public for testing
-  void scavenge();
+  void scavenge(bool force);
   // like a scavenge, but we only MADV_FREE
   void partialScavenge();
 
