@@ -94,12 +94,12 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
     // resetNextMeshCheck();
   } else if (strcmp(name, "mesh.scavenge") == 0) {
     lock.unlock();
-    scavenge();
+    scavenge(true);
     lock.lock();
   } else if (strcmp(name, "mesh.compact") == 0) {
-    lock.unlock();
     meshAllSizeClasses();
-    scavenge();
+    lock.unlock();
+    scavenge(true);
     lock.lock();
   } else if (strcmp(name, "arena") == 0) {
     // not sure what this should do
@@ -135,7 +135,8 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
 }
 
 void GlobalHeap::meshAllSizeClasses() {
-  Super::scavenge();
+  Super::scavenge(false);
+
   if (!_lastMeshEffective) {
     return;
   }
@@ -176,7 +177,7 @@ void GlobalHeap::meshAllSizeClasses() {
   _lastMeshEffective = mergeSets.size() > 256;
 
   if (mergeSets.size() == 0) {
-    Super::scavenge();
+    Super::scavenge(false);
     // debug("nothing to mesh.");
     return;
   }
@@ -192,7 +193,7 @@ void GlobalHeap::meshAllSizeClasses() {
     meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
   }
 
-  Super::scavenge();
+  Super::scavenge(false);
 
   _lastMesh = std::chrono::high_resolution_clock::now();
 

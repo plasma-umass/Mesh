@@ -113,7 +113,7 @@ static void meshTest(bool invert) {
   note("DONE FREE");
 
   note("ABOUT TO SCAVENGE");
-  gheap.scavenge();
+  gheap.scavenge(true);
   note("DONE SCAVENGE");
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
