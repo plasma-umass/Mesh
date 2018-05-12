@@ -32,11 +32,18 @@ private:
   static inline constexpr uint32_t ATTRIBUTE_ALWAYS_INLINE getMask(uint32_t pos) {
     return 1UL << pos;
   }
-  static constexpr uint32_t MeshedOffset = 0;
-  static constexpr uint32_t AttachedOffset = 8;
+  static constexpr uint32_t MeshedOffset = 16;
+  static constexpr uint32_t AttachedOffset = 24;
 
 public:
-  explicit Flags() noexcept {
+  explicit Flags(uint32_t maxCount) noexcept : _flags{maxCount} {
+    d_assert(maxCount <= 256);
+    d_assert(this->maxCount() == maxCount);
+  }
+
+  inline uint32_t maxCount() const {
+    // XXX: does this assume little endian?
+    return _flags.load(std::memory_order_relaxed) & 0x1ff;
   }
 
   inline void setAttached() {
@@ -93,7 +100,7 @@ private:
     }
   }
 
-  atomic_uint32_t _flags{0};
+  atomic_uint32_t _flags;
 };
 
 class MiniHeap {
@@ -104,7 +111,8 @@ public:
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
       : _bitmap(objectCount),
         _span(span),
-        _maxCount(objectCount),
+        _flags(objectCount),
+        _objectSize(objectSize),
         _objectSizeReciprocal(1.0 / (float)objectSize)
 #ifdef MESH_EXTRABITS
         ,
@@ -115,6 +123,8 @@ public:
 #endif
   {
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
+
+    d_assert(_bitmap.inUseCount() == 0);
 
     const auto expectedSpanSize = _span.byteLength();
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
@@ -173,7 +183,9 @@ public:
     // for each object in src, copy it to our backing span + update
     // our bitmap and in-use count
     for (auto const &off : src->bitmap()) {
+      d_assert(off < maxCount());
       d_assert(!_bitmap.isSet(off));
+
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize());
       // need to ensure we update the bitmap and in-use count
       void *dstObject = mallocAt(arenaBegin, off);
@@ -193,11 +205,11 @@ public:
   }
 
   inline size_t maxCount() const {
-    return _maxCount;
+    return _flags.maxCount();
   }
 
   inline size_t objectSize() const {
-    return 1.0 / _objectSizeReciprocal;
+    return _objectSize;
   }
 
   inline size_t getSize() const {
@@ -421,6 +433,8 @@ public:
     const size_t off = (ptrval - span) * _objectSizeReciprocal;
     // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
 
+    d_assert(off < maxCount());
+
     return off;
   }
 
@@ -459,8 +473,8 @@ protected:
       internal::BinToken::Max,
   };                                  // 8        40
   const Span _span;                   // 8        48
-  Flags _flags{};                     // 4        52
-  const uint32_t _maxCount;           // 4        56
+  Flags _flags;                       // 4        52
+  const uint32_t _objectSize;         // 4        56
   const float _objectSizeReciprocal;  // 4        60
   MiniHeapID _nextMiniHeap{};         // 4        64
 
