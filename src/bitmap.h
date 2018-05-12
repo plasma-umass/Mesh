@@ -43,8 +43,8 @@ static inline constexpr size_t ATTRIBUTE_ALWAYS_INLINE getMask(uint64_t pos) {
   return 1UL << pos;
 }
 
-using std::atomic_size_t;
 using std::atomic_compare_exchange_weak_explicit;
+using std::atomic_size_t;
 
 // enables iteration through the set bits of the bitmap
 template <typename Container>
@@ -89,6 +89,12 @@ public:
 protected:
   AtomicBitmapBase(size_t bitCount) {
     d_assert_msg(bitCount <= maxBits, "max bits (%zu) exceeded: %zu", maxBits, bitCount);
+
+    static_assert(wordCount(representationSize(maxBits)) == 4, "unexpected representation size");
+    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
+      _bits[i].store(0, std::memory_order_relaxed);
+    }
+    fence();
   }
 
   ~AtomicBitmapBase() {
@@ -153,10 +159,14 @@ public:
 protected:
   RelaxedBitmapBase(size_t bitCount)
       : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(internal::Heap().malloc(representationSize(bitCount)))) {
+    d_assert(_bits != nullptr);
+    clear();
   }
 
   RelaxedBitmapBase(size_t bitCount, char *backingMemory)
       : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(backingMemory)) {
+    d_assert(_bits != nullptr);
+    clear();
   }
 
   ~RelaxedBitmapBase() {
@@ -199,7 +209,8 @@ protected:
     _bits = nullptr;
   }
 
-  inline void fence() const {
+  void clear(void) {
+    memset(_bits, 0, representationSize(bitCount()));
   }
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
@@ -232,19 +243,12 @@ public:
   typedef BitmapIter<Bitmap> const const_iterator;
 
   explicit BitmapBase(size_t bitCount) : Super(bitCount) {
-    d_assert(Super::_bits != nullptr);
-    clear();
   }
 
   explicit BitmapBase(size_t bitCount, char *backingMemory) : Super(bitCount) {
-    d_assert(Super::_bits != nullptr);
-    clear();
   }
 
   explicit BitmapBase(const std::string &str) : Super(str.length()) {
-    d_assert(Super::bits() != nullptr);
-    clear();
-
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
       d_assert_msg(c == '0' || c == '1', "expected 0 or 1 in bitstring, not %c ('%s')", c, str.c_str());
@@ -254,9 +258,6 @@ public:
   }
 
   explicit BitmapBase(const internal::string &str) : Super(str.length()) {
-    d_assert(Super::_bits != nullptr);
-    clear();
-
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
       d_assert_msg(c == '0' || c == '1', "expected 0 or 1 in bitstring, not %c ('%s')", c, str.c_str());
@@ -301,35 +302,6 @@ public:
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
     return Super::bitCount();
-  }
-
-  /// Clears out the bitmap array.
-  void clear(void) {
-#ifdef __clang__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wtautological-pointer-compare"
-#endif
-    if (unlikely(Super::_bits == nullptr))
-      return;
-#ifdef __clang__
-#pragma GCC diagnostic pop
-#endif
-
-#if 1
-    // when a bitmap is being initialized, it is exclusively owned +
-    // accessible by the thread initializing it.  We don't need
-    // sequential consistency for each bit, just to ensure the 0'ed
-    // bits are flushed at the end.
-    size_t *bits = reinterpret_cast<size_t *>(Super::_bits);
-    memset(bits, 0, byteCount());
-    Super::fence();
-#else
-    const auto wordCount = byteCount() / sizeof(size_t);
-    // use an explicit array since these may be atomic_size_t's
-    for (size_t i = 0; i < wordCount; i++) {
-      Super::_bits[i] = 0;
-    }
-#endif
   }
 
   inline uint64_t setFirstEmpty(uint64_t startingAt = 0) {
