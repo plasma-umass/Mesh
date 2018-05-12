@@ -152,14 +152,16 @@ public:
                 this, objectSize(), maxCount(), meshCount(), _bitmap.to_string().c_str());
   }
 
-  // should never be called directly, a freelist is populated from our bitmap
-  // inline void *malloc();
-  // inline void localFree(Freelist &freelist, MWC &prng, void *ptr);
-
   inline void free(void *arenaBegin, void *ptr) {
+    // TODO: this should be removed when the logic in globalFree is
+    // updated to allow the 'race' between lock-free freeing and
+    // meshing
+    d_assert(!isMeshed());
     const ssize_t off = getOff(arenaBegin, ptr);
-    if (unlikely(off < 0))
+    if (unlikely(off < 0)) {
+      d_assert(false);
       return;
+    }
 
     freeOff(off);
   }
@@ -429,8 +431,8 @@ public:
     d_assert(span != 0);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
-    // const size_t off = (ptrval - span) / _objectSize;
     const size_t off = (ptrval - span) * _objectSizeReciprocal;
+    // const size_t off2 = (ptrval - span) / _objectSize;
     // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
 
     d_assert(off < maxCount());
@@ -440,23 +442,24 @@ public:
 
 protected:
   inline uintptr_t spanStart(void *arenaBegin, void *ptr) const {
-    const auto beginval = reinterpret_cast<uintptr_t>(arenaBegin);
+    const auto arena = reinterpret_cast<uintptr_t>(arenaBegin);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     const auto len = _span.byteLength();
 
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
-    uintptr_t span = beginval + _span.offset * kPageSize;
+    uintptr_t span = arena + _span.offset * kPageSize;
     if (likely(span <= ptrval && ptrval < span + len))
       return span;
 
     span = 0;
-    // TODO: investigate un-unrolling the above
-    forEachMeshed([&](const MiniHeap *mh) {
-      if (mh == this)
-        return false;
+    if (!_nextMiniHeap.hasValue()) {
+      d_assert(false);
+      return span;
+    }
 
-      uintptr_t meshedSpan = beginval + mh->span().offset * kPageSize;
+    GetMiniHeap(_nextMiniHeap)->forEachMeshed([&](const MiniHeap *mh) {
+      uintptr_t meshedSpan = arena + mh->span().offset * kPageSize;
       if (meshedSpan <= ptrval && ptrval < meshedSpan + len) {
         span = meshedSpan;
         return true;
@@ -464,6 +467,7 @@ protected:
       return false;
     });
 
+    d_assert(span != 0);
     return span;
   }
 
