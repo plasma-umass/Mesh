@@ -104,10 +104,12 @@ public:
   inline bool setAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
 
-    size_t oldValue = _bits[item];
-    while (!std::atomic_compare_exchange_weak(&_bits[item],  // address of word
-                                              &oldValue,     // old val
-                                              oldValue | mask)) {
+    size_t oldValue = _bits[item].load(std::memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(&_bits[item],               // address of word
+                                                  &oldValue,                  // old val
+                                                  oldValue | mask,            // new val
+                                                  std::memory_order_release,  // success mem model
+                                                  std::memory_order_relaxed)) {
     }
 
     return !(oldValue & mask);
@@ -116,10 +118,12 @@ public:
   inline bool unsetAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
 
-    size_t oldValue = _bits[item];
-    while (!std::atomic_compare_exchange_weak(&_bits[item],  // address of word
-                                              &oldValue,     // old val
-                                              oldValue & ~mask)) {
+    size_t oldValue = _bits[item].load(std::memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(&_bits[item],               // address of word
+                                                  &oldValue,                  // old val
+                                                  oldValue & ~mask,           // new val
+                                                  std::memory_order_release,  // success mem model
+                                                  std::memory_order_relaxed)) {
     }
 
     return !(oldValue & mask);
