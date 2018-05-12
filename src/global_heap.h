@@ -144,13 +144,13 @@ public:
   }
 
   inline MiniHeap *miniheapForID(const MiniHeapID id) const {
-    auto mh = reinterpret_cast<MiniHeap *>(_mhAllocator.ptrFromOffset(id));
+    auto mh = reinterpret_cast<MiniHeap *>(_mhAllocator.ptrFromOffset(id.value()));
     __builtin_prefetch(mh, 1, 2);
     return mh;
   }
 
   inline MiniHeapID miniheapIDFor(const MiniHeap *mh) const {
-    return _mhAllocator.offsetFor(mh);
+    return MiniHeapID{_mhAllocator.offsetFor(mh)};
   }
 
   void trackMiniheapLocked(size_t sizeClass, MiniHeap *mh) {

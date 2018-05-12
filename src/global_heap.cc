@@ -8,8 +8,7 @@
 namespace mesh {
 
 MiniHeap *GetMiniHeap(const MiniHeapID id) {
-  if (unlikely(id == 0))
-    return nullptr;
+  hard_assert(id.hasValue());
 
   return runtime().heap().miniheapForID(id);
 }

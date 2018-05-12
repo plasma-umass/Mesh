@@ -123,7 +123,7 @@ public:
     // d_assert_msg(spanSize == static_cast<size_t>(_spanSize), "%zu != %hu", spanSize, _spanSize);
     // d_assert_msg(objectSize == static_cast<size_t>(objectSize()), "%zu != %hu", objectSize, _objectSize);
 
-    d_assert(_nextMiniHeap == 0);
+    d_assert(!_nextMiniHeap.hasValue());
 
     // dumpDebug();
   }
@@ -259,9 +259,7 @@ public:
   }
 
   void trackMeshedSpan(MiniHeapID id) {
-    if (id == 0) {
-      return;
-    }
+    hard_assert(id.hasValue());
 
     if (unlikely(meshCount() >= kMaxMeshes)) {
       mesh::debug("fatal: too many meshes for one miniheap");
@@ -269,7 +267,7 @@ public:
       abort();
     }
 
-    if (_nextMiniHeap == 0) {
+    if (!_nextMiniHeap.hasValue()) {
       _nextMiniHeap = id;
     } else {
       GetMiniHeap(_nextMiniHeap)->trackMeshedSpan(id);
@@ -282,7 +280,7 @@ public:
     if (cb(this))
       return;
 
-    if (_nextMiniHeap != 0) {
+    if (_nextMiniHeap.hasValue()) {
       const auto mh = GetMiniHeap(_nextMiniHeap);
       mh->forEachMeshed(cb);
     }
@@ -293,7 +291,7 @@ public:
     if (cb(this))
       return;
 
-    if (_nextMiniHeap != 0) {
+    if (_nextMiniHeap.hasValue()) {
       auto mh = GetMiniHeap(_nextMiniHeap);
       mh->forEachMeshed(cb);
     }
@@ -463,8 +461,8 @@ protected:
   const Span _span;                   // 8        48
   Flags _flags{};                     // 4        52
   const uint32_t _maxCount;           // 4        56
-  MiniHeapID _nextMiniHeap{0};        // 4        60
-  const float _objectSizeReciprocal;  // 4        64
+  const float _objectSizeReciprocal;  // 4        60
+  MiniHeapID _nextMiniHeap{};         // 4        64
 
 #ifdef MESH_EXTRA_BITS
   internal::Bitmap _bitmap0;

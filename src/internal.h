@@ -39,7 +39,33 @@ enum PageType {
 };
 }  // namespace internal
 
-typedef uint32_t MiniHeapID;
+class MiniHeapID {
+public:
+  MiniHeapID() : _id{0} {
+  }
+
+  MiniHeapID(uint32_t id) : _id{id} {
+  }
+
+  MiniHeapID(const MiniHeapID &rhs) : _id{rhs._id} {
+  }
+
+  void operator=(const MiniHeapID &rhs) {
+    d_assert(rhs._id != 0);
+    _id = rhs._id;
+  }
+
+  bool hasValue() const {
+    return _id != 0;
+  }
+
+  uint32_t value() const {
+    return _id;
+  }
+
+private:
+  uint32_t _id;
+};
 
 class MiniHeap;
 MiniHeap *GetMiniHeap(const MiniHeapID id);
