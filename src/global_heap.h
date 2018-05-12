@@ -103,8 +103,13 @@ public:
     return ptr;
   }
 
-  inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize) {
+  inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize, MiniHeap *oldMH) {
     lock_guard<mutex> lock(_miniheapLock);
+
+    // ensure this flag is always set with the miniheap lock held
+    if (oldMH != nullptr) {
+      oldMH->unsetAttached();
+    }
 
     d_assert(objectSize <= _maxObjectSize);
 
@@ -113,13 +118,15 @@ public:
 
     d_assert_msg(objectSize == classMaxSize, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize,
                  classMaxSize, sizeClass);
-    d_assert(sizeClass >= 0);
 #endif
+    d_assert(sizeClass >= 0);
     d_assert(sizeClass < kNumBins);
 
     // check our bins for a miniheap to reuse
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
     if (existing != nullptr) {
+      d_assert(!existing->isAttached());
+      existing->setAttached();
       return existing;
     }
 
@@ -131,6 +138,8 @@ public:
     const size_t pageCount = PageCount(objectSize * objectCount);
 
     auto mh = allocMiniheapLocked(sizeClass, pageCount, objectCount, objectSize);
+    d_assert(!mh->isAttached());
+    mh->setAttached();
     return mh;
   }
 
