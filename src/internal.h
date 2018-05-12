@@ -44,15 +44,17 @@ public:
   MiniHeapID() : _id{0} {
   }
 
-  MiniHeapID(uint32_t id) : _id{id} {
+  explicit MiniHeapID(uint32_t id) : _id{id} {
   }
 
-  MiniHeapID(const MiniHeapID &rhs) : _id{rhs._id} {
-  }
+  MiniHeapID(const MiniHeapID &rhs) = default;
 
-  void operator=(const MiniHeapID &rhs) {
-    d_assert(rhs._id != 0);
-    _id = rhs._id;
+  constexpr MiniHeapID(MiniHeapID &&rhs) = default;
+
+  MiniHeapID &operator=(const MiniHeapID &rhs) = default;
+
+  bool operator==(const MiniHeapID &rhs) const {
+    return _id == rhs._id;
   }
 
   bool hasValue() const {
