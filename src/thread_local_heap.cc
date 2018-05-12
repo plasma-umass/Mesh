@@ -42,7 +42,7 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
 
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
-  MiniHeap *mh = _global->allocSmallMiniheap(sizeClass, sizeMax);
+  MiniHeap *mh = _global->allocSmallMiniheap(sizeClass, sizeMax, oldMH);
   d_assert(mh != nullptr);
 
   // TODO: maybe pass this to allocSmallMiniheap?
