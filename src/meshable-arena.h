@@ -65,8 +65,9 @@ public:
   void free(void *ptr, size_t sz, internal::PageType type);
 
   inline void *lookupMiniheapOffset(Offset off) const {
-    const Offset mhOff = _mhIndex[off];
-    const auto result = _mhAllocator.ptrFromOffset(mhOff);
+    const MiniHeapID mhOff = _mhIndex[off].load(std::memory_order_acquire);
+    d_assert(mhOff.hasValue());
+    const auto result = _mhAllocator.ptrFromOffset(mhOff.value());
     // debug("lookup ok for (%zu) %zu %p\n", off, mhOff, result);
 
     return result;
@@ -145,7 +146,7 @@ private:
   inline void clearIndex(const Span span) {
     for (size_t i = 0; i < span.length; i++) {
       // clear the miniheap pointers we were tracking
-      setIndex(span.offset + i, 0);
+      setIndex(span.offset + i, MiniHeapID{0});
     }
   }
 
@@ -201,7 +202,7 @@ private:
     return reinterpret_cast<void *>(ptrvalFromOffset(off));
   }
 
-  inline void setIndex(size_t off, Offset val) {
+  inline void setIndex(size_t off, MiniHeapID val) {
     d_assert(off < indexSize());
     _mhIndex[off].store(val, std::memory_order_release);
   }
@@ -247,7 +248,7 @@ private:
 
   void *_arenaBegin{nullptr};
   // indexed by page offset.
-  atomic<Offset> *_mhIndex{nullptr};
+  atomic<MiniHeapID> *_mhIndex{nullptr};
 
 protected:
   CheapHeap<64, kArenaSize / kPageSize> _mhAllocator{};

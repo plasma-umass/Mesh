@@ -47,7 +47,7 @@ MeshableArena::MeshableArena() : SuperHeap() {
   }
   _fd = fd;
   _arenaBegin = SuperHeap::map(kArenaSize, MAP_SHARED, fd);
-  _mhIndex = reinterpret_cast<atomic<Offset> *>(SuperHeap::malloc(indexSize()));
+  _mhIndex = reinterpret_cast<atomic<MiniHeapID> *>(SuperHeap::malloc(indexSize()));
 
   hard_assert(_arenaBegin != nullptr);
   hard_assert(_mhIndex != nullptr);
@@ -284,7 +284,7 @@ char *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignme
   }
 #endif
 
-  const auto ownerVal = _mhAllocator.offsetFor(owner);
+  const auto ownerVal = MiniHeapID{_mhAllocator.offsetFor(owner)};
 
   // now that we know they are available, set the empty pages to
   // in-use.  This is safe because this whole function is called
@@ -488,9 +488,9 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const auto removeOff = offsetFor(remove);
 
   const Length pageCount = sz / kPageSize;
-  const Offset keepMHOff = _mhIndex[keepOff];
+  const MiniHeapID keepID = _mhIndex[keepOff].load(std::memory_order_acquire);
   for (size_t i = 0; i < pageCount; i++) {
-    setIndex(removeOff + i, keepMHOff);
+    setIndex(removeOff + i, keepID);
   }
 
   const Span removedSpan{removeOff, pageCount};
@@ -686,7 +686,7 @@ void MeshableArena::afterForkChild() {
 #ifndef NDEBUG
         const Length pageCount = sz / kPageSize;
         for (size_t i = 0; i < pageCount; i++) {
-          d_assert(_mhIndex[removeOff + i] == _mhIndex[keepOff]);
+          d_assert(_mhIndex[removeOff + i].load().value() == _mhIndex[keepOff].load().value());
         }
 #endif
 

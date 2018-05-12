@@ -14,8 +14,10 @@ MiniHeap *GetMiniHeap(const MiniHeapID id) {
 }
 
 MiniHeapID GetMiniHeapID(const MiniHeap *mh) {
-  if (unlikely(mh == nullptr))
-    return 0;
+  if (unlikely(mh == nullptr)) {
+    d_assert(false);
+    return MiniHeapID{0};
+  }
 
   return runtime().heap().miniheapIDFor(mh);
 }
