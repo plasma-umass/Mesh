@@ -191,7 +191,9 @@ inline void halfSplit(MWC &prng, BinnedTracker<T> &miniheaps, internal::vector<T
 
   internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
 
-  for (size_t i = 0; i < bucket.size(); i++) {
+  constexpr size_t kL2CacheLimit = 3000;
+  const auto maxCandidates = bucket.size() > kL2CacheLimit ? kL2CacheLimit : bucket.size();
+  for (size_t i = 0; i < maxCandidates; i++) {
     auto mh = bucket[i];
     if (!mh->isMeshingCandidate() || mh->fullness() >= OccupancyCutoff)
       continue;
