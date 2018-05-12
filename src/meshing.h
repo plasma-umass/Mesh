@@ -28,14 +28,17 @@ inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bi
   d_assert(byteLen >= 8);
   d_assert(byteLen % 8 == 0);
 
-  const auto bits1 = (const size_t *)__builtin_assume_aligned(bitmap1, 16);
-  const auto bits2 = (const size_t *)__builtin_assume_aligned(bitmap2, 16);
+  bitmap1 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap1, 16);
+  bitmap2 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap2, 16);
 
-  size_t result = 0;
   for (size_t i = 0; i < byteLen / sizeof(size_t); i++) {
-    result += bits1[i] & bits2[i];
+    if ((bitmap1[i] & bitmap2[i]) != 0) {
+      // debug("%zu/%zu bitmap cmp failed: %zx & %zx != 0 (%zx)", i, byteLen, bitmap1[i].load(), bitmap2[i].load(),
+      //       bitmap1[i].load() & bitmap2[i].load());
+      return false;
+    }
   }
-  return result == 0;
+  return true;
 }
 
 size_t hammingDistance(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
@@ -90,7 +93,7 @@ inline void randomSort(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
     d_assert(!h1->isAttached());
     d_assert(!h2->isAttached());
 
-    constexpr auto len = 32; // 32 bytes is a max of 256 objects
+    const auto len = h1->bitmap().byteCount();
     const auto bitmap1 = h1->bitmap().bits();
     const auto bitmap2 = h2->bitmap().bits();
     const auto len2 = h2->bitmap().byteCount();
@@ -102,10 +105,10 @@ inline void randomSort(mt19937_64 &prng, BinnedTracker<T> &miniheaps,
 
       meshFound(std::move(heaps));
     } else {
-      debug("----\n2 UNMESHABLE HEAPS!\n");
-      h1->dumpDebug();
-      h2->dumpDebug();
-      debug("----\n");
+      // debug("----\n2 UNMESHABLE HEAPS!\n");
+      // h1->dumpDebug();
+      // h2->dumpDebug();
+      // debug("----\n");
     }
   }
 }
@@ -191,9 +194,7 @@ inline void halfSplit(MWC &prng, BinnedTracker<T> &miniheaps, internal::vector<T
 
   internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
 
-  constexpr size_t kL2CacheLimit = 3000;
-  const auto maxCandidates = bucket.size() > kL2CacheLimit ? kL2CacheLimit : bucket.size();
-  for (size_t i = 0; i < maxCandidates; i++) {
+  for (size_t i = 0; i < bucket.size(); i++) {
     auto mh = bucket[i];
     if (!mh->isMeshingCandidate() || mh->fullness() >= OccupancyCutoff)
       continue;
@@ -340,24 +341,18 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
   if (leftSize == 0 || rightSize == 0)
     return;
 
-  const size_t limit = rightSize < t ? rightSize : t;
-  constexpr size_t nBytes = 32;
+  const size_t nBytes = leftBucket[0]->bitmap().byteCount();
 
   size_t foundCount = 0;
   for (size_t j = 0; j < leftSize; j++) {
-    const size_t idxLeft = j;
-    size_t idxRight = j;
-    for (size_t i = 0; i < limit; i++, idxRight++) {
-      if (idxRight >= rightSize) {
-        idxRight %= rightSize;
-      }
-
+    for (size_t i = 0; i < t; i++) {
+      const size_t idxLeft = j;
+      const size_t idxRight = (j + i) % rightSize;
       auto h1 = leftBucket[idxLeft];
       auto h2 = rightBucket[idxRight];
 
-      if (h1 == nullptr || h2 == nullptr) {
+      if (h1 == nullptr || h2 == nullptr)
         continue;
-      }
 
       const auto bitmap1 = h1->bitmap().bits();
       const auto bitmap2 = h2->bitmap().bits();
@@ -371,11 +366,6 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
         if (foundCount > kMaxMeshesPerIteration) {
           return;
         }
-      } else {
-        // debug("----\n2 UNMESHABLE HEAPS!\n");
-        // h1->dumpDebug();
-        // h2->dumpDebug();
-        // debug("----\n");
       }
     }
   }
