@@ -152,6 +152,14 @@ protected:
 
 public:
 
+  inline void invert() {
+    const size_t numWords = wordCount(representationSize(_bitCount));
+    for (size_t i = 0; i < numWords; i++) {
+      _bits[i] = ~_bits[i];
+    }
+  }
+
+  
   inline void setAll() {
     const size_t numWords = wordCount(representationSize(_bitCount));
     for (size_t i = 0; i < numWords; i++) {
@@ -260,17 +268,7 @@ public:
     return s;
   }
 
-  void invert() {
-    // TODO: there is probably a cleaner way to refactor this
-    const auto length = bitCount();
-    for (size_t i = 0; i < length; i++) {
-      if (isSet(i))
-        unset(i);
-      else
-        tryToSet(i);
-    }
-  }
-
+ 
   // number of bytes used to store the bitmap -- rounds up to nearest sizeof(size_t)
   inline size_t byteCount() const {
     return representationSize(bitCount());
@@ -398,6 +396,8 @@ public:
     return iterator(*this, bitCount());
   }
 
+  
+ 
   size_t lowestSetBitAt(uint64_t startingAt) const {
     uint32_t startWord, startOff;
     computeItemPosition(startingAt, startWord, startOff);
