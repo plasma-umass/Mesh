@@ -135,14 +135,13 @@ public:
 
     d_assert(!_nextMiniHeap.hasValue());
 
-    debug("new:\n");
-    dumpDebug();
+    // debug("new:\n");
+    // dumpDebug();
   }
 
   ~MiniHeap() {
-    // if (_meshCount > 1)
-    debug("destruct:\n");
-    dumpDebug();
+    // debug("destruct:\n");
+    // dumpDebug();
   }
 
   inline Span span() const {
