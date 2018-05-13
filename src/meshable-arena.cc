@@ -104,8 +104,11 @@ void MeshableArena::expandArena(Length minPagesAdded) {
   _clean[expansion.spanClass()].push_back(expansion);
 }
 
-bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i, Length pageCount,
-                                   Span &result) {
+bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount],
+                                   const size_t i,
+                                   const Length pageCount,
+                                   Span &result)
+{
   internal::vector<Span> &spanList = freeSpans[i];
   if (spanList.empty())
     return false;
@@ -123,7 +126,7 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
       }
     }
 
-    // check that we found something in the above loop.this would be
+    // check that we found something in the above loop. this would be
     // our last loop iteration anyway
     if (spanList.back().length < pageCount) {
       return false;
@@ -155,7 +158,9 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
   return true;
 }
 
-  bool MeshableArena::findPages(Length pageCount, Span &result, internal::PageType &type) {
+  bool MeshableArena::findPages(const Length pageCount,
+                                Span &result,
+                                internal::PageType &type) {
   // Search through all dirty spans first.  We don't worry about
   // fragmenting dirty pages, as being able to reuse dirty pages means
   // we don't increase RSS.
@@ -178,7 +183,9 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
   return false;
 }
 
-Span MeshableArena::reservePages(Length pageCount, Length pageAlignment) {
+Span MeshableArena::reservePages(const Length pageCount,
+                                 const Length pageAlignment)
+{
   d_assert(pageCount >= 1);
 
   internal::PageType flags(internal::PageType::Unknown);
@@ -239,7 +246,7 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
 
   bitmap.setAll();
   
-  auto unmarkPages = [&](const Span span) {
+  auto unmarkPages = [&](const Span& span) {
     for (size_t k = 0; k < span.length; k++) {
 #ifdef NDEBUG
       if (!bitmap.isSet(span.offset + k)) {
@@ -257,7 +264,10 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
   return bitmap;
 }
 
-void *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignment) {
+void *MeshableArena::pageAlloc(const size_t pageCount,
+                               const void *owner,
+                               const size_t pageAlignment)
+{
   if (pageCount == 0) {
     return nullptr;
   }
@@ -322,7 +332,7 @@ void MeshableArena::free(void *ptr, size_t sz, internal::PageType type) {
 }
 
 void MeshableArena::partialScavenge() {
-  forEachFree(_dirty, [&](const Span span) {
+  forEachFree(_dirty, [&](const Span& span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
     madvise(ptr, sz, MADV_DONTNEED);
@@ -344,7 +354,7 @@ void MeshableArena::scavenge() {
   auto bitmap = allocatedBitmap(false);
   bitmap.invert();
 
-  auto markPages = [&](const Span span) {
+  auto markPages = [&](const Span& span) {
     for (size_t k = 0; k < span.length; k++) {
 #ifndef NDEBUG
       if (bitmap.isSet(span.offset + k)) {
@@ -357,7 +367,7 @@ void MeshableArena::scavenge() {
 
   // first, untrack the spans in the meshed bitmap and mark them in
   // the (method-local) unallocated bitmap
-  std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
+  std::for_each(_toReset.begin(), _toReset.end(), [&](const Span& span) {
     untrackMeshed(span);
     markPages(span);
   });
@@ -365,7 +375,7 @@ void MeshableArena::scavenge() {
   {
     internal::unordered_set<Offset> remappedStarts{};
 
-    std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
+    std::for_each(_toReset.begin(), _toReset.end(), [&](const Span& span) {
       Offset startMeshedOffset = _meshedBitmap.highestSetBitBeforeOrAt(span.offset);
       // might be 0
       if (_meshedBitmap.isSet(startMeshedOffset)) {
@@ -398,7 +408,7 @@ void MeshableArena::scavenge() {
     // TODO: find rss at peak
   }
 
-  forEachFree(_dirty, [&](const Span span) {
+  forEachFree(_dirty, [&](const Span& span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
     madvise(ptr, sz, MADV_DONTNEED);
