@@ -223,18 +223,6 @@ int epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int _
 int mesh_in_bounds(void *ptr) {
   return mesh::runtime().heap().inBounds(ptr);
 }
-
-int mesh_bit_get(enum mesh::BitType type, void *ptr) {
-  return mesh::runtime().heap().bitmapGet(type, ptr);
-}
-
-int mesh_bit_set(enum mesh::BitType type, void *ptr) {
-  return mesh::runtime().heap().bitmapSet(type, ptr);
-}
-
-int mesh_bit_clear(enum mesh::BitType type, void *ptr) {
-  return mesh::runtime().heap().bitmapClear(type, ptr);
-}
 }
 
 #ifdef __linux__
