@@ -17,8 +17,6 @@
 
 #include "heaplayers.h"
 
-#undef MESH_EXTRA_BITS
-
 namespace mesh {
 
 class MiniHeap;
@@ -113,15 +111,7 @@ public:
         _span(span),
         _flags(objectCount),
         _objectSize(objectSize),
-        _objectSizeReciprocal(1.0 / (float)objectSize)
-#ifdef MESH_EXTRABITS
-        ,
-        _bitmap0(maxCount()),
-        _bitmap1(maxCount()),
-        _bitmap2(maxCount()),
-        _bitmap3(maxCount())
-#endif
-  {
+        _objectSizeReciprocal(1.0 / (float)objectSize) {
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
 
     d_assert(_bitmap.inUseCount() == 0);
@@ -361,72 +351,6 @@ public:
     mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
   }
 
-  inline int bitmapGet(void *arenaBegin, enum mesh::BitType type, void *ptr) const {
-    const ssize_t off = getOff(arenaBegin, ptr);
-    d_assert(off >= 0);
-
-#ifdef MESH_EXTRA_BITS
-    switch (type) {
-    case MESH_BIT_0:
-      return _bitmap0.isSet(off);
-    case MESH_BIT_1:
-      return _bitmap1.isSet(off);
-    case MESH_BIT_2:
-      return _bitmap2.isSet(off);
-    case MESH_BIT_3:
-      return _bitmap3.isSet(off);
-    default:
-      break;
-    }
-#endif
-    d_assert(false);
-    return -1;
-  }
-
-  inline int bitmapSet(void *arenaBegin, enum mesh::BitType type, void *ptr) {
-    const ssize_t off = getOff(arenaBegin, ptr);
-    d_assert(off >= 0);
-
-#ifdef MESH_EXTRA_BITS
-    switch (type) {
-    case MESH_BIT_0:
-      return _bitmap0.tryToSet(off);
-    case MESH_BIT_1:
-      return _bitmap1.tryToSet(off);
-    case MESH_BIT_2:
-      return _bitmap2.tryToSet(off);
-    case MESH_BIT_3:
-      return _bitmap3.tryToSet(off);
-    default:
-      break;
-    }
-#endif
-    d_assert(false);
-    return -1;
-  }
-
-  inline int bitmapClear(void *arenaBegin, enum mesh::BitType type, void *ptr) {
-    const ssize_t off = getOff(arenaBegin, ptr);
-    d_assert(off >= 0);
-
-#ifdef MESH_EXTRA_BITS
-    switch (type) {
-    case MESH_BIT_0:
-      return _bitmap0.unset(off);
-    case MESH_BIT_1:
-      return _bitmap1.unset(off);
-    case MESH_BIT_2:
-      return _bitmap2.unset(off);
-    case MESH_BIT_3:
-      return _bitmap3.unset(off);
-    default:
-      break;
-    }
-#endif
-    d_assert(false);
-    return -1;
-  }
-
   inline ssize_t getOff(void *arenaBegin, void *ptr) const {
     const auto span = spanStart(arenaBegin, ptr);
     d_assert(span != 0);
@@ -482,22 +406,10 @@ protected:
   const uint32_t _objectSize;         // 4        56
   const float _objectSizeReciprocal;  // 4        60
   MiniHeapID _nextMiniHeap{};         // 4        64
-
-#ifdef MESH_EXTRA_BITS
-  internal::Bitmap _bitmap0;
-  internal::Bitmap _bitmap1;
-  internal::Bitmap _bitmap2;
-  internal::Bitmap _bitmap3;
-#endif
 };
 
 static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
-#ifdef MESH_EXTRA_BITS
-// static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
-#else
 static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
-#endif
-// static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 }  // namespace mesh
 
 #endif  // MESH__MINIHEAP_H

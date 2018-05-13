@@ -253,51 +253,6 @@ public:
     return mh != nullptr;
   }
 
-  int bitmapGet(enum mesh::BitType type, void *ptr) const {
-    if (unlikely(ptr == nullptr))
-      return 0;
-
-    lock_guard<mutex> lock(_miniheapLock);
-    // shared_lock<shared_mutex> lock(_miniheapLock);
-    auto mh = miniheapForLocked(ptr);
-    if (likely(mh)) {
-      auto result = mh->bitmapGet(arenaBegin(), type, ptr);
-      return result;
-    } else {
-      internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
-    }
-  }
-
-  int bitmapSet(enum mesh::BitType type, void *ptr) {
-    if (unlikely(ptr == nullptr))
-      return 0;
-
-    lock_guard<mutex> lock(_miniheapLock);
-    // shared_lock<shared_mutex> lock(_miniheapLock);
-    auto mh = miniheapForLocked(ptr);
-    if (likely(mh)) {
-      auto result = mh->bitmapSet(arenaBegin(), type, ptr);
-      return result;
-    } else {
-      internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
-    }
-  }
-
-  int bitmapClear(enum mesh::BitType type, void *ptr) {
-    if (unlikely(ptr == nullptr))
-      return 0;
-
-    lock_guard<mutex> lock(_miniheapLock);
-    // shared_lock<shared_mutex> lock(_miniheapLock);
-    auto mh = miniheapForLocked(ptr);
-    if (likely(mh)) {
-      auto result = mh->bitmapClear(arenaBegin(), type, ptr);
-      return result;
-    } else {
-      internal::__mesh_assert_fail("TODO: bitmap on bigheap", __FILE__, __PRETTY_FUNCTION__, __LINE__, "");
-    }
-  }
-
   int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
   size_t getAllocatedMiniheapCount() const {
