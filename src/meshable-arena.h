@@ -66,7 +66,7 @@ public:
 
   inline void *lookupMiniheapOffset(Offset off) const {
     const MiniHeapID mhOff = _mhIndex[off].load(std::memory_order_acquire);
-    d_assert(mhOff.hasValue());
+    // d_assert(mhOff.hasValue());
     const auto result = _mhAllocator.ptrFromOffset(mhOff.value());
     // debug("lookup ok for (%zu) %zu %p\n", off, mhOff, result);
 
