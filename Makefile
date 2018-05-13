@@ -57,6 +57,8 @@ GFLAGS_BUILD_DIR = build/src/vendor/gflags
 GFLAGS_BUILD     = $(GFLAGS_BUILD_DIR)/Makefile
 GFLAGS_LIB       = $(GFLAGS_BUILD_DIR)/lib/libgflags.a
 
+COV_DIR          = coverage
+
 ALL_SUBMODULES   = $(HEAP_LAYERS) $(GTEST) $(GFLAGS)
 
 CONFIG           = Makefile config.mk
@@ -156,6 +158,12 @@ install: $(LIB)
 
 paper:
 	$(MAKE) -C paper
+
+coverage: $(UNIT_BIN) $(LIB) $(CONFIG)
+	mkdir -p $(COV_DIR)
+	cd $(COV_DIR); lcov --base-directory .. --directory ../build/src --capture --output-file app.info
+	cd $(COV_DIR); genhtml app.info
+
 
 src/test/fork-example: build/src/test/fork-example.o $(CONFIG)
 	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"

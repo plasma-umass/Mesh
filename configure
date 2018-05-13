@@ -27,6 +27,10 @@ if c.optimize_build:
 else:
     c.append('cflags', '-O0')
 
+if c.coverage_build:
+    c.append('cflags', '--coverage')
+    c.append('ldflags', '--coverage')
+
 c.append('cflags', '-DSANITIZER_GO=0')
 
 c.append('cflags', '-march=westmere')
