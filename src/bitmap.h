@@ -151,6 +151,14 @@ protected:
   }
 
 public:
+
+  inline void setAll() {
+    const size_t numWords = wordCount(representationSize(_bitCount));
+    for (size_t i = 0; i < numWords; i++) {
+      _bits[i] = (unsigned long) -1;
+    }
+  }
+  
   inline bool setAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
 

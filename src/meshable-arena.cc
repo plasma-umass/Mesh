@@ -238,10 +238,13 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
   // and _dirty lists unsetting pages that aren't in use.
 
   // TODO: add a 'set all' method to bitmap?
+  bitmap.setAll();
+#if 0
   for (size_t i = 0; i < bitmap.bitCount(); i++) {
     bitmap.tryToSet(i);
   }
-
+#endif
+  
   auto unmarkPages = [&](const Span span) {
     for (size_t k = 0; k < span.length; k++) {
 #ifdef NDEBUG
