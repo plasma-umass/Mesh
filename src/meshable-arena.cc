@@ -348,33 +348,8 @@ void MeshableArena::scavenge(bool force) {
   std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
     untrackMeshed(span);
     markPages(span);
+    resetSpanMapping(span);
   });
-
-  {
-    internal::unordered_set<Offset> remappedStarts{};
-
-    std::for_each(_toReset.begin(), _toReset.end(), [&](const Span span) {
-      Offset startMeshedOffset = _meshedBitmap.highestSetBitBeforeOrAt(span.offset);
-      // might be 0
-      if (_meshedBitmap.isSet(startMeshedOffset)) {
-        startMeshedOffset++;
-      }
-      Offset nextMeshedOffset = _meshedBitmap.lowestSetBitAt(span.offset + span.length);
-      if (nextMeshedOffset > _end) {
-        nextMeshedOffset = _end;
-      }
-      const Span expandedSpan{startMeshedOffset, nextMeshedOffset - startMeshedOffset};
-
-      if (remappedStarts.find(expandedSpan.offset) != remappedStarts.end()) {
-        return;
-      }
-      // debug("resetting mapping for %u-%u (%u pages, originally %u) %zu meshed pages", expandedSpan.offset,
-      //       expandedSpan.offset + expandedSpan.length, expandedSpan.length, span.length, _meshedPageCount);
-
-      remappedStarts.insert(expandedSpan.offset);
-      resetSpanMapping(expandedSpan);
-    });
-  }
 
   // now that we've finally reset to identity all delayed-reset
   // mappings, empty the list
