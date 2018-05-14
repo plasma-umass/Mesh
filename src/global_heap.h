@@ -16,6 +16,8 @@
 
 #include "heaplayers.h"
 
+#include "gtest/gtest_prod.h"
+
 using namespace HL;
 
 namespace mesh {
@@ -86,7 +88,7 @@ public:
     MiniHeap *mh = new (buf) MiniHeap(arenaBegin(), span, objectCount, objectSize);
 
     if (sizeClass >= 0)
-      trackMiniheapLocked(sizeClass, mh);
+      trackMiniheapLocked(mh);
 
     _miniheapCount++;
     _stats.mhAllocCount++;
@@ -169,21 +171,20 @@ public:
     return MiniHeapID{_mhAllocator.offsetFor(mh)};
   }
 
-  void trackMiniheapLocked(size_t sizeClass, MiniHeap *mh) {
-    _littleheaps[sizeClass].add(mh);
+  void trackMiniheapLocked(MiniHeap *mh) {
+    _littleheaps[mh->sizeClass()].add(mh);
   }
 
-  void untrackMiniheapLocked(size_t sizeClass, MiniHeap *mh) {
+  void untrackMiniheapLocked(MiniHeap *mh) {
     _stats.mhAllocCount -= 1;
-    _littleheaps[sizeClass].remove(mh);
+    _littleheaps[mh->sizeClass()].remove(mh);
   }
 
   // called with lock held
   void freeMiniheapAfterMeshLocked(MiniHeap *mh, bool untrack = true) {
     // don't untrack a meshed miniheap -- it has already been untracked
     if (untrack && !mh->isMeshed()) {
-      const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
-      untrackMiniheapLocked(sizeClass, mh);
+      untrackMiniheapLocked(mh);
     }
 
     mh->MiniHeap::~MiniHeap();
@@ -236,7 +237,7 @@ public:
     // shared_lock<shared_mutex> lock(_miniheapLock);
     auto mh = miniheapForLocked(ptr);
     if (likely(mh)) {
-      return mh->getSize();
+      return mh->objectSize();
     } else {
       return 0;
     }
@@ -305,8 +306,8 @@ public:
 
     // make sure we adjust what bin the destination is in -- it might
     // now be full and not a candidate for meshing
-    _littleheaps[SizeMap::SizeClass(dst->objectSize())].postFree(dst, dst->inUseCount());
-    untrackMiniheapLocked(SizeMap::SizeClass(src->objectSize()), src);
+    _littleheaps[dst->sizeClass()].postFree(dst, dst->inUseCount());
+    untrackMiniheapLocked(src);
   }
 
   inline void maybeMesh() {
@@ -334,7 +335,9 @@ public:
     return miniheapForLocked(ptr) != nullptr;
   }
 
-protected:
+private:
+  FRIEND_TEST(TripleMeshTest, MeshAll);
+
   // check for meshes in all size classes -- must be called unlocked
   void meshAllSizeClasses();
 

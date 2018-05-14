@@ -47,13 +47,13 @@ namespace method {
 template <typename T>
 inline void halfSplit(MWC &prng, BinnedTracker<T> &miniheaps, internal::vector<T *> &left,
                       internal::vector<T *> &right) noexcept {
-  internal::vector<T *> bucket = miniheaps.meshingCandidates(OccupancyCutoff);
+  internal::vector<T *> bucket = miniheaps.meshingCandidates(kOccupancyCutoff);
 
   internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
 
   for (size_t i = 0; i < bucket.size(); i++) {
     auto mh = bucket[i];
-    if (!mh->isMeshingCandidate() || mh->fullness() >= OccupancyCutoff)
+    if (!mh->isMeshingCandidate() || mh->fullness() >= kOccupancyCutoff)
       continue;
 
     if (left.size() <= right.size())

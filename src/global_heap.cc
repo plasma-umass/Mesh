@@ -63,7 +63,7 @@ void GlobalHeap::free(void *ptr) {
   const auto remaining = mh->inUseCount();
   const bool shouldConsiderMesh = remaining > 0;
 
-  const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
+  const auto sizeClass = mh->sizeClass();
 
   // this may free the miniheap -- we can't safely access it after
   // this point.

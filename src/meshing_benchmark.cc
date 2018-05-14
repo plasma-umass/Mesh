@@ -148,7 +148,8 @@ unique_ptr<MeshTestcase> openTestcase(const char *path) {
 bool validate(const unique_ptr<MeshTestcase> &testcase) {
   ssize_t result = 0;
   if (testcase->method == "dumb") {
-    result = mesh::method::simple(testcase->bitmaps);
+    printf("FIXME: update for new methods\n");
+    // result = mesh::method::simple(testcase->bitmaps);
     if (result == testcase->expectedResult)
       return true;
   } else {

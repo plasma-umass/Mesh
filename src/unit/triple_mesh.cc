@@ -81,6 +81,9 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
   MiniHeap *mh3 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
 
+  const auto sizeClass = mh1->sizeClass();
+  ASSERT_EQ(SizeMap::SizeClass(StrLen), sizeClass);
+
   ASSERT_TRUE(mh1->isAttached());
   ASSERT_TRUE(mh2->isAttached());
   ASSERT_TRUE(mh3->isAttached());
@@ -223,18 +226,9 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 }
 
-TEST(TripleMeshTest, TryMesh1) {
+TEST(TripleMeshTest, MeshAll) {
   meshTestConcurrentWrite(false, false);
-}
-
-TEST(TripleMeshTest, TryMesh2) {
-  meshTestConcurrentWrite(true, false);
-}
-
-TEST(TripleMeshTest, TryMesh3) {
   meshTestConcurrentWrite(false, true);
-}
-
-TEST(TripleMeshTest, TryMesh4) {
+  meshTestConcurrentWrite(true, false);
   meshTestConcurrentWrite(true, true);
 }
