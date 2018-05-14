@@ -21,8 +21,6 @@ namespace mesh {
 
 class MiniHeap;
 
-typedef void (*SpanCallback)(Span span, internal::PageType type);
-
 class Flags {
 private:
   DISALLOW_COPY_AND_ASSIGN(Flags);
@@ -309,9 +307,6 @@ public:
       return false;
     });
     return count;
-  }
-
-  inline void forEachSpan(SpanCallback cb) const {
   }
 
   internal::BinToken getBinToken() const {
