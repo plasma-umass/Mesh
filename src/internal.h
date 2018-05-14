@@ -41,7 +41,7 @@ enum PageType {
 
 class MiniHeapID {
 public:
-  MiniHeapID() : _id{0} {
+  MiniHeapID() noexcept : _id{0} {
   }
 
   explicit MiniHeapID(uint32_t id) : _id{id} {
