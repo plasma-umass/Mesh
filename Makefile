@@ -169,8 +169,8 @@ clang-coverage: $(UNIT_BIN) $(LIB) $(CONFIG)
 	rm -f "$(COV_DIR)/unit.test.profdata"
 	cd "$(COV_DIR)" && llvm-profdata merge -sparse ../default.profraw -o unit.test.profdata
 	cd "$(COV_DIR)" && llvm-cov show -format=html -instr-profile=unit.test.profdata ../unit.test -ignore-filename-regex='.*(vendor|unit)/.*' >index.html
+	cd "$(COV_DIR)" && llvm-cov report -instr-profile=unit.test.profdata ../unit.test -ignore-filename-regex='.*(vendor|unit)/.*' -use-color
 	rm -f default.profraw
-
 
 src/test/fork-example: build/src/test/fork-example.o $(CONFIG)
 	$(CC) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"
