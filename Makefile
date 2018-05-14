@@ -160,9 +160,16 @@ paper:
 	$(MAKE) -C paper
 
 coverage: $(UNIT_BIN) $(LIB) $(CONFIG)
-	mkdir -p $(COV_DIR)
-	cd $(COV_DIR); lcov --base-directory .. --directory ../build/src --capture --output-file app.info
-	cd $(COV_DIR); genhtml app.info
+	mkdir -p "$(COV_DIR)"
+	cd "$(COV_DIR)" && lcov --base-directory .. --directory ../build/src --capture --output-file app.info
+	cd "$(COV_DIR)" && genhtml app.info
+
+clang-coverage: $(UNIT_BIN) $(LIB) $(CONFIG)
+	mkdir -p "$(COV_DIR)"
+	rm -f "$(COV_DIR)/unit.test.profdata"
+	cd "$(COV_DIR)" && llvm-profdata merge -sparse ../default.profraw -o unit.test.profdata
+	cd "$(COV_DIR)" && llvm-cov show -format=html -instr-profile=unit.test.profdata ../unit.test -ignore-filename-regex='.*(vendor|unit)/.*' >index.html
+	rm -f default.profraw
 
 
 src/test/fork-example: build/src/test/fork-example.o $(CONFIG)
