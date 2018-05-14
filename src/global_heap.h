@@ -78,12 +78,13 @@ public:
     d_assert(buf != nullptr);
 
     // allocate out of the arena
-    char *spanBegin = Super::pageAlloc(pageCount, buf, pageAlignment);
+    Span span{0, 0};
+    char *spanBegin = Super::pageAlloc(span, pageCount, pageAlignment);
     d_assert(spanBegin != nullptr);
     d_assert((reinterpret_cast<uintptr_t>(spanBegin) / kPageSize) % pageAlignment == 0);
 
-    size_t off = (spanBegin - arenaBegin()) / kPageSize;
-    Span span{static_cast<Offset>(off), static_cast<Length>(pageCount)};
+    const auto miniheapID = MiniHeapID{_mhAllocator.offsetFor(buf)};
+    Super::trackMiniHeap(span, miniheapID);
 
     MiniHeap *mh = new (buf) MiniHeap(arenaBegin(), span, objectCount, objectSize);
 

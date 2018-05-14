@@ -60,12 +60,27 @@ public:
     return arena <= ptrval && ptrval < arena + kArenaSize;
   }
 
-  char *pageAlloc(size_t pageCount, void *owner, size_t pageAlignment = 1);
+  char *pageAlloc(Span &result, size_t pageCount, size_t pageAlignment = 1);
 
   void free(void *ptr, size_t sz, internal::PageType type);
 
-  inline void *lookupMiniheapOffset(Offset off) const {
-    const MiniHeapID mhOff = _mhIndex[off].load(std::memory_order_acquire);
+  inline void trackMiniHeap(const Span span, MiniHeapID id) {
+    // now that we know they are available, set the empty pages to
+    // in-use.  This is safe because this whole function is called
+    // under the GlobalHeap lock, so there is no chance of concurrent
+    // modification between the loop above and the one below.
+    for (size_t i = 0; i < span.length; i++) {
+#ifndef NDEBUG
+      d_assert(!_mhIndex[span.offset + i].load(std::memory_order_acquire).hasValue());
+      // auto mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(span.offset + i));
+      // mh->dumpDebug();
+#endif
+      setIndex(span.offset + i, id);
+    }
+  }
+
+  inline void *miniheapForArenaOffset(Offset arenaOff) const {
+    const MiniHeapID mhOff = _mhIndex[arenaOff].load(std::memory_order_acquire);
     // d_assert(mhOff.hasValue());
     const auto result = _mhAllocator.ptrFromOffset(mhOff.value());
     // debug("lookup ok for (%zu) %zu %p\n", off, mhOff, result);
@@ -80,9 +95,8 @@ public:
 
     // we've already checked contains, so we know this offset is
     // within bounds
-    const auto off = offsetFor(ptr);
-
-    return lookupMiniheapOffset(off);
+    const auto arenaOff = offsetFor(ptr);
+    return miniheapForArenaOffset(arenaOff);
   }
 
   void beginMesh(void *keep, void *remove, size_t sz);
