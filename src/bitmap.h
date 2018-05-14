@@ -301,8 +301,8 @@ public:
     uint32_t startWord, off;
     computeItemPosition(startingAt, startWord, off);
 
-    //    const size_t words = byteCount();
-    const auto words = byteCount() / sizeof(size_t);
+    const size_t words = byteCount();
+    // const auto words = byteCount() / sizeof(size_t);
     for (size_t i = startWord; i < words; i++) {
       const size_t bits = Super::_bits[i];
       if (bits == ~0UL) {
