@@ -30,6 +30,16 @@ else:
 if c.coverage_build:
     c.append('cflags', '--coverage')
     c.append('ldflags', '--coverage')
+if c.clangcov_build:
+    c.append('cflags', '-fprofile-instr-generate')
+    c.append('cflags', '-fcoverage-mapping')
+    c.append('ldflags', '-fprofile-instr-generate')
+    c.append('ldflags', '-fcoverage-mapping')
+    c.prefer('cc', 'clang')
+    c.prefer('cxx', 'clang++')
+    c.prefer('ar', 'llvm-ar')
+    c.prefer('ranlib', 'llvm-ranlib')
+    c.append('ldflags', '-fuse-ld=lld')
 
 c.append('cflags', '-DSANITIZER_GO=0')
 

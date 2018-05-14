@@ -101,6 +101,8 @@ static void meshTest(bool invert) {
   s2[0] = 'b';
   ASSERT_EQ(s3[0], 'b');
 
+  ASSERT_EQ(mh1->meshCount(), 2);
+
   // now free the objects by going through the global heap -- it
   // should redirect both objects to the same miniheap
   gheap.free(s1);
