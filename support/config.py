@@ -63,6 +63,7 @@ Options:
   --help      display this help and exit
   --debug     build with debugging symbols
   --coverage  build with gcov profiling support
+  --clangcov  build with clang profiling support
   --optimize  build with heavy optimizations
   --mingw     cross-compiling under mingw32
 
@@ -76,6 +77,7 @@ class ConfigBuilder:
         self.defs['year'] = str(datetime.now().year)
         self.debug_build = '--debug' in argv
         self.coverage_build = '--coverage' in argv
+        self.clangcov_build = '--clangcov' in argv
         self.optimize_build = '--optimize' in argv
         self.pkg_config = 'pkg-config'
         self.cross_compiling = False
@@ -120,7 +122,7 @@ class ConfigBuilder:
             env[info] = existing + ' ' + new
 
     def generate(self, fname='config.mk'):
-        if self.coverage_build:
+        if self.coverage_build or self.clangcov_build:
             self.append('cflags', '-D_PROF')
         with open(fname, 'w') as config:
             for info in sorted(self.env.keys()):
