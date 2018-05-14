@@ -40,6 +40,8 @@ void *GlobalHeap::malloc(size_t sz) {
 }
 
 void GlobalHeap::free(void *ptr) {
+  // TODO: look at pushing this further down the function
+  lock_guard<mutex> lock(_miniheapLock);
   auto mh = miniheapForLocked(ptr);
   if (unlikely(!mh)) {
     debug("FIXME: free of untracked ptr %p", ptr);
@@ -51,7 +53,7 @@ void GlobalHeap::free(void *ptr) {
   // This can also include, for example, single page allocations w/
   // 16KB alignment.
   if (mh->maxCount() == 1) {
-    lock_guard<mutex> lock(_miniheapLock);
+    // lock_guard<mutex> lock(_miniheapLock);
     freeMiniheapLocked(mh, false);
     return;
   }
@@ -71,12 +73,14 @@ void GlobalHeap::free(void *ptr) {
   mh = nullptr;
 
   if (unlikely(shouldFlush)) {
-    lock_guard<mutex> lock(_miniheapLock);
+    // lock_guard<mutex> lock(_miniheapLock);
     flushBinLocked(sizeClass);
   }
 
-  if (shouldConsiderMesh)
+  if (shouldConsiderMesh) {
+    // lock_guard<mutex> lock(_miniheapLock);
     maybeMesh();
+  }
 }
 
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
