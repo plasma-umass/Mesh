@@ -81,6 +81,10 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
   MiniHeap *mh3 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
 
+  ASSERT_TRUE(mh1->isAttached());
+  ASSERT_TRUE(mh2->isAttached());
+  ASSERT_TRUE(mh3->isAttached());
+
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 3UL);
 
   // sanity checks
@@ -98,6 +102,14 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_TRUE(s1 != nullptr);
   ASSERT_TRUE(s2 != nullptr);
   ASSERT_TRUE(s3 != nullptr);
+
+  mh1->unsetAttached();
+  mh2->unsetAttached();
+  mh3->unsetAttached();
+
+  ASSERT_TRUE(!mh1->isAttached());
+  ASSERT_TRUE(!mh2->isAttached());
+  ASSERT_TRUE(!mh3->isAttached());
 
   // fill in the strings, set the trailing null byte
   memset(s1, 'A', StrLen);
@@ -140,6 +152,11 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_EQ(len, mh2->bitmap().byteCount());
   ASSERT_EQ(len, mh3->bitmap().byteCount());
 
+  ASSERT_TRUE(mh1->isMeshingCandidate());
+  ASSERT_TRUE(mh2->isMeshingCandidate());
+  ASSERT_TRUE(mh3->isMeshingCandidate());
+
+  // we have a clique
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2, len));
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap2, bitmap3, len));
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap3, len));

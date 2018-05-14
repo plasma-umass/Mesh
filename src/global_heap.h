@@ -131,6 +131,7 @@ public:
     // check our bins for a miniheap to reuse
     MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
     if (existing != nullptr) {
+      d_assert(!existing->isMeshed());
       d_assert(!existing->isAttached());
       existing->setAttached();
       return existing;
