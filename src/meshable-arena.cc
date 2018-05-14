@@ -260,7 +260,7 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
   return bitmap;
 }
 
-char *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignment) {
+char *MeshableArena::pageAlloc(Span &result, size_t pageCount, size_t pageAlignment) {
   if (pageCount == 0) {
     return nullptr;
   }
@@ -271,42 +271,24 @@ char *MeshableArena::pageAlloc(size_t pageCount, void *owner, size_t pageAlignme
   d_assert(pageCount < std::numeric_limits<Length>::max());
 
   auto span = reservePages(pageCount, pageAlignment);
-  d_assert((reinterpret_cast<uintptr_t>(ptrFromOffset(span.offset)) / kPageSize) % pageAlignment == 0);
+  d_assert(isAligned(span, pageAlignment));
 
-  const auto off = span.offset;
-
-  d_assert(ptrFromOffset(span.offset) < arenaEnd());
+  d_assert(contains(ptrFromOffset(span.offset)));
 #ifndef NDEBUG
-  if (lookupMiniheapOffset(off) != _mhAllocator.arenaBegin()) {
+  if (_mhIndex[span.offset].load().hasValue()) {
     mesh::debug("----\n");
-    auto mh = reinterpret_cast<MiniHeap *>(lookupMiniheapOffset(off));
+    auto mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(span.offset));
     mh->dumpDebug();
   }
 #endif
 
-  const auto ownerVal = MiniHeapID{_mhAllocator.offsetFor(owner)};
-
-  // now that we know they are available, set the empty pages to
-  // in-use.  This is safe because this whole function is called
-  // under the GlobalHeap lock, so there is no chance of concurrent
-  // modification between the loop above and the one below.
-  for (size_t i = 0; i < pageCount; i++) {
-#ifndef NDEBUG
-    if (lookupMiniheapOffset(off + i) != _mhAllocator.arenaBegin()) {
-      mesh::debug("----!\n");
-      auto mh = reinterpret_cast<MiniHeap *>(lookupMiniheapOffset(off + i));
-      mh->dumpDebug();
-    }
-#endif
-    setIndex(off + i, ownerVal);
-  }
-
-  char *ptr = reinterpret_cast<char *>(ptrFromOffset(off));
+  char *ptr = reinterpret_cast<char *>(ptrFromOffset(span.offset));
 
   if (kAdviseDump) {
     madvise(ptr, pageCount * kPageSize, MADV_DODUMP);
   }
 
+  result = span;
   return ptr;
 }
 
@@ -662,7 +644,7 @@ void MeshableArena::afterForkChild() {
     internal::unordered_set<MiniHeap *> seenMiniheaps{};
 
     for (auto const &i : _meshedBitmap) {
-      MiniHeap *mh = reinterpret_cast<MiniHeap *>(lookupMiniheapOffset(i));
+      MiniHeap *mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(i));
       if (seenMiniheaps.find(mh) != seenMiniheaps.end()) {
         continue;
       }
