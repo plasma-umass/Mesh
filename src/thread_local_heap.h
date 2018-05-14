@@ -80,8 +80,7 @@ public:
 
     auto mh = _global->miniheapForLocked(ptr);
     if (likely(mh) && mh->maxCount() > 1) {
-      const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
-      Freelist &freelist = _freelist[sizeClass];
+      Freelist &freelist = _freelist[mh->sizeClass()];
       if (likely(freelist.getAttached() == mh)) {
         d_assert(mh->isAttached());
         _last = &freelist;
@@ -102,8 +101,7 @@ public:
 
     auto mh = _global->miniheapForLocked(ptr);
     if (likely(mh) && mh->maxCount() > 1) {
-      const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
-      Freelist &freelist = _freelist[sizeClass];
+      Freelist &freelist = _freelist[mh->sizeClass()];
       if (likely(freelist.getAttached() == mh)) {
         _last = &freelist;
         return freelist.getSize();

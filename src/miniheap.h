@@ -203,8 +203,8 @@ public:
     return _objectSize;
   }
 
-  inline size_t getSize() const {
-    return objectSize();
+  inline int sizeClass() const {
+    return SizeMap::SizeClass(_objectSize);
   }
 
   inline uintptr_t getSpanStart(void *arenaBegin) const {
