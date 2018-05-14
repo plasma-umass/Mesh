@@ -115,9 +115,12 @@ public:
   inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize, MiniHeap *oldMH) {
     lock_guard<mutex> lock(_miniheapLock);
 
+    d_assert(sizeClass >= 0);
+
     // ensure this flag is always set with the miniheap lock held
     if (oldMH != nullptr) {
       oldMH->unsetAttached();
+      _littleheaps[sizeClass].postFree(oldMH, oldMH->inUseCount());
     }
 
     d_assert(objectSize <= _maxObjectSize);
@@ -334,6 +337,10 @@ public:
       return false;
 
     return miniheapForLocked(ptr) != nullptr;
+  }
+
+  inline internal::vector<MiniHeap *> meshingCandidates(int sizeClass) const {
+    return _littleheaps[sizeClass].meshingCandidates(kOccupancyCutoff);
   }
 
 private:

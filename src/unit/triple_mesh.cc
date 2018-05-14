@@ -106,9 +106,20 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_TRUE(s2 != nullptr);
   ASSERT_TRUE(s3 != nullptr);
 
-  mh1->unsetAttached();
-  mh2->unsetAttached();
-  mh3->unsetAttached();
+  {
+    const auto f1 = reinterpret_cast<char *>(mh1->mallocAt(gheap.arenaBegin(), 2));
+    const auto f2 = reinterpret_cast<char *>(mh2->mallocAt(gheap.arenaBegin(), 2));
+    const auto f3 = reinterpret_cast<char *>(mh3->mallocAt(gheap.arenaBegin(), 2));
+
+    mh1->unsetAttached();
+    mh2->unsetAttached();
+    mh3->unsetAttached();
+
+    gheap.free(f1);
+    gheap.free(f2);
+    gheap.free(f3);
+  }
+
 
   ASSERT_TRUE(!mh1->isAttached());
   ASSERT_TRUE(!mh2->isAttached());
@@ -164,6 +175,14 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap2, bitmap3, len));
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap3, len));
 
+  {
+    const internal::vector<MiniHeap *> candidates = gheap.meshingCandidates(mh1->sizeClass());
+    ASSERT_EQ(candidates.size(), 3);
+    ASSERT_TRUE(std::find(candidates.begin(), candidates.end(), mh1) != candidates.end());
+    ASSERT_TRUE(std::find(candidates.begin(), candidates.end(), mh2) != candidates.end());
+    ASSERT_TRUE(std::find(candidates.begin(), candidates.end(), mh3) != candidates.end());
+  }
+
   note("ABOUT TO MESH");
   if (!invert2) {
     gheap.meshLocked(mh1, mh2);
@@ -205,6 +224,12 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_EQ(mh1->getOff(gheap.arenaBegin(), s1), 0);
   ASSERT_EQ(mh1->getOff(gheap.arenaBegin(), s2), ObjCount - 1);
   ASSERT_EQ(mh1->getOff(gheap.arenaBegin(), s3), 3);
+
+  {
+    const internal::vector<MiniHeap *> candidates = gheap.meshingCandidates(mh1->sizeClass());
+    ASSERT_EQ(candidates.size(), 1);
+    ASSERT_EQ(candidates[0], mh1);
+  }
 
   // now free the objects by going through the global heap -- it
   // should redirect both objects to the same miniheap
