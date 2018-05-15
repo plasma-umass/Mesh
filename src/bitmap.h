@@ -88,6 +88,12 @@ public:
 protected:
   AtomicBitmapBase(size_t bitCount) : _bitCount(bitCount) {
     d_assert_msg(_bitCount <= maxBits, "max bits (%zu) exceeded: %zu", maxBits, _bitCount);
+
+    static_assert(wordCount(representationSize(maxBits)) == 4, "unexpected representation size");
+    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
+      _bits[i].store(0, std::memory_order_relaxed);
+    }
+    std::atomic_thread_fence(std::memory_order_release);
   }
 
   ~AtomicBitmapBase() {
@@ -138,10 +144,14 @@ public:
 protected:
   RelaxedBitmapBase(size_t bitCount)
       : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(internal::Heap().malloc(representationSize(bitCount)))) {
+    d_assert(_bits != nullptr);
+    clear();
   }
 
   RelaxedBitmapBase(size_t bitCount, char *backingMemory)
       : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(backingMemory)) {
+    d_assert(_bits != nullptr);
+    clear();
   }
 
   ~RelaxedBitmapBase() {
@@ -151,7 +161,6 @@ protected:
   }
 
 public:
-
   inline void invert() {
     const size_t numWords = wordCount(representationSize(_bitCount));
     for (size_t i = 0; i < numWords; i++) {
@@ -159,14 +168,13 @@ public:
     }
   }
 
-  
   inline void setAll() {
     const size_t numWords = wordCount(representationSize(_bitCount));
     for (size_t i = 0; i < numWords; i++) {
-      _bits[i] = (unsigned long) -1;
+      _bits[i] = (unsigned long)-1;
     }
   }
-  
+
   inline bool setAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
 
@@ -189,6 +197,10 @@ public:
 protected:
   inline void nullBits() {
     _bits = nullptr;
+  }
+
+  void clear(void) {
+    memset(_bits, 0, representationSize(_bitCount));
   }
 
   const size_t _bitCount;
@@ -217,18 +229,12 @@ public:
   typedef BitmapIter<Bitmap> const const_iterator;
 
   explicit BitmapBase(size_t bitCount) : Super(bitCount) {
-    d_assert(Super::_bits != nullptr);
-    clear();
   }
 
   explicit BitmapBase(size_t bitCount, char *backingMemory) : Super(bitCount) {
-    d_assert(Super::_bits != nullptr);
-    clear();
   }
 
   explicit BitmapBase(const std::string &str) : Super(str.length()) {
-    d_assert(Super::bits() != nullptr);
-    clear();
 
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
@@ -239,8 +245,6 @@ public:
   }
 
   explicit BitmapBase(const internal::string &str) : Super(str.length()) {
-    d_assert(Super::_bits != nullptr);
-    clear();
 
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
@@ -259,7 +263,7 @@ public:
       bitCount = this->bitCount();
     d_assert(0 <= bitCount && static_cast<size_t>(bitCount) <= Super::_bitCount);
 
-    internal::string s(bitCount+1, 0);
+    internal::string s(bitCount + 1, 0);
 
     for (ssize_t i = 0; i < bitCount; i++) {
       s[i] = isSet(i) ? '1' : '0';
@@ -268,7 +272,6 @@ public:
     return s;
   }
 
- 
   // number of bytes used to store the bitmap -- rounds up to nearest sizeof(size_t)
   inline size_t byteCount() const {
     return representationSize(bitCount());
@@ -276,25 +279,6 @@ public:
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
     return Super::_bitCount;
-  }
-
-  /// Clears out the bitmap array.
-  void clear(void) {
-#ifdef __clang__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wtautological-pointer-compare"
-#endif
-    if (unlikely(Super::_bits == nullptr))
-      return;
-#ifdef __clang__
-#pragma GCC diagnostic pop
-#endif
-
-    const auto wordCount = byteCount() / sizeof(size_t);
-    // use an explicit array since these may be atomic_size_t's
-    for (size_t i = 0; i < wordCount; i++) {
-      Super::_bits[i] = 0;
-    }
   }
 
   inline uint64_t setFirstEmpty(uint64_t startingAt = 0) {
@@ -397,8 +381,6 @@ public:
     return iterator(*this, bitCount());
   }
 
-  
- 
   size_t lowestSetBitAt(uint64_t startingAt) const {
     uint32_t startWord, startOff;
     computeItemPosition(startingAt, startWord, startOff);
