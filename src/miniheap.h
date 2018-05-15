@@ -30,6 +30,7 @@ public:
       : _bitmap(objectCount),
         _objectSize(objectSize),
         _objectSizeReciprocal(1.0 / (float)objectSize),
+        _maxCount(objectCount),
         _spanSize(dynamicSpanSize()),
         _span{reinterpret_cast<char *>(span), 0, 0, 0},
         _meshCount(1)
@@ -121,7 +122,7 @@ public:
   }
 
   inline size_t maxCount() const {
-    return _bitmap.bitCount();
+    return _maxCount;
   }
 
   inline size_t objectSize() const {
@@ -365,6 +366,7 @@ protected:
   const uint32_t _objectSize;
   const float    _objectSizeReciprocal;
 
+  const uint32_t _maxCount;
   const uint32_t _spanSize;  // max 4 GB span size/allocation size, 56
   char *_span[kMaxMeshes];
   internal::BinToken _token;
@@ -378,11 +380,11 @@ protected:
 #endif
 };
 
-static_assert(sizeof(mesh::internal::Bitmap) == 40, "Bitmap too big!");
+static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 #ifdef MESH_EXTRA_BITS
 static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
 #else
-static_assert(sizeof(MiniHeap) == 112, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
 #endif
 // static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
 }  // namespace mesh

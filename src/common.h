@@ -33,6 +33,9 @@ static constexpr int kMinAlign = 16;
 static constexpr int kPageSize = 4096;
 static constexpr size_t kMaxFastLargeSize = 256 * 1024;  // 256Kb
 
+// cutoff to be considered for meshing
+static constexpr double kOccupancyCutoff = .8;
+
 // if we have, e.g. a kernel-imposed max_map_count of 2^16 (65k) we
 // can only safely have about 30k meshes before we are at risk of
 // hitting the max_map_count limit.
