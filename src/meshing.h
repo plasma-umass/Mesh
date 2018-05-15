@@ -332,7 +332,6 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
   internal::vector<T *> leftBucket{};   // mutable copy
   internal::vector<T *> rightBucket{};  // mutable copy
 
-  // unbalancedSplit(prng, miniheaps, leftBucket, rightBucket);
   halfSplit(prng, miniheaps, leftBucket, rightBucket);
 
   const auto leftSize = leftBucket.size();
@@ -341,13 +340,18 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
   if (leftSize == 0 || rightSize == 0)
     return;
 
-  const size_t nBytes = leftBucket[0]->bitmap().byteCount();
+  const size_t limit = rightSize < t ? rightSize : t;
+  constexpr size_t nBytes = 32;
+  d_assert(nBytes == leftBucket[0]->bitmap().byteCount());
 
   size_t foundCount = 0;
   for (size_t j = 0; j < leftSize; j++) {
-    for (size_t i = 0; i < t; i++) {
-      const size_t idxLeft = j;
-      const size_t idxRight = (j + i) % rightSize;
+    const size_t idxLeft = j;
+    size_t idxRight = j;
+    for (size_t i = 0; i < limit; i++, idxRight++) {
+      if (unlikely(idxRight >= rightSize)) {
+        idxRight %= rightSize;
+      }
       auto h1 = leftBucket[idxLeft];
       auto h2 = rightBucket[idxRight];
 
