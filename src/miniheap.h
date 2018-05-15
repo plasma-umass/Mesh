@@ -187,6 +187,9 @@ public:
       // debug("\t'%s'\n", srcObject);
       src->freeOff(off);
     }
+#ifndef NDEBUG
+    // TODO: check that (_bitmap & src->bitmap) == src->bitmap
+#endif
 
     trackMeshedSpan(GetMiniHeapID(src));
   }
@@ -352,9 +355,12 @@ public:
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
     const size_t off = (ptrval - span) * _objectSizeReciprocal;
-    // const size_t off2 = (ptrval - span) / _objectSize;
-    // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
+#ifndef NDEBUG
+    const size_t off2 = (ptrval - span) / _objectSize;
+    hard_assert_msg(off == off2, "%zu != %zu", off, off2);
+#endif
 
+    d_assert(off >= 0);
     d_assert(off < maxCount());
 
     return off;
@@ -368,27 +374,27 @@ protected:
 
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
-    uintptr_t span = arena + _span.offset * kPageSize;
-    if (likely(span <= ptrval && ptrval < span + len))
-      return span;
+    uintptr_t spanptr = arena + _span.offset * kPageSize;
+    if (likely(spanptr <= ptrval && ptrval < spanptr + len))
+      return spanptr;
 
-    span = 0;
+    spanptr = 0;
     if (!_nextMiniHeap.hasValue()) {
       d_assert(false);
-      return span;
+      return spanptr;
     }
 
     GetMiniHeap(_nextMiniHeap)->forEachMeshed([&](const MiniHeap *mh) {
-      uintptr_t meshedSpan = arena + mh->span().offset * kPageSize;
-      if (meshedSpan <= ptrval && ptrval < meshedSpan + len) {
-        span = meshedSpan;
+      uintptr_t meshedSpanptr = arena + mh->span().offset * kPageSize;
+      if (meshedSpanptr <= ptrval && ptrval < meshedSpanptr + len) {
+        spanptr = meshedSpanptr;
         return true;
       }
       return false;
     });
 
-    d_assert(span != 0);
-    return span;
+    d_assert(spanptr != 0);
+    return spanptr;
   }
 
   internal::Bitmap _bitmap;  // 32 bytes 32
