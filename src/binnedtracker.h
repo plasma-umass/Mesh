@@ -82,9 +82,11 @@ public:
           break;
         }
 
+        d_assert(!mh->isAttached());
+
         // this can happen because in use count is updated outside the
         // bin tracker lock -- it may be queued up for reuse.
-        if (unlikely(mh->isFull())) {
+        if (unlikely(mh->isFull() || mh->isAttached())) {
           debug("I don't know how this could happen");
           continue;
         }

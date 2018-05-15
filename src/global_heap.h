@@ -207,6 +207,7 @@ public:
     MiniHeap *toFree[kMaxMeshes] = {0, 0, 0, 0};
     size_t last = 0;
 
+    // avoid use after frees while freeing
     mh->forEachMeshed([&](MiniHeap *mh) {
       toFree[last++] = mh;
       return false;
