@@ -28,8 +28,8 @@ static void meshTest(bool invert) {
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
   // allocate two miniheaps for the same object size from our global heap
-  MiniHeap *mh1 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen);
-  MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen);
+  MiniHeap *mh1 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
+  MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 2UL);
 
@@ -42,8 +42,8 @@ static void meshTest(bool invert) {
   ASSERT_EQ(mh2->bitmap().inUseCount(), 0UL);
 
   // allocate two c strings, one from each miniheap at different offsets
-  char *s1 = reinterpret_cast<char *>(mh1->mallocAt(0));
-  char *s2 = reinterpret_cast<char *>(mh2->mallocAt(ObjCount - 1));
+  char *s1 = reinterpret_cast<char *>(mh1->mallocAt(gheap.arenaBegin(), 0));
+  char *s2 = reinterpret_cast<char *>(mh2->mallocAt(gheap.arenaBegin(), ObjCount - 1));
 
   ASSERT_TRUE(s1 != nullptr);
   ASSERT_TRUE(s2 != nullptr);
@@ -79,16 +79,10 @@ static void meshTest(bool invert) {
 
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2, len));
 
-  mh1->unref();
-  mh2->unref();
-
   note("ABOUT TO MESH");
   // mesh the two miniheaps together
   gheap.meshLocked(mh1, mh2);
   note("DONE MESHING");
-
-  // mh2 is consumed by mesh call, ensure it is now a null pointer
-  ASSERT_EQ(mh2, nullptr);
 
   // ensure the count of set bits looks right
   ASSERT_EQ(mh1->inUseCount(), 2UL);
@@ -107,6 +101,8 @@ static void meshTest(bool invert) {
   s2[0] = 'b';
   ASSERT_EQ(s3[0], 'b');
 
+  ASSERT_EQ(mh1->meshCount(), 2);
+
   // now free the objects by going through the global heap -- it
   // should redirect both objects to the same miniheap
   gheap.free(s1);
@@ -119,7 +115,7 @@ static void meshTest(bool invert) {
   note("DONE FREE");
 
   note("ABOUT TO SCAVENGE");
-  gheap.scavenge();
+  gheap.scavenge(true);
   note("DONE SCAVENGE");
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);

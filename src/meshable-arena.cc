@@ -47,7 +47,7 @@ MeshableArena::MeshableArena() : SuperHeap() {
   }
   _fd = fd;
   _arenaBegin = SuperHeap::map(kArenaSize, MAP_SHARED, fd);
-  _mhIndex = reinterpret_cast<atomic<Offset> *>(SuperHeap::malloc(indexSize()));
+  _mhIndex = reinterpret_cast<atomic<MiniHeapID> *>(SuperHeap::malloc(indexSize()));
 
   hard_assert(_arenaBegin != nullptr);
   hard_assert(_mhIndex != nullptr);
@@ -158,9 +158,7 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
   return true;
 }
 
-  bool MeshableArena::findPages(const Length pageCount,
-                                Span &result,
-                                internal::PageType &type) {
+bool MeshableArena::findPages(const Length pageCount, Span &result, internal::PageType &type) {
   // Search through all dirty spans first.  We don't worry about
   // fragmenting dirty pages, as being able to reuse dirty pages means
   // we don't increase RSS.
@@ -264,10 +262,7 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
   return bitmap;
 }
 
-void *MeshableArena::pageAlloc(const size_t pageCount,
-                               const void *owner,
-                               const size_t pageAlignment)
-{
+char *MeshableArena::pageAlloc(Span &result, size_t pageCount, size_t pageAlignment) {
   if (pageCount == 0) {
     return nullptr;
   }
@@ -278,42 +273,24 @@ void *MeshableArena::pageAlloc(const size_t pageCount,
   d_assert(pageCount < std::numeric_limits<Length>::max());
 
   auto span = reservePages(pageCount, pageAlignment);
-  d_assert((reinterpret_cast<uintptr_t>(ptrFromOffset(span.offset)) / kPageSize) % pageAlignment == 0);
+  d_assert(isAligned(span, pageAlignment));
 
-  const auto off = span.offset;
-
-  d_assert(ptrFromOffset(span.offset) < arenaEnd());
+  d_assert(contains(ptrFromOffset(span.offset)));
 #ifndef NDEBUG
-  if (lookupMiniheapOffset(off) != _mhAllocator.arenaBegin()) {
+  if (_mhIndex[span.offset].load().hasValue()) {
     mesh::debug("----\n");
-    auto mh = reinterpret_cast<MiniHeap *>(lookupMiniheapOffset(off));
+    auto mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(span.offset));
     mh->dumpDebug();
   }
 #endif
 
-  const auto ownerVal = _mhAllocator.offsetFor(owner);
-
-  // now that we know they are available, set the empty pages to
-  // in-use.  This is safe because this whole function is called
-  // under the GlobalHeap lock, so there is no chance of concurrent
-  // modification between the loop above and the one below.
-  for (size_t i = 0; i < pageCount; i++) {
-#ifndef NDEBUG
-    if (lookupMiniheapOffset(off + i) != _mhAllocator.arenaBegin()) {
-      mesh::debug("----!\n");
-      auto mh = reinterpret_cast<MiniHeap *>(lookupMiniheapOffset(off + i));
-      mh->dumpDebug();
-    }
-#endif
-    setIndex(off + i, ownerVal);
-  }
-
-  void *ptr = ptrFromOffset(off);
+  char *ptr = reinterpret_cast<char *>(ptrFromOffset(span.offset));
 
   if (kAdviseDump) {
     madvise(ptr, pageCount * kPageSize, MADV_DODUMP);
   }
 
+  result = span;
   return ptr;
 }
 
@@ -348,7 +325,10 @@ void MeshableArena::partialScavenge() {
   _dirtyPageCount = 0;
 }
 
-void MeshableArena::scavenge() {
+void MeshableArena::scavenge(bool force) {
+  if (!force && _dirtyPageCount < kMinDirtyPageThreshold)
+    return;
+
   // the inverse of the allocated bitmap is all of the spans in _clear
   // (since we just MADV_DONTNEED'ed everything in dirty)
   auto bitmap = allocatedBitmap(false);
@@ -467,11 +447,9 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const auto removeOff = offsetFor(remove);
 
   const Length pageCount = sz / kPageSize;
-  const Offset keepMHOff = _mhIndex[keepOff];
+  const MiniHeapID keepID = _mhIndex[keepOff].load(std::memory_order_acquire);
   for (size_t i = 0; i < pageCount; i++) {
-    // TODO: remove duplication of meshed metadata between the low
-    // bits here and the meshed bitmap
-    setIndex(removeOff + i, keepMHOff);
+    setIndex(removeOff + i, keepID);
   }
 
   const Span removedSpan{removeOff, pageCount};
@@ -643,7 +621,7 @@ void MeshableArena::afterForkChild() {
     internal::unordered_set<MiniHeap *> seenMiniheaps{};
 
     for (auto const &i : _meshedBitmap) {
-      MiniHeap *mh = reinterpret_cast<MiniHeap *>(lookupMiniheapOffset(i));
+      MiniHeap *mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(i));
       if (seenMiniheaps.find(mh) != seenMiniheaps.end()) {
         continue;
       }
@@ -653,24 +631,30 @@ void MeshableArena::afterForkChild() {
       d_assert(meshCount > 1);
 
       const auto sz = mh->spanSize();
-      const auto keep = mh->spans()[0];
+      const auto keep = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
       const auto keepOff = offsetFor(keep);
 
-      for (size_t j = 1; j < meshCount; j++) {
-        const auto remove = mh->spans()[j];
+      const auto base = mh;
+      base->forEachMeshed([&](const MiniHeap *mh) {
+        if (!mh->isMeshed())
+          return false;
+
+        const auto remove = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
         const auto removeOff = offsetFor(remove);
 
 #ifndef NDEBUG
         const Length pageCount = sz / kPageSize;
         for (size_t i = 0; i < pageCount; i++) {
-          d_assert(_mhIndex[removeOff + i] == _mhIndex[keepOff]);
+          d_assert(_mhIndex[removeOff + i].load().value() == _mhIndex[keepOff].load().value());
         }
 #endif
 
         void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * kPageSize);
 
         hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-      }
+
+        return false;
+      });
     }
   }
 

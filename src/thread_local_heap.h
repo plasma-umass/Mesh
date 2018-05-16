@@ -80,10 +80,12 @@ public:
 
     auto mh = _global->miniheapForLocked(ptr);
     if (likely(mh) && mh->maxCount() > 1) {
-      const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
-      Freelist &freelist = _freelist[sizeClass];
+      Freelist &freelist = _freelist[mh->sizeClass()];
+      // Freelists only refer to the first virtual span of a Miniheap.
+      // Re-check contains() here to catch the case of a free for a
+      // non-primary-span allocation.
       if (likely(freelist.getAttached() == mh && freelist.contains(ptr))) {
-        d_assert(mh->refcount() > 0);
+        d_assert(mh->isAttached());
         _last = &freelist;
         freelist.free(ptr);
         return;
@@ -102,8 +104,7 @@ public:
 
     auto mh = _global->miniheapForLocked(ptr);
     if (likely(mh) && mh->maxCount() > 1) {
-      const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
-      Freelist &freelist = _freelist[sizeClass];
+      Freelist &freelist = _freelist[mh->sizeClass()];
       if (likely(freelist.getAttached() == mh)) {
         _last = &freelist;
         return freelist.getSize();

@@ -44,69 +44,6 @@
 
 namespace mesh {
 
-namespace internal {
-
-enum PageType {
-  Clean = 0,
-  Dirty = 1,
-  Meshed = 2,
-  Unknown = 3,
-};
-}  // namespace internal
-
-typedef uint32_t Offset;
-typedef uint32_t Length;
-
-struct Span {
-  // offset and length are in pages
-  explicit Span(Offset _offset, Length _length) : offset(_offset), length(_length) {
-  }
-
-  Span(const Span &rhs) : offset(rhs.offset), length(rhs.length) {
-  }
-
-  constexpr Span &operator=(const Span &rhs) {
-    offset = rhs.offset;
-    length = rhs.length;
-    return *this;
-  }
-
-  Span(Span &&rhs) : offset(rhs.offset), length(rhs.length) {
-  }
-
-  bool empty() const {
-    return length == 0;
-  }
-
-  // reduce the size of this span to pageCount, return another span
-  // with the rest of the pages.
-  Span splitAfter(Length pageCount) {
-    d_assert(pageCount <= length);
-    auto restPageCount = length - pageCount;
-    length = pageCount;
-    return Span(offset + pageCount, restPageCount);
-  }
-
-  uint32_t spanClass() const {
-    return std::min(length, kSpanClassCount) - 1;
-  }
-
-  size_t byteLength() const {
-    return length * kPageSize;
-  }
-
-  inline bool operator==(const Span &rhs) {
-    return offset == rhs.offset && length == rhs.length;
-  }
-
-  inline bool operator!=(const Span &rhs) {
-    return !(*this == rhs);
-  }
-
-  Offset offset;
-  Length length;
-};
-
 class MeshableArena : public mesh::OneWayMmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MeshableArena);
@@ -123,13 +60,29 @@ public:
     return arena <= ptrval && ptrval < arena + kArenaSize;
   }
 
-  void *pageAlloc(const size_t pageCount, const void *owner, const size_t pageAlignment = 1);
+  char *pageAlloc(Span &result, size_t pageCount, size_t pageAlignment = 1);
 
   void free(void *ptr, size_t sz, internal::PageType type);
 
-  inline void *lookupMiniheapOffset(Offset off) const {
-    const Offset mhOff = _mhIndex[off];
-    const auto result = _mhAllocator.ptrFromOffset(mhOff);
+  inline void trackMiniHeap(const Span span, MiniHeapID id) {
+    // now that we know they are available, set the empty pages to
+    // in-use.  This is safe because this whole function is called
+    // under the GlobalHeap lock, so there is no chance of concurrent
+    // modification between the loop above and the one below.
+    for (size_t i = 0; i < span.length; i++) {
+#ifndef NDEBUG
+      d_assert(!_mhIndex[span.offset + i].load(std::memory_order_acquire).hasValue());
+      // auto mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(span.offset + i));
+      // mh->dumpDebug();
+#endif
+      setIndex(span.offset + i, id);
+    }
+  }
+
+  inline void *miniheapForArenaOffset(Offset arenaOff) const {
+    const MiniHeapID mhOff = _mhIndex[arenaOff].load(std::memory_order_acquire);
+    // d_assert(mhOff.hasValue());
+    const auto result = _mhAllocator.ptrFromOffset(mhOff.value());
     // debug("lookup ok for (%zu) %zu %p\n", off, mhOff, result);
 
     return result;
@@ -142,9 +95,8 @@ public:
 
     // we've already checked contains, so we know this offset is
     // within bounds
-    const auto off = offsetFor(ptr);
-
-    return lookupMiniheapOffset(off);
+    const auto arenaOff = offsetFor(ptr);
+    return miniheapForArenaOffset(arenaOff);
   }
 
   void beginMesh(void *keep, void *remove, size_t sz);
@@ -165,7 +117,7 @@ public:
 
   // protected:
   // public for testing
-  void scavenge();
+  void scavenge(bool force);
   // like a scavenge, but we only MADV_FREE
   void partialScavenge();
 
@@ -177,6 +129,13 @@ public:
 
   inline size_t RSSAtHighWaterMark() const {
     return _rssKbAtHWM;
+  }
+
+  char *arenaBegin() const {
+    return reinterpret_cast<char *>(_arenaBegin);
+  }
+  void *arenaEnd() const {
+    return reinterpret_cast<char *>(_arenaBegin) + kArenaSize;
   }
 
 private:
@@ -203,7 +162,7 @@ private:
   inline void clearIndex(const Span& span) {
     for (size_t i = 0; i < span.length; i++) {
       // clear the miniheap pointers we were tracking
-      setIndex(span.offset + i, 0);
+      setIndex(span.offset + i, MiniHeapID{0});
     }
   }
 
@@ -261,7 +220,7 @@ private:
     return reinterpret_cast<void *>(ptrvalFromOffset(off));
   }
 
-  inline void setIndex(size_t off, Offset val) {
+  inline void setIndex(size_t off, MiniHeapID val) {
     d_assert(off < indexSize());
     _mhIndex[off].store(val, std::memory_order_release);
   }
@@ -305,16 +264,12 @@ private:
   void afterForkParent();
   void afterForkChild();
 
-  void *arenaEnd() const {
-    return reinterpret_cast<char *>(_arenaBegin) + kArenaSize;
-  }
-
   void *_arenaBegin{nullptr};
   // indexed by page offset.
-  atomic<Offset> *_mhIndex{nullptr};
+  atomic<MiniHeapID> *_mhIndex{nullptr};
 
 protected:
-  CheapHeap<128, kArenaSize / kPageSize> _mhAllocator{};
+  CheapHeap<64, kArenaSize / kPageSize> _mhAllocator{};
 
 private:
   Offset _end{};  // in pages

@@ -43,6 +43,7 @@ static inline constexpr size_t ATTRIBUTE_ALWAYS_INLINE getMask(uint64_t pos) {
   return 1UL << pos;
 }
 
+using std::atomic_compare_exchange_weak_explicit;
 using std::atomic_size_t;
 
 // enables iteration through the set bits of the bitmap
@@ -103,10 +104,12 @@ public:
   inline bool setAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
 
-    size_t oldValue = _bits[item];
-    while (!std::atomic_compare_exchange_weak(&_bits[item],  // address of word
-                                              &oldValue,     // old val
-                                              oldValue | mask)) {
+    size_t oldValue = _bits[item].load(std::memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(&_bits[item],               // address of word
+                                                  &oldValue,                  // old val
+                                                  oldValue | mask,            // new val
+                                                  std::memory_order_release,  // success mem model
+                                                  std::memory_order_relaxed)) {
     }
 
     return !(oldValue & mask);
@@ -115,13 +118,20 @@ public:
   inline bool unsetAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
 
-    size_t oldValue = _bits[item];
-    while (!std::atomic_compare_exchange_weak(&_bits[item],  // address of word
-                                              &oldValue,     // old val
-                                              oldValue & ~mask)) {
+    size_t oldValue = _bits[item].load(std::memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(&_bits[item],               // address of word
+                                                  &oldValue,                  // old val
+                                                  oldValue & ~mask,           // new val
+                                                  std::memory_order_release,  // success mem model
+                                                  std::memory_order_relaxed)) {
     }
 
     return !(oldValue & mask);
+  }
+
+  inline uint64_t inUseCount() const {
+    return __builtin_popcountl(_bits[0]) + __builtin_popcountl(_bits[1]) + __builtin_popcountl(_bits[2]) +
+           __builtin_popcountl(_bits[3]);
   }
 
 protected:
@@ -197,13 +207,22 @@ public:
     return !(oldValue & mask);
   }
 
+  inline uint64_t inUseCount() const {
+    const auto wordCount = representationSize(_bitCount) / sizeof(size_t);
+    uint64_t count = 0;
+    for (size_t i = 0; i < wordCount; i++) {
+      count += __builtin_popcountl(_bits[i]);
+    }
+    return count;
+  }
+
 protected:
   inline void nullBits() {
     _bits = nullptr;
   }
 
   void clear(void) {
-    memset(_bits, 0, representationSize(_bitCount));
+    memset(_bits, 0, representationSize(bitCount()));
   }
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
@@ -242,7 +261,6 @@ public:
   }
 
   explicit BitmapBase(const std::string &str) : Super(str.length()) {
-
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
       d_assert_msg(c == '0' || c == '1', "expected 0 or 1 in bitstring, not %c ('%s')", c, str.c_str());
@@ -252,7 +270,6 @@ public:
   }
 
   explicit BitmapBase(const internal::string &str) : Super(str.length()) {
-
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
       d_assert_msg(c == '0' || c == '1', "expected 0 or 1 in bitstring, not %c ('%s')", c, str.c_str());
@@ -356,15 +373,6 @@ public:
     return Super::_bits[item] & getMask(position);
   }
 
-  inline uint64_t inUseCount() const {
-    const auto wordCount = byteCount() / sizeof(size_t);
-    uint64_t count = 0;
-    for (size_t i = 0; i < wordCount; i++) {
-      count += __builtin_popcountl(Super::_bits[i]);
-    }
-    return count;
-  }
-
   const word_t *bits() const {
     return Super::_bits;
   }
@@ -439,7 +447,7 @@ public:
 private:
   /// Given an index, compute its item (word) and position within the word.
   inline void computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
-    d_assert(index < Super::bitCount());
+    d_assert(index < bitCount());
     item = index >> kWordBitshift;
     position = index & (kWordBits - 1);
     d_assert(position == index - (item << kWordBitshift));

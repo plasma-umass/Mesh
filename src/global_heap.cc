@@ -3,7 +3,24 @@
 
 #include "global_heap.h"
 
+#include "runtime.h"
+
 namespace mesh {
+
+MiniHeap *GetMiniHeap(const MiniHeapID id) {
+  hard_assert(id.hasValue());
+
+  return runtime().heap().miniheapForID(id);
+}
+
+MiniHeapID GetMiniHeapID(const MiniHeap *mh) {
+  if (unlikely(mh == nullptr)) {
+    d_assert(false);
+    return MiniHeapID{0};
+  }
+
+  return runtime().heap().miniheapIDFor(mh);
+}
 
 void *GlobalHeap::malloc(size_t sz) {
 #ifndef NDEBUG
@@ -23,8 +40,6 @@ void *GlobalHeap::malloc(size_t sz) {
 }
 
 void GlobalHeap::free(void *ptr) {
-  lock_guard<mutex> lock(_miniheapLock);
-
   auto mh = miniheapForLocked(ptr);
   if (unlikely(!mh)) {
     debug("FIXME: free of untracked ptr %p", ptr);
@@ -36,8 +51,7 @@ void GlobalHeap::free(void *ptr) {
   // This can also include, for example, single page allocations w/
   // 16KB alignment.
   if (mh->maxCount() == 1) {
-    // we need to grab the exclusive lock here, as the read-only
-    // lock we took in miniheapFor has already been released
+    lock_guard<mutex> lock(_miniheapLock);
     freeMiniheapLocked(mh, false);
     return;
   }
@@ -45,20 +59,31 @@ void GlobalHeap::free(void *ptr) {
   d_assert(mh->maxCount() > 1);
 
   _lastMeshEffective = 1;
-  mh->free(ptr);
+  mh->free(arenaBegin(), ptr);
 
-  bool shouldConsiderMesh = !mh->isEmpty();
+  if (unlikely(mh->isMeshed())) {
+    // our MiniHeap was meshed out from underneath us.  Grab the
+    // global lock to synchronize with a concurrent mesh, and
+    // re-update the bitmap
+    lock_guard<mutex> lock(_miniheapLock);
+    auto mh = miniheapForLocked(ptr);
+    hard_assert(!mh->isMeshed());
+    mh->free(arenaBegin(), ptr);
+  }
 
-  const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
+  const auto remaining = mh->inUseCount();
+  const bool shouldConsiderMesh = remaining > 0;
+
+  const auto sizeClass = mh->sizeClass();
 
   // this may free the miniheap -- we can't safely access it after
   // this point.
-  bool shouldFlush = _littleheaps[sizeClass].postFree(mh);
+  bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
   mh = nullptr;
 
   if (unlikely(shouldFlush)) {
+    lock_guard<mutex> lock(_miniheapLock);
     flushBinLocked(sizeClass);
-    Super::scavenge();
   }
 
   if (shouldConsiderMesh)
@@ -82,12 +107,12 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
     // resetNextMeshCheck();
   } else if (strcmp(name, "mesh.scavenge") == 0) {
     lock.unlock();
-    scavenge();
+    scavenge(true);
     lock.lock();
   } else if (strcmp(name, "mesh.compact") == 0) {
-    lock.unlock();
     meshAllSizeClasses();
-    scavenge();
+    lock.unlock();
+    scavenge(true);
     lock.lock();
   } else if (strcmp(name, "arena") == 0) {
     // not sure what this should do
@@ -123,7 +148,8 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
 }
 
 void GlobalHeap::meshAllSizeClasses() {
-  Super::scavenge();
+  Super::scavenge(false);
+
   if (!_lastMeshEffective) {
     return;
   }
@@ -164,7 +190,7 @@ void GlobalHeap::meshAllSizeClasses() {
   _lastMeshEffective = mergeSets.size() > 256;
 
   if (mergeSets.size() == 0) {
-    Super::scavenge();
+    Super::scavenge(false);
     // debug("nothing to mesh.");
     return;
   }
@@ -180,7 +206,7 @@ void GlobalHeap::meshAllSizeClasses() {
     meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
   }
 
-  Super::scavenge();
+  Super::scavenge(false);
 
   _lastMesh = std::chrono::high_resolution_clock::now();
 

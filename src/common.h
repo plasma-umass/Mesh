@@ -8,15 +8,16 @@
 #include <cstddef>
 #include <cstdint>
 
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <condition_variable>
 #include <functional>
 #include <map>
 #include <mutex>
+#include <shared_mutex>
 #include <random>
 #include <unordered_map>
 #include <vector>
@@ -46,6 +47,7 @@ static constexpr size_t kMaxMeshesPerIteration = 2500;
 // maximum number of dirty pages to hold onto before we flush them
 // back to the OS (via MeshableArena::scavenge()
 static constexpr size_t kMaxDirtyPageThreshold = 1 << 14;  // 64 MB in pages
+static constexpr size_t kMinDirtyPageThreshold = 32;       // 128 KB in pages
 
 static constexpr uint32_t kSpanClassCount = 256;
 
@@ -82,8 +84,11 @@ static constexpr size_t kBinnedTrackerMaxEmpty = 128;
 using std::condition_variable;
 using std::function;
 using std::lock_guard;
+using std::shared_lock;
+using std::unique_lock;
 using std::mt19937_64;
 using std::mutex;
+using std::shared_mutex;
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
@@ -149,7 +154,7 @@ inline mt19937_64 *initSeed() {
   // seed this Mersenne Twister PRNG with entropy from the host OS
   int fd = open("/dev/urandom", O_RDONLY);
   unsigned long buf;
-  auto sz = read(fd, (void *) &buf, sizeof(unsigned long));
+  auto sz = read(fd, (void *)&buf, sizeof(unsigned long));
   //  std::random_device rd;
   // return new (mtBuf) std::mt19937_64(rd());
   return new (mtBuf) std::mt19937_64(buf);
