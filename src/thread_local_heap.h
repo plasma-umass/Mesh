@@ -82,7 +82,7 @@ public:
     if (likely(mh) && mh->maxCount() > 1) {
       const auto sizeClass = SizeMap::SizeClass(mh->objectSize());
       Freelist &freelist = _freelist[sizeClass];
-      if (likely(freelist.getAttached() == mh)) {
+      if (likely(freelist.getAttached() == mh && freelist.contains(ptr))) {
         d_assert(mh->refcount() > 0);
         _last = &freelist;
         freelist.free(ptr);
