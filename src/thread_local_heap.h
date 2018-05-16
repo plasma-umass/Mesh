@@ -81,7 +81,10 @@ public:
     auto mh = _global->miniheapForLocked(ptr);
     if (likely(mh) && mh->maxCount() > 1) {
       Freelist &freelist = _freelist[mh->sizeClass()];
-      if (likely(freelist.getAttached() == mh)) {
+      // Freelists only refer to the first virtual span of a Miniheap.
+      // Re-check contains() here to catch the case of a free for a
+      // non-primary-span allocation.
+      if (likely(freelist.getAttached() == mh && freelist.contains(ptr))) {
         d_assert(mh->isAttached());
         _last = &freelist;
 #ifndef NDEBUG
