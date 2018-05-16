@@ -327,7 +327,22 @@ public:
     if (likely(duration.count() < _meshPeriodSecs))
       return;
 
+    lock_guard<mutex> lock(_miniheapLock);
+
+    {
+      // ensure if two threads tried to grab the mesh lock at the same
+      // time, the second one bows out gracefully without meshing
+      // twice in a row.
+      const auto lockedNow = std::chrono::high_resolution_clock::now();
+      const std::chrono::duration<double> duration = lockedNow - _lastMesh;
+
+      if (unlikely(duration.count() < _meshPeriodSecs)) {
+        return;
+      }
+    }
+
     _lastMesh = now;
+
     meshAllSizeClasses();
   }
 
@@ -345,9 +360,7 @@ public:
   }
 
 private:
-  FRIEND_TEST(TripleMeshTest, MeshAll);
-
-  // check for meshes in all size classes -- must be called unlocked
+  // check for meshes in all size classes -- must be called LOCKED
   void meshAllSizeClasses();
 
   const size_t _maxObjectSize;
