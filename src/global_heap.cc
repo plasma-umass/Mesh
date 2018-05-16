@@ -60,6 +60,17 @@ void GlobalHeap::free(void *ptr) {
 
   _lastMeshEffective = 1;
   mh->free(arenaBegin(), ptr);
+
+  if (unlikely(mh->isMeshed())) {
+    // our MiniHeap was meshed out from underneath us.  Grab the
+    // global lock to synchronize with a concurrent mesh, and
+    // re-update the bitmap
+    lock_guard<mutex> lock(_miniheapLock);
+    auto mh = miniheapForLocked(ptr);
+    hard_assert(!mh->isMeshed());
+    mh->free(arenaBegin(), ptr);
+  }
+
   const auto remaining = mh->inUseCount();
   const bool shouldConsiderMesh = remaining > 0;
 
