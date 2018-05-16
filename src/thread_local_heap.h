@@ -87,9 +87,6 @@ public:
       if (likely(freelist.getAttached() == mh && freelist.contains(ptr))) {
         d_assert(mh->isAttached());
         _last = &freelist;
-#ifndef NDEBUG
-        memset(ptr, 0x55, mh->objectSize());
-#endif
         freelist.free(ptr);
         return;
       }
