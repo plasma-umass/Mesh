@@ -30,3 +30,4 @@ __pycache__
 /test/docker/*/mstatgcc
 /test/docker/*/mstat
 /test/spec/data
+/coverage

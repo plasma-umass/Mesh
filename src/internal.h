@@ -30,6 +30,102 @@ static inline constexpr size_t RoundUpToPage(size_t sz) {
   return kPageSize * PageCount(sz);
 }
 
+namespace internal {
+enum PageType {
+  Clean = 0,
+  Dirty = 1,
+  Meshed = 2,
+  Unknown = 3,
+};
+}  // namespace internal
+
+class MiniHeapID {
+public:
+  MiniHeapID() noexcept : _id{0} {
+  }
+
+  explicit MiniHeapID(uint32_t id) : _id{id} {
+  }
+
+  MiniHeapID(const MiniHeapID &rhs) = default;
+
+  constexpr MiniHeapID(MiniHeapID &&rhs) = default;
+
+  MiniHeapID &operator=(const MiniHeapID &rhs) = default;
+
+  bool operator==(const MiniHeapID &rhs) const {
+    return _id == rhs._id;
+  }
+
+  bool hasValue() const {
+    return _id != 0;
+  }
+
+  uint32_t value() const {
+    return _id;
+  }
+
+private:
+  uint32_t _id;
+};
+
+class MiniHeap;
+MiniHeap *GetMiniHeap(const MiniHeapID id);
+MiniHeapID GetMiniHeapID(const MiniHeap *mh);
+
+typedef uint32_t Offset;
+typedef uint32_t Length;
+
+struct Span {
+  // offset and length are in pages
+  explicit Span(Offset _offset, Length _length) : offset(_offset), length(_length) {
+  }
+
+  Span(const Span &rhs) : offset(rhs.offset), length(rhs.length) {
+  }
+
+  constexpr Span &operator=(const Span &rhs) {
+    offset = rhs.offset;
+    length = rhs.length;
+    return *this;
+  }
+
+  Span(Span &&rhs) : offset(rhs.offset), length(rhs.length) {
+  }
+
+  bool empty() const {
+    return length == 0;
+  }
+
+  // reduce the size of this span to pageCount, return another span
+  // with the rest of the pages.
+  Span splitAfter(Length pageCount) {
+    d_assert(pageCount <= length);
+    auto restPageCount = length - pageCount;
+    length = pageCount;
+    return Span(offset + pageCount, restPageCount);
+  }
+
+  uint32_t spanClass() const {
+    return std::min(length, kSpanClassCount) - 1;
+  }
+
+  size_t byteLength() const {
+    return length * kPageSize;
+  }
+
+  inline bool operator==(const Span &rhs) {
+    return offset == rhs.offset && length == rhs.length;
+  }
+
+  inline bool operator!=(const Span &rhs) {
+    return !(*this == rhs);
+  }
+
+  Offset offset;
+  Length length;
+};
+
 // keep in-sync with the version in plasma/mesh.h
 enum BitType {
   MESH_BIT_0,
@@ -156,10 +252,10 @@ public:
   static constexpr inline Size FlagEmpty = numeric_limits<uint32_t>::max() - 2;
   static constexpr inline Size FlagNoOff = numeric_limits<uint32_t>::max();
 
-  BinToken() : _bin(Max), _off(Max) {
+  BinToken() noexcept : _bin(Max), _off(Max) {
   }
 
-  BinToken(Size bin, Size off) : _bin(bin), _off(off) {
+  BinToken(Size bin, Size off) noexcept : _bin(bin), _off(off) {
   }
 
   // whether this is a valid token, or just a default initialized one

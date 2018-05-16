@@ -17,164 +17,240 @@
 
 #include "heaplayers.h"
 
-#undef MESH_EXTRA_BITS
-
 namespace mesh {
+
+class MiniHeap;
+
+class Flags {
+private:
+  DISALLOW_COPY_AND_ASSIGN(Flags);
+
+  static inline constexpr uint32_t ATTRIBUTE_ALWAYS_INLINE getMask(uint32_t pos) {
+    return 1UL << pos;
+  }
+  static constexpr uint32_t MeshedOffset = 16;
+  static constexpr uint32_t AttachedOffset = 24;
+
+public:
+  explicit Flags(uint32_t maxCount) noexcept : _flags{maxCount} {
+    d_assert(maxCount <= 256);
+    d_assert(this->maxCount() == maxCount);
+  }
+
+  inline uint32_t maxCount() const {
+    // XXX: does this assume little endian?
+    return _flags.load(std::memory_order_relaxed) & 0x1ff;
+  }
+
+  inline void setAttached() {
+    set(AttachedOffset);
+  }
+
+  inline void unsetAttached() {
+    unset(AttachedOffset);
+  }
+
+  inline bool isAttached() const {
+    return is(AttachedOffset);
+  }
+
+  inline void setMeshed() {
+    set(MeshedOffset);
+  }
+
+  inline void unsetMeshed() {
+    unset(MeshedOffset);
+  }
+
+  inline bool isMeshed() const {
+    return is(MeshedOffset);
+  }
+
+private:
+  inline bool is(size_t offset) const {
+    const auto mask = getMask(offset);
+    return (_flags.load(std::memory_order_acquire) & mask) == mask;
+  }
+
+  inline void set(size_t offset) {
+    const uint32_t mask = getMask(offset);
+
+    uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(&_flags,
+                                                  &oldFlags,                  // old val
+                                                  oldFlags | mask,            // new val
+                                                  std::memory_order_release,  // success mem model
+                                                  std::memory_order_relaxed)) {
+    }
+  }
+
+  inline void unset(size_t offset) {
+    const uint32_t mask = getMask(offset);
+
+    uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(&_flags,
+                                                  &oldFlags,                  // old val
+                                                  oldFlags & ~mask,           // new val
+                                                  std::memory_order_release,  // success mem model
+                                                  std::memory_order_relaxed)) {
+    }
+  }
+
+  atomic_uint32_t _flags;
+};
 
 class MiniHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeap);
 
 public:
-  MiniHeap(void *span, size_t objectCount, size_t objectSize, size_t expectedSpanSize)
+  MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
       : _bitmap(objectCount),
+        _span(span),
+        _flags(objectCount),
         _objectSize(objectSize),
-        _objectSizeReciprocal(1.0 / (float)objectSize),
-        _maxCount(objectCount),
-        _spanSize(dynamicSpanSize()),
-        _span{reinterpret_cast<char *>(span), 0, 0, 0},
-        _meshCount(1)
-#ifdef MESH_EXTRABITS
-        ,
-        _bitmap0(maxCount()),
-        _bitmap1(maxCount()),
-        _bitmap2(maxCount()),
-        _bitmap3(maxCount())
-#endif
-  {
-    if (!_span[0])
-      abort();
-
+        _objectSizeReciprocal(1.0 / (float)objectSize) {
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
+
+    d_assert(_bitmap.inUseCount() == 0);
+
+    const auto expectedSpanSize = _span.byteLength();
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
-                 maxCount(), _objectSize);
-    d_assert_msg(expectedSpanSize == dynamicSpanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
-                 maxCount(), _objectSize);
+                 maxCount(), this->objectSize());
 
     // d_assert_msg(spanSize == static_cast<size_t>(_spanSize), "%zu != %hu", spanSize, _spanSize);
-    d_assert_msg(objectSize == static_cast<size_t>(_objectSize), "%zu != %hu", objectSize, _objectSize);
+    // d_assert_msg(objectSize == static_cast<size_t>(objectSize()), "%zu != %hu", objectSize, _objectSize);
 
-    d_assert(_span[1] == nullptr);
+    d_assert(!_nextMiniHeap.hasValue());
 
+    // debug("new:\n");
     // dumpDebug();
   }
 
   ~MiniHeap() {
-    _meshCount = ~0;
-    // if (_meshCount > 1)
-    //   dumpDebug();
+    // debug("destruct:\n");
+    // dumpDebug();
+  }
+
+  inline Span span() const {
+    return _span;
   }
 
   void printOccupancy() const {
     mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"mesh-count\": %d, \"bitmap\": \"%s\"}\n",
-                this, objectSize(), maxCount(), meshCount(), _bitmap.to_string().c_str());
+                this, objectSize(), maxCount(), meshCount(), _bitmap.to_string(maxCount()).c_str());
   }
 
-  // should never be called directly, a freelist is populated from our bitmap
-  // inline void *malloc();
-  // inline void localFree(Freelist &freelist, MWC &prng, void *ptr);
-
-  inline void free(void *ptr) {
-    const ssize_t off = getOff(ptr);
-    if (unlikely(off < 0))
+  inline void free(void *arenaBegin, void *ptr) {
+    // TODO: this should be removed when the logic in globalFree is
+    // updated to allow the 'race' between lock-free freeing and
+    // meshing
+    d_assert(!isMeshed());
+    const ssize_t off = getOff(arenaBegin, ptr);
+    if (unlikely(off < 0)) {
+      d_assert(false);
       return;
+    }
 
-    _bitmap.unset(off);
-    _inUseCount--;
+    freeOff(off);
   }
 
-  /// Copies (for meshing) the contents of src into our span.
-  inline void consume(const MiniHeap *src) {
-    const auto srcSpan = src->getSpanStart();
+protected:
+  inline void freeOff(size_t off) {
+    d_assert(_bitmap.isSet(off));
+    _bitmap.unset(off);
+  }
 
+public:
+  /// Copies (for meshing) the contents of src into our span.
+  inline void consume(void *arenaBegin, MiniHeap *src) {
     // this would be bad
     d_assert(src != this);
+    d_assert(objectSize() == src->objectSize());
+
+    src->setMeshed();
+    const auto srcSpan = src->getSpanStart(arenaBegin);
 
     // for each object in src, copy it to our backing span + update
     // our bitmap and in-use count
     for (auto const &off : src->bitmap()) {
+      d_assert(off < maxCount());
       d_assert(!_bitmap.isSet(off));
+
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize());
       // need to ensure we update the bitmap and in-use count
-      void *dstObject = mallocAt(off);
+      void *dstObject = mallocAt(arenaBegin, off);
+      // debug("meshing: %zu (%p <- %p, %zu)\n", off, dstObject, srcObject, objectSize());
       d_assert(dstObject != nullptr);
       memcpy(dstObject, srcObject, objectSize());
+      // debug("\t'%s'\n", dstObject);
+      // debug("\t'%s'\n", srcObject);
+      src->freeOff(off);
     }
 
-    const auto srcSpans = src->spans();
-    const auto srcMeshCount = src->meshCount();
-    for (size_t i = 0; i < srcMeshCount; i++) {
-      trackMeshedSpan(reinterpret_cast<uintptr_t>(srcSpans[i]));
-    }
-  }
-
-  inline bool contains(void *ptr) const {
-    return spanStart(ptr) != 0;
+    trackMeshedSpan(GetMiniHeapID(src));
   }
 
   inline size_t spanSize() const {
-    return _spanSize;
-  }
-
-  inline size_t dynamicSpanSize() const {
-    size_t bytesNeeded = static_cast<size_t>(_objectSize) * maxCount();
-    return mesh::RoundUpToPage(bytesNeeded);
+    return _span.byteLength();
   }
 
   inline size_t maxCount() const {
-    return _maxCount;
+    return _flags.maxCount();
   }
 
   inline size_t objectSize() const {
     return _objectSize;
   }
 
-  inline size_t getSize(void *ptr) const {
-    d_assert_msg(contains(ptr), "span(%p) <= %p < %p", _span[0], ptr,
-                 reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
-
-    return objectSize();
+  inline int sizeClass() const {
+    return SizeMap::SizeClass(_objectSize);
   }
 
-  inline uintptr_t getSpanStart() const {
-    return reinterpret_cast<uintptr_t>(_span[0]);
-  }
-
-  inline void incrementInUseCount(size_t additionalInUse) {
-    _inUseCount += additionalInUse;
+  inline uintptr_t getSpanStart(void *arenaBegin) const {
+    const auto beginval = reinterpret_cast<uintptr_t>(arenaBegin);
+    return beginval + _span.offset * kPageSize;
   }
 
   inline bool isEmpty() const {
-    return _inUseCount == 0;
+    return _bitmap.inUseCount() == 0;
   }
 
   inline bool isFull() const {
-    return _inUseCount == maxCount();
+    return _bitmap.inUseCount() == maxCount();
   }
 
   inline size_t inUseCount() const {
-    return _inUseCount;
+    return _bitmap.inUseCount();
   }
 
-  inline uint32_t refcount() const {
-    return _refCount.load();
+  inline void setMeshed() {
+    _flags.setMeshed();
   }
 
-  inline void ref() const {
-    ++_refCount;
+  inline void setAttached() {
+    _flags.setAttached();
   }
 
-  inline void unref() const {
-    --_refCount;
+  inline void unsetAttached() {
+    _flags.unsetAttached();
+  }
+
+  inline bool isAttached() const {
+    return _flags.isAttached();
+  }
+
+  inline bool isMeshed() const {
+    return _flags.isMeshed();
   }
 
   inline bool isMeshingCandidate() const {
-    return _refCount == 0 && objectSize() < kPageSize;
+    return !_flags.isAttached() && objectSize() < kPageSize;
   }
 
   /// Returns the fraction full (in the range [0, 1]) that this miniheap is.
   inline double fullness() const {
-    return static_cast<double>(_inUseCount) / static_cast<double>(maxCount());
+    return static_cast<double>(inUseCount()) / static_cast<double>(maxCount());
   }
 
   const internal::Bitmap &bitmap() const {
@@ -185,23 +261,52 @@ public:
     return _bitmap;
   }
 
-  void trackMeshedSpan(uintptr_t spanStart) {
-    if (unlikely(_meshCount >= kMaxMeshes)) {
+  void trackMeshedSpan(MiniHeapID id) {
+    hard_assert(id.hasValue());
+
+    if (unlikely(meshCount() >= kMaxMeshes)) {
       mesh::debug("fatal: too many meshes for one miniheap");
       dumpDebug();
       abort();
     }
 
-    _span[_meshCount] = reinterpret_cast<char *>(spanStart);
-    _meshCount++;
+    if (!_nextMiniHeap.hasValue()) {
+      _nextMiniHeap = id;
+    } else {
+      GetMiniHeap(_nextMiniHeap)->trackMeshedSpan(id);
+    }
+  }
+
+public:
+  template <class Callback>
+  inline void forEachMeshed(Callback cb) const {
+    if (cb(this))
+      return;
+
+    if (_nextMiniHeap.hasValue()) {
+      const auto mh = GetMiniHeap(_nextMiniHeap);
+      mh->forEachMeshed(cb);
+    }
+  }
+
+  template <class Callback>
+  inline void forEachMeshed(Callback cb) {
+    if (cb(this))
+      return;
+
+    if (_nextMiniHeap.hasValue()) {
+      auto mh = GetMiniHeap(_nextMiniHeap);
+      mh->forEachMeshed(cb);
+    }
   }
 
   size_t meshCount() const {
-    return _meshCount;
-  }
-
-  char *const *spans() const {
-    return _span;
+    size_t count = 0;
+    forEachMeshed([&](const MiniHeap *mh) {
+      count++;
+      return false;
+    });
+    return count;
   }
 
   internal::BinToken getBinToken() const {
@@ -213,20 +318,18 @@ public:
   }
 
   /// public for meshTest only
-  inline void *mallocAt(size_t off) {
+  inline void *mallocAt(void *arenaBegin, size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
       return nullptr;
     }
 
-    _inUseCount++;
-
-    return ptrFromOffset(off);
+    return ptrFromOffset(arenaBegin, off);
   }
 
-  inline void *ptrFromOffset(size_t off) {
-    return reinterpret_cast<void *>(getSpanStart() + off * _objectSize);
+  inline void *ptrFromOffset(void *arenaBegin, size_t off) {
+    return reinterpret_cast<void *>(getSpanStart(arenaBegin) + off * objectSize());
   }
 
   inline bool operator<(MiniHeap *&rhs) noexcept {
@@ -235,158 +338,75 @@ public:
 
   void dumpDebug() const {
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
-    const size_t inUseCount = _inUseCount;
-    const size_t meshCount = _meshCount;
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, mesh: %zu)\t%p-%p\n", this, _objectSize,
-                maxCount(), heapPages, inUseCount, meshCount, _span[0],
-                reinterpret_cast<uintptr_t>(_span[0]) + spanSize());
-    mesh::debug("\t%s\n", _bitmap.to_string().c_str());
+    const size_t inUseCount = this->inUseCount();
+    const size_t meshCount = this->meshCount();
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, spans: %zu)\t%p-%p\n", this, objectSize(),
+                maxCount(), heapPages, inUseCount, meshCount, _span.offset * kPageSize,
+                _span.offset * kPageSize + spanSize());
+    mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
   }
 
-  inline int bitmapGet(enum mesh::BitType type, void *ptr) const {
-    const ssize_t off = getOff(ptr);
-    d_assert(off >= 0);
-
-#ifdef MESH_EXTRA_BITS
-    switch (type) {
-    case MESH_BIT_0:
-      return _bitmap0.isSet(off);
-    case MESH_BIT_1:
-      return _bitmap1.isSet(off);
-    case MESH_BIT_2:
-      return _bitmap2.isSet(off);
-    case MESH_BIT_3:
-      return _bitmap3.isSet(off);
-    default:
-      break;
-    }
-#endif
-    d_assert(false);
-    return -1;
-  }
-
-  inline int bitmapSet(enum mesh::BitType type, void *ptr) {
-    const ssize_t off = getOff(ptr);
-    d_assert(off >= 0);
-
-#ifdef MESH_EXTRA_BITS
-    switch (type) {
-    case MESH_BIT_0:
-      return _bitmap0.tryToSet(off);
-    case MESH_BIT_1:
-      return _bitmap1.tryToSet(off);
-    case MESH_BIT_2:
-      return _bitmap2.tryToSet(off);
-    case MESH_BIT_3:
-      return _bitmap3.tryToSet(off);
-    default:
-      break;
-    }
-#endif
-    d_assert(false);
-    return -1;
-  }
-
-  inline int bitmapClear(enum mesh::BitType type, void *ptr) {
-    const ssize_t off = getOff(ptr);
-    d_assert(off >= 0);
-
-#ifdef MESH_EXTRA_BITS
-    switch (type) {
-    case MESH_BIT_0:
-      return _bitmap0.unset(off);
-    case MESH_BIT_1:
-      return _bitmap1.unset(off);
-    case MESH_BIT_2:
-      return _bitmap2.unset(off);
-    case MESH_BIT_3:
-      return _bitmap3.unset(off);
-    default:
-      break;
-    }
-#endif
-    d_assert(false);
-    return -1;
-  }
-
-  inline ssize_t getOff(void *ptr) const {
-    d_assert(getSize(ptr) == _objectSize);
-
-    const auto span = spanStart(ptr);
+  inline ssize_t getOff(void *arenaBegin, void *ptr) const {
+    const auto span = spanStart(arenaBegin, ptr);
     d_assert(span != 0);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
-    // const size_t off = (ptrval - span) / _objectSize;
     const size_t off = (ptrval - span) * _objectSizeReciprocal;
-    // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
-    // if (unlikely(span > ptrval || off >= maxCount())) {
-    //   mesh::debug("MiniHeap(%p): invalid free of %p", this, ptr);
-    //   return -1;
-    // }
+#ifndef NDEBUG
+    const size_t off2 = (ptrval - span) / _objectSize;
+    hard_assert_msg(off == off2, "%zu != %zu", off, off2);
+#endif
 
-    // if (unlikely(!_bitmap.isSet(off))) {
-    //   mesh::debug("MiniHeap(%p): double free of %p", this, ptr);
-    //   dumpDebug();
-    //   return -1;
-    // }
+    d_assert(off < maxCount());
 
     return off;
   }
 
 protected:
-  inline uintptr_t spanStart(void *ptr) const {
+  inline uintptr_t spanStart(void *arenaBegin, void *ptr) const {
+    const auto arena = reinterpret_cast<uintptr_t>(arenaBegin);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    const auto len = _spanSize;
+    const auto len = _span.byteLength();
 
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
-    auto span = reinterpret_cast<uintptr_t>(_span[0]);
-    if (likely(span <= ptrval && ptrval < span + len))
-      return span;
+    uintptr_t spanptr = arena + _span.offset * kPageSize;
+    if (likely(spanptr <= ptrval && ptrval < spanptr + len))
+      return spanptr;
 
-    for (size_t i = 1; i < _meshCount; ++i) {
-      if (unlikely(_span[i] == nullptr)) {
-        mesh::debug("_span[%d] should be non-null (%zu)", i, _meshCount);
-        dumpDebug();
-        d_assert(false);
-      }
-      span = reinterpret_cast<uintptr_t>(_span[i]);
-      if (span <= ptrval && ptrval < span + len)
-        return span;
+    spanptr = 0;
+    if (!_nextMiniHeap.hasValue()) {
+      d_assert(false);
+      return spanptr;
     }
 
-    return 0;
+    GetMiniHeap(_nextMiniHeap)->forEachMeshed([&](const MiniHeap *mh) {
+      uintptr_t meshedSpanptr = arena + mh->span().offset * kPageSize;
+      if (meshedSpanptr <= ptrval && ptrval < meshedSpanptr + len) {
+        spanptr = meshedSpanptr;
+        return true;
+      }
+      return false;
+    });
+
+    d_assert(spanptr != 0);
+    return spanptr;
   }
 
-  internal::Bitmap _bitmap;               // 40 bytes
-  mutable atomic<uint32_t> _refCount{1};  // 44
-
-  atomic<uint32_t> _inUseCount{0};  // 48
-
-  const uint32_t _objectSize;
-  const float    _objectSizeReciprocal;
-
-  const uint32_t _maxCount;
-  const uint32_t _spanSize;  // max 4 GB span size/allocation size, 56
-  char *_span[kMaxMeshes];
-  internal::BinToken _token;
-
-  uint32_t _meshCount;  // : 7;
-#ifdef MESH_EXTRA_BITS
-  internal::Bitmap _bitmap0;  // 16 bytes
-  internal::Bitmap _bitmap1;  // 16 bytes
-  internal::Bitmap _bitmap2;  // 16 bytes
-  internal::Bitmap _bitmap3;  // 16 bytes
-#endif
+  internal::Bitmap _bitmap;  // 32 bytes 32
+  internal::BinToken _token{
+      internal::BinToken::Max,
+      internal::BinToken::Max,
+  };                                  // 8        40
+  const Span _span;                   // 8        48
+  Flags _flags;                       // 4        52
+  const uint32_t _objectSize;         // 4        56
+  const float _objectSizeReciprocal;  // 4        60
+  MiniHeapID _nextMiniHeap{};         // 4        64
 };
 
 static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
-#ifdef MESH_EXTRA_BITS
-static_assert(sizeof(MiniHeap) == 184, "MiniHeap too big!");
-#else
-static_assert(sizeof(MiniHeap) == 104, "MiniHeap too big!");
-#endif
-// static_assert(sizeof(MiniHeap) == 80, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
 }  // namespace mesh
 
 #endif  // MESH__MINIHEAP_H
