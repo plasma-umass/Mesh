@@ -58,10 +58,6 @@ void GlobalHeap::free(void *ptr) {
     return;
   }
 
-#ifndef NDEBUG
-        memset(ptr, 0xAA, mh->objectSize());
-#endif
-
   d_assert(mh->maxCount() > 1);
 
   _lastMeshEffective = 1;
