@@ -187,9 +187,6 @@ public:
       // debug("\t'%s'\n", srcObject);
       src->freeOff(off);
     }
-#ifndef NDEBUG
-    // TODO: check that (_bitmap & src->bitmap) == src->bitmap
-#endif
 
     trackMeshedSpan(GetMiniHeapID(src));
   }
@@ -360,7 +357,6 @@ public:
     hard_assert_msg(off == off2, "%zu != %zu", off, off2);
 #endif
 
-    d_assert(off >= 0);
     d_assert(off < maxCount());
 
     return off;
