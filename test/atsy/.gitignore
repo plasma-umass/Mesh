@@ -1,3 +1,4 @@
 /chromedriver
 /env
 /nginx_root
+/gecko*log
