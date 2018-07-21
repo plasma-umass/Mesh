@@ -17,8 +17,8 @@
 #include <functional>
 #include <map>
 #include <mutex>
-#include <shared_mutex>
 #include <random>
+#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -84,11 +84,11 @@ static constexpr size_t kBinnedTrackerMaxEmpty = 128;
 using std::condition_variable;
 using std::function;
 using std::lock_guard;
-using std::shared_lock;
-using std::unique_lock;
 using std::mt19937_64;
 using std::mutex;
+using std::shared_lock;
 using std::shared_mutex;
+using std::unique_lock;
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
