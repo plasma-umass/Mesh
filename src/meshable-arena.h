@@ -148,9 +148,7 @@ private:
 
   void *malloc(size_t sz) = delete;
 
-  inline bool isAligned(const Span& span,
-                        const Length pageAlignment) const
-  {
+  inline bool isAligned(const Span &span, const Length pageAlignment) const {
     return ptrvalFromOffset(span.offset) % (pageAlignment * kPageSize) == 0;
   }
 
@@ -159,16 +157,14 @@ private:
     return sizeof(Offset) * (kArenaSize / kPageSize);
   }
 
-  inline void clearIndex(const Span& span) {
+  inline void clearIndex(const Span &span) {
     for (size_t i = 0; i < span.length; i++) {
       // clear the miniheap pointers we were tracking
       setIndex(span.offset + i, MiniHeapID{0});
     }
   }
 
-  inline void freeSpan(const Span& span,
-                       const internal::PageType flags)
-  {
+  inline void freeSpan(const Span &span, const internal::PageType flags) {
     if (span.length == 0) {
       return;
     }
@@ -239,7 +235,7 @@ private:
     }
   }
 
-  inline void trackMeshed(const Span& span) {
+  inline void trackMeshed(const Span &span) {
     for (size_t i = 0; i < span.length; i++) {
       // this may already be 1 if it was a meshed virtual span that is
       // now being re-meshed to a new owning miniheap
@@ -247,14 +243,14 @@ private:
     }
   }
 
-  inline void untrackMeshed(const Span& span) {
+  inline void untrackMeshed(const Span &span) {
     for (size_t i = 0; i < span.length; i++) {
       d_assert(_meshedBitmap.isSet(span.offset + i));
       _meshedBitmap.unset(span.offset + i);
     }
   }
 
-  inline void resetSpanMapping(const Span& span) {
+  inline void resetSpanMapping(const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
     mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);

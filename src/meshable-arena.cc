@@ -104,11 +104,8 @@ void MeshableArena::expandArena(Length minPagesAdded) {
   _clean[expansion.spanClass()].push_back(expansion);
 }
 
-bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount],
-                                   const size_t i,
-                                   const Length pageCount,
-                                   Span &result)
-{
+bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], const size_t i,
+                                   const Length pageCount, Span &result) {
   internal::vector<Span> &spanList = freeSpans[i];
   if (spanList.empty())
     return false;
@@ -181,9 +178,7 @@ bool MeshableArena::findPages(const Length pageCount, Span &result, internal::Pa
   return false;
 }
 
-Span MeshableArena::reservePages(const Length pageCount,
-                                 const Length pageAlignment)
-{
+Span MeshableArena::reservePages(const Length pageCount, const Length pageAlignment) {
   d_assert(pageCount >= 1);
 
   internal::PageType flags(internal::PageType::Unknown);
@@ -243,8 +238,8 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
   // and _dirty lists unsetting pages that aren't in use.
 
   bitmap.setAll();
-  
-  auto unmarkPages = [&](const Span& span) {
+
+  auto unmarkPages = [&](const Span &span) {
     for (size_t k = 0; k < span.length; k++) {
 #ifdef NDEBUG
       if (!bitmap.isSet(span.offset + k)) {
@@ -309,7 +304,7 @@ void MeshableArena::free(void *ptr, size_t sz, internal::PageType type) {
 }
 
 void MeshableArena::partialScavenge() {
-  forEachFree(_dirty, [&](const Span& span) {
+  forEachFree(_dirty, [&](const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
     madvise(ptr, sz, MADV_DONTNEED);
@@ -334,7 +329,7 @@ void MeshableArena::scavenge(bool force) {
   auto bitmap = allocatedBitmap(false);
   bitmap.invert();
 
-  auto markPages = [&](const Span& span) {
+  auto markPages = [&](const Span &span) {
     for (size_t k = 0; k < span.length; k++) {
 #ifndef NDEBUG
       if (bitmap.isSet(span.offset + k)) {
@@ -363,7 +358,7 @@ void MeshableArena::scavenge(bool force) {
     // TODO: find rss at peak
   }
 
-  forEachFree(_dirty, [&](const Span& span) {
+  forEachFree(_dirty, [&](const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
     madvise(ptr, sz, MADV_DONTNEED);

@@ -75,7 +75,7 @@ unique_ptr<MeshTestcase> openTestcase(const char *path) {
     exit(1);
   }
 
-  auto *bname = basename((char *) path);
+  auto *bname = basename((char *)path);
   auto *fname = strdup(bname);
   auto *dotPos = strrchr(fname, '.');
   // remove the extension if it exists
