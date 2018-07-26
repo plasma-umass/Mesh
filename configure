@@ -82,6 +82,7 @@ c.append('cflags', '-isystem build/src/vendor/gflags/include')
 c.append('cflags', '-Isrc/vendor/Heap-Layers')
 
 if platform != 'darwin':
+    c.append('ldflags', '-Wl,--no-as-needed')
     c.append('ldflags', '-Wl,--no-add-needed')
     c.append('ldflags', '-Wl,--sort-common')
     c.append('ldflags', '-Wl,--gc-sections')
