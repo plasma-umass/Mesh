@@ -70,7 +70,7 @@ void NOINLINE basic_fragment(int64_t n, size_t m_total) {
     // number of allocation pairs in this iteration
     const size_t pi = m_avail / (2 * ci * n);
 
-    // fprintf(stderr, "i:%4zu, ci:%5zu, n:%5zu, pi:%7zu (osize:%5zu)\n", i, ci, n, pi, ci * n);
+    fprintf(stderr, "i:%4zu, ci:%5zu, n:%5zu, pi:%7zu (osize:%5zu)\n", i, ci, n, pi, ci * n);
 
     // allocate two objects
     for (size_t k = 0; k < pi; k++) {

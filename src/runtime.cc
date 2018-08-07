@@ -264,10 +264,12 @@ int Runtime::sigaction(int signum, const struct sigaction *act, struct sigaction
   if (oldact)
     memcpy(oldact, &sigsegv_action, sizeof(sigsegv_action));
 
-  if (act == nullptr)
+  if (act == nullptr) {
     memset(&sigsegv_action, 0, sizeof(sigsegv_action));
-  else
+  } else {
+    // debug("TODO: user installed a segfault handler");
     memcpy(&sigsegv_action, act, sizeof(sigsegv_action));
+  }
 
   return 0;
 }
@@ -296,10 +298,16 @@ void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
     abort();
   }
 
-  // debug("TODO: check for + call program's handler\n");
-  debug("segfault (%u/%p): in arena? %d\n", siginfo->si_code, siginfo->si_addr,
-        runtime().heap().contains(siginfo->si_addr));
-  abort();
+  // if (sigsegv_action.sa_sigaction != nullptr) {
+  //   sigsegv_action.sa_sigaction(sig, siginfo, context);
+  //   return;
+  // } else
+  {
+    // debug("TODO: check for + call program's handler\n");
+    debug("segfault (%u/%p): in arena? %d\n", siginfo->si_code, siginfo->si_addr,
+          runtime().heap().contains(siginfo->si_addr));
+    abort();
+  }
 }
 
 void Runtime::installSegfaultHandler() {
@@ -316,6 +324,8 @@ void Runtime::installSegfaultHandler() {
   err = mesh::real::sigaction(SIGBUS, &action, &old_action);
   hard_assert(err == 0);
 
-  // debug("TODO: check old_action is NULL");
+  if (old_action.sa_sigaction != nullptr && old_action.sa_sigaction != segfaultHandler) {
+    debug("TODO: old_action not null: %p\n", (void *)old_action.sa_sigaction);
+  }
 }
 }  // namespace mesh
