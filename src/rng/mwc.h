@@ -49,7 +49,7 @@ private:
   unsigned int w;
 };
 
-#if 0
+#if 1
 class MWC : public RealMWC {
   using RealMWC::RealMWC;
 public:
@@ -78,6 +78,8 @@ public:
     // : xoro::xoro(s1, s2)
     : MWC64::MWC64(s1, s2)
   {
+    //    std::cout << sizeof(RealMWC) << std::endl;
+    //    std::cout << sizeof(MWC64) << std::endl;
   }
 #endif
   // returns a number between min and max (inclusive)
