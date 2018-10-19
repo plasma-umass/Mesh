@@ -8,9 +8,9 @@
 #include "realrandomvalue.h"
 
 class MWC64 {
-  unsigned long long _x, _c, _t;
+  uint64_t _x, _c, _t;
 
-  void init(unsigned long long seed1, unsigned long long seed2) {
+  void init(uint64_t seed1, uint64_t seed2) {
     _x = seed1;
     _x <<= 32;
     _x += seed2;
@@ -18,7 +18,7 @@ class MWC64 {
     _index = 2;
   }
 
-  unsigned long long MWC() {
+  uint64_t MWC() {
     _t = (_x << 58) + _c;
     _c = _x >> 6;
     _x += _t;
@@ -27,16 +27,16 @@ class MWC64 {
   }
 
   int _index;
-  unsigned long long _value;
+  uint64_t _value;
 
 public:
   MWC64() {
-    unsigned int a = RealRandomValue::value();
-    unsigned int b = RealRandomValue::value();
+    auto a = RealRandomValue::value();
+    auto b = RealRandomValue::value();
     init(a, b);
   }
 
-  MWC64(unsigned long long seed1, unsigned long long seed2) {
+  MWC64(uint64_t seed1, uint64_t seed2) {
     init(seed1, seed2);
   }
 
@@ -45,7 +45,7 @@ public:
       _value = MWC();
       _index = 0;
     }
-    unsigned long v = ((unsigned long *)&_value)[_index];
+    auto v = ((unsigned long *)&_value)[_index];
     _index++;
     return v;
   }
