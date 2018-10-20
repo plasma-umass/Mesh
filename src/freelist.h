@@ -56,7 +56,7 @@ public:
       _list[_off] = i;
     }
 
-    if (kEnableShuffleFreelist) {
+    if (kEnableShuffleOnInit) {
       internal::mwcShuffle(&_list[_off], &_list[_maxCount], _prng);
     }
 
@@ -93,7 +93,7 @@ public:
     _off--;
     _list[_off] = freedOff;
 
-    if (kEnableShuffleFreelist) {
+    if (kEnableShuffleOnFree) {
       size_t swapOff = _prng.inRange(_off, maxCount() - 1);
       _lastOff = swapOff;
       std::swap(_list[_off], _list[swapOff]);

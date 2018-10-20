@@ -83,6 +83,9 @@ c.append('cflags', '-Isrc/vendor/googletest/googletest')
 c.append('cflags', '-isystem build/src/vendor/gflags/include')
 c.append('cflags', '-Isrc/vendor/Heap-Layers')
 
+c.append('cflags', '-fvisibility=hidden')
+c.append('ldflags', '-fvisibility=hidden')
+
 if platform != 'darwin':
     c.append('ldflags', '-Wl,--no-as-needed')
     c.append('ldflags', '-Wl,--no-add-needed')
@@ -94,7 +97,7 @@ if platform != 'darwin':
     c.append('ldflags', '-Wl,-z,now,-z,relro')
     c.append('ldflags', '-ftls-model=initial-exec')
 
-    c.append('ldflags', '-static-libstdc++ -static-libgcc')
+    # c.append('ldflags', '-static-libstdc++ -static-libgcc')
     c.append('ldflags', '-lrt')
 
 c.append('libs', '-lm -lpthread')

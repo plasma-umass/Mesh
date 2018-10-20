@@ -59,9 +59,9 @@
 
 #define CUSTOM_PREFIX(x) mesh_##x
 
-#define WEAK_REDEF1(type, fname, arg1) type fname(arg1) __THROW WEAK(mesh_##fname)
-#define WEAK_REDEF2(type, fname, arg1, arg2) type fname(arg1, arg2) __THROW WEAK(mesh_##fname)
-#define WEAK_REDEF3(type, fname, arg1, arg2, arg3) type fname(arg1, arg2, arg3) __THROW WEAK(mesh_##fname)
+#define WEAK_REDEF1(type, fname, arg1) MESH_EXPORT type fname(arg1) __THROW WEAK(mesh_##fname)
+#define WEAK_REDEF2(type, fname, arg1, arg2) MESH_EXPORT type fname(arg1, arg2) __THROW WEAK(mesh_##fname)
+#define WEAK_REDEF3(type, fname, arg1, arg2, arg3) MESH_EXPORT type fname(arg1, arg2, arg3) __THROW WEAK(mesh_##fname)
 
 extern "C" {
 WEAK_REDEF1(void *, malloc, size_t);

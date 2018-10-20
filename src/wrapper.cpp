@@ -126,9 +126,9 @@ void xxmalloc_unlock();
 
 #include <stdio.h>
 
-extern "C" void *MYCDECL CUSTOM_MALLOC(size_t);
+// extern "C" void *MYCDECL CUSTOM_MALLOC(size_t);
 
-extern "C" void *MYCDECL CUSTOM_CALLOC(size_t nelem, size_t elsize) {
+extern "C" MESH_EXPORT void *MYCDECL CUSTOM_CALLOC(size_t nelem, size_t elsize) {
   size_t n = nelem * elsize;
 
   if (elsize && (nelem != n / elsize)) {
@@ -145,7 +145,7 @@ extern "C" void *MYCDECL CUSTOM_CALLOC(size_t nelem, size_t elsize) {
 }
 
 #if !defined(_WIN32)
-extern "C" int CUSTOM_POSIX_MEMALIGN(void **memptr, size_t alignment, size_t size)
+extern "C" MESH_EXPORT int CUSTOM_POSIX_MEMALIGN(void **memptr, size_t alignment, size_t size)
 #if !defined(__FreeBSD__) && !defined(__SVR4)
     throw()
 #endif
@@ -164,7 +164,7 @@ extern "C" int CUSTOM_POSIX_MEMALIGN(void **memptr, size_t alignment, size_t siz
 }
 #endif
 
-extern "C" void *MYCDECL CUSTOM_ALIGNED_ALLOC(size_t alignment, size_t size)
+extern "C" MESH_EXPORT void *MYCDECL CUSTOM_ALIGNED_ALLOC(size_t alignment, size_t size)
 #if !defined(__FreeBSD__)
     throw()
 #endif
@@ -177,7 +177,7 @@ extern "C" void *MYCDECL CUSTOM_ALIGNED_ALLOC(size_t alignment, size_t size)
   return CUSTOM_MEMALIGN(alignment, size);
 }
 
-extern "C" void MYCDECL CUSTOM_CFREE(void *ptr) {
+extern "C" MESH_EXPORT void MYCDECL CUSTOM_CFREE(void *ptr) {
   xxfree(ptr);
 }
 
@@ -190,7 +190,7 @@ extern "C" size_t MYCDECL CUSTOM_GOODSIZE(size_t sz) {
 
 #if defined(__linux)
 
-extern "C" char *MYCDECL CUSTOM_STRNDUP(const char *s, size_t sz) {
+extern "C" MESH_EXPORT char *MYCDECL CUSTOM_STRNDUP(const char *s, size_t sz) {
   char *newString = NULL;
   if (s != NULL) {
     size_t cappedLength = strnlen(s, sz);
@@ -203,7 +203,7 @@ extern "C" char *MYCDECL CUSTOM_STRNDUP(const char *s, size_t sz) {
 }
 #endif
 
-extern "C" char *MYCDECL CUSTOM_STRDUP(const char *s) {
+extern "C" MESH_EXPORT char *MYCDECL CUSTOM_STRDUP(const char *s) {
   char *newString = NULL;
   if (s != NULL) {
     if ((newString = (char *)xxmalloc(strlen(s) + 1))) {
@@ -223,7 +223,7 @@ extern "C" char *MYCDECL CUSTOM_STRDUP(const char *s) {
 
 typedef char *getcwdFunction(char *, size_t);
 
-extern "C" char *MYCDECL CUSTOM_GETCWD(char *buf, size_t size) {
+extern "C" MESH_EXPORT char *MYCDECL CUSTOM_GETCWD(char *buf, size_t size) {
   static getcwdFunction *real_getcwd =
       reinterpret_cast<getcwdFunction *>(reinterpret_cast<uintptr_t>(dlsym(RTLD_NEXT, "getcwd")));
 
@@ -238,30 +238,30 @@ extern "C" char *MYCDECL CUSTOM_GETCWD(char *buf, size_t size) {
 
 #endif
 
-extern "C" int CUSTOM_MALLOPT(int /* param */, int /* value */) {
+extern "C" MESH_EXPORT int CUSTOM_MALLOPT(int /* param */, int /* value */) {
   // NOP.
   return 1;  // success.
 }
 
-extern "C" int xxmalloc_TRIM(size_t /* pad */) {
+extern "C" MESH_EXPORT int xxmalloc_TRIM(size_t /* pad */) {
   // NOP.
   return 0;  // no memory returned to OS.
 }
 
-extern "C" void xxmalloc_STATS() {
+extern "C" MESH_EXPORT void xxmalloc_STATS() {
   // NOP.
 }
 
-extern "C" void *xxmalloc_GET_STATE() {
+extern "C" MESH_EXPORT void *xxmalloc_GET_STATE() {
   return NULL;  // always returns "error".
 }
 
-extern "C" int xxmalloc_SET_STATE(void * /* ptr */) {
+extern "C" MESH_EXPORT int xxmalloc_SET_STATE(void * /* ptr */) {
   return 0;  // success.
 }
 
 #if defined(__GNUC__) && !defined(__FreeBSD__)
-extern "C" struct mallinfo CUSTOM_MALLINFO() {
+extern "C" MESH_EXPORT struct mallinfo CUSTOM_MALLINFO() {
   // For now, we return useless stats.
   struct mallinfo m;
   m.arena = 0;
@@ -367,18 +367,18 @@ void operator delete[](void *ptr, size_t)
 
 /***** replacement functions for GNU libc extensions to malloc *****/
 
-extern "C" void *MYCDECL CUSTOM_VALLOC(size_t sz) {
+extern "C" MESH_EXPORT void *MYCDECL CUSTOM_VALLOC(size_t sz) {
   return CUSTOM_MEMALIGN(4096UL, sz);  // Default page size on most architectures.
 }
 
-extern "C" void *MYCDECL CUSTOM_PVALLOC(size_t sz) {
+extern "C" MESH_EXPORT void *MYCDECL CUSTOM_PVALLOC(size_t sz) {
   // Rounds up to the next pagesize and then calls valloc. Hoard
   // doesn't support aligned memory requests.
   return CUSTOM_VALLOC((sz + 4095UL) & ~4095UL);
 }
 
 // The wacky recalloc function, for Windows.
-extern "C" void *MYCDECL CUSTOM_RECALLOC(void *p, size_t num, size_t sz) {
+extern "C" MESH_EXPORT void *MYCDECL CUSTOM_RECALLOC(void *p, size_t num, size_t sz) {
   void *ptr = CUSTOM_REALLOC(p, num * sz);
   if ((p == NULL) && (ptr != NULL)) {
     // Clear out the memory.

@@ -64,7 +64,7 @@ static size_t usableSizeSlowpath(void *ptr) {
 }
 }  // namespace mesh
 
-extern "C" CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz) {
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
 
   if (unlikely(localHeap == nullptr)) {
@@ -75,7 +75,7 @@ extern "C" CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz) {
 }
 #define xxmalloc mesh_malloc
 
-extern "C" CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
 
   if (unlikely(localHeap == nullptr)) {
@@ -87,7 +87,7 @@ extern "C" CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
 }
 #define xxfree mesh_free
 
-extern "C" CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize) {
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
   if (unlikely(localHeap == nullptr)) {
     localHeap = ThreadLocalHeap::GetHeap();
@@ -130,7 +130,7 @@ extern "C" CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize)
   }
 }
 
-extern "C" CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr) {
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
 
   if (unlikely(localHeap == nullptr)) {
@@ -141,7 +141,7 @@ extern "C" CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr) {
 }
 #define xxmalloc_usable_size mesh_malloc_usable_size
 
-extern "C" CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment, size_t size)
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment, size_t size)
 #if !defined(__FreeBSD__) && !defined(__SVR4)
     throw()
 #endif
@@ -169,58 +169,58 @@ extern "C" CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment, size_t siz
 }
 
 extern "C" {
-size_t mesh_usable_size(void *ptr) {
+size_t MESH_EXPORT mesh_usable_size(void *ptr) {
   return xxmalloc_usable_size(ptr);
 }
 
 // ensure we don't concurrently allocate/mess with internal heap data
 // structures while forking.  This is not normally invoked when
 // libmesh is dynamically linked or LD_PRELOADed into a binary.
-void xxmalloc_lock(void) {
+void MESH_EXPORT xxmalloc_lock(void) {
   mesh::runtime().lock();
 }
 
 // ensure we don't concurrently allocate/mess with internal heap data
 // structures while forking.  This is not normally invoked when
 // libmesh is dynamically linked or LD_PRELOADed into a binary.
-void xxmalloc_unlock(void) {
+void MESH_EXPORT xxmalloc_unlock(void) {
   mesh::runtime().unlock();
 }
 
-int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) {
+int MESH_EXPORT sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) {
   return mesh::runtime().sigaction(signum, act, oldact);
 }
 
-int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
+int MESH_EXPORT sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
   return mesh::runtime().sigprocmask(how, set, oldset);
 }
 
 // we need to wrap pthread_create so that we can safely implement a
 // stop-the-world quiescent period for the copy/mremap phase of
 // meshing
-int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg) {
+int MESH_EXPORT pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg) {
   return mesh::runtime().createThread(thread, attr, startRoutine, arg);
 }
 
 // Same API as je_mallctl, allows a program to query stats and set
 // allocator-related options.
-int mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+int MESH_EXPORT mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
   return mesh::runtime().heap().mallctl(name, oldp, oldlenp, newp, newlen);
 }
 
 #ifdef __linux__
 
-int epoll_wait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {
+int MESH_EXPORT epoll_wait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {
   return mesh::runtime().epollWait(__epfd, __events, __maxevents, __timeout);
 }
 
-int epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss) {
+int MESH_EXPORT epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss) {
   return mesh::runtime().epollPwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
 
 #endif
 
-int mesh_in_bounds(void *ptr) {
+int MESH_EXPORT mesh_in_bounds(void *ptr) {
   return mesh::runtime().heap().inBounds(ptr);
 }
 }

@@ -61,7 +61,8 @@ static constexpr size_t kMinStringLen = 8;
 
 // shuffle freelist features
 static constexpr size_t kMaxFreelistLength = sizeof(uint8_t) << 8;  // 256
-static constexpr bool kEnableShuffleFreelist = true;
+static constexpr bool kEnableShuffleOnFree = true;
+static constexpr bool kEnableShuffleOnInit = kEnableShuffleOnFree;
 
 // madvise(DONTDUMP) the heap to make reasonable coredumps
 static constexpr bool kAdviseDump = false;
@@ -100,6 +101,8 @@ using std::unique_lock;
 #define CACHELINE_SIZE 64
 #define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 #define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
+
+#define MESH_EXPORT __attribute__((visibility("default")))
 
 #define ATTR_INITIAL_EXEC __attribute__((tls_model("initial-exec")))
 
