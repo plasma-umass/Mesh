@@ -62,7 +62,7 @@ public:
 
   // returns a number between min and max (inclusive)
   inline uint64_t ATTRIBUTE_ALWAYS_INLINE inRange(size_t min, size_t max) {
-      return min + next() % (1 + max - min);
+    return min + next() % (1 + max - min);
   }
 
   /* This is the jump function for the generator. It is equivalent

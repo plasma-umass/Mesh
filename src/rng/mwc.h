@@ -3,15 +3,15 @@
 #ifndef _MWC_H_
 #define _MWC_H_
 
-#include <iostream>
 #include <stdio.h>
+#include <iostream>
 
 #include "common.h"
 //#include <assert.h>
 //#define d_assert assert
 
-#include "sx.hh"
 #include "mwc64.h"
+#include "sx.hh"
 
 /**
  * @class MWC
@@ -25,7 +25,7 @@ public:
   explicit RealMWC(unsigned int seed1, unsigned int seed2) : z(seed1), w(seed2) {
     d_assert(seed1 != 0);
     d_assert(seed2 != 0);
-    //debug("MWC seed1: %u seed2: %u\n", seed1, seed2);
+    // debug("MWC seed1: %u seed2: %u\n", seed1, seed2);
   }
 
   inline unsigned int next(void) {
@@ -35,7 +35,7 @@ public:
     unsigned int znew = 36969 * (z & 65535) + (z >> 16);
     unsigned int wnew = 18000 * (w & 65535) + (w >> 16);
     unsigned int x = (znew << 16) + wnew;
-    //debug("MWC: %8x\n", x);
+    // debug("MWC: %8x\n", x);
     d_assert(wnew != 0);
     d_assert(znew != 0);
     w = wnew;
@@ -62,7 +62,7 @@ public:
   }
 };
 #else
-class MWC : public MWC64 { // public sx { // xoro {
+class MWC : public MWC64 {  // public sx { // xoro {
 public:
 #if 0
   //  using xoro::xoro;
@@ -74,9 +74,8 @@ public:
 #else
   //  using xoro::xoro;
   MWC(uint32_t s1, uint32_t s2)
-    // : xoro::xoro(s1, s2)
-    : MWC64::MWC64(s1, s2)
-  {
+  // : xoro::xoro(s1, s2)
+  : MWC64::MWC64(s1, s2) {
     //    std::cout << sizeof(RealMWC) << std::endl;
     //    std::cout << sizeof(MWC64) << std::endl;
   }
@@ -87,7 +86,7 @@ public:
 
     //    return min + next() % range;
     // adapted from https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
-    return min + (((uint64_t) next() * (uint64_t) range) >> 32);
+    return min + (((uint64_t)next() * (uint64_t)range) >> 32);
   }
 };
 #endif
