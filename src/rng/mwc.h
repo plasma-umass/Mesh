@@ -81,7 +81,7 @@ public:
   }
 #endif
   // returns a number between min and max (inclusive)
-  inline unsigned int inRange(size_t min, size_t max) {
+  inline unsigned int ATTRIBUTE_ALWAYS_INLINE inRange(size_t min, size_t max) {
     size_t range = 1 + max - min;
 
     //    return min + next() % range;

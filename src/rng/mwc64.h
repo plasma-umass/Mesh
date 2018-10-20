@@ -10,7 +10,7 @@
 class MWC64 {
   uint64_t _x, _c, _t;
 
-  void init(uint64_t seed1, uint64_t seed2) {
+  inline void ATTRIBUTE_ALWAYS_INLINE init(uint64_t seed1, uint64_t seed2) {
     _x = seed1;
     _x <<= 32;
     _x += seed2;
@@ -18,7 +18,7 @@ class MWC64 {
     _index = 2;
   }
 
-  uint64_t MWC() {
+  inline uint64_t ATTRIBUTE_ALWAYS_INLINE MWC() {
     _t = (_x << 58) + _c;
     _c = _x >> 6;
     _x += _t;
@@ -40,12 +40,12 @@ public:
     init(seed1, seed2);
   }
 
-  inline unsigned long next() {
+  inline uint64_t ATTRIBUTE_ALWAYS_INLINE next() {
     if (_index == 2) {
       _value = MWC();
       _index = 0;
     }
-    auto v = ((unsigned long *)&_value)[_index];
+    auto v = ((uint64_t *)&_value)[_index];
     _index++;
     return v;
   }
