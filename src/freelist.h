@@ -181,17 +181,17 @@ private:
   uintptr_t _start{0};                                  // 8   16
   uintptr_t _end{0};                                    // 8   24
   MiniHeap *_attachedMiniheap{nullptr};                 // 8   32
-  MWC _prng;                                            // 8   40
-  uint16_t _maxCount{0};                                // 2   42
-  uint16_t _off{0};                                     // 2   44
-  volatile uint8_t _lastOff{0};                         // 1   45
-  uint8_t __padding[15];                                // 15  64
-  uint8_t _list[kMaxFreelistLength] CACHELINE_ALIGNED;  // 256 320
+  MWC _prng;                                            // 36  68
+  uint16_t _maxCount{0};                                // 2   70
+  uint16_t _off{0};                                     // 2   72
+  volatile uint8_t _lastOff{0};                         // 1   73
+  uint8_t __padding[51];                                // 51  128
+  uint8_t _list[kMaxFreelistLength] CACHELINE_ALIGNED;  // 256 384
 };
 
 static_assert(HL::gcd<sizeof(Freelist), CACHELINE_SIZE>::value == CACHELINE_SIZE,
               "Freelist not multiple of cacheline size!");
-static_assert(sizeof(Freelist) == 320, "Freelist not expected size!");
+static_assert(sizeof(Freelist) == 384, "Freelist not expected size!");
 }  // namespace mesh
 
 #endif  // MESH__FREELIST_H

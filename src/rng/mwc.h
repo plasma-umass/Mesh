@@ -10,7 +10,6 @@
 //#include <assert.h>
 //#define d_assert assert
 
-#include "xoro.hh"
 #include "sx.hh"
 #include "mwc64.h"
 
@@ -49,7 +48,7 @@ private:
   unsigned int w;
 };
 
-#if 1
+#if 0
 class MWC : public RealMWC {
   using RealMWC::RealMWC;
 public:

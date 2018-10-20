@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-#include "realrandomvalue.h"
+#include "common.h"
 
 class MWC64 {
   uint64_t _x, _c, _t;
@@ -31,8 +31,8 @@ class MWC64 {
 
 public:
   MWC64() {
-    auto a = RealRandomValue::value();
-    auto b = RealRandomValue::value();
+    auto a = mesh::internal::seed();
+    auto b = mesh::internal::seed();
     init(a, b);
   }
 
@@ -50,5 +50,7 @@ public:
     return v;
   }
 };
+
+static_assert(sizeof(MWC64) == 40, "MWC64 not expected size!");
 
 #endif
