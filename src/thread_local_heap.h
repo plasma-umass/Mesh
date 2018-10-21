@@ -94,6 +94,27 @@ public:
     _global->free(ptr);
   }
 
+  inline void ATTRIBUTE_ALWAYS_INLINE sizedFree(void *ptr, size_t sz) {
+    if (unlikely(ptr == nullptr))
+      return;
+
+    uint32_t sizeClass = 0;
+
+    // if the size isn't in our sizemap it is a large alloc
+    if (unlikely(!SizeMap::GetSizeClass(sz, &sizeClass))) {
+      _global->free(ptr);
+      return;
+    }
+
+    Freelist &freelist = _freelist[sizeClass];
+    if (likely(freelist.contains(ptr))) {
+      freelist.free(ptr);
+      return;
+    }
+
+    _global->free(ptr);
+  }
+
   inline size_t getSize(void *ptr) {
     if (unlikely(ptr == nullptr))
       return 0;

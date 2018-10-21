@@ -87,6 +87,17 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
 }
 #define xxfree mesh_free
 
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size_t sz) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+
+  if (unlikely(localHeap == nullptr)) {
+    mesh::freeSlowpath(ptr);
+    return;
+  }
+
+  return localHeap->sizedFree(ptr, sz);
+}
+
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
   if (unlikely(localHeap == nullptr)) {
