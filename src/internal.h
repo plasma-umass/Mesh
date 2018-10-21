@@ -30,6 +30,18 @@ static inline constexpr size_t RoundUpToPage(size_t sz) {
   return kPageSize * PageCount(sz);
 }
 
+namespace powerOfTwo {
+static constexpr size_t kMinObjectSize = 8;
+
+inline constexpr size_t ByteSizeForClass(const int i) {
+  return static_cast<size_t>(1ULL << (i + staticlog(kMinObjectSize)));
+}
+
+inline constexpr int ClassForByteSize(const size_t sz) {
+  return static_cast<int>(HL::ilog2((sz < 8) ? 8 : sz) - staticlog(kMinObjectSize));
+}
+}  // namespace powerOfTwo
+
 namespace internal {
 enum PageType {
   Clean = 0,
