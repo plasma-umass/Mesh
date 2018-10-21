@@ -20,6 +20,8 @@
 
 #include "heaplayers.h"
 
+#include "partitioned_heap.h"
+
 namespace mesh {
 
 namespace internal {
