@@ -60,12 +60,12 @@ Configure the build system for Mesh.
 
 Options:
 
-  --help      display this help and exit
-  --debug     build with debugging symbols
-  --coverage  build with gcov profiling support
-  --clangcov  build with clang profiling support
-  --optimize  build with heavy optimizations
-  --mingw     cross-compiling under mingw32
+  --help           display this help and exit
+  --debug          build with debugging symbols
+  --coverage       build with gcov profiling support
+  --clangcov       build with clang profiling support
+  --(no-)optimize  build with heavy optimizations
+  --mingw          cross-compiling under mingw32
 
 Report bugs to <bpowers@cs.umass.edu>.
 '''
@@ -78,7 +78,7 @@ class ConfigBuilder:
         self.debug_build = '--debug' in argv
         self.coverage_build = '--coverage' in argv
         self.clangcov_build = '--clangcov' in argv
-        self.optimize_build = '--optimize' in argv
+        self.optimize_build = '--no-optimize' not in argv
         self.pkg_config = 'pkg-config'
         self.cross_compiling = False
         if '--mingw' in argv:
