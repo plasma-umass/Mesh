@@ -34,6 +34,13 @@ public:
     d_assert(reinterpret_cast<uintptr_t>(_freelist) % Alignment == 0);
   }
 
+  CheapHeap(char *arena, char *freelist) : SuperHeap(), _arena{arena}, _freelist{freelist} {
+    hard_assert(_arena != nullptr);
+    hard_assert(_freelist != nullptr);
+    d_assert(reinterpret_cast<uintptr_t>(_arena) % Alignment == 0);
+    d_assert(reinterpret_cast<uintptr_t>(_freelist) % Alignment == 0);
+  }
+
   inline void *alloc() {
     if (likely(_freelistOff >= 0)) {
       const auto ptr = _freelist[_freelistOff];
@@ -42,9 +49,7 @@ public:
     }
 
     const auto off = _arenaOff++;
-    char *ptr = ptrFromOffset(off);
-
-    return ptr;
+    return ptrFromOffset(off);
   }
 
   constexpr size_t getSize(void *ptr) const {
