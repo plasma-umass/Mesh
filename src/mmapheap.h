@@ -40,56 +40,9 @@
 #endif
 
 #include "internal.h"
-
-#ifndef HL_MMAP_PROTECTION_MASK
-#error "define HL_MMAP_PROTECTION_MASK before including mmapheap.h"
-#endif
-
-#if !defined(MAP_ANONYMOUS) && defined(MAP_ANON)
-#define MAP_ANONYMOUS MAP_ANON
-#endif
+#include "one_way_mmap_heap.h"
 
 namespace mesh {
-
-// OneWayMmapHeap allocates address space through calls to mmap and
-// will never unmap address space.
-class OneWayMmapHeap {
-private:
-  DISALLOW_COPY_AND_ASSIGN(OneWayMmapHeap);
-
-public:
-  enum { Alignment = MmapWrapper::Alignment };
-
-  OneWayMmapHeap() {
-  }
-
-  inline void *map(size_t sz, int flags, int fd = -1) {
-    if (sz == 0)
-      return nullptr;
-
-    // Round up to the size of a page.
-    sz = (sz + kPageSize - 1) & (size_t) ~(kPageSize - 1);
-
-    void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, flags, fd, 0);
-    if (ptr == MAP_FAILED)
-      abort();
-
-    d_assert(reinterpret_cast<size_t>(ptr) % Alignment == 0);
-
-    return ptr;
-  }
-
-  inline void *malloc(size_t sz) {
-    return map(sz, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1);
-  }
-
-  inline size_t getSize(void *ptr) const {
-    return 0;
-  }
-
-  inline void free(void *ptr) {
-  }
-};
 
 // MmapHeap extends OneWayMmapHeap to track allocated address space
 // and will free memory with calls to munmap.
