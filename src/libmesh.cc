@@ -225,7 +225,8 @@ int MESH_EXPORT epoll_wait(int __epfd, struct epoll_event *__events, int __maxev
   return mesh::runtime().epollWait(__epfd, __events, __maxevents, __timeout);
 }
 
-int MESH_EXPORT epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss) {
+int MESH_EXPORT epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
+                            const __sigset_t *__ss) {
   return mesh::runtime().epollPwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
 
