@@ -9,12 +9,14 @@
 // the allocator-internal heap in "internal.h"
 #include "common.h"
 
+#include "cheap_heap.h"
 #include "one_way_mmap_heap.h"
 
 namespace mesh {
 
 static constexpr int kPartitionedHeapNBins = 10;
-static constexpr int kPartitionedHeapArenaSize = 256 * 1024 * 1024;  // 256 MB
+static constexpr int kPartitionedHeapArenaSize = 250 * 1024 * 1024;  // 256 MB
+static constexpr int kPartitionedHeapSizePer = kPartitionedHeapArenaSize / kPartitionedHeapNBins;
 
 // Fast allocation for multiple size classes
 class PartitionedHeap : public OneWayMmapHeap {
@@ -31,6 +33,16 @@ public:
     auto freelist = reinterpret_cast<char *>(SuperHeap::malloc(kPartitionedHeapArenaSize));
     hard_assert(freelist != nullptr);
 
+    for (size_t i = 0; i < kPartitionedHeapNBins; ++i) {
+      auto arenaStart = _smallArena + i * kPartitionedHeapSizePer;
+      auto freelistStart = freelist + i * kPartitionedHeapSizePer;
+
+      const auto allocSize = powerOfTwo::ByteSizeForClass(i);
+      const auto maxCount = kPartitionedHeapSizePer / allocSize;
+
+      _smallHeaps[i].init(allocSize, maxCount, arenaStart, reinterpret_cast<void **>(freelistStart));
+    }
+
     // TODO: calc freelist + arena offsets
   }
 
@@ -41,16 +53,7 @@ public:
       return _bigHeap.malloc(sz);
     }
 
-    const auto sizeClass = getSizeClass(ptr);
-
-    if (likely(_freelistOff >= 0)) {
-      const auto ptr = _freelist[_freelistOff];
-      _freelistOff--;
-      return ptr;
-    }
-
-    const auto off = _arenaOff++;
-    return ptrFromOffset(off, sizeClass);
+    return _smallHeaps[sizeClass].alloc();
   }
 
   inline void free(void *ptr) {
@@ -63,7 +66,7 @@ public:
     d_assert(sizeClass >= 0);
     d_assert(sizeClass < kPartitionedHeapNBins);
 
-    _freelistOff[sizeClass]++ _freelist[sizeClass][_freelistOff[sizeClass]] = ptr;
+    return _smallHeaps[sizeClass].free(ptr);
   }
 
   inline size_t getSize(void *ptr) {
@@ -74,9 +77,13 @@ public:
     return powerOfTwo::ByteSizeForClass(getSizeClass(ptr));
   }
 
+  // must be protected with a contains()
   inline int getSizeClass(void *ptr) const {
-    // TODO
-    return -1;
+    const char *ptrval = reinterpret_cast<char *>(ptr);
+    const auto sizeClass = (ptrval - _smallArena) / kPartitionedHeapSizePer;
+    d_assert(sizeClass >= 0);
+    d_assert(sizeClass < kPartitionedHeapNBins);
+    return sizeClass;
   }
 
   inline bool contains(void *ptr) const {
@@ -84,17 +91,10 @@ public:
     return ptrval >= _smallArena && ptrval < _smallArenaEnd;
   }
 
-  inline char *ptrFromOffset(size_t off, int sizeClass) const {
-    return _smallArena + off * powerOfTwo::ByteSizeForClass(sizeClass);
-  }
-
 private:
   char *_smallArena{nullptr};
   char *_smallArenaEnd{nullptr};
-  char *_arena[kPartitionedHeapNBins]{nullptr};
-  void **_freelist[kPartitionedHeapNBins]{nullptr};
-  size_t _arenaOff[kPartitionedHeapNBins]{1};
-  ssize_t _freelistOff[kPartitionedHeapNBins]{-1};
+  DynCheapHeap _smallHeaps[kPartitionedHeapNBins]{};
   HL::MmapHeap _bigHeap{};
 };
 }  // namespace mesh
