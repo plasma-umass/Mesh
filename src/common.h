@@ -25,6 +25,8 @@
 #include "static/staticlog.h"
 #include "utility/ilog2.h"
 
+#include "config.h"
+
 namespace mesh {
 static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;

@@ -27,7 +27,7 @@ if c.optimize_build:
 else:
     c.append('cflags', '-O0')
 
-if c.coverage_build:
+if c.gcov_build:
     c.append('cflags', '--coverage')
     c.append('ldflags', '--coverage')
 if c.clangcov_build:
