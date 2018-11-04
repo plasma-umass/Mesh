@@ -110,6 +110,8 @@ class ConfigBuilder:
             suffix = str(args.randomization)
             if args.disable_meshing:
                 suffix = suffix + 'n'
+            else:
+                suffix = suffix + 'y'
             self.append('lib_suffix', suffix)
 
 

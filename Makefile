@@ -140,6 +140,8 @@ install: $(LIB)
 	mkdir -p $(PREFIX)/include/plasma
 	install -c -m 0755 src/plasma/mesh.h $(PREFIX)/include/plasma/mesh.h
 
+lib: $(LIB)
+
 paper:
 	$(MAKE) -C paper
 
@@ -185,7 +187,7 @@ endif
 
 clean:
 	rm -f src/test/fork-example
-	rm -f $(UNIT_BIN) $(BENCH_BIN) $(LIB)
+	rm -f $(UNIT_BIN) $(BENCH_BIN) $(FRAG_BIN) $(LIB)
 	find . -name '*~' -print0 | xargs -0 rm -f
 	rm -rf build
 
@@ -199,4 +201,4 @@ TAGS:
 
 -include $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean distclean format test test_frag check install paper run TAGS
+.PHONY: all clean distclean format test test_frag check lib install paper run TAGS
