@@ -40,13 +40,16 @@ MeshableArena::MeshableArena() : SuperHeap() {
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
-  int fd = openSpanFile(kArenaSize);
-  if (fd < 0) {
-    debug("mesh: opening arena file failed.\n");
-    abort();
+  int fd = -1;
+  if (kMeshingEnabled) {
+    fd = openSpanFile(kArenaSize);
+    if (fd < 0) {
+      debug("mesh: opening arena file failed.\n");
+      abort();
+    }
   }
   _fd = fd;
-  _arenaBegin = SuperHeap::map(kArenaSize, MAP_SHARED, fd);
+  _arenaBegin = SuperHeap::map(kArenaSize, kMapShared, fd);
   _mhIndex = reinterpret_cast<atomic<MiniHeapID> *>(SuperHeap::malloc(indexSize()));
 
   hard_assert(_arenaBegin != nullptr);
@@ -450,7 +453,7 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const Span removedSpan{removeOff, pageCount};
   trackMeshed(removedSpan);
 
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * kPageSize);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * kPageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
   freePhys(remove, sz);
 
@@ -547,16 +550,25 @@ void MeshableArena::staticAfterForkChild() {
 }
 
 void MeshableArena::prepareForFork() {
+  if (!kMeshingEnabled) {
+    return;
+  }
+
   // debug("%d: prepare fork", getpid());
   runtime().heap().lock();
   runtime().lock();
 
   int err = pipe(_forkPipe);
-  if (err == -1)
+  if (err == -1) {
     abort();
+  }
 }
 
 void MeshableArena::afterForkParent() {
+  if (!kMeshingEnabled) {
+    return;
+  }
+
   // debug("%d: after fork parent", getpid());
   runtime().unlock();
   runtime().heap().unlock();
@@ -583,6 +595,10 @@ void MeshableArena::afterForkParent() {
 }
 
 void MeshableArena::afterForkChild() {
+  if (!kMeshingEnabled) {
+    return;
+  }
+
   // debug("%d: after fork child", getpid());
   runtime().unlock();
   runtime().heap().unlock();
@@ -608,7 +624,7 @@ void MeshableArena::afterForkChild() {
   }
 
   // remap the new region over the old
-  void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, newFd, 0);
+  void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, 0);
   hard_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
   // re-do the meshed mappings
@@ -644,7 +660,7 @@ void MeshableArena::afterForkChild() {
         }
 #endif
 
-        void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, keepOff * kPageSize);
+        void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * kPageSize);
 
         hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
 

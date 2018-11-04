@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -18,7 +19,6 @@
 #include <map>
 #include <mutex>
 #include <random>
-// #include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -29,6 +29,8 @@
 
 namespace mesh {
 static constexpr bool kMeshingEnabled = MESHING_ENABLED == 1;
+
+static constexpr int kMapShared = kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
 
 static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;
