@@ -49,31 +49,13 @@ def exe_available(cmd):
     return len(path) > 0
 
 
-def _new_env():
-    return {
-        'cflags': '',
-        'ldflags': '',
-        'libs': '',
-    }
-
-help_text = '''Usage: ./configure [ OPTIONS ]
-Configure the build system for Mesh.
-
-Options:
-
-  --help           display this help and exit
-  --debug          build with debugging symbols
-  --coverage       build with gcov profiling support
-  --clangcov       build with clang profiling support
-  --(no-)optimize  build with heavy optimizations
-  --mingw          cross-compiling under mingw32
-
-Report bugs to <bpowers@cs.umass.edu>.
-'''
-
 class ConfigBuilder:
     def __init__(self):
-        self.env = _new_env()
+        self.env = {
+            'cflags': '',
+            'ldflags': '',
+            'libs': '',
+        }
         self.defs = {}
         self.config('year', str(datetime.now().year))
 
@@ -91,6 +73,13 @@ class ConfigBuilder:
         parser.add_argument('--clangcov', action='store_true', default=False,
                             help='build with gcov profiling support')
 
+        parser.add_argument('--stage', choices=[0, 1, 2], type=int, default=2,
+                            help='stage 0: no randomization. stage 1: randomization on freelist init only.  stage 2: full randomization')
+        parser.add_argument('--disable-meshing', action='store_true', default=False,
+                            help='disable meshing')
+        parser.add_argument('--suffix', action='store_true', default=False,
+                            help='always suffix the mesh binary with stage')
+
         args = parser.parse_args()
 
         self.debug_build = args.debug
@@ -100,13 +89,36 @@ class ConfigBuilder:
 
         self.pkg_config = 'pkg-config'
 
+        if args.stage == 0:
+            self.config_int('shuffle-on-init', 0)
+            self.config_int('shuffle-on-free', 0)
+        elif args.stage == 1:
+            self.config_int('shuffle-on-init', 1)
+            self.config_int('shuffle-on-free', 0)
+        elif args.stage == 2:
+            self.config_int('shuffle-on-init', 1)
+            self.config_int('shuffle-on-free', 1)
+        else:
+            raise 'unknown stage: {}'.format(args.stage)
+
+        if args.disable_meshing:
+            self.config_int('meshing-enabled', 0)
+        else:
+            self.config_int('meshing-enabled', 1)
+
+        if args.suffix:
+            suffix = str(args.stage)
+            if args.disable_meshing:
+                suffix = suffix + 'n'
+            self.append('lib_suffix', suffix)
+
 
     def config(self, key, val):
         self.defs[key] = '"' + val + '"'
 
 
     def config_int(self, key, val):
-        self.defs[key] = val
+        self.defs[key] = str(val)
 
 
     def require(self, lib='', program=None):
@@ -164,8 +176,8 @@ class ConfigBuilder:
         if not samefile(src_dir, getcwd()):
             copyfile(join(src_dir, 'Makefile'), 'Makefile')
 
-    def append(self, var, val):
-        self.env[var] = self.env.get(var, '') + ' ' + val
+    def append(self, var, val, sep=' '):
+        self.env[var] = self.env.get(var, '') + sep + val
 
     def prefer(self, cmd, preferred):
         if exe_available(preferred):

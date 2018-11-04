@@ -28,6 +28,8 @@
 #include "config.h"
 
 namespace mesh {
+static constexpr bool kMeshingEnabled = MESHING_ENABLED == 1;
+
 static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;
 static constexpr size_t kClassSizesMax = 96;
@@ -63,8 +65,8 @@ static constexpr size_t kMinStringLen = 8;
 
 // shuffle freelist features
 static constexpr size_t kMaxFreelistLength = sizeof(uint8_t) << 8;  // 256
-static constexpr bool kEnableShuffleOnFree = true;
-static constexpr bool kEnableShuffleOnInit = kEnableShuffleOnFree;
+static constexpr bool kEnableShuffleOnInit = SHUFFLE_ON_INIT == 1;
+static constexpr bool kEnableShuffleOnFree = SHUFFLE_ON_FREE == 1;
 
 // madvise(DONTDUMP) the heap to make reasonable coredumps
 static constexpr bool kAdviseDump = false;

@@ -316,6 +316,9 @@ public:
   }
 
   inline void maybeMesh() {
+    if (!kMeshingEnabled)
+      return;
+
     if (_meshPeriod == 0)
       return;
 
