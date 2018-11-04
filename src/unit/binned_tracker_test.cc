@@ -8,7 +8,6 @@
 
 #include "gtest/gtest.h"
 
-
 using namespace mesh;
 using namespace mesh::internal;
 

@@ -156,7 +156,6 @@ static void meshTestConcurrentWrite(bool invert) {
   gheap.scavenge(true);
   note("DONE SCAVENGE");
 
-
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 }
 

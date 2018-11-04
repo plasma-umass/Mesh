@@ -10,9 +10,9 @@
 #include <algorithm>
 #include <atomic>
 
-#include "shuffle_vector.h"
 #include "internal.h"
 #include "mini_heap.h"
+#include "shuffle_vector.h"
 
 #include "rng/mwc.h"
 

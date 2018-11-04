@@ -11,9 +11,9 @@
 
 #include "gtest/gtest.h"
 
-#include "shuffle_vector.h"
 #include "internal.h"
 #include "runtime.h"
+#include "shuffle_vector.h"
 
 using namespace std;
 using namespace mesh;
@@ -119,7 +119,6 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
     gheap.free(f2);
     gheap.free(f3);
   }
-
 
   ASSERT_TRUE(!mh1->isAttached());
   ASSERT_TRUE(!mh2->isAttached());

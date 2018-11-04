@@ -66,7 +66,7 @@ MAKEFLAGS       += -s
 endif
 
 .SUFFIXES:
-.SUFFIXES: .cc .cpp .S .c .o .d .test
+.SUFFIXES: .cc .c .o .d .test
 
 all: test $(BENCH_BIN) $(LIB) $(FRAG_BIN)
 
@@ -179,7 +179,7 @@ run: $(LIB) src/test/fork-example
 	src/test/fork-example
 
 format:
-	clang-format -i src/*.cc src/*.h
+	clang-format -i src/*.cc src/*.c src/*.h  src/plasma/*.h src/rng/*.h src/static/*.h src/test/*.cc src/test/*.cc src/unit/*.cc
 
 endif
 
