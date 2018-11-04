@@ -13,7 +13,7 @@
 
 #include "internal.h"
 #include "runtime.h"
-#include "freelist.h"
+#include "shuffle_vector.h"
 
 using namespace std;
 using namespace mesh;

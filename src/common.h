@@ -22,7 +22,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "static/staticlog.h"
+#include "static/log.h"
+
+// from Heap Layers
 #include "utility/ilog2.h"
 
 #include "config.h"

@@ -13,8 +13,8 @@
 #include "real.h"
 
 #include "global_heap.h"
-#include "lockedheap.h"
-#include "mmapheap.h"
+#include "locked_heap.h"
+#include "mmap_heap.h"
 
 #include "heaplayers.h"
 

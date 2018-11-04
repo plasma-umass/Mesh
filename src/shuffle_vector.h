@@ -2,19 +2,18 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
 #pragma once
-#ifndef MESH__FREELIST_H
-#define MESH__FREELIST_H
+#ifndef MESH__SHUFFLE_VECTOR_H
+#define MESH__SHUFFLE_VECTOR_H
 
 #include <iterator>
 #include <random>
 #include <utility>
 
-// #include "rng/xoroshiro128plus.h"
 #include "rng/mwc.h"
 
 #include "internal.h"
 
-#include "miniheap.h"
+#include "mini_heap.h"
 
 using mesh::debug;
 
@@ -194,4 +193,4 @@ static_assert(HL::gcd<sizeof(Freelist), CACHELINE_SIZE>::value == CACHELINE_SIZE
 static_assert(sizeof(Freelist) == 384, "Freelist not expected size!");
 }  // namespace mesh
 
-#endif  // MESH__FREELIST_H
+#endif  // MESH__SHUFFLE_VECTOR_H

@@ -2,8 +2,8 @@
 /* Copyright 2017 University of Massachusetts, Amherst */
 
 #pragma once
-#ifndef MESH__MESH_H
-#define MESH__MESH_H
+#ifndef PLASMA__MESH_H
+#define PLASMA__MESH_H
 
 #include <stddef.h>
 
@@ -28,4 +28,4 @@ size_t mesh_usable_size(void *ptr);
 }
 #endif
 
-#endif /* MESH__MESH_H */
+#endif /* PLASMA__MESH_H */

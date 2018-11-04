@@ -12,9 +12,9 @@
 #include "common.h"
 
 #include "internal.h"
-#include "miniheap.h"
+#include "mini_heap.h"
 
-#include "binnedtracker.h"
+#include "binned_tracker.h"
 #include "bitmap.h"
 
 namespace mesh {

@@ -11,7 +11,7 @@
 
 #include "gtest/gtest.h"
 
-#include "freelist.h"
+#include "shuffle_vector.h"
 #include "internal.h"
 #include "runtime.h"
 

@@ -238,7 +238,7 @@ int MESH_EXPORT mesh_in_bounds(void *ptr) {
 }
 
 #ifdef __linux__
-#include "gnuwrapper.cpp"
+#include "gnu_wrapper.cc"
 #else
 #include "wrappers/macwrapper.cpp"
 #endif

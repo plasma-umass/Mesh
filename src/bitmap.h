@@ -19,7 +19,7 @@
 #include "common.h"
 #include "internal.h"
 
-#include "static/staticlog.h"
+#include "static/log.h"
 
 #include "heaplayers.h"
 

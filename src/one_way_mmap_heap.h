@@ -22,8 +22,8 @@
 */
 
 #pragma once
-#ifndef MESH__MESH_ONE_WAY_MMAP_HEAP_H
-#define MESH__MESH_ONE_WAY_MMAP_HEAP_H
+#ifndef MESH__ONE_WAY_MMAP_HEAP_H
+#define MESH__ONE_WAY_MMAP_HEAP_H
 
 #if defined(_WIN32)
 #error "TODO"
@@ -93,4 +93,4 @@ public:
 
 }  // namespace mesh
 
-#endif  // MESH__MESH_ONE_WAY_MMAP_HEAP_H
+#endif  // MESH__ONE_WAY_MMAP_HEAP_H

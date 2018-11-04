@@ -2,8 +2,8 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
 #pragma once
-#ifndef MESH__MINIHEAP_H
-#define MESH__MINIHEAP_H
+#ifndef MESH__MINI_HEAP_H
+#define MESH__MINI_HEAP_H
 
 #include <pthread.h>
 
@@ -409,4 +409,4 @@ static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
 }  // namespace mesh
 
-#endif  // MESH__MINIHEAP_H
+#endif  // MESH__MINI_HEAP_H

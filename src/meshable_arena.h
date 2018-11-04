@@ -32,7 +32,7 @@
 
 #include "bitmap.h"
 
-#include "mmapheap.h"
+#include "mmap_heap.h"
 
 #ifndef MADV_DONTDUMP
 #define MADV_DONTDUMP 0

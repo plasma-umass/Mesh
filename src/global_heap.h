@@ -8,15 +8,13 @@
 #include <algorithm>
 #include <mutex>
 
-#include "binnedtracker.h"
+#include "binned_tracker.h"
 #include "internal.h"
-#include "meshable-arena.h"
+#include "meshable_arena.h"
 #include "meshing.h"
-#include "miniheap.h"
+#include "mini_heap.h"
 
 #include "heaplayers.h"
-
-#include "gtest/gtest_prod.h"
 
 using namespace HL;
 

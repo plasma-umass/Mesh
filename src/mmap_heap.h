@@ -22,8 +22,8 @@
 */
 
 #pragma once
-#ifndef MESH__MESH_MMAP_H
-#define MESH__MESH_MMAP_H
+#ifndef MESH__MMAP_HEAP_H
+#define MESH__MMAP_HEAP_H
 
 #if defined(_WIN32)
 #error "TODO"

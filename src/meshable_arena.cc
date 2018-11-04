@@ -21,9 +21,9 @@
 
 #include <algorithm>
 
-#include "meshable-arena.h"
+#include "meshable_arena.h"
 
-#include "miniheap.h"
+#include "mini_heap.h"
 
 #include "runtime.h"
 

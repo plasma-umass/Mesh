@@ -1,8 +1,8 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 
 #pragma once
-#ifndef MESH__BINNEDTRACKER_H
-#define MESH__BINNEDTRACKER_H
+#ifndef MESH__BINNED_TRACKER_H
+#define MESH__BINNED_TRACKER_H
 
 #include <mutex>
 
@@ -418,4 +418,4 @@ private:
 };
 }  // namespace mesh
 
-#endif  // MESH__BINNEDTRACKER_H
+#endif  // MESH__BINNED_TRACKER_H

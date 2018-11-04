@@ -1,4 +1,4 @@
-/* -*- C++ -*- */
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 
 /*
 
@@ -25,8 +25,8 @@
 */
 
 #pragma once
-#ifndef MESH__LOCKEDHEAP_H
-#define MESH__LOCKEDHEAP_H
+#ifndef MESH__LOCKED_HEAP_H
+#define MESH__LOCKED_HEAP_H
 
 #include <mutex>
 
