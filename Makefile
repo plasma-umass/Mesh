@@ -51,15 +51,10 @@ ALL_OBJS         = $(LIB_OBJS) $(UNIT_OBJS) $(BENCH_OBJS) $(FRAG_OBJS)
 # reference files in each subproject to ensure git fully checks the project out
 HEAP_LAYERS      = src/vendor/Heap-Layers/heaplayers.h
 GTEST            = src/vendor/googletest/googletest/include/gtest/gtest.h
-GFLAGS           = src/vendor/gflags/CMakeLists.txt
-
-GFLAGS_BUILD_DIR = build/src/vendor/gflags
-GFLAGS_BUILD     = $(GFLAGS_BUILD_DIR)/Makefile
-GFLAGS_LIB       = $(GFLAGS_BUILD_DIR)/lib/libgflags.a
 
 COV_DIR          = coverage
 
-ALL_SUBMODULES   = $(HEAP_LAYERS) $(GTEST) $(GFLAGS)
+ALL_SUBMODULES   = $(HEAP_LAYERS) $(GTEST)
 
 CONFIG           = Makefile config.mk
 
@@ -96,17 +91,6 @@ $(ALL_SUBMODULES):
 	git submodule update --init
 	touch -c $@
 
-$(GFLAGS_BUILD): $(GFLAGS) $(CONFIG)
-	@echo "  CMAKE $@"
-	mkdir -p $(GFLAGS_BUILD_DIR)
-	cd $(GFLAGS_BUILD_DIR) && CC=$(CC) CXX=$(CXX) cmake $(realpath $(dir $(GFLAGS)))
-	touch -c $(GFLAGS_BUILD)
-
-$(GFLAGS_LIB): $(GFLAGS_BUILD) $(CONFIG)
-	@echo "  LD    $@"
-	cd $(GFLAGS_BUILD_DIR) && $(MAKE)
-	touch -c $@
-
 build/src/vendor/googletest/%.o: src/vendor/googletest/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
@@ -119,7 +103,7 @@ build/src/%.o: src/%.c build $(CONFIG)
 	@echo "  CC    $@"
 	$(CC) $(CFLAGS) -MMD -o $@ -c $<
 
-build/src/%.o: src/%.cc build $(CONFIG) $(GFLAGS_LIB)
+build/src/%.o: src/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(CXXFLAGS) -MMD -o $@ -c $<
 
@@ -135,13 +119,13 @@ libmesh.dylib: $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
 	@echo "  LD    $@"
 	$(CXX) -compatibility_version 1 -current_version 1 -dynamiclib $(LDFLAGS) -o $@ $(LIB_OBJS) $(LIBS)
 
-$(BENCH_BIN): $(HEAP_LAYERS) $(GFLAGS_LIB) $(BENCH_OBJS) $(CONFIG)
+$(BENCH_BIN): $(HEAP_LAYERS) $(BENCH_OBJS) $(CONFIG)
 	@echo "  LD    $@"
-	$(CXX) $(LDFLAGS) -o $@ $(BENCH_OBJS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
+	$(CXX) $(LDFLAGS) -o $@ $(BENCH_OBJS) $(LIBS)
 
 $(FRAG_BIN): $(GFLAGS_LIB) $(FRAG_OBJS) $(CONFIG)
 	@echo "  LD    $@"
-	$(CXX) $(LDFLAGS) -o $@ $(FRAG_OBJS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
+	$(CXX) $(LDFLAGS) -o $@ $(FRAG_OBJS) $(LIBS)
 
 $(UNIT_BIN): $(CONFIG) $(UNIT_OBJS)
 	@echo "  LD    $@"
@@ -207,7 +191,6 @@ clean:
 
 
 distclean: clean
-	rm -rf $(GFLAGS_BUILD_DIR)
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
