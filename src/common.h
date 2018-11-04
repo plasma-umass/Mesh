@@ -69,7 +69,7 @@ static constexpr bool kEnableShuffleOnInit = kEnableShuffleOnFree;
 // madvise(DONTDUMP) the heap to make reasonable coredumps
 static constexpr bool kAdviseDump = false;
 
-static const double kMeshPeriodSecs = .1;
+static constexpr double kMeshPeriodSecs = .1;
 
 // controls aspects of miniheaps
 static constexpr size_t kMaxMeshes = 4;
