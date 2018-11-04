@@ -219,6 +219,16 @@ void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RN
   }
 }
 
+// ideally these would be static constants on BinToken, but that
+// requires C++17
+namespace bintoken {
+static constexpr uint32_t Max = numeric_limits<uint32_t>::max();
+static constexpr uint32_t MinFlags = numeric_limits<uint32_t>::max() - 4;
+static constexpr uint32_t FlagFull = numeric_limits<uint32_t>::max() - 1;
+static constexpr uint32_t FlagEmpty = numeric_limits<uint32_t>::max() - 2;
+static constexpr uint32_t FlagNoOff = numeric_limits<uint32_t>::max();
+}  // namespace bintoken
+
 // BinTokens are stored on MiniHeaps and used by the BinTracker to
 // store occupancy metadata.  They are opaque to the MiniHeap, but
 // storing the BinTracker's metadata on the MiniHeap saves a bunch of
@@ -226,14 +236,8 @@ void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RN
 class BinToken {
 public:
   typedef uint32_t Size;
-  // C++ 17 has inline vars, but earlier versions don't
-  static constexpr inline Size Max = numeric_limits<uint32_t>::max();
-  static constexpr inline Size MinFlags = numeric_limits<uint32_t>::max() - 4;
-  static constexpr inline Size FlagFull = numeric_limits<uint32_t>::max() - 1;
-  static constexpr inline Size FlagEmpty = numeric_limits<uint32_t>::max() - 2;
-  static constexpr inline Size FlagNoOff = numeric_limits<uint32_t>::max();
 
-  BinToken() noexcept : _bin(Max), _off(Max) {
+  BinToken() noexcept : _bin(bintoken::Max), _off(bintoken::Max) {
   }
 
   BinToken(Size bin, Size off) noexcept : _bin(bin), _off(off) {
@@ -241,19 +245,19 @@ public:
 
   // whether this is a valid token, or just a default initialized one
   bool valid() const {
-    return _bin < Max && _off < Max;
+    return _bin < bintoken::Max && _off < bintoken::Max;
   }
 
   bool flagOk() const {
-    return _off < MinFlags;
+    return _off < bintoken::MinFlags;
   }
 
   static BinToken Full() {
-    return BinToken{FlagFull, FlagNoOff};
+    return BinToken{bintoken::FlagFull, bintoken::FlagNoOff};
   }
 
   static BinToken Empty() {
-    return BinToken{FlagEmpty, FlagNoOff};
+    return BinToken{bintoken::FlagEmpty, bintoken::FlagNoOff};
   }
 
   BinToken newOff(Size newOff) const {

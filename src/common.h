@@ -18,7 +18,7 @@
 #include <map>
 #include <mutex>
 #include <random>
-#include <shared_mutex>
+// #include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -110,8 +110,8 @@ using std::function;
 using std::lock_guard;
 using std::mt19937_64;
 using std::mutex;
-using std::shared_lock;
-using std::shared_mutex;
+// using std::shared_lock;
+// using std::shared_mutex;
 using std::unique_lock;
 
 #define likely(x) __builtin_expect(!!(x), 1)

@@ -18,7 +18,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(CheapHeap);
   typedef OneWayMmapHeap SuperHeap;
 
-  static_assert(allocSize % 2 == 0);
+  static_assert(allocSize % 2 == 0, "expected allocSize to be even");
 
 public:
   // cacheline-sized alignment

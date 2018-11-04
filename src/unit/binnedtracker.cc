@@ -17,7 +17,7 @@ TEST(BinnedTracker, Tests) {
 
   ASSERT_FALSE(token.valid());
 
-  ASSERT_NE(BinToken::FlagFull, BinToken::FlagEmpty);
+  ASSERT_NE(bintoken::FlagFull, bintoken::FlagEmpty);
 
   ASSERT_FALSE(BinToken::Full().valid());
 

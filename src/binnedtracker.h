@@ -145,7 +145,7 @@ public:
 
     move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
 
-    return newBinId == internal::BinToken::FlagEmpty && _empty.size() >= kBinnedTrackerMaxEmpty;
+    return newBinId == internal::bintoken::FlagEmpty && _empty.size() >= kBinnedTrackerMaxEmpty;
   }
 
   void add(MiniHeap *mh) {
@@ -309,7 +309,7 @@ private:
 
       // when we pop for reuse, we effectively "top off" a MiniHeap, so
       // it moves into the full bin
-      move(_full, vec, mh, internal::BinToken::FlagFull);
+      move(_full, vec, mh, internal::bintoken::FlagFull);
 
       return mh;
     }
@@ -332,7 +332,7 @@ private:
 
   void move(internal::vector<MiniHeap *> &to, internal::vector<MiniHeap *> &from, MiniHeap *mh, uint32_t size) {
     removeFrom(from, mh);
-    mh->setBinToken(internal::BinToken(size, internal::BinToken::FlagNoOff));
+    mh->setBinToken(internal::BinToken(size, internal::bintoken::FlagNoOff));
     addTo(to, mh);
     std::atomic_thread_fence(std::memory_order_release);
   }
@@ -377,23 +377,23 @@ private:
     // }
 
     // update the miniheap's token
-    mh->setBinToken(mh->getBinToken().newOff(internal::BinToken::FlagNoOff));
+    mh->setBinToken(mh->getBinToken().newOff(internal::bintoken::FlagNoOff));
   }
 
   uint32_t getBinId(uint32_t inUseCount) const {
     if (inUseCount == _objectCount) {
-      return internal::BinToken::FlagFull;
+      return internal::bintoken::FlagFull;
     } else if (inUseCount == 0) {
-      return internal::BinToken::FlagEmpty;
+      return internal::bintoken::FlagEmpty;
     } else {
       return (inUseCount * kBinnedTrackerBinCount) * _objectCountReciprocal;
     }
   }
 
   internal::vector<MiniHeap *> &getBin(const uint32_t bin) {
-    if (bin == internal::BinToken::FlagFull) {
+    if (bin == internal::bintoken::FlagFull) {
       return _full;
-    } else if (bin == internal::BinToken::FlagEmpty) {
+    } else if (bin == internal::bintoken::FlagEmpty) {
       return _empty;
     } else {
       return _partial[bin];
