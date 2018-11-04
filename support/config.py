@@ -61,7 +61,7 @@ class ConfigBuilder:
 
         parser = argparse.ArgumentParser(description='Configure the mesh build.')
         parser.add_argument('--debug', action='store_true', default=True,
-                            help='build with debugging symbols')
+                            help='build with debugging symbols (default)')
         parser.add_argument('--no-debug', action='store_false', dest='debug',
                             help='build with debugging symbols')
         parser.add_argument('--optimize', action='store_true', default=True,
@@ -73,12 +73,12 @@ class ConfigBuilder:
         parser.add_argument('--clangcov', action='store_true', default=False,
                             help='build with gcov profiling support')
 
-        parser.add_argument('--stage', choices=[0, 1, 2], type=int, default=2,
-                            help='stage 0: no randomization. stage 1: randomization on freelist init only.  stage 2: full randomization')
+        parser.add_argument('--randomization', choices=[0, 1, 2], type=int, default=2,
+                            help='0: no randomization. 1: freelist init only.  2: freelist init + free fastpath (default)')
         parser.add_argument('--disable-meshing', action='store_true', default=False,
                             help='disable meshing')
         parser.add_argument('--suffix', action='store_true', default=False,
-                            help='always suffix the mesh binary with stage')
+                            help='always suffix the mesh binary with randomization + meshing info')
 
         args = parser.parse_args()
 
@@ -89,17 +89,17 @@ class ConfigBuilder:
 
         self.pkg_config = 'pkg-config'
 
-        if args.stage == 0:
+        if args.randomization == 0:
             self.config_int('shuffle-on-init', 0)
             self.config_int('shuffle-on-free', 0)
-        elif args.stage == 1:
+        elif args.randomization == 1:
             self.config_int('shuffle-on-init', 1)
             self.config_int('shuffle-on-free', 0)
-        elif args.stage == 2:
+        elif args.randomization == 2:
             self.config_int('shuffle-on-init', 1)
             self.config_int('shuffle-on-free', 1)
         else:
-            raise 'unknown stage: {}'.format(args.stage)
+            raise 'unknown randomization: {}'.format(args.randomization)
 
         if args.disable_meshing:
             self.config_int('meshing-enabled', 0)
@@ -107,7 +107,7 @@ class ConfigBuilder:
             self.config_int('meshing-enabled', 1)
 
         if args.suffix:
-            suffix = str(args.stage)
+            suffix = str(args.randomization)
             if args.disable_meshing:
                 suffix = suffix + 'n'
             self.append('lib_suffix', suffix)

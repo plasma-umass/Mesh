@@ -12,11 +12,11 @@ ifeq ($(OS),Windows_NT)
     LIB = libmesh.dll
 else
     UNAME_S := $(shell uname -s)
-    UNAME_P := $(shell uname -p)
     ifeq ($(UNAME_S),Darwin)
-	LIB              = libmesh.dylib
+	LIB        = libmesh.dylib
     else
-	LIB              = libmesh.so
+	LIB        = libmesh$(LIB_SUFFIX).so
+	SHARED_LIB = $(LIB)
     endif
 endif
 
@@ -111,7 +111,7 @@ build/src/unit/%.o: src/unit/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
 
-libmesh.so: $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
+$(SHARED_LIB): $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
 	@echo "  LD    $@"
 	$(CXX) -shared $(LDFLAGS) -o $@ $(LIB_OBJS) $(LIBS)
 
