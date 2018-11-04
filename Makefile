@@ -68,7 +68,7 @@ endif
 .SUFFIXES:
 .SUFFIXES: .cc .c .o .d .test
 
-all: test $(BENCH_BIN) $(LIB) $(FRAG_BIN)
+all: test $(LIB) $(FRAG_BIN)
 
 build:
 	mkdir -p build
