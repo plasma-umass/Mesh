@@ -20,6 +20,10 @@ static inline void note(const char *note) {
 }
 
 static void meshTest(bool invert) {
+  if (!kMeshingEnabled) {
+    GTEST_SKIP();
+  }
+
   GlobalHeap &gheap = runtime().heap();
 
   // disable automatic meshing for this test

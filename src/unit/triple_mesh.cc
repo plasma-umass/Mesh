@@ -252,6 +252,9 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
 }
 
 TEST(TripleMeshTest, MeshAll) {
+  if (!kMeshingEnabled) {
+    GTEST_SKIP();
+  }
   meshTestConcurrentWrite(false, false);
   meshTestConcurrentWrite(false, true);
   meshTestConcurrentWrite(true, false);
