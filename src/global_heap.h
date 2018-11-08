@@ -110,6 +110,20 @@ public:
     return ptr;
   }
 
+  inline void releaseMiniheapLocked(MiniHeap *mh, int sizeClass) {
+    mh->unsetAttached();
+    _littleheaps[sizeClass].postFree(mh, mh->inUseCount());
+  }
+
+  inline void releaseMiniheap(MiniHeap *mh) {
+    if (mh == nullptr) {
+      return;
+    }
+
+    lock_guard<mutex> lock(_miniheapLock);
+    releaseMiniheapLocked(mh, mh->sizeClass());
+  }
+
   inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize, MiniHeap *oldMH) {
     lock_guard<mutex> lock(_miniheapLock);
 
@@ -117,8 +131,7 @@ public:
 
     // ensure this flag is always set with the miniheap lock held
     if (oldMH != nullptr) {
-      oldMH->unsetAttached();
-      _littleheaps[sizeClass].postFree(oldMH, oldMH->inUseCount());
+      releaseMiniheapLocked(oldMH, sizeClass);
     }
 
     d_assert(objectSize <= _maxObjectSize);
@@ -190,7 +203,7 @@ public:
     }
 
     mh->MiniHeap::~MiniHeap();
-    memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
+    // memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
     _mhAllocator.free(mh);
     _miniheapCount--;
   }
