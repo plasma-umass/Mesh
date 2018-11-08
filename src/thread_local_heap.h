@@ -49,6 +49,17 @@ public:
     d_assert(_global != nullptr);
   }
 
+  ~ThreadLocalHeap() {
+    releaseAll();
+  }
+
+  void releaseAll() {
+    for (size_t i = 1; i < kNumBins; i++) {
+      auto mh = _freelist[i].detach();
+      _global->releaseMiniheap(mh);
+    }
+  }
+
   void *smallAllocSlowpath(size_t sizeClass);
 
   // semiansiheap ensures we never see size == 0
