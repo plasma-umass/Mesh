@@ -572,13 +572,6 @@ void MeshableArena::afterForkParent() {
     return;
   }
 
-  int r = mprotect(_arenaBegin, kArenaSize, PROT_READ | PROT_WRITE);
-  hard_assert(r == 0);
-
-  // debug("%d: after fork parent", getpid());
-  runtime().unlock();
-  runtime().heap().unlock();
-
   close(_forkPipe[1]);
 
   char buf[8];
@@ -591,11 +584,17 @@ void MeshableArena::afterForkParent() {
   }
   close(_forkPipe[0]);
 
+  d_assert(strcmp(buf, "ok") == 0);
+
   _forkPipe[0] = -1;
   _forkPipe[1] = -1;
 
-  d_assert(strcmp(buf, "ok") == 0);
+  // only after the child has finished copying the heap is it safe to
+  // go back to read/write
+  int r = mprotect(_arenaBegin, kArenaSize, PROT_READ | PROT_WRITE);
+  hard_assert(r == 0);
 
+  // debug("%d: after fork parent", getpid());
   runtime().unlock();
   runtime().heap().unlock();
 }
