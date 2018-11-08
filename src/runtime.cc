@@ -82,6 +82,7 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 }
 
 Runtime::Runtime() {
+  updatePid();
 }
 
 void Runtime::initMaxMapCount() {
@@ -305,6 +306,11 @@ int Runtime::sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
 }
 
 void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
+  if (runtime().pid() != getpid()) {
+    // we are just after fork, and glibc sucks.
+    runtime().heap().doAfterForkChild();
+  }
+
   // okToProceed is a barrier that ensures any in-proress meshing has
   // completed, and the reason for the fault was 'just' a meshing
   if (siginfo->si_code == SEGV_ACCERR && runtime().heap().okToProceed(siginfo->si_addr)) {
@@ -334,10 +340,12 @@ void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
 
   if (siginfo->si_code == SEGV_MAPERR && siginfo->si_addr == nullptr) {
     debug("libmesh: caught null pointer dereference (signal: %d)", sig);
+    raise(SIGABRT);
     _Exit(1);
   } else {
     debug("segfault (%u/%p): in arena? %d\n", siginfo->si_code, siginfo->si_addr,
           runtime().heap().contains(siginfo->si_addr));
+    raise(SIGABRT);
     _Exit(1);
   }
 }

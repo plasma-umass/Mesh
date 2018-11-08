@@ -74,6 +74,14 @@ public:
   void createSignalFd();
   void installSegfaultHandler();
 
+  void updatePid() {
+    _pid = getpid();
+  }
+
+  pid_t pid() const {
+    return _pid;
+  }
+
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
   // happens lazily, as the dynamic linker's dlopen calls into malloc
@@ -90,6 +98,7 @@ private:
   GlobalHeap _heap{};
   mutex _mutex{};
   int _signalFd{-2};
+  pid_t _pid{};
 };
 
 // get a reference to the Runtime singleton

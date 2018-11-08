@@ -599,8 +599,19 @@ void MeshableArena::afterForkParent() {
   runtime().heap().unlock();
 }
 
+void MeshableArena::doAfterForkChild() {
+  afterForkChild();
+}
+
 void MeshableArena::afterForkChild() {
+  runtime().updatePid();
+
   if (!kMeshingEnabled) {
+    return;
+  }
+
+  // this function can get called twice
+  if (_forkPipe[0] == -1) {
     return;
   }
 
@@ -689,8 +700,5 @@ void MeshableArena::afterForkChild() {
 
   _forkPipe[0] = -1;
   _forkPipe[1] = -1;
-
-  runtime().unlock();
-  runtime().heap().unlock();
 }
 }  // namespace mesh

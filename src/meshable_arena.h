@@ -138,6 +138,8 @@ public:
     return reinterpret_cast<char *>(_arenaBegin) + kArenaSize;
   }
 
+  void doAfterForkChild();
+
 private:
   void expandArena(Length minPagesAdded);
   bool findPages(Length pageCount, Span &result, internal::PageType &type);
