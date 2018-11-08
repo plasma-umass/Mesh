@@ -147,7 +147,7 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
   // didn't allocate anything), we don't have any cleanup to do
   // auto heap = ThreadLocalHeap::GetFastPathHeap();
   // if (heap != nullptr) {
-  //   // heap->releaseAll();
+  //   heap->releaseAll();
   //   // heap->ThreadLocalHeap::~ThreadLocalHeap();
   //   // mesh::internal::Heap().free(reinterpret_cast<void *>(heap));
   // }
