@@ -170,7 +170,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
     // malloc implementation.
     auto ptr = mesh_malloc(size);
     // but double-check that...
-    d_assert((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0);
+    d_assert_msg((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0, "%p(%su) %% %zu != 0", ptr, size, alignment);
     return ptr;
   } else {
     const size_t pageAlignment = (alignment + kPageSize - 1) / kPageSize;
