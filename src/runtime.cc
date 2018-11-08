@@ -140,7 +140,18 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
 
   runtime->installSegfaultHandler();
 
-  return startRoutine(arg);
+  auto result = startRoutine(arg);
+
+  // use the 'fast path' here, because if it doesn't exist (i.e. we
+  // didn't allocate anything), we don't have any cleanup to do
+  // auto heap = ThreadLocalHeap::GetFastPathHeap();
+  // if (heap != nullptr) {
+  //   // heap->releaseAll();
+  //   // heap->ThreadLocalHeap::~ThreadLocalHeap();
+  //   // mesh::internal::Heap().free(reinterpret_cast<void *>(heap));
+  // }
+
+  return result;
 }
 
 void Runtime::createSignalFd() {
