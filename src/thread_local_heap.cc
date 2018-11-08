@@ -8,15 +8,15 @@ namespace mesh {
 __thread ThreadLocalHeap::ThreadLocalData ThreadLocalHeap::_threadLocalData ATTR_INITIAL_EXEC CACHELINE_ALIGNED;
 
 ThreadLocalHeap *ThreadLocalHeap::CreateThreadLocalHeap() {
-  void *buf = mesh::internal::Heap().malloc(sizeof(ThreadLocalHeap) + 2 * CACHELINE_SIZE);
+  void *buf = mesh::internal::Heap().malloc(RoundUpToPage(sizeof(ThreadLocalHeap)));
   if (buf == nullptr) {
     mesh::debug("mesh: unable to allocate ThreadLocalHeap, aborting.\n");
     abort();
   }
 
-  void *alignedPtr = (void *)(((uintptr_t)buf + CACHELINE_SIZE - 1) & ~(CACHELINE_SIZE - 1));
+  // hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
-  return new (alignedPtr) ThreadLocalHeap(&mesh::runtime().heap());
+  return new (buf) ThreadLocalHeap(&mesh::runtime().heap());
 }
 
 ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
