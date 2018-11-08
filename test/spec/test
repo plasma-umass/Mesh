@@ -98,7 +98,7 @@ def test_speed(*benchmarks, enabled_configs=None, ref=False, docker=True, mstat=
         runspec_cmd = 'runspec --config=%s %s %s' % (spec_config, flags, benchmark_list)
         cmd = 'cd /spec && . ./shrc && %s' % runspec_cmd
         if docker:
-            result_dir = new_result_dir(config.name, ref)
+            result_dir = new_result_dir(config.dir_name, ref)
             flags = ''
             if mstat:
                 os.makedirs(path.join(result_dir, 'mstat'))
