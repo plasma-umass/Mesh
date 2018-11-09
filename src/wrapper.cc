@@ -227,20 +227,20 @@ extern "C" MESH_EXPORT int CUSTOM_MALLOPT(int /* param */, int /* value */) {
   return 1;  // success.
 }
 
-extern "C" MESH_EXPORT int xxmalloc_TRIM(size_t /* pad */) {
+extern "C" MESH_EXPORT int CUSTOM_MALLOC_TRIM(size_t /* pad */) {
   // NOP.
   return 0;  // no memory returned to OS.
 }
 
-extern "C" MESH_EXPORT void xxmalloc_STATS() {
+extern "C" MESH_EXPORT void CUSTOM_MALLOC_STATS() {
   // NOP.
 }
 
-extern "C" MESH_EXPORT void *xxmalloc_GET_STATE() {
+extern "C" MESH_EXPORT void *CUSTOM_MALLOC_GET_STATE() {
   return NULL;  // always returns "error".
 }
 
-extern "C" MESH_EXPORT int xxmalloc_SET_STATE(void * /* ptr */) {
+extern "C" MESH_EXPORT int CUSTOM_MALLOC_SET_STATE(void * /* ptr */) {
   return 0;  // success.
 }
 
@@ -270,51 +270,67 @@ extern "C" MESH_EXPORT struct mallinfo CUSTOM_MALLINFO() {
 #ifndef NEW_INCLUDED
 #define NEW_INCLUDED
 
-void *
+MESH_EXPORT CACHELINE_ALIGNED_FN void *
 operator new(size_t sz)
 #if defined(_GLIBCXX_THROW)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
 {
-  void *ptr = xxmalloc(sz);
-  if (unlikely(ptr == NULL && sz != 0)) {
-    throw std::bad_alloc();
-  } else {
-    return ptr;
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    return mesh::cxxNewSlowpath(sz);
   }
+
+  return localHeap->cxxNew(sz);
 }
 
-void operator delete(void *ptr)
+MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr)
 #if !defined(linux_)
     throw()
 #endif
 {
-  CUSTOM_FREE(ptr);
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    mesh::freeSlowpath(ptr);
+    return;
+  }
+
+  return localHeap->free(ptr);
 }
 
 #if !defined(__SUNPRO_CC) || __SUNPRO_CC > 0x420
-void *operator new(size_t sz, const std::nothrow_t &) throw() {
-  return xxmalloc(sz);
+MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz, const std::nothrow_t &) throw() {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    return mesh::allocSlowpath(sz);
+  }
+
+  return localHeap->malloc(sz);
 }
 
-void *operator new[](size_t size)
+MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz)
 #if defined(_GLIBCXX_THROW)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
 {
-  void *ptr = xxmalloc(size);
-  if (ptr == NULL) {
-    throw std::bad_alloc();
-  } else {
-    return ptr;
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    return mesh::cxxNewSlowpath(sz);
   }
+
+  return localHeap->cxxNew(sz);
 }
 
-void *operator new[](size_t sz, const std::nothrow_t &) throw() {
-  return xxmalloc(sz);
+MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz, const std::nothrow_t &) throw() {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    return mesh::allocSlowpath(sz);
+  }
+
+  return localHeap->malloc(sz);
 }
 
-void operator delete[](void *ptr)
+MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr)
 #if defined(_GLIBCXX_USE_NOEXCEPT)
     _GLIBCXX_USE_NOEXCEPT
 #else
@@ -324,25 +340,43 @@ void operator delete[](void *ptr)
 #endif
 #endif
 {
-  CUSTOM_FREE(ptr);
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    mesh::freeSlowpath(ptr);
+    return;
+  }
+
+  return localHeap->free(ptr);
 }
 
 #if defined(__cpp_sized_deallocation) && __cpp_sized_deallocation >= 201309
 
-void operator delete(void *ptr, size_t)
+MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr, size_t sz)
 #if !defined(linux_)
     throw()
 #endif
 {
-  CUSTOM_FREE(ptr);
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    mesh::freeSlowpath(ptr);
+    return;
+  }
+
+  return localHeap->sizedFree(ptr, sz);
 }
 
-void operator delete[](void *ptr, size_t)
+MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr, size_t)
 #if defined(__GNUC__)
     _GLIBCXX_USE_NOEXCEPT
 #endif
 {
-  CUSTOM_FREE(ptr);
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    mesh::freeSlowpath(ptr);
+    return;
+  }
+
+  return localHeap->free(ptr);
 }
 #endif
 

@@ -139,6 +139,15 @@ public:
     return ptr;
   }
 
+  inline void *ATTRIBUTE_ALWAYS_INLINE cxxNew(size_t sz) {
+    void *ptr = this->malloc(sz);
+    if (unlikely(ptr == NULL && sz != 0)) {
+      throw std::bad_alloc();
+    }
+
+    return ptr;
+  }
+
   // semiansiheap ensures we never see size == 0
   inline void *ATTRIBUTE_ALWAYS_INLINE malloc(size_t sz) {
     uint32_t sizeClass = 0;
