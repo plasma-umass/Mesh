@@ -3,7 +3,7 @@
 for n in 0 1 2; do
     for meshing in '--disable-meshing' ''; do
         echo building --randomization $n $meshing
-        ./configure --randomization $n $meshing --suffix
+        ./configure --no-debug --randomization $n $meshing --suffix
         make clean
         make -j5 lib test
         sudo make install
