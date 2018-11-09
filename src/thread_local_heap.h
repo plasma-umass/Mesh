@@ -62,6 +62,83 @@ public:
 
   void *smallAllocSlowpath(size_t sizeClass);
 
+  inline void *memalign(size_t alignment, size_t size) {
+    // Check for non power-of-two alignment.
+    if ((alignment == 0) || (alignment & (alignment - 1))) {
+      return nullptr;
+    }
+
+    uint32_t sizeClass = 0;
+    const bool isSmall = SizeMap::GetSizeClass(size, &sizeClass);
+    if (alignment == sizeof(double) || (isSmall && SizeMap::ByteSizeForClass(sizeClass) <= kPageSize &&
+                                        alignment <= SizeMap::ByteSizeForClass(sizeClass))) {
+      // the requested alignment will be naturally satisfied by our
+      // malloc implementation.
+      auto ptr = this->malloc(size);
+      // but double-check that...
+      d_assert_msg((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0, "%p(%su) %% %zu != 0", ptr, size, alignment);
+      return ptr;
+    } else {
+      const size_t pageAlignment = (alignment + kPageSize - 1) / kPageSize;
+      const size_t pageCount = PageCount(size);
+      return _global->pageAlignedAlloc(pageAlignment, pageCount);
+    }
+  }
+
+  inline void *ATTRIBUTE_ALWAYS_INLINE realloc(void *oldPtr, size_t newSize) {
+    if (oldPtr == nullptr) {
+      return this->malloc(newSize);
+    }
+
+    if (newSize == 0) {
+      this->free(oldPtr);
+      return this->malloc(newSize);
+    }
+
+    size_t oldSize = getSize(oldPtr);
+
+    // the following is directly from tcmalloc, designed to avoid
+    // 'resizing ping pongs'
+    const size_t lowerBoundToGrow = oldSize + oldSize / 4ul;
+    const size_t upperBoundToShrink = oldSize / 2ul;
+
+    if (newSize > oldSize || newSize < upperBoundToShrink) {
+      void *newPtr = nullptr;
+      if (newSize > oldSize && newSize < lowerBoundToGrow) {
+        newPtr = this->malloc(lowerBoundToGrow);
+      }
+      if (newPtr == nullptr) {
+        newPtr = this->malloc(newSize);
+      }
+      if (unlikely(newPtr == nullptr)) {
+        return nullptr;
+      }
+      const size_t copySize = (oldSize < newSize) ? oldSize : newSize;
+      memcpy(newPtr, oldPtr, copySize);
+      this->free(oldPtr);
+      return newPtr;
+    } else {
+      // the current allocation is good enough
+      return oldPtr;
+    }
+  }
+
+  inline void *ATTRIBUTE_ALWAYS_INLINE calloc(size_t count, size_t size) {
+    if (unlikely(size && count > (size_t)-1 / size)) {
+      errno = ENOMEM;
+      return nullptr;
+    }
+
+    const size_t n = count * size;
+    void *ptr = this->malloc(n);
+
+    if (ptr != nullptr) {
+      memset(ptr, 0, n);
+    }
+
+    return ptr;
+  }
+
   // semiansiheap ensures we never see size == 0
   inline void *ATTRIBUTE_ALWAYS_INLINE malloc(size_t sz) {
     uint32_t sizeClass = 0;

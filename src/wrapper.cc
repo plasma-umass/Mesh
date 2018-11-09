@@ -128,22 +128,6 @@ void xxmalloc_unlock();
 
 // extern "C" void *MYCDECL CUSTOM_MALLOC(size_t);
 
-extern "C" MESH_EXPORT void *MYCDECL CUSTOM_CALLOC(size_t nelem, size_t elsize) {
-  size_t n = nelem * elsize;
-
-  if (elsize && (nelem != n / elsize)) {
-    return nullptr;
-  }
-
-  void *ptr = xxmalloc(n);
-
-  // Zero out the malloc'd block.
-  if (ptr != nullptr) {
-    memset(ptr, 0, n);
-  }
-  return ptr;
-}
-
 #if !defined(_WIN32)
 extern "C" MESH_EXPORT int CUSTOM_POSIX_MEMALIGN(void **memptr, size_t alignment, size_t size)
 #if !defined(__FreeBSD__) && !defined(__SVR4)
