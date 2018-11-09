@@ -76,7 +76,6 @@ c.append('cflags', '-Wcast-align')
 
 c.append('cflags', '-Isrc/vendor/googletest/googletest/include')
 c.append('cflags', '-Isrc/vendor/googletest/googletest')
-c.append('cflags', '-isystem build/src/vendor/gflags/include')
 c.append('cflags', '-Isrc/vendor/Heap-Layers')
 
 c.append('cflags', '-fvisibility=hidden')
