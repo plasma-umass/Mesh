@@ -243,16 +243,6 @@ public:
     return _threadLocalData.fastpathHeap;
   }
 
-  static inline void FreeHeap() {
-    auto heap = GetFastPathHeap();
-    if (heap != nullptr) {
-      heap->ThreadLocalHeap::~ThreadLocalHeap();
-      mesh::internal::Heap().free(reinterpret_cast<void *>(heap));
-    }
-
-    _threadLocalData.fastpathHeap = nullptr;
-  }
-
   static ATTRIBUTE_NEVER_INLINE ThreadLocalHeap *GetHeap();
 
   static ThreadLocalHeap *CreateThreadLocalHeap();
