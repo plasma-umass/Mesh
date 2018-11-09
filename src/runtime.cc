@@ -143,14 +143,11 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
 
   auto result = startRoutine(arg);
 
-  // use the 'fast path' here, because if it doesn't exist (i.e. we
-  // didn't allocate anything), we don't have any cleanup to do
-  // auto heap = ThreadLocalHeap::GetFastPathHeap();
-  // if (heap != nullptr) {
-  //   heap->releaseAll();
-  //   // heap->ThreadLocalHeap::~ThreadLocalHeap();
-  //   // mesh::internal::Heap().free(reinterpret_cast<void *>(heap));
-  // }
+  auto heap = ThreadLocalHeap::GetFastPathHeap();
+  if (heap != nullptr) {
+    heap->releaseAll();
+  }
+  // ThreadLocalHeap::FreeHeap();
 
   return result;
 }
