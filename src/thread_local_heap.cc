@@ -19,6 +19,13 @@ ThreadLocalHeap *ThreadLocalHeap::CreateThreadLocalHeap() {
   return new (buf) ThreadLocalHeap(&mesh::runtime().heap());
 }
 
+void ThreadLocalHeap::releaseAll() {
+  for (size_t i = 1; i < kNumBins; i++) {
+    auto mh = _freelist[i].refillAndDetach();
+    _global->releaseMiniheap(mh);
+  }
+}
+
 ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
   auto heap = GetFastPathHeap();
   if (heap == nullptr) {

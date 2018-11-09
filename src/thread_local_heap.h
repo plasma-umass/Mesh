@@ -53,12 +53,7 @@ public:
     releaseAll();
   }
 
-  void releaseAll() {
-    for (size_t i = 1; i < kNumBins; i++) {
-      auto mh = _freelist[i].detach();
-      _global->releaseMiniheap(mh);
-    }
-  }
+  void releaseAll();
 
   void *smallAllocSlowpath(size_t sizeClass);
 
@@ -70,19 +65,27 @@ public:
 
     uint32_t sizeClass = 0;
     const bool isSmall = SizeMap::GetSizeClass(size, &sizeClass);
-    if (alignment == sizeof(double) || (isSmall && SizeMap::ByteSizeForClass(sizeClass) <= kPageSize &&
-                                        alignment <= SizeMap::ByteSizeForClass(sizeClass))) {
-      // the requested alignment will be naturally satisfied by our
-      // malloc implementation.
+    if (alignment <= sizeof(double)) {
+      // all of our size classes are at least 8-byte aligned
       auto ptr = this->malloc(size);
-      // but double-check that...
       d_assert_msg((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0, "%p(%su) %% %zu != 0", ptr, size, alignment);
       return ptr;
-    } else {
-      const size_t pageAlignment = (alignment + kPageSize - 1) / kPageSize;
-      const size_t pageCount = PageCount(size);
-      return _global->pageAlignedAlloc(pageAlignment, pageCount);
+    } else if (isSmall) {
+      const auto sizeClassBytes = SizeMap::ByteSizeForClass(sizeClass);
+      // if the alignment is for a small allocation that is less than
+      // the page size, and the size class size in bytes is a multiple
+      // of the alignment, just call malloc
+      if (sizeClassBytes <= kPageSize && alignment <= sizeClassBytes && (sizeClassBytes % alignment) == 0) {
+        auto ptr = this->malloc(size);
+        d_assert_msg((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0, "%p(%su) %% %zu != 0", ptr, size, alignment);
+        return ptr;
+      }
     }
+
+    // fall back to page-aligned allocation
+    const size_t pageAlignment = (alignment + kPageSize - 1) / kPageSize;
+    const size_t pageCount = PageCount(size);
+    return _global->pageAlignedAlloc(pageAlignment, pageCount);
   }
 
   inline void *ATTRIBUTE_ALWAYS_INLINE realloc(void *oldPtr, size_t newSize) {

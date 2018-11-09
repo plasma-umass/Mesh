@@ -71,6 +71,17 @@ public:
     return mh;
   }
 
+  MiniHeap *refillAndDetach() {
+    const auto mh = detach();
+
+    while (_off < _maxCount) {
+      const auto off = pop();
+      mh->freeOff(off);
+    }
+
+    return mh;
+  }
+
   inline bool isExhausted() const {
     return _off >= _maxCount;
   }

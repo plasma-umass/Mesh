@@ -59,6 +59,12 @@ public:
     }
   }
 
+  inline void flushAllBins() {
+    for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
+      flushBinLocked(sizeClass);
+    }
+  }
+
   void scavenge(bool force = false) {
     lock_guard<mutex> lock(_miniheapLock);
 

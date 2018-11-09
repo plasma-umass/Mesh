@@ -155,13 +155,11 @@ public:
     freeOff(off);
   }
 
-protected:
   inline void freeOff(size_t off) {
     d_assert(_bitmap.isSet(off));
     _bitmap.unset(off);
   }
 
-public:
   /// Copies (for meshing) the contents of src into our span.
   inline void consume(void *arenaBegin, MiniHeap *src) {
     // this would be bad
