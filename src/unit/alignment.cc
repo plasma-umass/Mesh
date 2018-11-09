@@ -18,8 +18,14 @@ TEST(Alignment, NaturalAlignment) {
 
   for (size_t size = 0; size < 4096; size += 4) {
     for (size_t alignment = 2; alignment <= 4096; alignment *= 2) {
+      bool logged = false;
       for (size_t i = 0; i <= 256; i++) {
-        void *ptr = heap->memalign(size, alignment);
+        void *ptr = heap->memalign(alignment, size);
+        if (!logged) {
+          size_t actual = heap->getSize(ptr);
+          // debug("%10zu %10zu %10zu %10p\n", size, actual, alignment, ptr);
+          logged = true;
+        }
         const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
         ASSERT_EQ(ptrval % alignment, 0);
         heap->free(ptr);

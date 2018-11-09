@@ -63,7 +63,6 @@ public:
   }
 
   MiniHeap *detach() {
-    d_assert(_attachedMiniheap != nullptr);
     const auto mh = _attachedMiniheap;
     _attachedMiniheap = nullptr;
     _start = 0;
@@ -72,14 +71,12 @@ public:
   }
 
   MiniHeap *refillAndDetach() {
-    const auto mh = detach();
-
     while (_off < _maxCount) {
       const auto off = pop();
-      mh->freeOff(off);
+      _attachedMiniheap->freeOff(off);
     }
 
-    return mh;
+    return detach();
   }
 
   inline bool isExhausted() const {

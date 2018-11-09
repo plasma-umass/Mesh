@@ -63,12 +63,16 @@ public:
       return nullptr;
     }
 
+    if (size < 8) {
+      size = 8;
+    }
+
     uint32_t sizeClass = 0;
     const bool isSmall = SizeMap::GetSizeClass(size, &sizeClass);
     if (alignment <= sizeof(double)) {
       // all of our size classes are at least 8-byte aligned
       auto ptr = this->malloc(size);
-      d_assert_msg((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0, "%p(%su) %% %zu != 0", ptr, size, alignment);
+      d_assert_msg((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0, "%p(%zu) %% %zu != 0", ptr, size, alignment);
       return ptr;
     } else if (isSmall) {
       const auto sizeClassBytes = SizeMap::ByteSizeForClass(sizeClass);
@@ -77,7 +81,7 @@ public:
       // of the alignment, just call malloc
       if (sizeClassBytes <= kPageSize && alignment <= sizeClassBytes && (sizeClassBytes % alignment) == 0) {
         auto ptr = this->malloc(size);
-        d_assert_msg((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0, "%p(%su) %% %zu != 0", ptr, size, alignment);
+        d_assert_msg((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0, "%p(%zu) %% %zu != 0", ptr, size, alignment);
         return ptr;
       }
     }
