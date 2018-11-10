@@ -90,8 +90,9 @@ void GlobalHeap::free(void *ptr) {
     flushBinLocked(sizeClass);
   }
 
-  if (shouldConsiderMesh)
+  if (shouldConsiderMesh) {
     maybeMesh();
+  }
 }
 
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {

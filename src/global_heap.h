@@ -332,20 +332,25 @@ public:
     untrackMiniheapLocked(src);
   }
 
-  inline void maybeMesh() {
-    if (!kMeshingEnabled)
+  inline void ATTRIBUTE_ALWAYS_INLINE maybeMesh() {
+    if (!kMeshingEnabled) {
       return;
+    }
 
-    if (_meshPeriod == 0)
+    if (_meshPeriod == 0) {
       return;
+    }
 
     const auto now = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double> duration = now - _lastMesh;
 
-    if (unlikely(_meshPeriodSecs <= 0))
+    if (unlikely(_meshPeriodSecs <= 0)) {
       return;
-    if (likely(duration.count() < _meshPeriodSecs))
+    }
+
+    if (likely(duration.count() < _meshPeriodSecs)) {
       return;
+    }
 
     lock_guard<mutex> lock(_miniheapLock);
 
