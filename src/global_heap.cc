@@ -70,7 +70,7 @@ void GlobalHeap::free(void *ptr) {
     // global lock to synchronize with a concurrent mesh, and
     // re-update the bitmap
     lock_guard<mutex> lock(_miniheapLock);
-    auto mh = miniheapForLocked(ptr);
+    mh = miniheapForLocked(ptr);
     hard_assert(!mh->isMeshed());
     mh->free(arenaBegin(), ptr);
   }
