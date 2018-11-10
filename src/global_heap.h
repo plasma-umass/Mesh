@@ -341,7 +341,7 @@ public:
       return;
     }
 
-    if (unlikely(_meshPeriodSecs <= 0)) {
+    if (_meshPeriodSecs <= 0) {
       return;
     }
 
