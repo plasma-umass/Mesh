@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <map>
@@ -75,7 +76,8 @@ static constexpr bool kEnableShuffleOnFree = SHUFFLE_ON_FREE == 1;
 // madvise(DONTDUMP) the heap to make reasonable coredumps
 static constexpr bool kAdviseDump = false;
 
-static constexpr double kMeshPeriodSecs = .1;
+static constexpr std::chrono::nanoseconds kZeroNs{0};
+static constexpr std::chrono::nanoseconds kMeshPeriodNs{100000000};  // 100 ms
 
 // controls aspects of miniheaps
 static constexpr size_t kMaxMeshes = 4;

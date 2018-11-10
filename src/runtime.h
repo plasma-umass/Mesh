@@ -46,8 +46,8 @@ public:
   // meshing
   int createThread(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg);
 
-  void setMeshPeriodSecs(double period) {
-    _heap.setMeshPeriodSecs(period);
+  void setMeshPeriodNs(std::chrono::nanoseconds period) {
+    _heap.setMeshPeriodNs(period);
   }
 
 #ifdef __linux__

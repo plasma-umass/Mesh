@@ -284,8 +284,8 @@ public:
     return _miniheapCount;
   }
 
-  void setMeshPeriodSecs(double period) {
-    _meshPeriodSecs = period;
+  void setMeshPeriodNs(std::chrono::nanoseconds period) {
+    _meshPeriodNs = period;
   }
 
   void lock() {
@@ -341,14 +341,14 @@ public:
       return;
     }
 
-    if (_meshPeriodSecs <= 0) {
+    if (_meshPeriodNs == kZeroNs) {
       return;
     }
 
     const auto now = std::chrono::high_resolution_clock::now();
-    const std::chrono::duration<double> duration = now - _lastMesh;
+    auto duration = chrono::duration_cast<chrono::nanoseconds>(now - _lastMesh);
 
-    if (likely(duration.count() < _meshPeriodSecs)) {
+    if (likely(duration < _meshPeriodNs)) {
       return;
     }
 
@@ -359,9 +359,9 @@ public:
       // time, the second one bows out gracefully without meshing
       // twice in a row.
       const auto lockedNow = std::chrono::high_resolution_clock::now();
-      const std::chrono::duration<double> duration = lockedNow - _lastMesh;
+      auto duration = chrono::duration_cast<chrono::nanoseconds>(lockedNow - _lastMesh);
 
-      if (unlikely(duration.count() < _meshPeriodSecs)) {
+      if (unlikely(duration < _meshPeriodNs)) {
         return;
       }
     }
@@ -404,7 +404,7 @@ private:
 
   GlobalHeapStats _stats{};
 
-  double _meshPeriodSecs{kMeshPeriodSecs};
+  std::chrono::nanoseconds _meshPeriodNs{kMeshPeriodNs};
   // XXX: should be atomic, but has exception spec?
   std::chrono::time_point<std::chrono::high_resolution_clock> _lastMesh;
 };

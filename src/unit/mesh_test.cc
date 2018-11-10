@@ -27,7 +27,7 @@ static void meshTest(bool invert) {
   GlobalHeap &gheap = runtime().heap();
 
   // disable automatic meshing for this test
-  gheap.setMeshPeriodSecs(-1);
+  gheap.setMeshPeriodNs(std::chrono::nanoseconds{0});
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 

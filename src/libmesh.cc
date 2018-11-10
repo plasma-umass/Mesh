@@ -15,10 +15,13 @@ static __attribute__((constructor)) void libmesh_init() {
   runtime().installSegfaultHandler();
   runtime().initMaxMapCount();
 
-  char *meshPeriodStr = getenv("MESH_PERIOD_SECS");
+  char *meshPeriodStr = getenv("MESH_PERIOD_MS");
   if (meshPeriodStr) {
-    double period = strtod(meshPeriodStr, nullptr);
-    runtime().setMeshPeriodSecs(period);
+    long period = strtol(meshPeriodStr, nullptr, 10);
+    if (period < 0) {
+      period = 0;
+    }
+    runtime().setMeshPeriodNs(std::chrono::milliseconds{period});
   }
 
   char *bgThread = getenv("MESH_BACKGROUND_THREAD");
