@@ -341,12 +341,12 @@ public:
       return;
     }
 
-    const auto now = std::chrono::high_resolution_clock::now();
-    const std::chrono::duration<double> duration = now - _lastMesh;
-
     if (unlikely(_meshPeriodSecs <= 0)) {
       return;
     }
+
+    const auto now = std::chrono::high_resolution_clock::now();
+    const std::chrono::duration<double> duration = now - _lastMesh;
 
     if (likely(duration.count() < _meshPeriodSecs)) {
       return;
