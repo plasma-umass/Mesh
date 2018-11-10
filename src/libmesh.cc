@@ -59,8 +59,9 @@ static void *cxxNewSlowpath(size_t sz) {
 
 ATTRIBUTE_NEVER_INLINE
 static void freeSlowpath(void *ptr) {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeap();
-  localHeap->free(ptr);
+  // instead of instantiating a thread-local heap on free, just free
+  // to the global heap directly
+  runtime().heap().free(ptr);
 }
 
 ATTRIBUTE_NEVER_INLINE
