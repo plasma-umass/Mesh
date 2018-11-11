@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+(cd ../mstatgcc && make)
+# (cd ../../.. && make libmesh.so)
+
+cp ../../../libmesh1y.so libmesh.so
+cp -a ../mstatgcc/mstatgcc .
+cp -a `which mstat` .
+
+docker build -t bpowers/spec:mesh-1y .
