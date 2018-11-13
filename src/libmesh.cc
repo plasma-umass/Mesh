@@ -155,7 +155,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
   return localHeap->memalign(alignment, size);
 }
 
-extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void * mesh_calloc(size_t count, size_t size) {
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_calloc(size_t count, size_t size) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
   if (unlikely(localHeap == nullptr)) {
     return mesh::callocSlowpath(count, size);
@@ -163,7 +163,6 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void * mesh_calloc(size_t count, siz
 
   return localHeap->calloc(count, size);
 }
-
 
 extern "C" {
 size_t MESH_EXPORT mesh_usable_size(void *ptr) __attribute__((weak, alias("mesh_malloc_usable_size")));
