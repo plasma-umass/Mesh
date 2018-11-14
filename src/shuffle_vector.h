@@ -183,16 +183,16 @@ public:
   }
 
 private:
-  uint32_t _objectSize{0};                              // 4   4
-  float _objectSizeReciprocal{0.0};                     // 4   8
-  uintptr_t _start{0};                                  // 8   16
-  uintptr_t _end{0};                                    // 8   24
-  MiniHeap *_attachedMiniheap{nullptr};                 // 8   32
-  MWC _prng;                                            // 36  68
-  uint16_t _maxCount{0};                                // 2   70
-  uint16_t _off{0};                                     // 2   72
-  volatile uint8_t _lastOff{0};                         // 1   73
-  uint8_t __padding[51];                                // 51  128
+  uint32_t _objectSize{0};                                   // 4   4
+  float _objectSizeReciprocal{0.0};                          // 4   8
+  uintptr_t _start{0};                                       // 8   16
+  uintptr_t _end{0};                                         // 8   24
+  MiniHeap *_attachedMiniheap{nullptr};                      // 8   32
+  MWC _prng;                                                 // 36  68
+  uint16_t _maxCount{0};                                     // 2   70
+  uint16_t _off{0};                                          // 2   72
+  volatile uint8_t _lastOff{0};                              // 1   73
+  uint8_t __padding[51];                                     // 51  128
   uint8_t _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;  // 256 384
 };
 
