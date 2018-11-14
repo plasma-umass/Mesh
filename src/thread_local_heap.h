@@ -42,9 +42,9 @@ public:
         _global(global),
         _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)) {
     // when asked, give 16-byte allocations for 0-byte requests
-    _freelist[0].setObjectSize(SizeMap::ByteSizeForClass(1));
+    _shuffleVector[0].setObjectSize(SizeMap::ByteSizeForClass(1));
     for (size_t i = 1; i < kNumBins; i++) {
-      _freelist[i].setObjectSize(SizeMap::ByteSizeForClass(i));
+      _shuffleVector[i].setObjectSize(SizeMap::ByteSizeForClass(i));
     }
     d_assert(_global != nullptr);
   }
@@ -164,13 +164,13 @@ public:
       return _global->malloc(sz);
     }
 
-    Freelist &freelist = _freelist[sizeClass];
-    if (unlikely(freelist.isExhausted())) {
+    ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
+    if (unlikely(shuffleVector.isExhausted())) {
       return smallAllocSlowpath(sizeClass);
     }
 
-    _last = &freelist;
-    return freelist.malloc();
+    _last = &shuffleVector;
+    return shuffleVector.malloc();
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
@@ -184,14 +184,14 @@ public:
 
     auto mh = _global->miniheapForLocked(ptr);
     if (likely(mh) && mh->maxCount() > 1) {
-      Freelist &freelist = _freelist[mh->sizeClass()];
-      // Freelists only refer to the first virtual span of a Miniheap.
+      ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
+      // ShuffleVectors only refer to the first virtual span of a Miniheap.
       // Re-check contains() here to catch the case of a free for a
       // non-primary-span allocation.
-      if (likely(freelist.getAttached() == mh && freelist.contains(ptr))) {
+      if (likely(shuffleVector.getAttached() == mh && shuffleVector.contains(ptr))) {
         d_assert(mh->isAttached());
-        _last = &freelist;
-        freelist.free(ptr);
+        _last = &shuffleVector;
+        shuffleVector.free(ptr);
         return;
       }
     }
@@ -210,9 +210,9 @@ public:
       return;
     }
 
-    Freelist &freelist = _freelist[sizeClass];
-    if (likely(freelist.contains(ptr))) {
-      freelist.free(ptr);
+    ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
+    if (likely(shuffleVector.contains(ptr))) {
+      shuffleVector.free(ptr);
       return;
     }
 
@@ -229,10 +229,10 @@ public:
 
     auto mh = _global->miniheapForLocked(ptr);
     if (likely(mh) && mh->maxCount() > 1) {
-      Freelist &freelist = _freelist[mh->sizeClass()];
-      if (likely(freelist.getAttached() == mh)) {
-        _last = &freelist;
-        return freelist.getSize();
+      ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
+      if (likely(shuffleVector.getAttached() == mh)) {
+        _last = &shuffleVector;
+        return shuffleVector.getSize();
       }
     }
 
@@ -258,8 +258,8 @@ public:
   static ThreadLocalHeap *CreateThreadLocalHeap();
 
 protected:
-  Freelist _freelist[kNumBins] CACHELINE_ALIGNED;
-  Freelist *_last{nullptr};
+  ShuffleVector _shuffleVector[kNumBins] CACHELINE_ALIGNED;
+  ShuffleVector *_last{nullptr};
   MWC _prng;
   GlobalHeap *_global;
   const size_t _maxObjectSize;
