@@ -311,7 +311,7 @@ void MeshableArena::partialScavenge() {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
     madvise(ptr, sz, MADV_DONTNEED);
-    // freePhys(ptr, sz);
+    freePhys(ptr, sz);
     // don't coalesce, just add to clean
     _clean[span.spanClass()].push_back(span);
   });
@@ -365,7 +365,7 @@ void MeshableArena::scavenge(bool force) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
     madvise(ptr, sz, MADV_DONTNEED);
-    // freePhys(ptr, sz);
+    freePhys(ptr, sz);
     markPages(span);
   });
 
