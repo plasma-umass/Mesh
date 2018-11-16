@@ -193,70 +193,19 @@ def test_frag(detailed_mesh_stats=False, enabled_configs=None):
         if enabled_configs and config.name not in enabled_configs:
             continue
 
-        server = tool('redis-server', config.name)
-        cmd = '%s redis.conf' % server
-        if USE_MSTAT:
-            cmd = 'mstat -o redis-lru-%s.tsv -freq %d -- %s' % (config.name, FREQ, cmd)
 
-        server_cmd = run_cmd(cmd)
+        cmd = 'ruby ./frag.rb'
+        if USE_MSTAT:
+            env = ''
+            if config.env:
+                env = '-env ' + config.env
+            cmd = 'mstat -o ruby-frag-%s.tsv %s -freq %d -- %s' % (config.name, env, FREQ, cmd)
 
         start = time.time()
-        time.sleep(.2) # sleep for 100 ms to give server time to start
-        server_pid = getpid('redis-server')
+        run_cmd(cmd).join()
+        end = time.time()
 
-        client = run_cmd('cat %s | %s' % (TEST_SCRIPT, REDIS_CLI)).join()
-
-        time.sleep(.5)
-        run_cmd('%s dbsize' % REDIS_CLI).join()
-
-        rss = get_rss(server_pid)
-
-        if 'mesh' in config.name and detailed_mesh_stats:
-            run_cmd('kill -42 %d' % server_pid).join()
-
-        if config.defrag:
-            run_cmd('%s config set activedefrag yes' % REDIS_CLI).join()
-            time.sleep(5) # give time to reach steady state
-            run_cmd('%s config set activedefrag no' % REDIS_CLI).join()
-            time.sleep(1)
-            end_rss = get_rss(server_pid)
-        else:
-            run_cmd('%s info' % REDIS_CLI).join()
-            time.sleep(5) # give time to reach steady state
-            run_cmd('%s info' % REDIS_CLI).join()
-
-        if 'mesh' in config.name and detailed_mesh_stats:
-            run_cmd('kill -42 %d' % server_pid).join()
-            time.sleep(1)
-
-        elapsed = time.time() - start
-        remaining = TEST_DURATION - elapsed
-        if remaining > 0:
-            log(DEBUG, 'sleeping %.2f sec' % remaining)
-            time.sleep(remaining)
-        else:
-            log(DEBUG, 'aint nobody got time for sleeping')
-
-        _rss = get_rss(server_pid, stat='Rss')
-        _pss = get_rss(server_pid, stat='Pss')
-        log(WARN, 'rss/pss: %.2f/%.2f (%.2f)', _pss, _rss, rss)
-
-        run_cmd('kill %d' % server_pid).join()
-        time.sleep(.3) # give mstat a chance to finish up
-        server_cmd.end()
-        server_cmd.join()
-
-        if 'mesh' in config.name and detailed_mesh_stats:
-            miniheap_lines = server_cmd.stderr.decode('utf8').splitlines()
-            parts = split_mesh_dump(miniheap_lines)
-            log(DEBUG, 'len(parts): %d/%d/%d', len(parts), len(parts[0]), len(miniheap_lines))
-            print_distribution(parts[0])
-            print_distribution(parts[1])
-
-        if config.defrag:
-            print('%s\t%.3f\t%.3f' % (config.name, rss, end_rss))
-        else:
-            print('%s\t%.3f' % (config.name, rss))
+        print('%s\t%.3f' % (config.name, end - start))
 
 
 def test_fragperf(detailed_mesh_stats=False, enabled_configs=None):
