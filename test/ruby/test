@@ -1,0 +1,307 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+import sys
+import time
+
+from collections import defaultdict
+from os import path
+from sys import stderr, argv
+from subprocess import Popen, PIPE
+from shutil import copyfile
+
+from config import configs
+from cmd import run_cmd
+
+MB = 1/1024.0/1024.0
+
+USE_MSTAT = True
+FREQ = 127
+
+ROOT_DIR = os.getcwd()
+
+TEST_DURATION = 10 # seconds
+
+DELIM = '>>>>>>>>>>' # delimits different mesh dumps
+
+
+def print_distribution(miniheap_lines):
+    size_classes = open_data(miniheap_lines)
+    sizes = sorted(size_classes.keys(), reverse=True)
+
+    total_size = 0
+    live_size = 0
+    meshed_size = 0
+
+    for size in sizes:
+        spans = size_classes[size]
+        total_size += sum([s.size * s.length for s in spans])
+        live_size += sum([s.size * s.n_objects for s in spans])
+        meshed_size += sum([s.size * s.length * (s.n_meshes - 1) for s in spans])
+
+    print('Total heap size: %.1f MiB' % (total_size * MB,))
+    print('Live  heap size: %.1f MiB' % (live_size * MB,))
+    print('Meshed eap size: %.1f MiB' % (meshed_size * MB,))
+
+    for size in sizes:
+        spans = size_classes[size]
+        occ = 0.0
+        span_total = sum([s.size * s.length for s in spans]) or 0.0
+        span_live = sum([s.size * s.n_objects for s in spans]) or 0.0
+        span_meshed = sum([s.size * s.length * (s.n_meshes - 1) for s in spans]) or 0.0
+
+        if len(spans) > 0:
+            bitlen = spans[0].length
+            bitcount = bitlen * len(spans)
+            bits = 0
+            meshes = defaultdict(int)
+            counts = defaultdict(int)
+
+            for span in spans:
+                n = span.n_objects
+                bits += n
+                counts[n] += 1
+                meshes[span.n_meshes] += 1
+
+            occ = (float(bits) / bitcount) * 100.0
+
+            print('\t%5d: %d spans (avg occ: %.2f) -- %.2f/%.2f (%.2f) MiB' %
+                  (size, len(spans), occ, span_live * MB, span_total * MB, span_meshed * MB))
+
+            for n in sorted(meshes.keys()):
+                print('\t\t\t%d: %d' % (n, meshes[n]))
+
+            if len(spans) > 0 and size == 256:
+                for i in range(0, 16):
+                    pct = float(counts[i]) / len(spans)
+                    # print('\t\t%2d: %5d  %.2f' % (i, counts[i], pct))
+                    print('%d\t%d\t%.3f' % (i, counts[i], pct))
+
+
+def split_mesh_dump(lines):
+    parts = []
+    while DELIM in lines:
+        i = lines.index(DELIM)
+        if i > 0:
+            parts.append(lines[:i])
+        lines = lines[i+1:]
+    if lines:
+        parts.append(lines)
+    return parts
+
+
+# from rainbow
+def make_reporter(verbosity, quiet, filelike):
+    '''
+    Returns a function suitible for logging use.
+    '''
+    if not quiet:
+        def report(level, msg, *args):
+            'Log if the specified severity is <= the initial verbosity.'
+            if level <= verbosity:
+                if len(args):
+                    filelike.write(msg % args + '\n')
+                else:
+                    filelike.write('%s\n' % (msg, ))
+    else:
+        def report(level, msg, *args):
+            '/dev/null logger.'
+            pass
+
+    return report
+
+
+ERROR = 0
+WARN = 1
+INFO = 2
+DEBUG = 3
+log = make_reporter(WARN, False, sys.stderr)
+
+
+def tool(cmd, config):
+    return path.join(ROOT_DIR, 'bin', '%s-%s' % (cmd, config))
+
+
+REDIS_CLI = tool('redis-cli', 'jemalloc')
+
+
+def slurp(file_name):
+    with open(file_name, 'r') as f:
+        return f.read().strip()
+
+
+def get_rss(pid, stat = 'Pss'):
+    memory = slurp('/proc/%d/smaps_rollup' % pid)
+    lines = memory.splitlines()
+    def get_stat(stat_name):
+        line = [l for l in lines if l.startswith(stat + ':')][0]
+        return float(line.split()[1])/1024.0
+
+    return get_stat(stat)
+
+
+def test_perf(detailed_mesh_stats=False, enabled_configs=None):
+    redis_benchmark = tool('redis-benchmark', 'jemalloc')
+
+    for config in configs:
+        if config.skip:
+            continue
+        if enabled_configs and config.name not in enabled_configs:
+            continue
+
+        server = tool('redis-server', config.name)
+        server_cmd = run_cmd('%s redis.conf' % server)
+
+        time.sleep(.1) # sleep for 100 ms to give server time to start
+
+        start = time.time()
+
+        run_cmd(redis_benchmark).join()
+
+        end = time.time()
+
+        duration_secs = end - start
+
+        server_cmd.end()
+        server_cmd.join()
+
+        print('%s\t%.3f' % (config.name, duration_secs))
+
+
+def getpid(name):
+    getpid_cmd = run_cmd('ps -u %s' % os.getuid()).join()
+    lines = getpid_cmd.stdout.decode('utf8').splitlines()
+    candidates = [l for l in lines if name in l]
+    if len(candidates) > 1:
+        raise Exception('multiple %s running!' % name)
+    elif len(candidates) == 0:
+        raise Exception('couldn\'t find %s' % name)
+    log(DEBUG, 'candidates: %s', (candidates,))
+    return int(candidates[-1].split()[0])
+
+
+def test_frag(detailed_mesh_stats=False, enabled_configs=None):
+    '''
+    Given a file containing commands, run them against each
+    redis-server, recording memory usage.
+    '''
+
+    for config in configs:
+        if config.skip:
+            continue
+        if enabled_configs and config.name not in enabled_configs:
+            continue
+
+        server = tool('redis-server', config.name)
+        cmd = '%s redis.conf' % server
+        if USE_MSTAT:
+            cmd = 'mstat -o redis-lru-%s.tsv -freq %d -- %s' % (config.name, FREQ, cmd)
+
+        server_cmd = run_cmd(cmd)
+
+        start = time.time()
+        time.sleep(.2) # sleep for 100 ms to give server time to start
+        server_pid = getpid('redis-server')
+
+        client = run_cmd('cat %s | %s' % (TEST_SCRIPT, REDIS_CLI)).join()
+
+        time.sleep(.5)
+        run_cmd('%s dbsize' % REDIS_CLI).join()
+
+        rss = get_rss(server_pid)
+
+        if 'mesh' in config.name and detailed_mesh_stats:
+            run_cmd('kill -42 %d' % server_pid).join()
+
+        if config.defrag:
+            run_cmd('%s config set activedefrag yes' % REDIS_CLI).join()
+            time.sleep(5) # give time to reach steady state
+            run_cmd('%s config set activedefrag no' % REDIS_CLI).join()
+            time.sleep(1)
+            end_rss = get_rss(server_pid)
+        else:
+            run_cmd('%s info' % REDIS_CLI).join()
+            time.sleep(5) # give time to reach steady state
+            run_cmd('%s info' % REDIS_CLI).join()
+
+        if 'mesh' in config.name and detailed_mesh_stats:
+            run_cmd('kill -42 %d' % server_pid).join()
+            time.sleep(1)
+
+        elapsed = time.time() - start
+        remaining = TEST_DURATION - elapsed
+        if remaining > 0:
+            log(DEBUG, 'sleeping %.2f sec' % remaining)
+            time.sleep(remaining)
+        else:
+            log(DEBUG, 'aint nobody got time for sleeping')
+
+        _rss = get_rss(server_pid, stat='Rss')
+        _pss = get_rss(server_pid, stat='Pss')
+        log(WARN, 'rss/pss: %.2f/%.2f (%.2f)', _pss, _rss, rss)
+
+        run_cmd('kill %d' % server_pid).join()
+        time.sleep(.3) # give mstat a chance to finish up
+        server_cmd.end()
+        server_cmd.join()
+
+        if 'mesh' in config.name and detailed_mesh_stats:
+            miniheap_lines = server_cmd.stderr.decode('utf8').splitlines()
+            parts = split_mesh_dump(miniheap_lines)
+            log(DEBUG, 'len(parts): %d/%d/%d', len(parts), len(parts[0]), len(miniheap_lines))
+            print_distribution(parts[0])
+            print_distribution(parts[1])
+
+        if config.defrag:
+            print('%s\t%.3f\t%.3f' % (config.name, rss, end_rss))
+        else:
+            print('%s\t%.3f' % (config.name, rss))
+
+
+def test_fragperf(detailed_mesh_stats=False, enabled_configs=None):
+    '''
+    Given a file containing commands, run them against each
+    redis-server, recording memory usage.
+    '''
+
+    for config in configs:
+        if config.skip:
+            continue
+        if enabled_configs and config.name not in enabled_configs:
+            continue
+
+        env = ''
+        if config.env:
+            env = config.env + ' '
+
+        start = time.time()
+        run_cmd(env + 'ruby ./frag.rb').join()
+        end = time.time()
+
+        print('%s\t%.3f' % (config.name, end - start))
+
+
+TESTS = {
+    'frag': test_frag,
+    'fragperf': test_fragperf,
+}
+
+def main():
+    global log
+
+    parser = argparse.ArgumentParser(description='Test redis with different allocators.')
+    parser.add_argument('-v', action='store_const', const=True, help='verbose logging')
+    parser.add_argument('--config', nargs='+', help='specific configs to run')
+    parser.add_argument('tests', nargs='*', default=sorted(TESTS.keys()), help='specific tests to run')
+    args = parser.parse_args()
+
+    if args.v:
+        log = make_reporter(DEBUG, False, sys.stderr)
+
+    for test in args.tests:
+        TESTS[test](enabled_configs=args.config)
+
+
+if __name__ == '__main__':
+    sys.exit(main())
