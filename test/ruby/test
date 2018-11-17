@@ -17,7 +17,7 @@ from cmd import run_cmd
 MB = 1/1024.0/1024.0
 
 USE_MSTAT = True
-FREQ = 127
+FREQ = 10
 
 ROOT_DIR = os.getcwd()
 
@@ -199,7 +199,7 @@ def test_frag(detailed_mesh_stats=False, enabled_configs=None):
             env = ''
             if config.env:
                 env = '-env ' + config.env
-            cmd = 'mstat -o ruby-frag-%s.tsv %s -freq %d -- %s' % (config.name, env, FREQ, cmd)
+            cmd = 'mstat -o ruby-frag-%s.%d.tsv %s -freq %d -- %s' % (config.name, time.time(), env, FREQ, cmd)
 
         start = time.time()
         run_cmd(cmd).join()

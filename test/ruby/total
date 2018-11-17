@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+
+import argparse
+import sys
+import os
+import csv
+import numpy
+
+from os import path
+from collections import defaultdict
+
+
+usage = []
+
+with open(sys.argv[1], newline='') as log_file:
+    reader = csv.DictReader(log_file, dialect=csv.excel_tab)
+    for row in reader:
+        # convert from bytes to MB
+        total = int(row['rss']) + int(row['kernel'])
+        usage.append(int(total)/1024.0/1024.0)
+
+usage = numpy.array(usage)
+mean = numpy.mean(usage)
+stddev = numpy.std(usage)
+
+print('%.2f (± %.2f)' % (mean, stddev))
