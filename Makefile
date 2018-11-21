@@ -1,24 +1,14 @@
--include config.mk
+# For Windows; see GNUmakefile for the Unix Makefile
 
-ifeq ($(VERSION),)
+CC = cl
+CFLAGS = /Ox # -O0 -DSANITIZER_GO=0 -march=westmere -fPIC -pipe -fno-builtin-malloc -fno-omit-frame-pointer -ffunction-sections -fdata-sections -Werror=implicit-function-declaration -Werror=implicit-int -Werror=pointer-sign -Werror=pointer-arith -Wall -Wextra -pedantic -Wno-unused-parameter -Wno-unused-variable -Werror=return-type -Wtype-limits -Wempty-body -Wvariadic-macros -Wcast-align -Isrc/vendor/googletest/googletest/include -Isrc/vendor/googletest/googletest -isystem build/src/vendor/gflags/include -Isrc/vendor/Heap-Layers -Wa,--noexecstack
+CXXFLAGS = /std:c++17 /Isrc /Isrc\vendor\Heap-Layers $(CFLAGS) # -Woverloaded-virtual -Wno-ctor-dtor-privacy -Winvalid-offsetof -std=c++1z -I src $(CFLAGS)
+LDFLAGS = # -march=westmere
+LIBS = /Md # -lm -lpthread -ldl
+VERSION = 0.1.0
 
-all:
-	@echo "run ./configure before running make."
-	@exit 1
-
-else
-
-ifeq ($(OS),Windows_NT)
-    LIB = libmesh.dll
-else
-    UNAME_S := $(shell uname -s)
-    ifeq ($(UNAME_S),Darwin)
-	LIB        = libmesh.dylib
-    else
-	LIB        = libmesh$(LIB_SUFFIX).so
-	SHARED_LIB = $(LIB)
-    endif
-endif
+# LIB = libmesh.dll
+SHARED_LIB = libmesh.dll
 
 PREFIX = /usr
 
@@ -26,24 +16,24 @@ ARCH             = x86_64
 
 COMMON_SRCS      = src/thread_local_heap.cc src/global_heap.cc src/runtime.cc src/real.cc src/meshable_arena.cc src/d_assert.cc src/measure_rss.cc
 
+src/thread_local_heap.o: src/thread_local_heap.cc
+	$(CC) $(CXXFLAGS) /c src/thread_local_heap.cc /o src/thread_local_heap.o
+
 LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc
-LIB_OBJS         = $(addprefix build/,$(patsubst %.c,%.o,$(patsubst %.S,%.o,$(LIB_SRCS:.cc=.o))))
+LIB_OBJS         = src/thread_local_heap.o src/global_heap.o src/runtime.o src/real.o src/meshable_arena.o src/d_assert.o src/measure_rss.o src/libmesh.o
 
 GTEST_SRCS       = src/vendor/googletest/googletest/src/gtest-all.cc \
                    src/vendor/googletest/googletest/src/gtest_main.cc
 
-UNIT_SRCS        = $(wildcard src/unit/*.cc) $(GTEST_SRCS) $(COMMON_SRCS)
-UNIT_OBJS        = $(addprefix build/,$(patsubst %.c,%.o,$(UNIT_SRCS:.cc=.o)))
-UNIT_CXXFLAGS    = -isystem src/vendor/googletest/googletest/include -Isrc/vendor/googletest/googletest $(filter-out -Wextra,$(CXXFLAGS:-Wundef=)) -Wno-unused-const-variable -DGTEST_HAS_PTHREAD=1
 UNIT_LDFLAGS     = $(LIBS)
 UNIT_BIN         = unit.test
 
 BENCH_SRCS       = src/meshing_benchmark.cc $(COMMON_SRCS)
-BENCH_OBJS       = $(addprefix build/,$(patsubst %.c,%.o,$(BENCH_SRCS:.cc=.o)))
+#BENCH_OBJS       = $(addprefix build/,$(patsubst %.c,%.o,$(BENCH_SRCS:.cc=.o)))
 BENCH_BIN        = meshing-benchmark
 
 FRAG_SRCS        = src/fragmenter.cc src/measure_rss.cc
-FRAG_OBJS        = $(addprefix build/,$(patsubst %.c,%.o,$(FRAG_SRCS:.cc=.o)))
+#FRAG_OBJS        = $(addprefix build/,$(patsubst %.c,%.o,$(FRAG_SRCS:.cc=.o)))
 FRAG_BIN         = fragmenter
 
 ALL_OBJS         = $(LIB_OBJS) $(UNIT_OBJS) $(BENCH_OBJS) $(FRAG_OBJS)
@@ -58,21 +48,14 @@ ALL_SUBMODULES   = $(HEAP_LAYERS) $(GTEST)
 
 CONFIG           = Makefile config.mk
 
-# quiet output, but allow us to look at what commands are being
-# executed by passing 'V=1' to make, without requiring temporarily
-# editing the Makefile.
-ifneq ($V, 1)
-MAKEFLAGS       += -s
-endif
-
 .SUFFIXES:
 .SUFFIXES: .cc .c .o .d .test
 
-all: test $(LIB) $(FRAG_BIN)
+all: $(SHARED_LIB) # test $(LIB) $(FRAG_BIN)
 
 build:
 	mkdir -p build
-	mkdir -p $(basename $(ALL_OBJS))
+#	mkdir -p $(basename $(ALL_OBJS))
 
 test_frag: $(FRAG_BIN) $(LIB)
 	@echo "  GLIBC MALLOC"
@@ -183,7 +166,6 @@ run: $(LIB) src/test/fork-example
 format:
 	clang-format -i src/*.cc src/*.c src/*.h  src/plasma/*.h src/rng/*.h src/static/*.h src/test/*.cc src/test/*.cc src/unit/*.cc
 
-endif
 
 clean:
 	rm -f src/test/fork-example
@@ -198,7 +180,5 @@ distclean: clean
 TAGS:
 	@echo "  TAGS"
 	find . -type f | egrep '\.(cpp|h|cc|hh)$$' | grep -v google | xargs etags -l c++
-
--include $(ALL_OBJS:.o=.d)
 
 .PHONY: all clean distclean format test test_frag check lib install paper run TAGS

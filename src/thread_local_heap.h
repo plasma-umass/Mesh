@@ -4,8 +4,10 @@
 #ifndef MESH__THREAD_LOCAL_HEAP_H
 #define MESH__THREAD_LOCAL_HEAP_H
 
+#if !defined(_WIN32)
 #include <pthread.h>
 #include <stdalign.h>
+#endif
 
 #include <algorithm>
 #include <atomic>

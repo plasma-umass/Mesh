@@ -9,10 +9,13 @@
 #include <cstdint>
 
 #include <fcntl.h>
+
+#if !defined(_WIN32)
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <condition_variable>
@@ -33,8 +36,12 @@
 namespace mesh {
 static constexpr bool kMeshingEnabled = MESHING_ENABLED == 1;
 
-static constexpr int kMapShared = kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
-
+#if defined(_WIN32)
+  static constexpr int kMapShared = 1; // FIXME EDB kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+#else
+  static constexpr int kMapShared = kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+#endif
+  
 static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;
 static constexpr size_t kClassSizesMax = 96;
