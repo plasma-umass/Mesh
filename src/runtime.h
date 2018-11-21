@@ -13,8 +13,8 @@
 #include "real.h"
 
 #include "global_heap.h"
-#include "lockedheap.h"
-#include "mmapheap.h"
+#include "locked_heap.h"
+#include "mmap_heap.h"
 
 #include "heaplayers.h"
 
@@ -46,8 +46,8 @@ public:
   // meshing
   int createThread(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg);
 
-  void setMeshPeriodSecs(double period) {
-    _heap.setMeshPeriodSecs(period);
+  void setMeshPeriodNs(std::chrono::nanoseconds period) {
+    _heap.setMeshPeriodNs(period);
   }
 
 #ifdef __linux__
@@ -74,6 +74,14 @@ public:
   void createSignalFd();
   void installSegfaultHandler();
 
+  void updatePid() {
+    _pid = getpid();
+  }
+
+  pid_t pid() const {
+    return _pid;
+  }
+
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
   // happens lazily, as the dynamic linker's dlopen calls into malloc
@@ -90,6 +98,7 @@ private:
   GlobalHeap _heap{};
   mutex _mutex{};
   int _signalFd{-2};
+  pid_t _pid{};
 };
 
 // get a reference to the Runtime singleton

@@ -27,7 +27,7 @@ if c.optimize_build:
 else:
     c.append('cflags', '-O0')
 
-if c.coverage_build:
+if c.gcov_build:
     c.append('cflags', '--coverage')
     c.append('ldflags', '--coverage')
 if c.clangcov_build:
@@ -41,12 +41,9 @@ if c.clangcov_build:
     c.prefer('ranlib', 'llvm-ranlib')
     c.append('ldflags', '-fuse-ld=lld')
 
-c.append('cflags', '-DSANITIZER_GO=0')
-
 c.append('cflags', '-march=westmere')
 c.append('ldflags', '-march=westmere')
 c.append('cflags', '-mavx')
-
 
 c.append('cflags', '-fPIC')
 c.append('cflags', '-pipe')
@@ -77,10 +74,8 @@ c.append('cxxflags', '-Winvalid-offsetof')
 c.append('cflags', '-Wvariadic-macros')
 c.append('cflags', '-Wcast-align')
 
-
 c.append('cflags', '-Isrc/vendor/googletest/googletest/include')
 c.append('cflags', '-Isrc/vendor/googletest/googletest')
-c.append('cflags', '-isystem build/src/vendor/gflags/include')
 c.append('cflags', '-Isrc/vendor/Heap-Layers')
 
 c.append('cflags', '-fvisibility=hidden')
@@ -97,13 +92,13 @@ if platform != 'darwin':
     c.append('ldflags', '-Wl,-z,now,-z,relro')
     c.append('ldflags', '-ftls-model=initial-exec')
 
-    # c.append('ldflags', '-static-libstdc++ -static-libgcc')
+    c.append('ldflags', '-static-libstdc++ -static-libgcc')
     c.append('ldflags', '-lrt')
 
 c.append('libs', '-lm -lpthread')
 c.append('libs', '-ldl')
 
-c.append('cxxflags', '-std=c++1z -I src')
+c.append('cxxflags', '-std=c++14 -I src')
 c.append('cxxflags', '$(CFLAGS)')
 
 # for development work, clang has much, much nicer error messages

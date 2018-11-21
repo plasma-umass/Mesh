@@ -2,8 +2,8 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
 #pragma once
-#ifndef MESH__MINIHEAP_H
-#define MESH__MINIHEAP_H
+#ifndef MESH__MINI_HEAP_H
+#define MESH__MINI_HEAP_H
 
 #include <pthread.h>
 
@@ -155,13 +155,11 @@ public:
     freeOff(off);
   }
 
-protected:
   inline void freeOff(size_t off) {
     d_assert(_bitmap.isSet(off));
     _bitmap.unset(off);
   }
 
-public:
   /// Copies (for meshing) the contents of src into our span.
   inline void consume(void *arenaBegin, MiniHeap *src) {
     // this would be bad
@@ -395,8 +393,8 @@ protected:
 
   internal::Bitmap _bitmap;  // 32 bytes 32
   internal::BinToken _token{
-      internal::BinToken::Max,
-      internal::BinToken::Max,
+      internal::bintoken::Max,
+      internal::bintoken::Max,
   };                                  // 8        40
   const Span _span;                   // 8        48
   Flags _flags;                       // 4        52
@@ -409,4 +407,4 @@ static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
 }  // namespace mesh
 
-#endif  // MESH__MINIHEAP_H
+#endif  // MESH__MINI_HEAP_H

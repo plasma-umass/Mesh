@@ -82,6 +82,7 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 }
 
 Runtime::Runtime() {
+  updatePid();
 }
 
 void Runtime::initMaxMapCount() {
@@ -140,7 +141,15 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
 
   runtime->installSegfaultHandler();
 
-  return startRoutine(arg);
+  auto result = startRoutine(arg);
+
+  auto heap = ThreadLocalHeap::GetFastPathHeap();
+  if (heap != nullptr) {
+    heap->releaseAll();
+  }
+  // ThreadLocalHeap::FreeHeap();
+
+  return result;
 }
 
 void Runtime::createSignalFd() {
@@ -247,28 +256,36 @@ int Runtime::epollPwait(int __epfd, struct epoll_event *__events, int __maxevent
 }
 #endif
 
-static struct sigaction sigsegv_action;
-static mutex sigsegv_lock;
+static struct sigaction sigbusAction;
+static struct sigaction sigsegvAction;
+static mutex sigactionLock;
 
 int Runtime::sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) {
-  if (unlikely(mesh::real::sigaction == nullptr))
+  if (unlikely(mesh::real::sigaction == nullptr)) {
     mesh::real::init();
+  }
 
-  if (signum != SIGSEGV)
+  if (signum != SIGSEGV && signum != SIGBUS) {
     return mesh::real::sigaction(signum, act, oldact);
+  }
 
   // if a user is trying to install a segfault handler, record that
   // here to proxy to later.
-  lock_guard<mutex> lock(sigsegv_lock);
+  lock_guard<mutex> lock(sigactionLock);
+
+  auto nextAct = &sigsegvAction;
+  if (signum == SIGBUS) {
+    act = &sigbusAction;
+  }
 
   if (oldact)
-    memcpy(oldact, &sigsegv_action, sizeof(sigsegv_action));
+    memcpy(oldact, nextAct, sizeof(*nextAct));
 
   if (act == nullptr) {
-    memset(&sigsegv_action, 0, sizeof(sigsegv_action));
+    memset(nextAct, 0, sizeof(*nextAct));
   } else {
     // debug("TODO: user installed a segfault handler");
-    memcpy(&sigsegv_action, act, sizeof(sigsegv_action));
+    memcpy(nextAct, act, sizeof(*nextAct));
   }
 
   return 0;
@@ -278,7 +295,7 @@ int Runtime::sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
   if (unlikely(mesh::real::sigprocmask == nullptr))
     mesh::real::init();
 
-  lock_guard<mutex> lock(sigsegv_lock);
+  lock_guard<mutex> lock(sigactionLock);
 
   // debug("TODO: ensure we never mask SIGSEGV\n");
 
@@ -286,6 +303,11 @@ int Runtime::sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
 }
 
 void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
+  if (runtime().pid() != getpid()) {
+    // we are just after fork, and glibc sucks.
+    runtime().heap().doAfterForkChild();
+  }
+
   // okToProceed is a barrier that ensures any in-proress meshing has
   // completed, and the reason for the fault was 'just' a meshing
   if (siginfo->si_code == SEGV_ACCERR && runtime().heap().okToProceed(siginfo->si_addr)) {
@@ -293,39 +315,64 @@ void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
     return;
   }
 
-  if (siginfo->si_code == SEGV_MAPERR && siginfo->si_addr == nullptr) {
-    debug("libmesh: caught null pointer dereference");
-    abort();
+  struct sigaction *action = nullptr;
+  if (sig == SIGBUS) {
+    action = &sigbusAction;
+  } else {
+    action = &sigsegvAction;
   }
 
-  // if (sigsegv_action.sa_sigaction != nullptr) {
-  //   sigsegv_action.sa_sigaction(sig, siginfo, context);
-  //   return;
-  // } else
-  {
-    // debug("TODO: check for + call program's handler\n");
+  if (action != nullptr) {
+    if (action->sa_sigaction != nullptr) {
+      action->sa_sigaction(sig, siginfo, context);
+      return;
+    } else if (action->sa_handler == SIG_IGN) {
+      // ignore
+      return;
+    } else if (action->sa_handler != nullptr && action->sa_handler != SIG_DFL) {
+      action->sa_handler(sig);
+      return;
+    }
+  }
+
+  if (siginfo->si_code == SEGV_MAPERR && siginfo->si_addr == nullptr) {
+    debug("libmesh: caught null pointer dereference (signal: %d)", sig);
+    raise(SIGABRT);
+    _Exit(1);
+  } else {
     debug("segfault (%u/%p): in arena? %d\n", siginfo->si_code, siginfo->si_addr,
           runtime().heap().contains(siginfo->si_addr));
-    abort();
+    raise(SIGABRT);
+    _Exit(1);
   }
 }
 
 void Runtime::installSegfaultHandler() {
   struct sigaction action;
-  struct sigaction old_action;
+  struct sigaction oldAction;
 
   memset(&action, 0, sizeof(action));
-  memset(&old_action, 0, sizeof(old_action));
+  memset(&oldAction, 0, sizeof(oldAction));
 
   action.sa_sigaction = segfaultHandler;
   action.sa_flags = SA_SIGINFO | SA_NODEFER;
-  auto err = mesh::real::sigaction(SIGSEGV, &action, &old_action);
-  hard_assert(err == 0);
-  err = mesh::real::sigaction(SIGBUS, &action, &old_action);
+
+  auto err = mesh::real::sigaction(SIGBUS, &action, &oldAction);
   hard_assert(err == 0);
 
-  if (old_action.sa_sigaction != nullptr && old_action.sa_sigaction != segfaultHandler) {
-    debug("TODO: old_action not null: %p\n", (void *)old_action.sa_sigaction);
+  lock_guard<mutex> lock(sigactionLock);
+
+  if (oldAction.sa_sigaction != nullptr && oldAction.sa_sigaction != segfaultHandler) {
+    // debug("TODO: oldAction not null: %p\n", (void *)oldAction.sa_sigaction);
+    memcpy(&sigbusAction, &oldAction, sizeof(sigbusAction));
+  }
+
+  err = mesh::real::sigaction(SIGSEGV, &action, &oldAction);
+  hard_assert(err == 0);
+
+  if (oldAction.sa_sigaction != nullptr && oldAction.sa_sigaction != segfaultHandler) {
+    // debug("TODO: oldAction not null: %p\n", (void *)oldAction.sa_sigaction);
+    memcpy(&sigsegvAction, &oldAction, sizeof(sigsegvAction));
   }
 }
 }  // namespace mesh

@@ -1,7 +1,8 @@
-# Copyright 2017 Bobby Powers. All rights reserved.
+# Copyright 2018 Bobby Powers. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+import argparse
 from sys import stdout, stderr, argv
 from subprocess import Popen, PIPE
 from os import environ, getcwd
@@ -48,49 +49,79 @@ def exe_available(cmd):
     return len(path) > 0
 
 
-def _new_env():
-    return {
-        'cflags': '',
-        'ldflags': '',
-        'libs': '',
-    }
-
-help_text = '''Usage: ./configure [ OPTIONS ]
-Configure the build system for Mesh.
-
-Options:
-
-  --help      display this help and exit
-  --debug     build with debugging symbols
-  --coverage  build with gcov profiling support
-  --clangcov  build with clang profiling support
-  --optimize  build with heavy optimizations
-  --mingw     cross-compiling under mingw32
-
-Report bugs to <bpowers@cs.umass.edu>.
-'''
-
 class ConfigBuilder:
     def __init__(self):
-        self.env = _new_env()
+        self.env = {
+            'cflags': '',
+            'ldflags': '',
+            'libs': '',
+        }
         self.defs = {}
-        self.defs['year'] = str(datetime.now().year)
-        self.debug_build = '--debug' in argv
-        self.coverage_build = '--coverage' in argv
-        self.clangcov_build = '--clangcov' in argv
-        self.optimize_build = '--optimize' in argv
-        self.pkg_config = 'pkg-config'
-        self.cross_compiling = False
-        if '--mingw' in argv:
-            self.pkg_config = 'mingw32-pkg-config'
-            self.cross_compiling = True
+        self.config('year', str(datetime.now().year))
 
-        if '--help' in argv:
-            stdout.write(help_text)
-            exit(0)
+        parser = argparse.ArgumentParser(description='Configure the mesh build.')
+        parser.add_argument('--debug', action='store_true', default=True,
+                            help='build with debugging symbols (default)')
+        parser.add_argument('--no-debug', action='store_false', dest='debug',
+                            help='build with debugging symbols')
+        parser.add_argument('--optimize', action='store_true', default=True,
+                            help='build with optimizations (default)')
+        parser.add_argument('--no-optimize', action='store_false', dest='optimize',
+                            help='build without optimizations')
+        parser.add_argument('--gcov', action='store_true', default=False,
+                            help='build with gcov profiling support')
+        parser.add_argument('--clangcov', action='store_true', default=False,
+                            help='build with gcov profiling support')
+
+        parser.add_argument('--randomization', choices=[0, 1, 2], type=int, default=2,
+                            help='0: no randomization. 1: freelist init only.  2: freelist init + free fastpath (default)')
+        parser.add_argument('--disable-meshing', action='store_true', default=False,
+                            help='disable meshing')
+        parser.add_argument('--suffix', action='store_true', default=False,
+                            help='always suffix the mesh binary with randomization + meshing info')
+
+        args = parser.parse_args()
+
+        self.debug_build = args.debug
+        self.gcov_build = args.gcov
+        self.clangcov_build = args.clangcov
+        self.optimize_build = args.optimize
+
+        self.pkg_config = 'pkg-config'
+
+        if args.randomization == 0:
+            self.config_int('shuffle-on-init', 0)
+            self.config_int('shuffle-on-free', 0)
+        elif args.randomization == 1:
+            self.config_int('shuffle-on-init', 1)
+            self.config_int('shuffle-on-free', 0)
+        elif args.randomization == 2:
+            self.config_int('shuffle-on-init', 1)
+            self.config_int('shuffle-on-free', 1)
+        else:
+            raise 'unknown randomization: {}'.format(args.randomization)
+
+        if args.disable_meshing:
+            self.config_int('meshing-enabled', 0)
+        else:
+            self.config_int('meshing-enabled', 1)
+
+        if args.suffix:
+            suffix = str(args.randomization)
+            if args.disable_meshing:
+                suffix = suffix + 'n'
+            else:
+                suffix = suffix + 'y'
+            self.append('lib_suffix', suffix)
+
 
     def config(self, key, val):
-        self.defs[key] = val
+        self.defs[key] = '"' + val + '"'
+
+
+    def config_int(self, key, val):
+        self.defs[key] = str(val)
+
 
     def require(self, lib='', program=None):
         if not program:
@@ -121,35 +152,37 @@ class ConfigBuilder:
             new = run_cmd('%s --%s %s' % (program, info, lib)).strip()
             env[info] = existing + ' ' + new
 
-    def generate(self, fname='config.mk'):
-        if self.coverage_build or self.clangcov_build:
+    def generate(self, mk_config='config.mk', header_config='src/config.h'):
+        if self.gcov_build or self.clangcov_build:
             self.append('cflags', '-D_PROF')
-        with open(fname, 'w') as config:
+
+        with open(mk_config, 'w') as config:
             for info in sorted(self.env.keys()):
                 values = self.env[info].strip()
-                if self.cross_compiling:
-                    values = values.replace('-pthread', '-lpthread')
-                    values = values.replace('-lrt', '')
-                    if info.upper() == 'LIBS':
-                        values += ' -lws2_32'
                 config.write('%s := %s\n' % (info.upper(),
                                              values))
-            if self.cross_compiling:
-                config.write('EXE_SUFFIX := .exe')
-        if self.cross_compiling:
-            with open('config.sh', 'w') as config:
-                config.write('EXE_SUFFIX=\'.exe\'')
+
+        with open(header_config, 'w') as config:
+            config.write('// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-\n')
+            config.write('// auto-generated by ./configure, do not edit.\n\n')
+            config.write('#pragma once\n')
+            config.write('#ifndef MESH__CONFIG_H\n')
+            config.write('#define MESH__CONFIG_H\n\n')
+            for var in sorted(self.defs.keys()):
+                value = self.defs[var].strip()
+                config.write('#define %s %s\n' %
+                             (var.upper().replace('-', '_'), value))
+            config.write('\n#endif // MESH__CONFIG_H\n')
 
         src_dir = dirname(argv[0])
         if not samefile(src_dir, getcwd()):
             copyfile(join(src_dir, 'Makefile'), 'Makefile')
 
-
-    def append(self, var, val):
-        self.env[var] = self.env.get(var, '') + ' ' + val
+    def append(self, var, val, sep=' '):
+        self.env[var] = self.env.get(var, '') + sep + val
 
     def prefer(self, cmd, preferred):
         if exe_available(preferred):
             self.env[cmd] = preferred
         else:
-            stderr.write('warning: %s not found, using default cc\n' % preferred)
+            stderr.write('warning: %s not found, using default %s\n' % (preferred, cmd))

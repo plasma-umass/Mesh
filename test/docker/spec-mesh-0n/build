@@ -4,8 +4,8 @@ set -e
 (cd ../mstatgcc && make)
 # (cd ../../.. && make libmesh.so)
 
-cp ../../../libmesh2y.so libmesh.so
+cp ../../../libmesh0n.so libmesh.so
 cp -a ../mstatgcc/mstatgcc .
 cp -a `which mstat` .
 
-docker build -t bpowers/spec:mesh-2y .
+docker build -t bpowers/spec:mesh-0n .

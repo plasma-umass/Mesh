@@ -15,10 +15,13 @@ static __attribute__((constructor)) void libmesh_init() {
   runtime().installSegfaultHandler();
   runtime().initMaxMapCount();
 
-  char *meshPeriodStr = getenv("MESH_PERIOD_SECS");
+  char *meshPeriodStr = getenv("MESH_PERIOD_MS");
   if (meshPeriodStr) {
-    double period = strtod(meshPeriodStr, nullptr);
-    runtime().setMeshPeriodSecs(period);
+    long period = strtol(meshPeriodStr, nullptr, 10);
+    if (period < 0) {
+      period = 0;
+    }
+    runtime().setMeshPeriodNs(std::chrono::milliseconds{period});
   }
 
   char *bgThread = getenv("MESH_BACKGROUND_THREAD");
@@ -52,9 +55,28 @@ static void *allocSlowpath(size_t sz) {
 }
 
 ATTRIBUTE_NEVER_INLINE
-static void freeSlowpath(void *ptr) {
+static void *cxxNewSlowpath(size_t sz) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeap();
-  localHeap->free(ptr);
+  return localHeap->cxxNew(sz);
+}
+
+ATTRIBUTE_NEVER_INLINE
+static void freeSlowpath(void *ptr) {
+  // instead of instantiating a thread-local heap on free, just free
+  // to the global heap directly
+  runtime().heap().free(ptr);
+}
+
+ATTRIBUTE_NEVER_INLINE
+static void *reallocSlowpath(void *oldPtr, size_t newSize) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeap();
+  return localHeap->realloc(oldPtr, newSize);
+}
+
+ATTRIBUTE_NEVER_INLINE
+static void *callocSlowpath(size_t count, size_t size) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeap();
+  return localHeap->calloc(count, size);
 }
 
 ATTRIBUTE_NEVER_INLINE
@@ -62,11 +84,16 @@ static size_t usableSizeSlowpath(void *ptr) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeap();
   return localHeap->getSize(ptr);
 }
+
+ATTRIBUTE_NEVER_INLINE
+static void *memalignSlowpath(size_t alignment, size_t size) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeap();
+  return localHeap->memalign(alignment, size);
+}
 }  // namespace mesh
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
-
   if (unlikely(localHeap == nullptr)) {
     return mesh::allocSlowpath(sz);
   }
@@ -77,7 +104,6 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz) {
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
-
   if (unlikely(localHeap == nullptr)) {
     mesh::freeSlowpath(ptr);
     return;
@@ -87,52 +113,27 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
 }
 #define xxfree mesh_free
 
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size_t sz) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    mesh::freeSlowpath(ptr);
+    return;
+  }
+
+  return localHeap->sizedFree(ptr, sz);
+}
+
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
   if (unlikely(localHeap == nullptr)) {
-    localHeap = ThreadLocalHeap::GetHeap();
-    d_assert(localHeap != nullptr);
+    return mesh::reallocSlowpath(oldPtr, newSize);
   }
 
-  if (oldPtr == nullptr) {
-    return localHeap->malloc(newSize);
-  }
-  if (newSize == 0) {
-    localHeap->free(oldPtr);
-    return localHeap->malloc(newSize);
-  }
-
-  size_t oldSize = localHeap->getSize(oldPtr);
-
-  // the following is directly from tcmalloc, designed to avoid
-  // 'resizing ping pongs'
-  const size_t lowerBoundToGrow = oldSize + oldSize / 4ul;
-  const size_t upperBoundToShrink = oldSize / 2ul;
-
-  if (newSize > oldSize || newSize < upperBoundToShrink) {
-    void *newPtr = nullptr;
-    if (newSize > oldSize && newSize < lowerBoundToGrow) {
-      newPtr = localHeap->malloc(lowerBoundToGrow);
-    }
-    if (newPtr == nullptr) {
-      newPtr = localHeap->malloc(newSize);
-    }
-    if (unlikely(newPtr == nullptr)) {
-      return nullptr;
-    }
-    const size_t copySize = (oldSize < newSize) ? oldSize : newSize;
-    memcpy(newPtr, oldPtr, copySize);
-    localHeap->free(oldPtr);
-    return newPtr;
-  } else {
-    // the current allocation is good enough
-    return oldPtr;
-  }
+  return localHeap->realloc(oldPtr, newSize);
 }
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
-
   if (unlikely(localHeap == nullptr)) {
     return mesh::usableSizeSlowpath(ptr);
   }
@@ -146,32 +147,25 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
     throw()
 #endif
 {
-  // Check for non power-of-two alignment.
-  if ((alignment == 0) || (alignment & (alignment - 1))) {
-    return nullptr;
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    return mesh::memalignSlowpath(alignment, size);
   }
 
-  uint32_t sizeClass = 0;
-  const bool isSmall = SizeMap::GetSizeClass(size, &sizeClass);
-  if (alignment == sizeof(double) || (isSmall && SizeMap::ByteSizeForClass(sizeClass) <= kPageSize &&
-                                      alignment <= SizeMap::ByteSizeForClass(sizeClass))) {
-    // the requested alignment will be naturally satisfied by our
-    // malloc implementation.
-    auto ptr = mesh_malloc(size);
-    // but double-check that...
-    d_assert((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0);
-    return ptr;
-  } else {
-    const size_t pageAlignment = (alignment + kPageSize - 1) / kPageSize;
-    const size_t pageCount = PageCount(size);
-    return runtime().heap().pageAlignedAlloc(pageAlignment, pageCount);
+  return localHeap->memalign(alignment, size);
+}
+
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_calloc(size_t count, size_t size) {
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  if (unlikely(localHeap == nullptr)) {
+    return mesh::callocSlowpath(count, size);
   }
+
+  return localHeap->calloc(count, size);
 }
 
 extern "C" {
-size_t MESH_EXPORT mesh_usable_size(void *ptr) {
-  return xxmalloc_usable_size(ptr);
-}
+size_t MESH_EXPORT mesh_usable_size(void *ptr) __attribute__((weak, alias("mesh_malloc_usable_size")));
 
 // ensure we don't concurrently allocate/mess with internal heap data
 // structures while forking.  This is not normally invoked when
@@ -214,7 +208,8 @@ int MESH_EXPORT epoll_wait(int __epfd, struct epoll_event *__events, int __maxev
   return mesh::runtime().epollWait(__epfd, __events, __maxevents, __timeout);
 }
 
-int MESH_EXPORT epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss) {
+int MESH_EXPORT epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
+                            const __sigset_t *__ss) {
   return mesh::runtime().epollPwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
 
@@ -226,7 +221,7 @@ int MESH_EXPORT mesh_in_bounds(void *ptr) {
 }
 
 #ifdef __linux__
-#include "gnuwrapper.cpp"
+#include "gnu_wrapper.cc"
 #else
 #include "wrappers/macwrapper.cpp"
 #endif

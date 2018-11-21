@@ -16,7 +16,7 @@ TEST(BitmapTest, RepresentationSize) {
   ASSERT_EQ(8, mesh::bitmap::representationSize(1));
   ASSERT_EQ(8, mesh::bitmap::representationSize(64));
   ASSERT_EQ(32, mesh::bitmap::representationSize(256));
-  ASSERT_EQ(4, mesh::bitmap::representationSize(256)/sizeof(size_t));
+  ASSERT_EQ(4, mesh::bitmap::representationSize(256) / sizeof(size_t));
 }
 
 TEST(BitmapTest, LowestSetBitAt) {

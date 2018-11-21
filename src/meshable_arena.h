@@ -32,7 +32,7 @@
 
 #include "bitmap.h"
 
-#include "mmapheap.h"
+#include "mmap_heap.h"
 
 #ifndef MADV_DONTDUMP
 #define MADV_DONTDUMP 0
@@ -137,6 +137,8 @@ public:
   void *arenaEnd() const {
     return reinterpret_cast<char *>(_arenaBegin) + kArenaSize;
   }
+
+  void doAfterForkChild();
 
 private:
   void expandArena(Length minPagesAdded);
@@ -253,7 +255,7 @@ private:
   inline void resetSpanMapping(const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
-    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, MAP_SHARED | MAP_FIXED, _fd, span.offset * kPageSize);
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset * kPageSize);
   }
 
   void prepareForFork();

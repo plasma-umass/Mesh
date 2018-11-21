@@ -2,41 +2,40 @@
 // Copyright 2017 University of Massachusetts, Amherst
 
 #pragma once
-#ifndef MESH__FREELIST_H
-#define MESH__FREELIST_H
+#ifndef MESH__SHUFFLE_VECTOR_H
+#define MESH__SHUFFLE_VECTOR_H
 
 #include <iterator>
 #include <random>
 #include <utility>
 
-// #include "rng/xoroshiro128plus.h"
 #include "rng/mwc.h"
 
 #include "internal.h"
 
-#include "miniheap.h"
+#include "mini_heap.h"
 
 using mesh::debug;
 
 namespace mesh {
 
-class Freelist {
+class ShuffleVector {
 private:
-  DISALLOW_COPY_AND_ASSIGN(Freelist);
+  DISALLOW_COPY_AND_ASSIGN(ShuffleVector);
 
 public:
-  Freelist() : _prng(internal::seed(), internal::seed()) {
+  ShuffleVector() : _prng(internal::seed(), internal::seed()) {
     // set initialized = false;
   }
 
-  ~Freelist() {
+  ~ShuffleVector() {
     detach();
   }
 
   // post: list has the index of all bits set to 1 in it, in a random order
   size_t init(internal::Bitmap &bitmap) {
     d_assert(_maxCount > 0);
-    d_assert_msg(_maxCount <= kMaxFreelistLength, "objCount? %zu <= %zu", _maxCount, kMaxFreelistLength);
+    d_assert_msg(_maxCount <= kMaxShuffleVectorLength, "objCount? %zu <= %zu", _maxCount, kMaxShuffleVectorLength);
 
     // off == maxCount means 'empty'
     _off = _maxCount;
@@ -64,12 +63,20 @@ public:
   }
 
   MiniHeap *detach() {
-    d_assert(_attachedMiniheap != nullptr);
     const auto mh = _attachedMiniheap;
     _attachedMiniheap = nullptr;
     _start = 0;
     _end = 0;
     return mh;
+  }
+
+  MiniHeap *refillAndDetach() {
+    while (_off < _maxCount) {
+      const auto off = pop();
+      _attachedMiniheap->freeOff(off);
+    }
+
+    return detach();
   }
 
   inline bool isExhausted() const {
@@ -176,22 +183,22 @@ public:
   }
 
 private:
-  uint32_t _objectSize{0};                              // 4   4
-  float _objectSizeReciprocal{0.0};                     // 4   8
-  uintptr_t _start{0};                                  // 8   16
-  uintptr_t _end{0};                                    // 8   24
-  MiniHeap *_attachedMiniheap{nullptr};                 // 8   32
-  MWC _prng;                                            // 36  68
-  uint16_t _maxCount{0};                                // 2   70
-  uint16_t _off{0};                                     // 2   72
-  volatile uint8_t _lastOff{0};                         // 1   73
-  uint8_t __padding[51];                                // 51  128
-  uint8_t _list[kMaxFreelistLength] CACHELINE_ALIGNED;  // 256 384
+  uint32_t _objectSize{0};                                   // 4   4
+  float _objectSizeReciprocal{0.0};                          // 4   8
+  uintptr_t _start{0};                                       // 8   16
+  uintptr_t _end{0};                                         // 8   24
+  MiniHeap *_attachedMiniheap{nullptr};                      // 8   32
+  MWC _prng;                                                 // 36  68
+  uint16_t _maxCount{0};                                     // 2   70
+  uint16_t _off{0};                                          // 2   72
+  volatile uint8_t _lastOff{0};                              // 1   73
+  uint8_t __padding[51];                                     // 51  128
+  uint8_t _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;  // 256 384
 };
 
-static_assert(HL::gcd<sizeof(Freelist), CACHELINE_SIZE>::value == CACHELINE_SIZE,
-              "Freelist not multiple of cacheline size!");
-static_assert(sizeof(Freelist) == 384, "Freelist not expected size!");
+static_assert(HL::gcd<sizeof(ShuffleVector), CACHELINE_SIZE>::value == CACHELINE_SIZE,
+              "ShuffleVector not multiple of cacheline size!");
+static_assert(sizeof(ShuffleVector) == 384, "ShuffleVector not expected size!");
 }  // namespace mesh
 
-#endif  // MESH__FREELIST_H
+#endif  // MESH__SHUFFLE_VECTOR_H

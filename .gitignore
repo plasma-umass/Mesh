@@ -4,6 +4,7 @@
 *.so
 *.pyc
 TAGS
+/src/config.h
 /src/test/fork-example
 /src/test/thread-example
 /unit.test

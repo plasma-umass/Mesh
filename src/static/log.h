@@ -1,4 +1,4 @@
-// -*- C++ -*-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 
 /**
  * @file   staticlog.h
@@ -8,12 +8,10 @@
  */
 
 #pragma once
-#ifndef MESH__STATICLOG_H
-#define MESH__STATICLOG_H
+#ifndef MESH__STATIC__LOG_H
+#define MESH__STATIC__LOG_H
 
-#include "staticif.h"
-
-#if __cplusplus > 199711L
+#include "if.h"
 
 int constexpr staticlog(int v) {
   return ((v == 1) ? 0 : (v == 2) ? 1 : (v > 1) ? staticlog(v / 2) + 1 : 0);
@@ -41,7 +39,5 @@ class StaticLog {
 public:
   enum { VALUE = StaticIf<(Number > 1), StaticLog<Number / 2>::VALUE + 1, 0>::VALUE };
 };
-
-#endif
 
 #endif

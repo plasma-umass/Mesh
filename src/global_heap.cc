@@ -40,6 +40,10 @@ void *GlobalHeap::malloc(size_t sz) {
 }
 
 void GlobalHeap::free(void *ptr) {
+  if (unlikely(ptr == nullptr)) {
+    return;
+  }
+
   auto mh = miniheapForLocked(ptr);
   if (unlikely(!mh)) {
     debug("FIXME: free of untracked ptr %p", ptr);
@@ -66,7 +70,7 @@ void GlobalHeap::free(void *ptr) {
     // global lock to synchronize with a concurrent mesh, and
     // re-update the bitmap
     lock_guard<mutex> lock(_miniheapLock);
-    auto mh = miniheapForLocked(ptr);
+    mh = miniheapForLocked(ptr);
     hard_assert(!mh->isMeshed());
     mh->free(arenaBegin(), ptr);
   }
@@ -86,8 +90,9 @@ void GlobalHeap::free(void *ptr) {
     flushBinLocked(sizeClass);
   }
 
-  if (shouldConsiderMesh)
+  if (shouldConsiderMesh) {
     maybeMesh();
+  }
 }
 
 int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {

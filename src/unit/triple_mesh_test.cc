@@ -11,9 +11,9 @@
 
 #include "gtest/gtest.h"
 
-#include "freelist.h"
 #include "internal.h"
 #include "runtime.h"
+#include "shuffle_vector.h"
 
 using namespace std;
 using namespace mesh;
@@ -72,7 +72,7 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   GlobalHeap &gheap = runtime().heap();
 
   // disable automatic meshing for this test
-  gheap.setMeshPeriodSecs(-1);
+  gheap.setMeshPeriodNs(std::chrono::nanoseconds{0});
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
@@ -119,7 +119,6 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
     gheap.free(f2);
     gheap.free(f3);
   }
-
 
   ASSERT_TRUE(!mh1->isAttached());
   ASSERT_TRUE(!mh2->isAttached());
@@ -252,6 +251,9 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
 }
 
 TEST(TripleMeshTest, MeshAll) {
+  if (!kMeshingEnabled) {
+    GTEST_SKIP();
+  }
   meshTestConcurrentWrite(false, false);
   meshTestConcurrentWrite(false, true);
   meshTestConcurrentWrite(true, false);

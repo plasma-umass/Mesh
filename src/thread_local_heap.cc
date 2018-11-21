@@ -8,15 +8,22 @@ namespace mesh {
 __thread ThreadLocalHeap::ThreadLocalData ThreadLocalHeap::_threadLocalData ATTR_INITIAL_EXEC CACHELINE_ALIGNED;
 
 ThreadLocalHeap *ThreadLocalHeap::CreateThreadLocalHeap() {
-  void *buf = mesh::internal::Heap().malloc(sizeof(ThreadLocalHeap) + 2 * CACHELINE_SIZE);
+  void *buf = mesh::internal::Heap().malloc(RoundUpToPage(sizeof(ThreadLocalHeap)));
   if (buf == nullptr) {
     mesh::debug("mesh: unable to allocate ThreadLocalHeap, aborting.\n");
     abort();
   }
 
-  void *alignedPtr = (void *)(((uintptr_t)buf + CACHELINE_SIZE - 1) & ~(CACHELINE_SIZE - 1));
+  // hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
-  return new (alignedPtr) ThreadLocalHeap(&mesh::runtime().heap());
+  return new (buf) ThreadLocalHeap(&mesh::runtime().heap());
+}
+
+void ThreadLocalHeap::releaseAll() {
+  for (size_t i = 1; i < kNumBins; i++) {
+    auto mh = _shuffleVector[i].refillAndDetach();
+    _global->releaseMiniheap(mh);
+  }
 }
 
 ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
@@ -28,16 +35,16 @@ ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
   return heap;
 }
 
-// we get here if the freelist is exhausted
+// we get here if the shuffleVector is exhausted
 void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
-  Freelist &freelist = _freelist[sizeClass];
+  ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
 
   MiniHeap *oldMH = nullptr;
   // we are in the slowlist because we couldn't allocate out of this
-  // freelist.  If there was an attached miniheap it is now full, so
+  // shuffleVector.  If there was an attached miniheap it is now full, so
   // detach it
-  if (likely(freelist.isAttached())) {
-    oldMH = freelist.detach();
+  if (likely(shuffleVector.isAttached())) {
+    oldMH = shuffleVector.detach();
   }
 
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
@@ -45,15 +52,15 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
   MiniHeap *mh = _global->allocSmallMiniheap(sizeClass, sizeMax, oldMH);
   d_assert(mh != nullptr);
 
-  freelist.attach(_global->arenaBegin(), mh);
+  shuffleVector.attach(_global->arenaBegin(), mh);
 
-  d_assert(freelist.isAttached());
-  d_assert(!freelist.isExhausted());
+  d_assert(shuffleVector.isAttached());
+  d_assert(!shuffleVector.isExhausted());
   d_assert(mh->isAttached());
 
-  void *ptr = freelist.malloc();
+  void *ptr = shuffleVector.malloc();
   d_assert(ptr != nullptr);
-  _last = &freelist;
+  _last = &shuffleVector;
 
   return ptr;
 }

@@ -9,23 +9,32 @@
 #include <cstdint>
 
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <map>
 #include <mutex>
 #include <random>
-#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
-#include "static/staticlog.h"
+#include "static/log.h"
+
+// from Heap Layers
 #include "utility/ilog2.h"
 
+#include "config.h"
+
 namespace mesh {
+static constexpr bool kMeshingEnabled = MESHING_ENABLED == 1;
+
+static constexpr int kMapShared = kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+
 static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;
 static constexpr size_t kClassSizesMax = 96;
@@ -59,20 +68,21 @@ static constexpr uint32_t kMinArenaExpansion = 4096;  // 16 MB in pages
 // ensures we amortize the cost of going to the global heap enough
 static constexpr size_t kMinStringLen = 8;
 
-// shuffle freelist features
-static constexpr size_t kMaxFreelistLength = sizeof(uint8_t) << 8;  // 256
-static constexpr bool kEnableShuffleOnFree = true;
-static constexpr bool kEnableShuffleOnInit = kEnableShuffleOnFree;
+// shuffle vector features
+static constexpr size_t kMaxShuffleVectorLength = 256;  // sizeof(uint8_t) << 8
+static constexpr bool kEnableShuffleOnInit = SHUFFLE_ON_INIT == 1;
+static constexpr bool kEnableShuffleOnFree = SHUFFLE_ON_FREE == 1;
 
 // madvise(DONTDUMP) the heap to make reasonable coredumps
 static constexpr bool kAdviseDump = false;
 
-static const double kMeshPeriodSecs = .1;
+static constexpr std::chrono::nanoseconds kZeroNs{0};
+static constexpr std::chrono::nanoseconds kMeshPeriodNs{100000000};  // 100 ms
 
 // controls aspects of miniheaps
 static constexpr size_t kMaxMeshes = 4;
 
-static constexpr size_t kArenaSize = 1UL << 33;       // 8 GB
+static constexpr size_t kArenaSize = 1UL << 33;       // 4 GB
 static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 #define SIGDUMP (SIGRTMIN + 8)
@@ -80,6 +90,27 @@ static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
 // BinnedTracker
 static constexpr size_t kBinnedTrackerBinCount = 4;
 static constexpr size_t kBinnedTrackerMaxEmpty = 128;
+
+static inline constexpr size_t PageCount(size_t sz) {
+  return (sz + (kPageSize - 1)) / kPageSize;
+}
+
+static inline constexpr size_t RoundUpToPage(size_t sz) {
+  return kPageSize * PageCount(sz);
+}
+
+namespace powerOfTwo {
+static constexpr size_t kMinObjectSize = 8;
+
+inline constexpr size_t ByteSizeForClass(const int i) {
+  return static_cast<size_t>(1ULL << (i + staticlog(kMinObjectSize)));
+}
+
+inline constexpr int ClassForByteSize(const size_t sz) {
+  return static_cast<int>(HL::ilog2((sz < 8) ? 8 : sz) - staticlog(kMinObjectSize));
+}
+}  // namespace powerOfTwo
+
 }  // namespace mesh
 
 using std::condition_variable;
@@ -87,8 +118,8 @@ using std::function;
 using std::lock_guard;
 using std::mt19937_64;
 using std::mutex;
-using std::shared_lock;
-using std::shared_mutex;
+// using std::shared_lock;
+// using std::shared_mutex;
 using std::unique_lock;
 
 #define likely(x) __builtin_expect(!!(x), 1)

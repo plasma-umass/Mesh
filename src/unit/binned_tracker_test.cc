@@ -4,10 +4,9 @@
 #include <cstdint>
 #include <cstdlib>
 
-#include "binnedtracker.h"
+#include "binned_tracker.h"
 
 #include "gtest/gtest.h"
-
 
 using namespace mesh;
 using namespace mesh::internal;
@@ -17,7 +16,7 @@ TEST(BinnedTracker, Tests) {
 
   ASSERT_FALSE(token.valid());
 
-  ASSERT_NE(BinToken::FlagFull, BinToken::FlagEmpty);
+  ASSERT_NE(bintoken::FlagFull, bintoken::FlagEmpty);
 
   ASSERT_FALSE(BinToken::Full().valid());
 

@@ -9,8 +9,6 @@
 #include <string>
 #include <vector>
 
-#include <gflags/gflags.h>
-
 #include "measure_rss.h"
 
 void print_rss() {
@@ -30,8 +28,6 @@ using std::string;
 #define MESH_MARKER (7305126540297948313)
 #define MB (1024 * 1024)
 #define GB (1024 * 1024 * 1024)
-
-DEFINE_bool(v, false, "verbose debugging output");
 
 void *NOINLINE bench_alloc(size_t n) {
   volatile void *ptr = malloc(n);
@@ -110,12 +106,6 @@ void NOINLINE basic_fragment(int64_t n, size_t m_total) {
 }
 
 int main(int argc, char *argv[]) {
-  string usage("Fragment memory.  Sample usage:\n");
-  usage += argv[0];
-  usage += "\n";
-  gflags::SetUsageMessage(usage);
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
-
   print_rss();
 
   basic_fragment(512, 128 * MB);

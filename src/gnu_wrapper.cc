@@ -75,5 +75,5 @@ WEAK_REDEF2(void *, aligned_alloc, size_t, size_t);
 WEAK_REDEF1(size_t, malloc_usable_size, void *);
 }
 
-#include "wrapper.cpp"
+#include "wrapper.cc"
 #include "wrappers/gnuwrapper-hooks.cpp"

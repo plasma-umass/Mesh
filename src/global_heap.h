@@ -8,15 +8,13 @@
 #include <algorithm>
 #include <mutex>
 
-#include "binnedtracker.h"
+#include "binned_tracker.h"
 #include "internal.h"
-#include "meshable-arena.h"
+#include "meshable_arena.h"
 #include "meshing.h"
-#include "miniheap.h"
+#include "mini_heap.h"
 
 #include "heaplayers.h"
-
-#include "gtest/gtest_prod.h"
 
 using namespace HL;
 
@@ -58,6 +56,12 @@ public:
 
     for (size_t i = 0; i < kNumBins; i++) {
       _littleheaps[i].printOccupancy();
+    }
+  }
+
+  inline void flushAllBins() {
+    for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
+      flushBinLocked(sizeClass);
     }
   }
 
@@ -112,6 +116,20 @@ public:
     return ptr;
   }
 
+  inline void releaseMiniheapLocked(MiniHeap *mh, int sizeClass) {
+    mh->unsetAttached();
+    _littleheaps[sizeClass].postFree(mh, mh->inUseCount());
+  }
+
+  inline void releaseMiniheap(MiniHeap *mh) {
+    if (mh == nullptr) {
+      return;
+    }
+
+    lock_guard<mutex> lock(_miniheapLock);
+    releaseMiniheapLocked(mh, mh->sizeClass());
+  }
+
   inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize, MiniHeap *oldMH) {
     lock_guard<mutex> lock(_miniheapLock);
 
@@ -119,8 +137,7 @@ public:
 
     // ensure this flag is always set with the miniheap lock held
     if (oldMH != nullptr) {
-      oldMH->unsetAttached();
-      _littleheaps[sizeClass].postFree(oldMH, oldMH->inUseCount());
+      releaseMiniheapLocked(oldMH, sizeClass);
     }
 
     d_assert(objectSize <= _maxObjectSize);
@@ -192,7 +209,7 @@ public:
     }
 
     mh->MiniHeap::~MiniHeap();
-    memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
+    // memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
     _mhAllocator.free(mh);
     _miniheapCount--;
   }
@@ -267,8 +284,8 @@ public:
     return _miniheapCount;
   }
 
-  void setMeshPeriodSecs(double period) {
-    _meshPeriodSecs = period;
+  void setMeshPeriodNs(std::chrono::nanoseconds period) {
+    _meshPeriodNs = period;
   }
 
   void lock() {
@@ -315,17 +332,25 @@ public:
     untrackMiniheapLocked(src);
   }
 
-  inline void maybeMesh() {
-    if (_meshPeriod == 0)
+  inline void ATTRIBUTE_ALWAYS_INLINE maybeMesh() {
+    if (!kMeshingEnabled) {
       return;
+    }
+
+    if (_meshPeriod == 0) {
+      return;
+    }
+
+    if (_meshPeriodNs == kZeroNs) {
+      return;
+    }
 
     const auto now = std::chrono::high_resolution_clock::now();
-    const std::chrono::duration<double> duration = now - _lastMesh;
+    auto duration = chrono::duration_cast<chrono::nanoseconds>(now - _lastMesh);
 
-    if (unlikely(_meshPeriodSecs <= 0))
+    if (likely(duration < _meshPeriodNs)) {
       return;
-    if (likely(duration.count() < _meshPeriodSecs))
-      return;
+    }
 
     lock_guard<mutex> lock(_miniheapLock);
 
@@ -334,9 +359,9 @@ public:
       // time, the second one bows out gracefully without meshing
       // twice in a row.
       const auto lockedNow = std::chrono::high_resolution_clock::now();
-      const std::chrono::duration<double> duration = lockedNow - _lastMesh;
+      auto duration = chrono::duration_cast<chrono::nanoseconds>(lockedNow - _lastMesh);
 
-      if (unlikely(duration.count() < _meshPeriodSecs)) {
+      if (unlikely(duration < _meshPeriodNs)) {
         return;
       }
     }
@@ -379,7 +404,7 @@ private:
 
   GlobalHeapStats _stats{};
 
-  double _meshPeriodSecs{kMeshPeriodSecs};
+  std::chrono::nanoseconds _meshPeriodNs{kMeshPeriodNs};
   // XXX: should be atomic, but has exception spec?
   std::chrono::time_point<std::chrono::high_resolution_clock> _lastMesh;
 };

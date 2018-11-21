@@ -1,4 +1,4 @@
-// -*- C++ -*-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 
 /**
  * @file   staticif.h
@@ -8,10 +8,8 @@
  */
 
 #pragma once
-#ifndef MESH__STATICIF_H
-#define MESH__STATICIF_H
-
-#if __cplusplus > 199711L
+#ifndef MESH__STATIC__IF_H
+#define MESH__STATIC__IF_H
 
 template <class TYPE>
 TYPE constexpr staticif(bool v, TYPE a, TYPE b) {
@@ -34,7 +32,5 @@ class StaticIf<false, a, b> {
 public:
   enum { VALUE = b };
 };
-
-#endif
 
 #endif

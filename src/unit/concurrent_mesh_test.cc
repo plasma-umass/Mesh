@@ -1,29 +1,67 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright 2017 University of Massachusetts, Amherst
 
+#include <sched.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+#include <atomic>
+#include <mutex>
+#include <thread>
 
 #include "gtest/gtest.h"
 
 #include "internal.h"
 #include "runtime.h"
+#include "shuffle_vector.h"
 
+using namespace std;
 using namespace mesh;
 
 static constexpr size_t StrLen = 128;
 static constexpr size_t ObjCount = 32;
+
+static char *s1;
+static char *s2;
+
+static atomic<int> ShouldExit;
+static atomic<int> ShouldContinueTest;
+
+// we need to wrap pthread_create so that we can safely implement a
+// stop-the-world quiescent period for the copy/mremap phase of
+// meshing -- copied from libmesh.cc
+extern "C" int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg) {
+  return mesh::runtime().createThread(thread, attr, startRoutine, arg);
+}
+
+static void writerThread() {
+  ShouldContinueTest = 1;
+
+  for (size_t i = 1; i < numeric_limits<uint64_t>::max(); i++) {
+    if (i % 1000000 == 0 && ShouldExit)
+      return;
+
+    s1[0] = 'A';
+    s2[0] = 'Z';
+  }
+
+  debug("loop ended before ShouldExit\n");
+}
 
 // shows up in strace logs, but otherwise does nothing
 static inline void note(const char *note) {
   int _ __attribute__((unused)) = write(-1, note, strlen(note));
 }
 
-static void meshTest(bool invert) {
+static void meshTestConcurrentWrite(bool invert) {
+  if (!kMeshingEnabled) {
+    GTEST_SKIP();
+  }
+
   GlobalHeap &gheap = runtime().heap();
 
   // disable automatic meshing for this test
-  gheap.setMeshPeriodSecs(-1);
+  gheap.setMeshPeriodNs(std::chrono::nanoseconds{0});
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
@@ -38,12 +76,9 @@ static void meshTest(bool invert) {
   ASSERT_EQ(mh1->maxCount(), mh2->maxCount());
   ASSERT_EQ(mh1->maxCount(), ObjCount);
 
-  ASSERT_EQ(mh1->bitmap().inUseCount(), 0UL);
-  ASSERT_EQ(mh2->bitmap().inUseCount(), 0UL);
-
   // allocate two c strings, one from each miniheap at different offsets
-  char *s1 = reinterpret_cast<char *>(mh1->mallocAt(gheap.arenaBegin(), 0));
-  char *s2 = reinterpret_cast<char *>(mh2->mallocAt(gheap.arenaBegin(), ObjCount - 1));
+  s1 = reinterpret_cast<char *>(mh1->mallocAt(gheap.arenaBegin(), 0));
+  s2 = reinterpret_cast<char *>(mh2->mallocAt(gheap.arenaBegin(), ObjCount - 1));
 
   ASSERT_TRUE(s1 != nullptr);
   ASSERT_TRUE(s2 != nullptr);
@@ -63,14 +98,16 @@ static void meshTest(bool invert) {
   ASSERT_EQ(mh1->inUseCount(), 1UL);
   ASSERT_EQ(mh2->inUseCount(), 1UL);
 
-  ASSERT_EQ(mh1->bitmap().inUseCount(), 1UL);
-  ASSERT_EQ(mh2->bitmap().inUseCount(), 1UL);
-
   if (invert) {
     MiniHeap *tmp = mh1;
     mh1 = mh2;
     mh2 = tmp;
   }
+
+  thread writer(writerThread);
+
+  while (ShouldContinueTest != 1)
+    sched_yield();
 
   const auto bitmap1 = mh1->bitmap().bits();
   const auto bitmap2 = mh2->bitmap().bits();
@@ -96,12 +133,13 @@ static void meshTest(bool invert) {
   char *s3 = s1 + (ObjCount - 1) * StrLen;
   ASSERT_STREQ(s2, s3);
 
+  ShouldExit = 1;
+  writer.join();
+
   // modify the second string, ensure the modification shows up on
   // string 3 (would fail if the two miniheaps weren't meshed)
   s2[0] = 'b';
   ASSERT_EQ(s3[0], 'b');
-
-  ASSERT_EQ(mh1->meshCount(), 2);
 
   // now free the objects by going through the global heap -- it
   // should redirect both objects to the same miniheap
@@ -121,10 +159,10 @@ static void meshTest(bool invert) {
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 }
 
-TEST(MeshTest, TryMesh) {
-  meshTest(false);
+TEST(ConcurrentMeshTest, TryMesh) {
+  meshTestConcurrentWrite(false);
 }
 
-TEST(MeshTest, TryMeshInverse) {
-  meshTest(true);
+TEST(ConcurrentMeshTest, TryMeshInverse) {
+  meshTestConcurrentWrite(true);
 }
