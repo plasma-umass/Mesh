@@ -12,11 +12,11 @@ ifeq ($(OS),Windows_NT)
     LIB = libmesh.dll
 else
     UNAME_S := $(shell uname -s)
-    UNAME_P := $(shell uname -p)
     ifeq ($(UNAME_S),Darwin)
-	LIB              = libmesh.dylib
+	LIB        = libmesh.dylib
     else
-	LIB              = libmesh.so
+	LIB        = libmesh$(LIB_SUFFIX).so
+	SHARED_LIB = $(LIB)
     endif
 endif
 
@@ -24,7 +24,7 @@ PREFIX = /usr
 
 ARCH             = x86_64
 
-COMMON_SRCS      = src/thread_local_heap.cc src/global_heap.cc src/runtime.cc src/real.cc src/meshable-arena.cc src/d_assert.cc src/measure_rss.cc
+COMMON_SRCS      = src/thread_local_heap.cc src/global_heap.cc src/runtime.cc src/real.cc src/meshable_arena.cc src/d_assert.cc src/measure_rss.cc
 
 LIB_SRCS         = $(COMMON_SRCS) src/libmesh.cc
 LIB_OBJS         = $(addprefix build/,$(patsubst %.c,%.o,$(patsubst %.S,%.o,$(LIB_SRCS:.cc=.o))))
@@ -51,15 +51,10 @@ ALL_OBJS         = $(LIB_OBJS) $(UNIT_OBJS) $(BENCH_OBJS) $(FRAG_OBJS)
 # reference files in each subproject to ensure git fully checks the project out
 HEAP_LAYERS      = src/vendor/Heap-Layers/heaplayers.h
 GTEST            = src/vendor/googletest/googletest/include/gtest/gtest.h
-GFLAGS           = src/vendor/gflags/CMakeLists.txt
-
-GFLAGS_BUILD_DIR = build/src/vendor/gflags
-GFLAGS_BUILD     = $(GFLAGS_BUILD_DIR)/Makefile
-GFLAGS_LIB       = $(GFLAGS_BUILD_DIR)/lib/libgflags.a
 
 COV_DIR          = coverage
 
-ALL_SUBMODULES   = $(HEAP_LAYERS) $(GTEST) $(GFLAGS)
+ALL_SUBMODULES   = $(HEAP_LAYERS) $(GTEST)
 
 CONFIG           = Makefile config.mk
 
@@ -71,9 +66,9 @@ MAKEFLAGS       += -s
 endif
 
 .SUFFIXES:
-.SUFFIXES: .cc .cpp .S .c .o .d .test
+.SUFFIXES: .cc .c .o .d .test
 
-all: test $(BENCH_BIN) $(LIB) $(FRAG_BIN)
+all: test $(LIB) $(FRAG_BIN)
 
 build:
 	mkdir -p build
@@ -96,17 +91,6 @@ $(ALL_SUBMODULES):
 	git submodule update --init
 	touch -c $@
 
-$(GFLAGS_BUILD): $(GFLAGS) $(CONFIG)
-	@echo "  CMAKE $@"
-	mkdir -p $(GFLAGS_BUILD_DIR)
-	cd $(GFLAGS_BUILD_DIR) && CC=$(CC) CXX=$(CXX) cmake $(realpath $(dir $(GFLAGS)))
-	touch -c $(GFLAGS_BUILD)
-
-$(GFLAGS_LIB): $(GFLAGS_BUILD) $(CONFIG)
-	@echo "  LD    $@"
-	cd $(GFLAGS_BUILD_DIR) && $(MAKE)
-	touch -c $@
-
 build/src/vendor/googletest/%.o: src/vendor/googletest/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
@@ -119,7 +103,7 @@ build/src/%.o: src/%.c build $(CONFIG)
 	@echo "  CC    $@"
 	$(CC) $(CFLAGS) -MMD -o $@ -c $<
 
-build/src/%.o: src/%.cc build $(CONFIG) $(GFLAGS_LIB)
+build/src/%.o: src/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(CXXFLAGS) -MMD -o $@ -c $<
 
@@ -127,7 +111,7 @@ build/src/unit/%.o: src/unit/%.cc build $(CONFIG)
 	@echo "  CXX   $@"
 	$(CXX) $(UNIT_CXXFLAGS) -MMD -o $@ -c $<
 
-libmesh.so: $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
+$(SHARED_LIB): $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
 	@echo "  LD    $@"
 	$(CXX) -shared $(LDFLAGS) -o $@ $(LIB_OBJS) $(LIBS)
 
@@ -135,13 +119,13 @@ libmesh.dylib: $(HEAP_LAYERS) $(LIB_OBJS) $(CONFIG)
 	@echo "  LD    $@"
 	$(CXX) -compatibility_version 1 -current_version 1 -dynamiclib $(LDFLAGS) -o $@ $(LIB_OBJS) $(LIBS)
 
-$(BENCH_BIN): $(HEAP_LAYERS) $(GFLAGS_LIB) $(BENCH_OBJS) $(CONFIG)
+$(BENCH_BIN): $(HEAP_LAYERS) $(BENCH_OBJS) $(CONFIG)
 	@echo "  LD    $@"
-	$(CXX) $(LDFLAGS) -o $@ $(BENCH_OBJS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
+	$(CXX) $(LDFLAGS) -o $@ $(BENCH_OBJS) $(LIBS)
 
 $(FRAG_BIN): $(GFLAGS_LIB) $(FRAG_OBJS) $(CONFIG)
 	@echo "  LD    $@"
-	$(CXX) $(LDFLAGS) -o $@ $(FRAG_OBJS) $(LIBS) -L$(GFLAGS_BUILD_DIR)/lib -lgflags
+	$(CXX) $(LDFLAGS) -o $@ $(FRAG_OBJS) $(LIBS)
 
 $(UNIT_BIN): $(CONFIG) $(UNIT_OBJS)
 	@echo "  LD    $@"
@@ -155,6 +139,8 @@ install: $(LIB)
 	ldconfig
 	mkdir -p $(PREFIX)/include/plasma
 	install -c -m 0755 src/plasma/mesh.h $(PREFIX)/include/plasma/mesh.h
+
+lib: $(LIB)
 
 paper:
 	$(MAKE) -C paper
@@ -195,19 +181,18 @@ run: $(LIB) src/test/fork-example
 	src/test/fork-example
 
 format:
-	clang-format -i src/*.cc src/*.h
+	clang-format -i src/*.cc src/*.c src/*.h  src/plasma/*.h src/rng/*.h src/static/*.h src/test/*.cc src/test/*.cc src/unit/*.cc
 
 endif
 
 clean:
 	rm -f src/test/fork-example
-	rm -f $(UNIT_BIN) $(BENCH_BIN) $(LIB)
+	rm -f $(UNIT_BIN) $(BENCH_BIN) $(FRAG_BIN) $(LIB)
 	find . -name '*~' -print0 | xargs -0 rm -f
 	rm -rf build
 
 
 distclean: clean
-	rm -rf $(GFLAGS_BUILD_DIR)
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
@@ -216,4 +201,4 @@ TAGS:
 
 -include $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean distclean format test test_frag check install paper run TAGS
+.PHONY: all clean distclean format test test_frag check lib install paper run TAGS
