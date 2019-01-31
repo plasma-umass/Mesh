@@ -37,11 +37,12 @@ namespace mesh {
 static constexpr bool kMeshingEnabled = MESHING_ENABLED == 1;
 
 #if defined(_WIN32)
-  static constexpr int kMapShared = 1; // FIXME EDB kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+// FIXME(EDB)
+static constexpr int kMapShared = 1;
 #else
-  static constexpr int kMapShared = kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+static constexpr int kMapShared = kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
 #endif
-  
+
 static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;
 static constexpr size_t kClassSizesMax = 96;
