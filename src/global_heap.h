@@ -221,8 +221,10 @@ public:
 
   void freeMiniheapLocked(MiniHeap *&mh, bool untrack) {
     const auto spanSize = mh->spanSize();
-    MiniHeap *toFree[kMaxMeshes] = {0, 0, 0, 0};
+    MiniHeap *toFree[kMaxMeshes];
     size_t last = 0;
+
+    memset(toFree, 0, sizeof(*toFree) * kMaxMeshes);
 
     // avoid use after frees while freeing
     mh->forEachMeshed([&](MiniHeap *mh) {
@@ -301,8 +303,9 @@ public:
   // PUBLIC ONLY FOR TESTING
   // after call to meshLocked() completes src is a nullptr
   void meshLocked(MiniHeap *dst, MiniHeap *&src) {
-    if (dst->meshCount() + src->meshCount() > kMaxMeshes)
+    if (dst->meshCount() + src->meshCount() > kMaxMeshes) {
       return;
+    }
 
     const size_t dstSpanSize = dst->spanSize();
     const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart(arenaBegin()));
