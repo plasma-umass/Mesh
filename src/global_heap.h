@@ -174,7 +174,7 @@ public:
   }
 
   // large, page-multiple allocations
-  void *malloc(size_t sz);
+  void *ATTRIBUTE_NEVER_INLINE malloc(size_t sz);
 
   inline MiniHeap *miniheapForLocked(const void *ptr) const {
     auto mh = reinterpret_cast<MiniHeap *>(Super::lookupMiniheap(ptr));
@@ -251,7 +251,7 @@ public:
     }
   }
 
-  void free(void *ptr);
+  void ATTRIBUTE_NEVER_INLINE free(void *ptr);
 
   inline size_t getSize(void *ptr) const {
     if (unlikely(ptr == nullptr))
