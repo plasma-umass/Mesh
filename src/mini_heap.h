@@ -393,7 +393,7 @@ protected:
 
   internal::Bitmap _bitmap;  // 32 bytes 32
   internal::BinToken _token{
-      internal::bintoken::Max,
+      internal::bintoken::BinMax,
       internal::bintoken::Max,
   };                                  // 8        40
   const Span _span;                   // 8        48
@@ -403,6 +403,7 @@ protected:
   MiniHeapID _nextMiniHeap{};         // 4        64
 };
 
+static_assert(sizeof(pid_t) == 4, "pid_t not 32-bits!");
 static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
 }  // namespace mesh

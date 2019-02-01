@@ -222,11 +222,15 @@ void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RN
 // ideally these would be static constants on BinToken, but that
 // requires C++17
 namespace bintoken {
-static constexpr uint32_t Max = numeric_limits<uint32_t>::max();
-static constexpr uint32_t MinFlags = numeric_limits<uint32_t>::max() - 4;
-static constexpr uint32_t FlagFull = numeric_limits<uint32_t>::max() - 1;
-static constexpr uint32_t FlagEmpty = numeric_limits<uint32_t>::max() - 2;
-static constexpr uint32_t FlagNoOff = numeric_limits<uint32_t>::max();
+static constexpr uint8_t BinMax = (1 << 3) - 1;
+static constexpr uint32_t Max = (1 << 28) - 1;
+static constexpr uint32_t MinFlags = Max - 1;
+static constexpr uint8_t FlagFull = (1 << 3) - 2;
+static constexpr uint8_t FlagEmpty = (1 << 3) - 3;
+static constexpr uint32_t FlagNoOff = (1 << 28) - 1;
+
+static_assert(FlagFull > kBinnedTrackerBinCount, "Full flag too small");
+static_assert(FlagEmpty > kBinnedTrackerBinCount, "Full flag too small");
 }  // namespace bintoken
 
 // BinTokens are stored on MiniHeaps and used by the BinTracker to
@@ -235,17 +239,18 @@ static constexpr uint32_t FlagNoOff = numeric_limits<uint32_t>::max();
 // internal allocations and indirections.
 class BinToken {
 public:
+  typedef uint8_t Bin;
   typedef uint32_t Size;
 
-  BinToken() noexcept : _bin(bintoken::Max), _off(bintoken::Max) {
+  BinToken() noexcept : _bin(bintoken::BinMax), _off(bintoken::Max) {
   }
 
-  BinToken(Size bin, Size off) noexcept : _bin(bin), _off(off) {
+  BinToken(Bin bin, Size off) noexcept : _bin(bin), _off(off) {
   }
 
   // whether this is a valid token, or just a default initialized one
   bool valid() const {
-    return _bin < bintoken::Max && _off < bintoken::Max;
+    return _bin < bintoken::BinMax && _off < bintoken::Max;
   }
 
   bool flagOk() const {
@@ -264,7 +269,7 @@ public:
     return BinToken{_bin, newOff};
   }
 
-  Size bin() const {
+  Bin bin() const {
     return _bin;
   }
 
@@ -273,11 +278,11 @@ public:
   }
 
 private:
-  Size _bin;
-  Size _off;
+  Bin _bin : 4;
+  Size _off : 28;
 };
 
-static_assert(sizeof(BinToken) == 8, "BinToken too big!");
+static_assert(sizeof(BinToken) == 4, "BinToken too big!");
 }  // namespace internal
 }  // namespace mesh
 

@@ -133,6 +133,7 @@ using std::unique_lock;
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#define ATTRIBUTE_PACKED __attribute__((packed))
 #define ATTRIBUTE_NEVER_INLINE __attribute__((noinline))
 #define ATTRIBUTE_ALWAYS_INLINE __attribute__((always_inline))
 #define ATTRIBUTE_HIDDEN __attribute__((visibility("hidden")))
