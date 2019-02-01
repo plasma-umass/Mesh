@@ -177,7 +177,6 @@ public:
 
   inline MiniHeap *miniheapForLocked(const void *ptr) const {
     auto mh = reinterpret_cast<MiniHeap *>(Super::lookupMiniheap(ptr));
-    __builtin_prefetch(mh, 1, 2);
     return mh;
   }
 
