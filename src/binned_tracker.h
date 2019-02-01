@@ -43,33 +43,6 @@ public:
     return _objectSize;
   }
 
-#if 0
-  MiniHeap *selectForReuse() {
-    std::lock_guard<std::mutex> lock(_mutex);
-
-    const auto partialCount = partialSize();
-
-    // no partial miniheaps means we should reuse an empty span
-    if (partialCount == 0) {
-      if (_empty.size() == 0)
-        return nullptr;
-
-      return popRandomLocked(_empty);
-    }
-
-    const size_t off = _fastPrng(0, partialCount - 1);
-
-    size_t count = 0;
-    for (size_t i = 0; i < kBinnedTrackerBinCount; i++) {
-      count += _partial[i].size();
-      if (off < count)
-        return popRandomLocked(_partial[i]);
-    }
-
-    mesh::debug("selectForReuse: should be unreachable");
-    return nullptr;
-  }
-#else
   MiniHeap *selectForReuse() {
     std::lock_guard<std::mutex> lock(_mutex);
 
@@ -97,7 +70,6 @@ public:
 
     return nullptr;
   }
-#endif
 
   internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {
     std::lock_guard<std::mutex> lock(_mutex);
