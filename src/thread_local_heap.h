@@ -9,6 +9,8 @@
 #include <stdalign.h>
 #endif
 
+#include <sys/types.h>
+
 #include <algorithm>
 #include <atomic>
 
@@ -40,8 +42,9 @@ public:
   enum { Alignment = 16 };
 
   ThreadLocalHeap(GlobalHeap *global)
-      : _prng(internal::seed(), internal::seed()),
-        _global(global),
+      : _global(global),
+        _current(gettid()),
+        _prng(internal::seed(), internal::seed()),
         _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)) {
     // when asked, give 16-byte allocations for 0-byte requests
     _shuffleVector[0].setObjectSize(SizeMap::ByteSizeForClass(1));
@@ -185,12 +188,12 @@ public:
     }
 
     auto mh = _global->miniheapForLocked(ptr);
-    if (likely(mh) && mh->maxCount() > 1) {
+    if (likely(mh) && mh->current() == _current) {
       ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
       // ShuffleVectors only refer to the first virtual span of a Miniheap.
       // Re-check contains() here to catch the case of a free for a
       // non-primary-span allocation.
-      if (likely(shuffleVector.getAttached() == mh && shuffleVector.contains(ptr))) {
+      if (likely(shuffleVector.contains(ptr))) {
         d_assert(mh->isAttached());
         _last = &shuffleVector;
         shuffleVector.free(ptr);
@@ -262,8 +265,9 @@ public:
 protected:
   ShuffleVector _shuffleVector[kNumBins] CACHELINE_ALIGNED;
   ShuffleVector *_last{nullptr};
-  MWC _prng;
   GlobalHeap *_global;
+  pid_t _current{0};
+  MWC _prng;
   const size_t _maxObjectSize;
   LocalHeapStats _stats{};
 

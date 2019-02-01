@@ -49,7 +49,7 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
 
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
-  MiniHeap *mh = _global->allocSmallMiniheap(sizeClass, sizeMax, oldMH);
+  MiniHeap *mh = _global->allocSmallMiniheap(sizeClass, sizeMax, oldMH, _current);
   d_assert(mh != nullptr);
 
   shuffleVector.attach(_global->arenaBegin(), mh);

@@ -226,11 +226,17 @@ public:
     _flags.setMeshed();
   }
 
-  inline void setAttached() {
+  inline void setAttached(pid_t current) {
+    _current = current;
     _flags.setAttached();
   }
 
+  inline pid_t current() const {
+    return _current;
+  }
+
   inline void unsetAttached() {
+    _current = 0;
     _flags.unsetAttached();
   }
 
@@ -395,7 +401,8 @@ protected:
   internal::BinToken _token{
       internal::bintoken::BinMax,
       internal::bintoken::Max,
-  };                                  // 8        40
+  };                                  // 4        36
+  pid_t _current{0};                  // 4        40
   const Span _span;                   // 8        48
   Flags _flags;                       // 4        52
   const uint32_t _objectSize;         // 4        56

@@ -69,6 +69,7 @@ static inline void note(const char *note) {
 }
 
 static void meshTestConcurrentWrite(bool invert1, bool invert2) {
+  const auto tid = gettid();
   GlobalHeap &gheap = runtime().heap();
 
   // disable automatic meshing for this test
@@ -77,9 +78,9 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
   // allocate two miniheaps for the same object size from our global heap
-  MiniHeap *mh1 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
-  MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
-  MiniHeap *mh3 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
+  MiniHeap *mh1 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr, tid);
+  MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr, tid);
+  MiniHeap *mh3 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr, tid);
 
   const auto sizeClass = mh1->sizeClass();
   ASSERT_EQ(SizeMap::SizeClass(StrLen), sizeClass);

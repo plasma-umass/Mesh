@@ -24,6 +24,7 @@ static void meshTest(bool invert) {
     GTEST_SKIP();
   }
 
+  const auto tid = gettid();
   GlobalHeap &gheap = runtime().heap();
 
   // disable automatic meshing for this test
@@ -32,8 +33,8 @@ static void meshTest(bool invert) {
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
   // allocate two miniheaps for the same object size from our global heap
-  MiniHeap *mh1 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
-  MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr);
+  MiniHeap *mh1 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr, tid);
+  MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr, tid);
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 2UL);
 

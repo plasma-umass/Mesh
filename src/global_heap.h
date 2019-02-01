@@ -129,7 +129,7 @@ public:
     releaseMiniheapLocked(mh, mh->sizeClass());
   }
 
-  inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize, MiniHeap *oldMH) {
+  inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize, MiniHeap *oldMH, pid_t current) {
     lock_guard<mutex> lock(_miniheapLock);
 
     d_assert(sizeClass >= 0);
@@ -155,7 +155,7 @@ public:
     if (existing != nullptr) {
       d_assert(!existing->isMeshed());
       d_assert(!existing->isAttached());
-      existing->setAttached();
+      existing->setAttached(current);
       return existing;
     }
 
@@ -168,7 +168,7 @@ public:
 
     auto mh = allocMiniheapLocked(sizeClass, pageCount, objectCount, objectSize);
     d_assert(!mh->isAttached());
-    mh->setAttached();
+    mh->setAttached(current);
     return mh;
   }
 

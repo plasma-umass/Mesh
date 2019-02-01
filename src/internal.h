@@ -5,6 +5,11 @@
 #ifndef MESH__INTERNAL_H
 #define MESH__INTERNAL_H
 
+#ifdef __linux__
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
+
 #include <atomic>
 #include <unordered_set>
 
@@ -21,6 +26,12 @@
 #include "heaplayers.h"
 
 #include "partitioned_heap.h"
+
+#ifdef __linux__
+inline pid_t gettid(void) {
+  return syscall(__NR_gettid);
+}
+#endif
 
 namespace mesh {
 
