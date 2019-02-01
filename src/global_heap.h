@@ -46,7 +46,6 @@ public:
 
   GlobalHeap()
       : _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)),
-        _prng(internal::seed()),
         _fastPrng(internal::seed(), internal::seed()),
         _lastMesh{std::chrono::high_resolution_clock::now()} {
   }
@@ -398,7 +397,6 @@ private:
   // always accessed with the mhRWLock exclusively locked
   size_t _miniheapCount{0};
 
-  mt19937_64 _prng;
   MWC _fastPrng;
 
   BinnedTracker<MiniHeap> _littleheaps[kNumBins];
