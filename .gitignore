@@ -28,6 +28,8 @@ __pycache__
 /src/test/big-alloc-hoard
 /src/test/local-alloc-hoard
 /src/test/local-alloc-tcmalloc
+/src/test/local-alloc-jemalloc
+/src/test/local-alloc-mesh
 /test/docker/*/mstatgcc
 /test/docker/*/mstat
 /test/spec/data
