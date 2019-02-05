@@ -28,18 +28,43 @@ private:
   static inline constexpr uint32_t ATTRIBUTE_ALWAYS_INLINE getMask(uint32_t pos) {
     return 1UL << pos;
   }
-  static constexpr uint32_t MeshedOffset = 16;
-  static constexpr uint32_t AttachedOffset = 24;
+  static constexpr uint32_t MeshedOffset = 30;
+  static constexpr uint32_t AttachedOffset = 29;
+  static constexpr uint32_t MaxCountShift = 16;
+  static constexpr uint32_t SizeClassShift = 0;
+  static constexpr uint32_t ShuffleVectorOffsetShift = 8;
 
 public:
-  explicit Flags(uint32_t maxCount) noexcept : _flags{maxCount} {
+  explicit Flags(uint32_t maxCount, uint32_t sizeClass, uint32_t svOffset) noexcept
+      : _flags{(maxCount << MaxCountShift) + (sizeClass << SizeClassShift) + (svOffset << ShuffleVectorOffsetShift)} {
+    d_assert(svOffset < 255);
+    d_assert_msg(sizeClass < 255, "sizeClass: %u", sizeClass);
     d_assert(maxCount <= 256);
     d_assert(this->maxCount() == maxCount);
   }
 
   inline uint32_t maxCount() const {
     // XXX: does this assume little endian?
-    return _flags.load(std::memory_order_relaxed) & 0x1ff;
+    return (_flags.load(std::memory_order_relaxed) >> MaxCountShift) & 0x1ff;
+  }
+
+  inline uint32_t sizeClass() const {
+    return (_flags.load(std::memory_order_relaxed) >> SizeClassShift) & 0xff;
+  }
+
+  inline uint32_t svOffset() const {
+    return (_flags.load(std::memory_order_relaxed) >> ShuffleVectorOffsetShift) & 0xff;
+  }
+
+  inline void setSvOffset(uint32_t off) {
+    d_assert(off < 255);
+    uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(&_flags,
+                                                  &oldFlags,                  // old val
+                                                  (oldFlags & ~0xff) | off,   // new val
+                                                  std::memory_order_release,  // success mem model
+                                                  std::memory_order_relaxed)) {
+    }
   }
 
   inline void setAttached() {
@@ -107,7 +132,7 @@ public:
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
       : _bitmap(objectCount),
         _span(span),
-        _flags(objectCount),
+        _flags(objectCount, objectCount > 1 ? SizeMap::SizeClass(objectSize) : 1, 0),
         _objectSize(objectSize),
         _objectSizeReciprocal(1.0 / (float)objectSize) {
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
@@ -202,7 +227,7 @@ public:
   }
 
   inline int sizeClass() const {
-    return SizeMap::SizeClass(_objectSize);
+    return _flags.sizeClass();
   }
 
   inline uintptr_t getSpanStart(void *arenaBegin) const {
