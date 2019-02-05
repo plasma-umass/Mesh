@@ -73,7 +73,7 @@ class ConfigBuilder:
         parser.add_argument('--clangcov', action='store_true', default=False,
                             help='build with gcov profiling support')
 
-        parser.add_argument('--randomization', choices=[0, 1, 2], type=int, default=2,
+        parser.add_argument('--randomization', choices=[0, 1, 2], type=int, default=1,
                             help='0: no randomization. 1: freelist init only.  2: freelist init + free fastpath (default)')
         parser.add_argument('--disable-meshing', action='store_true', default=False,
                             help='disable meshing')
