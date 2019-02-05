@@ -188,11 +188,13 @@ public:
     }
 
     auto mh = _global->miniheapForLocked(ptr);
-    if (likely(mh) && mh->current() == _current) {
+    if (likely(mh && mh->current() == _current)) {
       ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
-      // ShuffleVectors only refer to the first virtual span of a Miniheap.
-      // Re-check contains() here to catch the case of a free for a
-      // non-primary-span allocation.
+      // ShuffleVectors only refer to the first virtual span of a
+      // Miniheap.  Re-check contains() here to catch the case of a
+      // free for a non-primary-span allocation.  Plus its slightly
+      // faster here to call contains unconditionally rather than
+      // first check !mh->isMeshed :shrug:
       if (likely(shuffleVector.contains(ptr))) {
         d_assert(mh->isAttached());
         _last = &shuffleVector;
@@ -233,7 +235,7 @@ public:
     }
 
     auto mh = _global->miniheapForLocked(ptr);
-    if (likely(mh) && mh->maxCount() > 1) {
+    if (likely(mh && mh->maxCount() > 1)) {
       ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
       if (likely(shuffleVector.getAttached() == mh)) {
         _last = &shuffleVector;
