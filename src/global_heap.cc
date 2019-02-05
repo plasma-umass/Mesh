@@ -62,7 +62,7 @@ void GlobalHeap::free(void *ptr) {
 
   d_assert(mh->maxCount() > 1);
 
-  _lastMeshEffective = 1;
+  _lastMeshEffective.store(1, std::memory_order::memory_order_release);
   mh->free(arenaBegin(), ptr);
 
   if (unlikely(mh->isMeshed())) {
@@ -155,7 +155,7 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
 void GlobalHeap::meshAllSizeClasses() {
   Super::scavenge(false);
 
-  if (!_lastMeshEffective) {
+  if (!_lastMeshEffective.load(std::memory_order::memory_order_acquire)) {
     return;
   }
 
