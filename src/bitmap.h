@@ -100,6 +100,12 @@ protected:
   ~AtomicBitmapBase() {
   }
 
+  void setAndExchangeAll(uint64_t *oldBits, const uint64_t *newBits) {
+    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
+      oldBits[i] = _bits[i].exchange(newBits[i]);
+    }
+  }
+
 public:
   inline bool setAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
@@ -161,10 +167,12 @@ protected:
     clear();
   }
 
-  RelaxedBitmapBase(size_t bitCount, char *backingMemory)
+  RelaxedBitmapBase(size_t bitCount, char *backingMemory, bool clear)
       : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(backingMemory)) {
     d_assert(_bits != nullptr);
-    clear();
+    if (clear) {
+      this->clear();
+    }
   }
 
   ~RelaxedBitmapBase() {
@@ -182,9 +190,16 @@ public:
   }
 
   inline void setAll() {
+    uint64_t bits = _bitCount;
     const size_t numWords = wordCount(representationSize(_bitCount));
-    for (size_t i = 0; i < numWords; i++) {
-      _bits[i] = (unsigned long)-1;
+    for (size_t i = 0; bits > 0; i++) {
+      if (bits >= 64) {
+        _bits[i] = (unsigned long)-1;
+        bits -= 64;
+      } else {
+        _bits[i] = (1ULL << bits) - 1;
+        bits = 0;
+      }
     }
   }
 
@@ -257,7 +272,7 @@ public:
   explicit BitmapBase(size_t bitCount) : Super(bitCount) {
   }
 
-  explicit BitmapBase(size_t bitCount, char *backingMemory) : Super(bitCount) {
+  explicit BitmapBase(size_t bitCount, char *backingMemory, bool clear = true) : Super(bitCount, backingMemory, clear) {
   }
 
   explicit BitmapBase(const std::string &str) : Super(str.length()) {
@@ -442,6 +457,10 @@ public:
     }
 
     return 0;
+  }
+
+  inline void setAndExchangeAll(uint64_t *oldBits, const uint64_t *newBits) {
+    Super::setAndExchangeAll(oldBits, newBits);
   }
 
 private:

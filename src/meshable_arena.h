@@ -283,7 +283,7 @@ private:
 
   internal::RelaxedBitmap _meshedBitmap{
       kArenaSize / kPageSize,
-      reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSize)))};
+      reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSize))), false};
   size_t _meshedPageCount{0};
   size_t _meshedPageCountHWM{0};
   size_t _rssKbAtHWM{0};

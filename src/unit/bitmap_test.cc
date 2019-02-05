@@ -44,6 +44,59 @@ TEST(BitmapTest, HighestSetBitAt) {
   ASSERT_EQ(123, bits.highestSetBitBeforeOrAt(127));
 }
 
+TEST(BitmapTest, SetAndExchangeAll) {
+  const auto maxCount = 128;
+
+  mesh::internal::Bitmap bitmap{maxCount};
+  bitmap.tryToSet(3);
+  bitmap.tryToSet(4);
+  bitmap.tryToSet(127);
+
+  uint64_t newBits[4] = {0, 0, 0, 0};
+  mesh::internal::RelaxedBitmap newBitmap{maxCount, reinterpret_cast<char *>(newBits)};
+  for (size_t i = 0; i < maxCount; i++) {
+    newBitmap.tryToSet(i);
+  }
+
+  uint64_t oldBits[4] = {0, 0, 0, 0};
+  bitmap.setAndExchangeAll(oldBits, newBitmap.bits());
+  mesh::internal::RelaxedBitmap localBits{maxCount, reinterpret_cast<char *>(oldBits), false};
+
+  for (size_t i = 0; i < maxCount; i++) {
+    ASSERT_TRUE(bitmap.isSet(i));
+    ASSERT_TRUE(newBitmap.isSet(i));
+    switch (i) {
+    case 3:
+    case 4:
+    case 127:
+      ASSERT_TRUE(localBits.isSet(i));
+      break;
+    default:
+      ASSERT_FALSE(localBits.isSet(i));
+      break;
+    }
+  }
+}
+
+TEST(BitmapTest, SetAll) {
+  const auto maxCount = 88;
+
+  uint64_t bits1[4] = {0, 0, 0, 0};
+  mesh::internal::RelaxedBitmap bitmap1{maxCount, reinterpret_cast<char *>(bits1), false};
+  for (size_t i = 0; i < maxCount; i++) {
+    bitmap1.tryToSet(i);
+  }
+
+  uint64_t bits2[4] = {0, 0, 0, 0};
+  mesh::internal::RelaxedBitmap bitmap2{maxCount, reinterpret_cast<char *>(bits2), false};
+  bitmap2.setAll();
+
+  for (size_t i = 0; i < maxCount; i++) {
+    ASSERT_TRUE(bitmap1.isSet(i));
+    ASSERT_TRUE(bitmap2.isSet(i));
+  }
+}
+
 TEST(BitmapTest, SetGet) {
   const int NTRIALS = 1000;
 
