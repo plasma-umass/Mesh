@@ -41,16 +41,14 @@ public:
     _off = _maxCount;
     d_assert(_maxCount == _attachedMiniheap->maxCount());
 
-    uint64_t newBits[4] = {0, 0, 0, 0};
-    internal::RelaxedBitmap newBitmap{_maxCount, reinterpret_cast<char *>(newBits), false};
-    newBitmap.setAll();
-
-    uint64_t oldBits[4] = {0, 0, 0, 0};
-    bitmap.setAndExchangeAll(oldBits, newBitmap.bits());
-    internal::RelaxedBitmap localBits{_maxCount, reinterpret_cast<char *>(oldBits), false};
-    localBits.invert();
-
-    for (auto const &i : localBits) {
+    for (size_t i = 0; i < _maxCount; i++) {
+      // if we were passed in a bitmap and the current object is
+      // already allocated, don't add its offset to the freelist
+      if (bitmap.isSet(i)) {
+        continue;
+      } else {
+        bitmap.tryToSet(i);
+      }
       _off--;
       d_assert(_off < _maxCount);
       _list[_off] = i;
