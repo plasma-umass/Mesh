@@ -29,7 +29,6 @@ private:
     return 1UL << pos;
   }
   static constexpr uint32_t MeshedOffset = 30;
-  static constexpr uint32_t AttachedOffset = 29;
   static constexpr uint32_t MaxCountShift = 16;
   static constexpr uint32_t SizeClassShift = 0;
   static constexpr uint32_t ShuffleVectorOffsetShift = 8;
@@ -65,18 +64,6 @@ public:
                                                   std::memory_order_release,  // success mem model
                                                   std::memory_order_relaxed)) {
     }
-  }
-
-  inline void setAttached() {
-    set(AttachedOffset);
-  }
-
-  inline void unsetAttached() {
-    unset(AttachedOffset);
-  }
-
-  inline bool isAttached() const {
-    return is(AttachedOffset);
   }
 
   inline void setMeshed() {
@@ -252,21 +239,19 @@ public:
   }
 
   inline void setAttached(pid_t current) {
-    _current = current;
-    _flags.setAttached();
+    _current.store(current, std::memory_order::memory_order_release);
   }
 
   inline pid_t current() const {
-    return _current;
+    return _current.load(std::memory_order::memory_order_acquire);
   }
 
   inline void unsetAttached() {
-    _current = 0;
-    _flags.unsetAttached();
+    _current.store(0, std::memory_order::memory_order_release);
   }
 
   inline bool isAttached() const {
-    return _flags.isAttached();
+    return current() != 0;
   }
 
   inline bool isMeshed() const {
@@ -274,7 +259,7 @@ public:
   }
 
   inline bool isMeshingCandidate() const {
-    return !_flags.isAttached() && objectSize() < kPageSize;
+    return !isAttached() && objectSize() < kPageSize;
   }
 
   /// Returns the fraction full (in the range [0, 1]) that this miniheap is.
@@ -427,7 +412,7 @@ protected:
       internal::bintoken::BinMax,
       internal::bintoken::Max,
   };                                  // 4        36
-  pid_t _current{0};                  // 4        40
+  atomic<pid_t> _current{0};          // 4        40
   const Span _span;                   // 8        48
   Flags _flags;                       // 4        52
   const uint32_t _objectSize;         // 4        56
