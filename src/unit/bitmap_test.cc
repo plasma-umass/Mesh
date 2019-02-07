@@ -52,27 +52,27 @@ TEST(BitmapTest, SetAndExchangeAll) {
   bitmap.tryToSet(4);
   bitmap.tryToSet(127);
 
-  uint64_t newBits[4] = {0, 0, 0, 0};
-  mesh::internal::RelaxedBitmap newBitmap{maxCount, reinterpret_cast<char *>(newBits)};
-  for (size_t i = 0; i < maxCount; i++) {
-    newBitmap.tryToSet(i);
-  }
+  mesh::internal::RelaxedFixedBitmap newBitmap{maxCount};
+  newBitmap.setAll(maxCount);
 
-  uint64_t oldBits[4] = {0, 0, 0, 0};
-  bitmap.setAndExchangeAll(oldBits, newBitmap.bits());
-  mesh::internal::RelaxedBitmap localBits{maxCount, reinterpret_cast<char *>(oldBits), false};
+  mesh::internal::RelaxedFixedBitmap localBits{maxCount};
+  bitmap.setAndExchangeAll(localBits.mut_bits(), newBitmap.bits());
+  localBits.invert();
 
-  for (size_t i = 0; i < maxCount; i++) {
+  for (auto const &i : localBits) {
+    if (i >= maxCount) {
+      break;
+    }
     ASSERT_TRUE(bitmap.isSet(i));
     ASSERT_TRUE(newBitmap.isSet(i));
     switch (i) {
     case 3:
     case 4:
     case 127:
-      ASSERT_TRUE(localBits.isSet(i));
+      ASSERT_FALSE(localBits.isSet(i));
       break;
     default:
-      ASSERT_FALSE(localBits.isSet(i));
+      ASSERT_TRUE(localBits.isSet(i));
       break;
     }
   }
@@ -89,7 +89,7 @@ TEST(BitmapTest, SetAll) {
 
   uint64_t bits2[4] = {0, 0, 0, 0};
   mesh::internal::RelaxedBitmap bitmap2{maxCount, reinterpret_cast<char *>(bits2), false};
-  bitmap2.setAll();
+  bitmap2.setAll(maxCount);
 
   for (size_t i = 0; i < maxCount; i++) {
     ASSERT_TRUE(bitmap1.isSet(i));

@@ -162,13 +162,15 @@ public:
 
 protected:
   RelaxedBitmapBase(size_t bitCount)
-      : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(internal::Heap().malloc(representationSize(bitCount)))) {
+      : _bitCount(bitCount),
+        _isDynamicallyAllocated(1),
+        _bits(reinterpret_cast<word_t *>(internal::Heap().malloc(representationSize(bitCount)))) {
     d_assert(_bits != nullptr);
     clear();
   }
 
   RelaxedBitmapBase(size_t bitCount, char *backingMemory, bool clear)
-      : _bitCount(bitCount), _bits(reinterpret_cast<word_t *>(backingMemory)) {
+      : _bitCount(bitCount), _isDynamicallyAllocated(0), _bits(reinterpret_cast<word_t *>(backingMemory)) {
     d_assert(_bits != nullptr);
     if (clear) {
       this->clear();
@@ -176,8 +178,9 @@ protected:
   }
 
   ~RelaxedBitmapBase() {
-    if (_bits)
+    if (_isDynamicallyAllocated && _bits) {
       internal::Heap().free(_bits);
+    }
     _bits = nullptr;
   }
 
@@ -189,16 +192,15 @@ public:
     }
   }
 
-  inline void setAll() {
-    uint64_t bits = _bitCount;
-    const size_t numWords = wordCount(representationSize(_bitCount));
-    for (size_t i = 0; bits > 0; i++) {
-      if (bits >= 64) {
+  inline void setAll(uint64_t bitCount) {
+    const size_t numWords = wordCount(representationSize(bitCount));
+    for (size_t i = 0; bitCount > 0; i++) {
+      if (bitCount >= 64) {
         _bits[i] = (unsigned long)-1;
-        bits -= 64;
+        bitCount -= 64;
       } else {
-        _bits[i] = (1ULL << bits) - 1;
-        bits = 0;
+        _bits[i] = (1ULL << bitCount) - 1;
+        bitCount = 0;
       }
     }
   }
@@ -236,7 +238,7 @@ protected:
     _bits = nullptr;
   }
 
-  void clear(void) {
+  void clear() {
     memset(_bits, 0, representationSize(bitCount()));
   }
 
@@ -244,8 +246,91 @@ protected:
     return _bitCount;
   }
 
-  const size_t _bitCount;
+  const size_t _bitCount : 63;
+  const size_t _isDynamicallyAllocated : 1;
   word_t *_bits;
+};
+
+template <size_t maxBits>
+class RelaxedFixedBitmapBase {
+private:
+  DISALLOW_COPY_AND_ASSIGN(RelaxedFixedBitmapBase);
+
+public:
+  typedef size_t word_t;
+
+  enum { MaxBitCount = maxBits };
+
+protected:
+  RelaxedFixedBitmapBase(size_t bitCount) {
+    clear();
+  }
+
+public:
+  inline void invert() {
+    const size_t numWords = wordCount(representationSize(bitCount()));
+    for (size_t i = 0; i < numWords; i++) {
+      _bits[i] = ~_bits[i];
+    }
+  }
+
+  inline void setAll(uint64_t bitCount) {
+    const size_t numWords = wordCount(representationSize(bitCount));
+    for (size_t i = 0; bitCount > 0; i++) {
+      if (bitCount >= 64) {
+        _bits[i] = (unsigned long)-1;
+        bitCount -= 64;
+      } else {
+        _bits[i] = (1ULL << bitCount) - 1;
+        bitCount = 0;
+      }
+    }
+  }
+
+  inline bool setAt(uint32_t item, uint32_t position) {
+    const auto mask = getMask(position);
+
+    size_t oldValue = _bits[item];
+    _bits[item] = oldValue | mask;
+
+    return !(oldValue & mask);
+  }
+
+  /// Clears the bit at the given index.
+  inline bool unsetAt(uint32_t item, uint32_t position) {
+    const auto mask = getMask(position);
+
+    size_t oldValue = _bits[item];
+    _bits[item] = oldValue & ~mask;
+
+    return !(oldValue & mask);
+  }
+
+  inline uint64_t inUseCount() const {
+    const auto wordCount = representationSize(bitCount()) / sizeof(size_t);
+    uint64_t count = 0;
+    for (size_t i = 0; i < wordCount; i++) {
+      count += __builtin_popcountl(_bits[i]);
+    }
+    return count;
+  }
+
+protected:
+  inline void nullBits() {
+    _bits = nullptr;
+  }
+
+  void clear() {
+    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
+      _bits[i] = 0;
+    }
+  }
+
+  inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
+    return maxBits;
+  }
+
+  word_t _bits[wordCount(representationSize(maxBits))] = {};
 };
 
 template <typename Super>
@@ -392,6 +477,10 @@ public:
     return Super::_bits;
   }
 
+  word_t *mut_bits() {
+    return Super::_bits;
+  }
+
   iterator begin() {
     return iterator(*this, lowestSetBitAt(0));
   }
@@ -477,9 +566,11 @@ private:
 
 namespace internal {
 typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase<256>> Bitmap;
+typedef bitmap::BitmapBase<bitmap::RelaxedFixedBitmapBase<256>> RelaxedFixedBitmap;
 typedef bitmap::BitmapBase<bitmap::RelaxedBitmapBase> RelaxedBitmap;
 
 static_assert(sizeof(Bitmap) == sizeof(size_t) * 4, "Bitmap unexpected size");
+static_assert(sizeof(RelaxedFixedBitmap) == sizeof(size_t) * 4, "Bitmap unexpected size");
 static_assert(sizeof(RelaxedBitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
 }  // namespace internal
 }  // namespace mesh
