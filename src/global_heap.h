@@ -11,7 +11,6 @@
 #include "binned_tracker.h"
 #include "internal.h"
 #include "meshable_arena.h"
-#include "meshing.h"
 #include "mini_heap.h"
 
 #include "heaplayers.h"
@@ -398,7 +397,7 @@ private:
 
   MWC _fastPrng;
 
-  BinnedTracker<MiniHeap> _littleheaps[kNumBins];
+  BinnedTracker _littleheaps[kNumBins];
 
   mutable mutex _miniheapLock{};
 

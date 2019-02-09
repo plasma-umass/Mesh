@@ -10,6 +10,8 @@
 
 #include "rng/mwc.h"
 
+#include "mini_heap.h"
+
 // invariants:
 // - MiniHeap only in one one bin in one BinnedTracker
 
@@ -22,7 +24,6 @@
 
 namespace mesh {
 
-template <typename MiniHeap>
 class BinnedTracker {
 private:
   DISALLOW_COPY_AND_ASSIGN(BinnedTracker);

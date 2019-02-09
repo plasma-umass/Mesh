@@ -7,6 +7,7 @@
 #include "gtest/gtest.h"
 
 #include "internal.h"
+#include "meshing.h"
 #include "runtime.h"
 
 using namespace mesh;

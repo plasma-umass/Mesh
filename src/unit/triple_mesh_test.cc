@@ -12,6 +12,7 @@
 #include "gtest/gtest.h"
 
 #include "internal.h"
+#include "meshing.h"
 #include "runtime.h"
 #include "shuffle_vector.h"
 

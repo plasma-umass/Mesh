@@ -3,6 +3,7 @@
 
 #include "global_heap.h"
 
+#include "meshing.h"
 #include "runtime.h"
 
 namespace mesh {
