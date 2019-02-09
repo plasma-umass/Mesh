@@ -39,18 +39,20 @@ ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
 void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
   ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
 
-  MiniHeap *oldMH = nullptr;
+  FixedArray<MiniHeap, 1> array{};
   // we are in the slowlist because we couldn't allocate out of this
   // shuffleVector.  If there was an attached miniheap it is now full, so
   // detach it
   if (likely(shuffleVector.isAttached())) {
-    oldMH = shuffleVector.detach();
+    array.append(shuffleVector.detach());
   }
 
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
-  MiniHeap *mh = _global->allocSmallMiniheap(sizeClass, sizeMax, oldMH, _current);
-  d_assert(mh != nullptr);
+  _global->allocSmallMiniheaps(sizeClass, sizeMax, array, _current);
+  d_assert(array.size() > 0);
+
+  auto mh = array[0];
 
   shuffleVector.attach(_global->arenaBegin(), mh);
 

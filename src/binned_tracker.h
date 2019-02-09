@@ -44,8 +44,11 @@ public:
     return _objectSize;
   }
 
-  MiniHeap *selectForReuse() {
+  template<size_t Size>
+  size_t selectForReuse(FixedArray<MiniHeap, Size> &miniheaps, pid_t current) {
     std::lock_guard<std::mutex> lock(_mutex);
+
+    size_t bytesFree = 0;
 
     for (int i = kBinnedTrackerBinCount - 1; i >= 0; i--) {
       while (_partial[i].size() > 0) {
@@ -60,16 +63,24 @@ public:
 
         // this can happen because in use count is updated outside the
         // bin tracker lock -- it may be queued up for reuse.
+        //
+        // FIXME: check for isMeshed?
         if (unlikely(mh->isFull() || mh->isAttached())) {
           debug("I don't know how this could happen");
           continue;
         }
 
-        return mh;
+        mh->setAttached(current);
+        d_assert(!miniheaps.full());
+        miniheaps.append(mh);
+        bytesFree += mh->bytesFree();
+        if (bytesFree >= kMiniheapRefillGoalSize || miniheaps.full()) {
+          return bytesFree;
+        }
       }
     }
 
-    return nullptr;
+    return bytesFree;
   }
 
   internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {

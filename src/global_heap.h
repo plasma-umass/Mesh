@@ -115,6 +115,7 @@ public:
   }
 
   inline void releaseMiniheapLocked(MiniHeap *mh, int sizeClass) {
+    // ensure this flag is always set with the miniheap lock held
     mh->unsetAttached();
     _littleheaps[sizeClass].postFree(mh, mh->inUseCount());
   }
@@ -128,15 +129,16 @@ public:
     releaseMiniheapLocked(mh, mh->sizeClass());
   }
 
-  inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize, MiniHeap *oldMH, pid_t current) {
+  template<size_t Size>
+  inline void allocSmallMiniheaps(int sizeClass, size_t objectSize, FixedArray<MiniHeap, Size> &miniheaps, pid_t current) {
     lock_guard<mutex> lock(_miniheapLock);
 
     d_assert(sizeClass >= 0);
 
-    // ensure this flag is always set with the miniheap lock held
-    if (oldMH != nullptr) {
+    for (MiniHeap *oldMH : miniheaps) {
       releaseMiniheapLocked(oldMH, sizeClass);
     }
+    miniheaps.clear();
 
     d_assert(objectSize <= _maxObjectSize);
 
@@ -149,13 +151,12 @@ public:
     d_assert(sizeClass >= 0);
     d_assert(sizeClass < kNumBins);
 
+    d_assert(miniheaps.size() == 0);
+
     // check our bins for a miniheap to reuse
-    MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
-    if (existing != nullptr) {
-      d_assert(!existing->isMeshed());
-      d_assert(!existing->isAttached());
-      existing->setAttached(current);
-      return existing;
+    auto bytesFree = _littleheaps[sizeClass].selectForReuse(miniheaps, current);
+    if (bytesFree >= kMiniheapRefillGoalSize || miniheaps.full()) {
+      return;
     }
 
     // if we have objects bigger than the size of a page, allocate
@@ -165,10 +166,15 @@ public:
     const size_t objectCount = max(kPageSize / objectSize, kMinStringLen);
     const size_t pageCount = PageCount(objectSize * objectCount);
 
-    auto mh = allocMiniheapLocked(sizeClass, pageCount, objectCount, objectSize);
-    d_assert(!mh->isAttached());
-    mh->setAttached(current);
-    return mh;
+    while (bytesFree < kMiniheapRefillGoalSize && !miniheaps.full()) {
+      auto mh = allocMiniheapLocked(sizeClass, pageCount, objectCount, objectSize);
+      d_assert(!mh->isAttached());
+      mh->setAttached(current);
+      miniheaps.append(mh);
+      bytesFree += mh->bytesFree();
+    }
+
+    return;
   }
 
   // large, page-multiple allocations

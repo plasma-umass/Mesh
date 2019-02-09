@@ -11,6 +11,7 @@
 #include <random>
 
 #include "bitmap.h"
+#include "fixed_array.h"
 #include "internal.h"
 
 #include "rng/mwc.h"
@@ -51,11 +52,11 @@ public:
     return (_flags.load(std::memory_order_relaxed) >> SizeClassShift) & 0xff;
   }
 
-  inline uint32_t svOffset() const {
+  inline uint8_t svOffset() const {
     return (_flags.load(std::memory_order_relaxed) >> ShuffleVectorOffsetShift) & 0xff;
   }
 
-  inline void setSvOffset(uint32_t off) {
+  inline void setSvOffset(uint8_t off) {
     d_assert(off < 255);
     uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
     while (!atomic_compare_exchange_weak_explicit(&_flags,
@@ -234,12 +235,24 @@ public:
     return _bitmap.inUseCount();
   }
 
+  inline size_t bytesFree() const {
+    return inUseCount() * objectSize();
+  }
+
   inline void setMeshed() {
     _flags.setMeshed();
   }
 
   inline void setAttached(pid_t current) {
     _current.store(current, std::memory_order::memory_order_release);
+  }
+
+  inline uint8_t svOffset() const {
+    return _flags.svOffset();
+  }
+
+  inline void setSvOffset(uint8_t off) {
+    _flags.setSvOffset(off);
   }
 
   inline pid_t current() const {
@@ -420,9 +433,12 @@ protected:
   MiniHeapID _nextMiniHeap{};         // 4        64
 };
 
+typedef FixedArray<MiniHeap, 63> MiniHeapArray;
+
 static_assert(sizeof(pid_t) == 4, "pid_t not 32-bits!");
 static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
+static_assert(sizeof(MiniHeapArray) == 64 * sizeof(void *), "MiniHeapArray too big!");
 }  // namespace mesh
 
 #endif  // MESH__MINI_HEAP_H

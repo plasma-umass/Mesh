@@ -75,6 +75,7 @@ static constexpr uint32_t kMinArenaExpansion = 4096;  // 16 MB in pages
 
 // ensures we amortize the cost of going to the global heap enough
 static constexpr size_t kMinStringLen = 8;
+static constexpr size_t kMiniheapRefillGoalSize = 64 * 1024; // 64 kB
 
 // shuffle vector features
 static constexpr size_t kMaxShuffleVectorLength = 256;  // sizeof(uint8_t) << 8
@@ -90,7 +91,7 @@ static constexpr std::chrono::nanoseconds kMeshPeriodNs{100000000};  // 100 ms
 // controls aspects of miniheaps
 static constexpr size_t kMaxMeshes = 4;
 
-static constexpr size_t kArenaSize = 1UL << 33;       // 4 GB
+static constexpr size_t kArenaSize = 1UL << 29;       // 512 MB FIXME
 static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 #define SIGDUMP (SIGRTMIN + 8)
