@@ -91,23 +91,31 @@ protected:
     d_assert_msg(bitCount <= maxBits, "max bits (%zu) exceeded: %zu", maxBits, bitCount);
 
     static_assert(wordCount(representationSize(maxBits)) == 4, "unexpected representation size");
-    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
-      _bits[i].store(0, std::memory_order_relaxed);
-    }
+    // for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
+    //   _bits[i].store(0, std::memory_order_relaxed);
+    // }
+    _bits[0].store(0, std::memory_order_relaxed);
+    _bits[1].store(0, std::memory_order_relaxed);
+    _bits[2].store(0, std::memory_order_relaxed);
+    _bits[3].store(0, std::memory_order_relaxed);
     std::atomic_thread_fence(std::memory_order_release);
   }
 
   ~AtomicBitmapBase() {
   }
 
-  void setAndExchangeAll(uint64_t *oldBits, const uint64_t *newBits) {
-    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
-      oldBits[i] = _bits[i].exchange(newBits[i]);
-    }
+  inline void ATTRIBUTE_ALWAYS_INLINE setAndExchangeAll(uint64_t *oldBits, const uint64_t *newBits) {
+    // for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
+    //   oldBits[i] = _bits[i].exchange(newBits[i]);
+    // }
+    oldBits[0] = _bits[0].exchange(newBits[0], std::memory_order_acq_rel);
+    oldBits[1] = _bits[1].exchange(newBits[1], std::memory_order_acq_rel);
+    oldBits[2] = _bits[2].exchange(newBits[2], std::memory_order_acq_rel);
+    oldBits[3] = _bits[3].exchange(newBits[3], std::memory_order_acq_rel);
   }
 
 public:
-  inline bool setAt(uint32_t item, uint32_t position) {
+  inline bool ATTRIBUTE_ALWAYS_INLINE setAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
 
     size_t oldValue = _bits[item].load(std::memory_order_relaxed);
@@ -121,7 +129,7 @@ public:
     return !(oldValue & mask);
   }
 
-  inline bool unsetAt(uint32_t item, uint32_t position) {
+  inline bool ATTRIBUTE_ALWAYS_INLINE unsetAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
 
     size_t oldValue = _bits[item].load(std::memory_order_relaxed);
@@ -135,7 +143,7 @@ public:
     return !(oldValue & mask);
   }
 
-  inline uint64_t inUseCount() const {
+  inline uint64_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
     return __builtin_popcountl(_bits[0]) + __builtin_popcountl(_bits[1]) + __builtin_popcountl(_bits[2]) +
            __builtin_popcountl(_bits[3]);
   }
@@ -267,15 +275,18 @@ protected:
   }
 
 public:
-  inline void invert() {
-    const size_t numWords = wordCount(representationSize(bitCount()));
-    for (size_t i = 0; i < numWords; i++) {
-      _bits[i] = ~_bits[i];
-    }
+  inline void ATTRIBUTE_ALWAYS_INLINE invert() {
+    // constexpr size_t numWords = wordCount(representationSize(maxBits));
+    // for (size_t i = 0; i < numWords; i++) {
+    //   _bits[i] = ~_bits[i];
+    // }
+    _bits[0] = ~_bits[0];
+    _bits[1] = ~_bits[1];
+    _bits[2] = ~_bits[2];
+    _bits[3] = ~_bits[3];
   }
 
-  inline void setAll(uint64_t bitCount) {
-    const size_t numWords = wordCount(representationSize(bitCount));
+  inline void ATTRIBUTE_ALWAYS_INLINE setAll(uint64_t bitCount) {
     for (size_t i = 0; bitCount > 0; i++) {
       if (bitCount >= 64) {
         _bits[i] = (unsigned long)-1;
@@ -287,7 +298,7 @@ public:
     }
   }
 
-  inline bool setAt(uint32_t item, uint32_t position) {
+  inline bool ATTRIBUTE_ALWAYS_INLINE setAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
 
     size_t oldValue = _bits[item];
@@ -297,7 +308,7 @@ public:
   }
 
   /// Clears the bit at the given index.
-  inline bool unsetAt(uint32_t item, uint32_t position) {
+  inline bool ATTRIBUTE_ALWAYS_INLINE unsetAt(uint32_t item, uint32_t position) {
     const auto mask = getMask(position);
 
     size_t oldValue = _bits[item];
@@ -306,24 +317,25 @@ public:
     return !(oldValue & mask);
   }
 
-  inline uint64_t inUseCount() const {
-    const auto wordCount = representationSize(bitCount()) / sizeof(size_t);
+  inline uint64_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
+    constexpr auto wordCount = representationSize(maxBits) / sizeof(size_t);
     uint64_t count = 0;
-    for (size_t i = 0; i < wordCount; i++) {
-      count += __builtin_popcountl(_bits[i]);
-    }
+    // for (size_t i = 0; i < wordCount; i++) {
+    //   count += __builtin_popcountl(_bits[i]);
+    // }
+    count += __builtin_popcountl(_bits[0]);
+    count += __builtin_popcountl(_bits[1]);
+    count += __builtin_popcountl(_bits[2]);
+    count += __builtin_popcountl(_bits[3]);
     return count;
   }
 
 protected:
-  inline void nullBits() {
-    _bits = nullptr;
-  }
-
-  void clear() {
-    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
-      _bits[i] = 0;
-    }
+  void ATTRIBUTE_ALWAYS_INLINE clear() {
+    _bits[0] = 0;
+    _bits[1] = 0;
+    _bits[2] = 0;
+    _bits[3] = 0;
   }
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
