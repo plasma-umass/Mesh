@@ -74,12 +74,12 @@ public:
     unset(MeshedOffset);
   }
 
-  inline bool isMeshed() const {
+  inline bool ATTRIBUTE_ALWAYS_INLINE isMeshed() const {
     return is(MeshedOffset);
   }
 
 private:
-  inline bool is(size_t offset) const {
+  inline bool ATTRIBUTE_ALWAYS_INLINE is(size_t offset) const {
     const auto mask = getMask(offset);
     return (_flags.load(std::memory_order_acquire) & mask) == mask;
   }
@@ -153,7 +153,7 @@ public:
                 this, objectSize(), maxCount(), meshCount(), _bitmap.to_string(maxCount()).c_str());
   }
 
-  inline void free(void *arenaBegin, void *ptr) {
+  inline void ATTRIBUTE_ALWAYS_INLINE free(void *arenaBegin, void *ptr) {
     // TODO: this should be removed when the logic in globalFree is
     // updated to allow the 'race' between lock-free freeing and
     // meshing
@@ -254,7 +254,7 @@ public:
     return current() != 0;
   }
 
-  inline bool isMeshed() const {
+  inline bool ATTRIBUTE_ALWAYS_INLINE isMeshed() const {
     return _flags.isMeshed();
   }
 
@@ -360,7 +360,7 @@ public:
     mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
   }
 
-  inline ssize_t getOff(void *arenaBegin, void *ptr) const {
+  inline ssize_t ATTRIBUTE_ALWAYS_INLINE getOff(void *arenaBegin, void *ptr) const {
     const auto span = spanStart(arenaBegin, ptr);
     d_assert(span != 0);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
@@ -377,7 +377,7 @@ public:
   }
 
 protected:
-  inline uintptr_t spanStart(void *arenaBegin, void *ptr) const {
+  inline uintptr_t ATTRIBUTE_ALWAYS_INLINE spanStart(void *arenaBegin, void *ptr) const {
     const auto arena = reinterpret_cast<uintptr_t>(arenaBegin);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     const auto len = _span.byteLength();
