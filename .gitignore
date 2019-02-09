@@ -34,3 +34,7 @@ __pycache__
 /test/docker/*/mstat
 /test/spec/data
 /coverage
+/src/test/larson-mesh
+/src/test/larson-glibc
+/src/test/larson-tcmalloc
+/src/test/larson-hoard

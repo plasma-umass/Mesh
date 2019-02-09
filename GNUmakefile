@@ -56,7 +56,7 @@ COV_DIR          = coverage
 
 ALL_SUBMODULES   = $(HEAP_LAYERS) $(GTEST)
 
-CONFIG           = Makefile config.mk
+CONFIG           = GNUmakefile Makefile config.mk
 
 # quiet output, but allow us to look at what commands are being
 # executed by passing 'V=1' to make, without requiring temporarily
@@ -176,6 +176,17 @@ src/test/big-alloc-glibc: src/test/big-alloc.c $(CONFIG)
 src/test/thread-example: src/test/thread.cc $(CONFIG)
 	$(CXX) -std=c++11 -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)" -lpthread
 
+src/test/larson-mesh: src/test/larson.cc $(CONFIG)
+	$(CXX) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -O3 -DNDEBUG -Isrc -Isrc/vendor/Heap-Layers -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)" -lpthread
+
+src/test/larson-hoard: src/test/larson.cc $(CONFIG)
+	$(CXX) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -O3 -DNDEBUG -Isrc -Isrc/vendor/Heap-Layers -o $@ $< -lhoard -lpthread
+
+src/test/larson-tcmalloc: src/test/larson.cc $(CONFIG)
+	$(CXX) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -O3 -DNDEBUG -Isrc -Isrc/vendor/Heap-Layers -o $@ $< -ltcmalloc_minimal -lpthread
+
+src/test/larson-glibc: src/test/larson.cc $(CONFIG)
+	$(CXX) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -O3 -DNDEBUG -Isrc -Isrc/vendor/Heap-Layers -o $@ $< -lpthread
 
 run: $(LIB) src/test/fork-example
 	src/test/fork-example
