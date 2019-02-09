@@ -48,38 +48,10 @@ private:
   unsigned int w;
 };
 
-#if 0
-class MWC : public RealMWC {
-  using RealMWC::RealMWC;
+class MWC : public MWC64 {
 public:
-  // returns a number between min and max (inclusive)
-  inline unsigned int inRange(size_t min, size_t max) {
-    size_t range = 1 + max - min;
-
-    //    return min + next() % range;
-    // adapted from https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
-    return min + (((uint64_t) next() * (uint64_t) range) >> 32);
+  MWC(uint64_t s1, uint64_t s2) : MWC64::MWC64(s1, s2) {
   }
-};
-#else
-class MWC : public MWC64 {  // public sx { // xoro {
-public:
-#if 0
-  //  using xoro::xoro;
-  MWC(uint32_t s1, uint32_t s2)
-    // : xoro::xoro(s1, s2)
-    : sx::sx(s1, s2)
-  {
-  }
-#else
-  //  using xoro::xoro;
-  MWC(uint64_t s1, uint64_t s2)
-  // : xoro::xoro(s1, s2)
-  : MWC64::MWC64(s1, s2) {
-    //    std::cout << sizeof(RealMWC) << std::endl;
-    //    std::cout << sizeof(MWC64) << std::endl;
-  }
-#endif
   // returns a number between min and max (inclusive)
   inline unsigned int ATTRIBUTE_ALWAYS_INLINE inRange(size_t min, size_t max) {
     size_t range = 1 + max - min;
@@ -89,7 +61,6 @@ public:
     return min + (((uint64_t)(uint32_t)next() * (uint64_t)range) >> 32);
   }
 };
-#endif
 
 #endif
 
