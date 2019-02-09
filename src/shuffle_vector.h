@@ -19,6 +19,40 @@ using mesh::debug;
 
 namespace mesh {
 
+namespace sv {
+class Entry {
+public:
+  Entry() noexcept : _mhOffset{0}, _bitOffset{0} {
+  }
+
+  explicit Entry(uint8_t mhOff, uint8_t bitOff) : _mhOffset{mhOff}, _bitOffset{bitOff} {
+  }
+
+  Entry(const Entry &rhs) = default;
+
+  constexpr Entry(Entry &&rhs) = default;
+
+  Entry &operator=(const Entry &rhs) = default;
+
+  bool operator==(const Entry &rhs) const {
+    return _mhOffset == rhs._mhOffset && _bitOffset == rhs._bitOffset;
+  }
+
+  inline uint8_t ATTRIBUTE_ALWAYS_INLINE miniheapOffset() const {
+    return _mhOffset;
+  }
+
+  inline uint8_t ATTRIBUTE_ALWAYS_INLINE bit() const {
+    return _bitOffset;
+  }
+
+private:
+  uint8_t _mhOffset;
+  uint8_t _bitOffset;
+};
+static_assert(sizeof(Entry) == 2, "Entry too big!");
+}  // namespace sv
+
 class ShuffleVector {
 private:
   DISALLOW_COPY_AND_ASSIGN(ShuffleVector);
@@ -29,7 +63,7 @@ public:
   }
 
   ~ShuffleVector() {
-    detach();
+    d_assert(_attachedMiniheaps.size() == 0);
   }
 
   // post: list has the index of all bits set to 1 in it, in a random order
@@ -39,7 +73,7 @@ public:
 
     // off == maxCount means 'empty'
     _off = _maxCount;
-    d_assert(_maxCount == _attachedMiniheap->maxCount());
+    // d_assert(_maxCount == _attachedMiniheap->maxCount());
 
     internal::RelaxedFixedBitmap newBitmap{_maxCount};
     newBitmap.setAll(_maxCount);
@@ -55,7 +89,7 @@ public:
       }
       _off--;
       d_assert(_off < _maxCount);
-      _list[_off] = i;
+      _list[_off] = sv::Entry{0, static_cast<uint8_t>(i)};
     }
 
     if (kEnableShuffleOnInit) {
@@ -65,21 +99,17 @@ public:
     return length();
   }
 
-  MiniHeap *detach() {
-    const auto mh = _attachedMiniheap;
-    _attachedMiniheap = nullptr;
+  FixedArray<MiniHeap, 1> &miniheaps() {
     _start = 0;
     _end = 0;
-    return mh;
+    return _attachedMiniheaps;
   }
 
-  MiniHeap *refillAndDetach() {
+  void refillMiniheaps() {
     while (_off < _maxCount) {
-      const auto off = pop();
-      _attachedMiniheap->freeOff(off);
+      const auto entry = pop();
+      _attachedMiniheaps[entry.miniheapOffset()]->freeOff(entry.bit());
     }
-
-    return detach();
   }
 
   inline bool isExhausted() const {
@@ -96,12 +126,12 @@ public:
   }
 
   // Pushing an element onto the freelist does a round of the
-  // Fisher-Yates shuffle.
-  inline void ATTRIBUTE_ALWAYS_INLINE push(size_t freedOff) {
+  // Fisher-Yates shuffle if randomization level is >= 2.
+  inline void ATTRIBUTE_ALWAYS_INLINE push(uint8_t freedOff) {
     d_assert(_off > 0);  // we must have at least 1 free space in the list
 
     _off--;
-    _list[_off] = freedOff;
+    _list[_off] = sv::Entry{0, freedOff};
 
     if (kEnableShuffleOnFree) {
       size_t swapOff = _prng.inRange(_off, maxCount() - 1);
@@ -110,7 +140,7 @@ public:
     }
   }
 
-  inline size_t ATTRIBUTE_ALWAYS_INLINE pop() {
+  inline sv::Entry ATTRIBUTE_ALWAYS_INLINE pop() {
     d_assert(_off < _maxCount);
 
     auto val = _list[_off];
@@ -125,33 +155,27 @@ public:
     const size_t off = (ptrval - _start) * _objectSizeReciprocal;
     // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
 
-    push(off);
-  }
+    d_assert(off < 256);
 
-  inline MiniHeap *getAttached() const {
-    return _attachedMiniheap;
-  }
-
-  inline bool isAttached() const {
-    return _attachedMiniheap != nullptr;
+    push(static_cast<uint8_t>(off));
   }
 
   // an attach takes ownership of the reference to mh
-  inline void attach(void *arenaBegin, MiniHeap *mh) {
-    d_assert(mh->isAttached());
-    d_assert(_attachedMiniheap == nullptr);
-    _attachedMiniheap = mh;
+  inline void attach(void *arenaBegin) {
+    for (MiniHeap *mh : _attachedMiniheaps) {
+      d_assert(mh->isAttached());
 
-    _start = mh->getSpanStart(arenaBegin);
-    _end = _start + mh->spanSize();
+      _start = mh->getSpanStart(arenaBegin);
+      _end = _start + mh->spanSize();
 
-    const auto allocCount = init(mh->writableBitmap());
+      const auto allocCount = init(mh->writableBitmap());
 #ifndef NDEBUG
-    if (allocCount == 0) {
-      mh->dumpDebug();
-    }
+      if (allocCount == 0) {
+        mh->dumpDebug();
+      }
 #endif
-    d_assert_msg(allocCount > 0, "no free bits in MH %p", mh->getSpanStart(arenaBegin));
+      d_assert_msg(allocCount > 0, "no free bits in MH %p", mh->getSpanStart(arenaBegin));
+    }
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE contains(void *ptr) const {
@@ -159,8 +183,9 @@ public:
     return ptrval >= _start && ptrval < _end;
   }
 
-  inline void *ATTRIBUTE_ALWAYS_INLINE ptrFromOffset(size_t off) const {
-    return reinterpret_cast<void *>(_start + off * _objectSize);
+  inline void *ATTRIBUTE_ALWAYS_INLINE ptrFromOffset(sv::Entry off) const {
+    d_assert(off.miniheapOffset() == 0);
+    return reinterpret_cast<void *>(_start + off.bit() * _objectSize);
   }
 
   inline void *ATTRIBUTE_ALWAYS_INLINE malloc() {
@@ -186,22 +211,22 @@ public:
   }
 
 private:
-  uint32_t _objectSize{0};                                   // 4   4
-  float _objectSizeReciprocal{0.0};                          // 4   8
-  uintptr_t _start{0};                                       // 8   16
-  uintptr_t _end{0};                                         // 8   24
-  MiniHeap *_attachedMiniheap{nullptr};                      // 8   32
-  MWC _prng;                                                 // 36  68
-  uint16_t _maxCount{0};                                     // 2   70
-  uint16_t _off{0};                                          // 2   72
-  volatile uint8_t _lastOff{0};                              // 1   73
-  uint8_t __padding[51];                                     // 51  128
-  uint8_t _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;  // 256 384
+  uint32_t _objectSize{0};                       // 4   4
+  float _objectSizeReciprocal{0.0};              // 4   8
+  uintptr_t _start{0};                           // 8   16
+  uintptr_t _end{0};                             // 8   24
+  MWC _prng;                                     // 36  60
+  uint16_t _maxCount{0};                         // 2   62
+  uint16_t _off{0};                              // 2   64
+  FixedArray<MiniHeap, 1> _attachedMiniheaps{};  // 16  80
+  volatile uint8_t _lastOff{0};                  // 1   81
+  // uint8_t __padding[47];                                       // 47  128
+  sv::Entry _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;  // 512 640
 };
 
 static_assert(HL::gcd<sizeof(ShuffleVector), CACHELINE_SIZE>::value == CACHELINE_SIZE,
               "ShuffleVector not multiple of cacheline size!");
-static_assert(sizeof(ShuffleVector) == 384, "ShuffleVector not expected size!");
+static_assert(sizeof(ShuffleVector) == 640, "ShuffleVector not expected size!");
 }  // namespace mesh
 
 #endif  // MESH__SHUFFLE_VECTOR_H

@@ -235,12 +235,10 @@ public:
     }
 
     auto mh = _global->miniheapForLocked(ptr);
-    if (likely(mh && mh->maxCount() > 1)) {
+    if (likely(mh && mh->current() == _current)) {
       ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
-      if (likely(shuffleVector.getAttached() == mh)) {
-        _last = &shuffleVector;
-        return shuffleVector.getSize();
-      }
+      _last = &shuffleVector;
+      return shuffleVector.getSize();
     }
 
     return _global->getSize(ptr);

@@ -21,8 +21,8 @@ ThreadLocalHeap *ThreadLocalHeap::CreateThreadLocalHeap() {
 
 void ThreadLocalHeap::releaseAll() {
   for (size_t i = 1; i < kNumBins; i++) {
-    auto mh = _shuffleVector[i].refillAndDetach();
-    _global->releaseMiniheap(mh);
+    _shuffleVector[i].refillMiniheaps();
+    _global->releaseMiniheaps(_shuffleVector[i].miniheaps());
   }
 }
 
@@ -37,28 +37,14 @@ ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
 
 // we get here if the shuffleVector is exhausted
 void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
+  const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
   ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
 
-  FixedArray<MiniHeap, 1> array{};
-  // we are in the slowlist because we couldn't allocate out of this
-  // shuffleVector.  If there was an attached miniheap it is now full, so
-  // detach it
-  if (likely(shuffleVector.isAttached())) {
-    array.append(shuffleVector.detach());
-  }
+  _global->allocSmallMiniheaps(sizeClass, sizeMax, shuffleVector.miniheaps(), _current);
 
-  const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
+  shuffleVector.attach(_global->arenaBegin());
 
-  _global->allocSmallMiniheaps(sizeClass, sizeMax, array, _current);
-  d_assert(array.size() > 0);
-
-  auto mh = array[0];
-
-  shuffleVector.attach(_global->arenaBegin(), mh);
-
-  d_assert(shuffleVector.isAttached());
   d_assert(!shuffleVector.isExhausted());
-  d_assert(mh->isAttached());
 
   void *ptr = shuffleVector.malloc();
   d_assert(ptr != nullptr);

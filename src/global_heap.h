@@ -120,17 +120,22 @@ public:
     _littleheaps[sizeClass].postFree(mh, mh->inUseCount());
   }
 
-  inline void releaseMiniheap(MiniHeap *mh) {
-    if (mh == nullptr) {
+  template <size_t Size>
+  inline void releaseMiniheaps(FixedArray<MiniHeap, Size> &miniheaps) {
+    if (miniheaps.size() == 0) {
       return;
     }
 
     lock_guard<mutex> lock(_miniheapLock);
-    releaseMiniheapLocked(mh, mh->sizeClass());
+    for (auto mh : miniheaps) {
+      releaseMiniheapLocked(mh, mh->sizeClass());
+    }
+    miniheaps.clear();
   }
 
-  template<size_t Size>
-  inline void allocSmallMiniheaps(int sizeClass, size_t objectSize, FixedArray<MiniHeap, Size> &miniheaps, pid_t current) {
+  template <size_t Size>
+  inline void allocSmallMiniheaps(int sizeClass, size_t objectSize, FixedArray<MiniHeap, Size> &miniheaps,
+                                  pid_t current) {
     lock_guard<mutex> lock(_miniheapLock);
 
     d_assert(sizeClass >= 0);

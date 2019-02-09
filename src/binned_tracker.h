@@ -44,7 +44,7 @@ public:
     return _objectSize;
   }
 
-  template<size_t Size>
+  template <size_t Size>
   size_t selectForReuse(FixedArray<MiniHeap, Size> &miniheaps, pid_t current) {
     std::lock_guard<std::mutex> lock(_mutex);
 
