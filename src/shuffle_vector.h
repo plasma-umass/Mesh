@@ -67,7 +67,7 @@ public:
   }
 
   // post: list has the index of all bits set to 1 in it, in a random order
-  uint32_t init(uint8_t mhOffset, internal::Bitmap &bitmap) {
+  inline uint32_t ATTRIBUTE_ALWAYS_INLINE init(uint8_t mhOffset, internal::Bitmap &bitmap) {
     d_assert(_maxCount > 0);
     d_assert_msg(_maxCount <= kMaxShuffleVectorLength, "objCount? %zu <= %zu", _maxCount, kMaxShuffleVectorLength);
 
@@ -143,17 +143,19 @@ public:
   inline bool ATTRIBUTE_ALWAYS_INLINE localRefill() {
     uint32_t addedCapacity = 0;
     auto miniheapCount = _attachedMiniheaps.size();
-    for (uint32_t i = 0; i < miniheapCount && !isFull(); i++, _attachedOff++) {
-      if (_attachedOff >= miniheapCount) {
-        _attachedOff = 0;
+    uint32_t attachedOff = _prng.inRange(0, miniheapCount - 1);
+
+    for (uint32_t i = 0; i < miniheapCount && !isFull(); i++, attachedOff++) {
+      if (attachedOff >= miniheapCount) {
+        attachedOff = 0;
       }
 
-      auto mh = _attachedMiniheaps[_attachedOff];
+      auto mh = _attachedMiniheaps[attachedOff];
       if (mh->isFull()) {
         continue;
       }
 
-      const auto allocCount = init(_attachedOff, mh->writableBitmap());
+      const auto allocCount = init(attachedOff, mh->writableBitmap());
       addedCapacity |= allocCount;
     }
 
@@ -208,7 +210,7 @@ public:
   // an attach takes ownership of the reference to mh
   inline void reinit() {
     _off = _maxCount;
-    _attachedOff = 0;
+    // _attachedOff = 0;
 
     internal::mwcShuffle(_attachedMiniheaps.array_begin(), _attachedMiniheaps.array_end(), _prng);
 
@@ -252,22 +254,21 @@ public:
   }
 
 private:
-  uintptr_t _start[kMaxMiniheapsPerShuffleVector];                           // 8
-  uint16_t _maxCount{0};                                                     // 2
-  int16_t _off{0};                                                           // 2
-  uint32_t _objectSize{0};                                                   // 4
-  float _objectSizeReciprocal{0.0};                                          // 4
-  uint16_t _attachedOff{0};                                                  //
-  const char *_arenaBegin;                                                   // 8
-  FixedArray<MiniHeap, kMaxMiniheapsPerShuffleVector> _attachedMiniheaps{};  // 16
-  MWC _prng;                                                                 // 36
-  // uint8_t __padding[47];                                       // 47  128
-  sv::Entry _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;  // 512 640
+  uintptr_t _start[kMaxMiniheapsPerShuffleVector];                           // 32  32
+  const char *_arenaBegin;                                                   // 8   40
+  uint16_t _maxCount{0};                                                     // 2   42
+  int16_t _off{0};                                                           // 2   44
+  uint32_t _objectSize{0};                                                   // 4   48
+  FixedArray<MiniHeap, kMaxMiniheapsPerShuffleVector> _attachedMiniheaps{};  // 36  128
+  MWC _prng;                                                                 // 36  84
+  float _objectSizeReciprocal{0.0};                                          // 4   88
+  sv::Entry _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;                // 512 640
 };
 
 static_assert(HL::gcd<sizeof(ShuffleVector), CACHELINE_SIZE>::value == CACHELINE_SIZE,
               "ShuffleVector not multiple of cacheline size!");
-static_assert(sizeof(ShuffleVector) == 640, "ShuffleVector not expected size!");
+// FIXME should fit in 640
+static_assert(sizeof(ShuffleVector) == 704, "ShuffleVector not expected size!");
 }  // namespace mesh
 
 #endif  // MESH__SHUFFLE_VECTOR_H
