@@ -124,8 +124,9 @@ public:
     // double-check
     oldBinId = mh->getBinToken().bin();
     newBinId = getBinId(mh->inUseCount());
-    if (unlikely(newBinId == oldBinId))
+    if (unlikely(newBinId == oldBinId)) {
       return false;
+    }
 
     move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
 
@@ -137,8 +138,9 @@ public:
 
     d_assert(mh != nullptr);
 
-    if (unlikely(!_hasMetadata))
+    if (unlikely(!_hasMetadata)) {
       setMetadata(mh);
+    }
 
     mh->setBinToken(internal::BinToken::Full());
     addTo(_full, mh);
@@ -225,7 +227,10 @@ public:
       }
     }
 
-    // no need to print occupancy of _empty MiniHeaps
+    for (size_t i = 0; i < _empty.size(); i++) {
+      if (_empty[i] != nullptr)
+        _empty[i]->printOccupancy();
+    }
   }
 
   void dumpStats(bool beDetailed) const {

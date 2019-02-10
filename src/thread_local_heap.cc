@@ -54,7 +54,7 @@ void *CACHELINE_ALIGNED_FN ThreadLocalHeap::smallAllocGlobalRefill(ShuffleVector
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
   _global->allocSmallMiniheaps(sizeClass, sizeMax, shuffleVector.miniheaps(), _current);
-  shuffleVector.attach();
+  shuffleVector.reinit();
 
   d_assert(!shuffleVector.isExhausted());
 

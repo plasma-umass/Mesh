@@ -67,12 +67,14 @@ public:
   }
 
   // post: list has the index of all bits set to 1 in it, in a random order
-  size_t init(internal::Bitmap &bitmap) {
+  uint32_t init(uint8_t mhOffset, internal::Bitmap &bitmap) {
     d_assert(_maxCount > 0);
     d_assert_msg(_maxCount <= kMaxShuffleVectorLength, "objCount? %zu <= %zu", _maxCount, kMaxShuffleVectorLength);
 
-    // off == maxCount means 'empty'
-    _off = _maxCount;
+    if (isFull()) {
+      return 0;
+    }
+
     // d_assert(_maxCount == _attachedMiniheap->maxCount());
 
     internal::RelaxedFixedBitmap newBitmap{_maxCount};
@@ -82,21 +84,37 @@ public:
     bitmap.setAndExchangeAll(localBits.mut_bits(), newBitmap.bits());
     localBits.invert();
 
+    uint32_t allocCount = 0;
+
     for (auto const &i : localBits) {
-      // for (size_t i = 0; i < _maxCount; i++) {
+      // FIXME: this incredibly lurky conditional is because
+      // RelaxedFixedBitmap iterates over all 256 bits it has,
+      // regardless of the _maxCount set in the constructor -- we
+      // should fix that.
       if (i >= _maxCount) {
         break;
       }
-      _off--;
-      d_assert(_off < _maxCount);
-      _list[_off] = sv::Entry{0, static_cast<uint8_t>(i)};
+
+      if (unlikely(isFull())) {
+        // TODO: we don't have any more space in our shuffle vector
+        // for these bits we've pulled out of the MiniHeap's bitmap,
+        // so we need to set them as free again.  we should measure
+        // how often this happens, as its gonna be slow
+        bitmap.unset(i);
+      } else {
+        _off--;
+        d_assert(_off >= 0);
+        d_assert(_off < _maxCount);
+        _list[_off] = sv::Entry{mhOffset, static_cast<uint8_t>(i)};
+        allocCount++;
+      }
     }
 
     if (kEnableShuffleOnInit) {
       internal::mwcShuffle(&_list[_off], &_list[_maxCount], _prng);
     }
 
-    return length();
+    return allocCount;
   }
 
   FixedArray<MiniHeap, kMaxMiniheapsPerShuffleVector> &miniheaps() {
@@ -110,6 +128,10 @@ public:
     }
   }
 
+  inline bool isFull() const {
+    return _off <= 0;
+  }
+
   inline bool isExhausted() const {
     return _off >= _maxCount;
   }
@@ -119,38 +141,27 @@ public:
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE localRefill() {
+    uint32_t addedCapacity = 0;
     auto miniheapCount = _attachedMiniheaps.size();
-    for (uint32_t i = 0, mhOff = _attachedOff + i; i < miniheapCount; i++, mhOff++) {
-      if (mhOff == miniheapCount) {
-        mhOff = 0;
+    for (uint32_t i = 0; i < miniheapCount && !isFull(); i++, _attachedOff++) {
+      if (_attachedOff >= miniheapCount) {
+        _attachedOff = 0;
       }
-    }
-    // const auto origOff = _attachedOff;
-    // // look at the rest of the MiniHeaps we already have.  If some have space,
-    // // refill the shuffle vector
-    // for (_attachedOff++; _attachedOff < _attachedMiniheaps.size(); _attachedOff++) {
-    //   MiniHeap *mh = getAttached();
-    //   if (mh->fullness() > .1) {
-    //     attach(arenaBegin, _attachedOff);
-    //     return true;
-    //   }
-    // }
-    // // TODO: refactor this, but if we didn't find anything we should loop
-    // // through our miniheaps once more (in case there were frees)
-    // for (_attachedOff = 0; _attachedOff < origOff; _attachedOff++) {
-    //   MiniHeap *mh = getAttached();
-    //   d_assert(mh != nullptr);
-    //   if (mh->fullness() > .1) {
-    //     attach(arenaBegin, _attachedOff);
-    //     return true;
-    //   }
-    // }
 
-    return false;
+      auto mh = _attachedMiniheaps[_attachedOff];
+      if (mh->isFull()) {
+        continue;
+      }
+
+      const auto allocCount = init(_attachedOff, mh->writableBitmap());
+      addedCapacity |= allocCount;
+    }
+
+    return addedCapacity > 0;
   }
 
   // number of items in the list
-  inline size_t ATTRIBUTE_ALWAYS_INLINE length() const {
+  inline uint32_t ATTRIBUTE_ALWAYS_INLINE length() const {
     return _maxCount - _off;
   }
 
@@ -169,6 +180,7 @@ public:
   }
 
   inline sv::Entry ATTRIBUTE_ALWAYS_INLINE pop() {
+    d_assert(_off >= 0);
     d_assert(_off < _maxCount);
 
     auto val = _list[_off];
@@ -186,30 +198,33 @@ public:
 
     d_assert(off < 256);
 
-    push(sv::Entry{0, static_cast<uint8_t>(off)});
-  }
-
-  // an attach takes ownership of the reference to mh
-  inline void attach() {
-    internal::mwcShuffle(_attachedMiniheaps.array_begin(), _attachedMiniheaps.array_end(), _prng);
-    for (size_t i = 0; i < _attachedMiniheaps.size(); i++) {
-      const auto mh = _attachedMiniheaps[i];
-      _start[i] = mh->getSpanStart(_arenaBegin);
-
-      d_assert(mh->isAttached());
-
-      const auto allocCount = init(mh->writableBitmap());
-#ifndef NDEBUG
-      if (allocCount == 0) {
-        mh->dumpDebug();
-      }
-#endif
-      d_assert_msg(allocCount > 0, "no free bits in MH %p", mh->getSpanStart(_arenaBegin));
+    if (likely(_off > 0)) {
+      push(sv::Entry{mh->svOffset(), static_cast<uint8_t>(off)});
+    } else {
+      mh->freeOff(off);
     }
   }
 
+  // an attach takes ownership of the reference to mh
+  inline void reinit() {
+    _off = _maxCount;
+    _attachedOff = 0;
+
+    internal::mwcShuffle(_attachedMiniheaps.array_begin(), _attachedMiniheaps.array_end(), _prng);
+
+    for (size_t i = 0; i < _attachedMiniheaps.size(); i++) {
+      const auto mh = _attachedMiniheaps[i];
+      _start[i] = mh->getSpanStart(_arenaBegin);
+      mh->setSvOffset(i);
+      d_assert(mh->isAttached());
+    }
+
+    const bool addedCapacity = localRefill();
+    d_assert(addedCapacity);
+  }
+
   inline void *ATTRIBUTE_ALWAYS_INLINE ptrFromOffset(sv::Entry off) const {
-    d_assert(off.miniheapOffset() == 0);
+    d_assert(off.miniheapOffset() < _attachedMiniheaps.size());
     return reinterpret_cast<void *>(_start[off.miniheapOffset()] + off.bit() * _objectSize);
   }
 
@@ -239,7 +254,7 @@ public:
 private:
   uintptr_t _start[kMaxMiniheapsPerShuffleVector];                           // 8
   uint16_t _maxCount{0};                                                     // 2
-  uint16_t _off{0};                                                          // 2
+  int16_t _off{0};                                                           // 2
   uint32_t _objectSize{0};                                                   // 4
   float _objectSizeReciprocal{0.0};                                          // 4
   uint16_t _attachedOff{0};                                                  //
