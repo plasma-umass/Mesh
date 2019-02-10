@@ -118,6 +118,31 @@ public:
     return _maxCount;
   }
 
+  inline bool ATTRIBUTE_ALWAYS_INLINE localRefill(void *arenaBegin) {
+    // const auto origOff = _attachedOff;
+    // // look at the rest of the MiniHeaps we already have.  If some have space,
+    // // refill the shuffle vector
+    // for (_attachedOff++; _attachedOff < _attachedMiniheaps.size(); _attachedOff++) {
+    //   MiniHeap *mh = getAttached();
+    //   if (mh->fullness() > .1) {
+    //     attach(arenaBegin, _attachedOff);
+    //     return true;
+    //   }
+    // }
+    // // TODO: refactor this, but if we didn't find anything we should loop
+    // // through our miniheaps once more (in case there were frees)
+    // for (_attachedOff = 0; _attachedOff < origOff; _attachedOff++) {
+    //   MiniHeap *mh = getAttached();
+    //   d_assert(mh != nullptr);
+    //   if (mh->fullness() > .1) {
+    //     attach(arenaBegin, _attachedOff);
+    //     return true;
+    //   }
+    // }
+
+    return false;
+  }
+
   // number of items in the list
   inline size_t ATTRIBUTE_ALWAYS_INLINE length() const {
     return _maxCount - _off;
