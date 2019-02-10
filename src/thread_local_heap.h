@@ -61,8 +61,9 @@ public:
 
   void releaseAll();
 
-  void *ATTRIBUTE_NEVER_INLINE smallAllocSlowpath(size_t sizeClass);
-  void *ATTRIBUTE_NEVER_INLINE smallAllocGlobalRefill(ShuffleVector &shuffleVector, size_t sizeClass);
+  void *ATTRIBUTE_NEVER_INLINE CACHELINE_ALIGNED_FN smallAllocSlowpath(size_t sizeClass);
+  void *ATTRIBUTE_NEVER_INLINE CACHELINE_ALIGNED_FN smallAllocGlobalRefill(ShuffleVector &shuffleVector,
+                                                                           size_t sizeClass);
 
   inline void *memalign(size_t alignment, size_t size) {
     // Check for non power-of-two alignment.

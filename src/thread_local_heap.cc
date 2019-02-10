@@ -36,7 +36,7 @@ ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
 }
 
 // we get here if the shuffleVector is exhausted
-void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
+void *CACHELINE_ALIGNED_FN ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
   ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
 
   // we grab multiple MiniHeaps at a time from the global heap.  often
@@ -50,7 +50,7 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
   return smallAllocGlobalRefill(shuffleVector, sizeClass);
 }
 
-void *ThreadLocalHeap::smallAllocGlobalRefill(ShuffleVector &shuffleVector, size_t sizeClass) {
+void *CACHELINE_ALIGNED_FN ThreadLocalHeap::smallAllocGlobalRefill(ShuffleVector &shuffleVector, size_t sizeClass) {
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
   _global->allocSmallMiniheaps(sizeClass, sizeMax, shuffleVector.miniheaps(), _current);
