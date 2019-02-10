@@ -174,7 +174,6 @@ public:
       return smallAllocSlowpath(sizeClass);
     }
 
-    _last = &shuffleVector;
     return shuffleVector.malloc();
   }
 
@@ -183,12 +182,12 @@ public:
       return;
 
     auto mh = _global->miniheapForLocked(ptr);
-    if (likely(mh && mh->current() == _current)) {
+    if (likely(mh && mh->current() == _current && !mh->isMeshed())) {
       ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
       shuffleVector.free(mh, ptr);
       return;
     }
-    _global->free(ptr);
+    _global->freeFor(mh, ptr);
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE sizedFree(void *ptr, size_t sz) {
@@ -199,14 +198,9 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
-    if (likely(_last != nullptr && _last->contains(ptr))) {
-      return _last->getSize();
-    }
-
     auto mh = _global->miniheapForLocked(ptr);
     if (likely(mh && mh->current() == _current)) {
       ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
-      _last = &shuffleVector;
       return shuffleVector.getSize();
     }
 
@@ -233,7 +227,6 @@ public:
 
 protected:
   ShuffleVector _shuffleVector[kNumBins] CACHELINE_ALIGNED;
-  ShuffleVector *_last{nullptr};
   GlobalHeap *_global;
   pid_t _current{0};
   MWC _prng;

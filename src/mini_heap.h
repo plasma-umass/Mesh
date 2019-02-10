@@ -308,7 +308,7 @@ public:
 
 public:
   template <class Callback>
-  inline void forEachMeshed(Callback cb) const {
+  inline void ATTRIBUTE_ALWAYS_INLINE forEachMeshed(Callback cb) const {
     if (cb(this))
       return;
 
@@ -319,7 +319,7 @@ public:
   }
 
   template <class Callback>
-  inline void forEachMeshed(Callback cb) {
+  inline void ATTRIBUTE_ALWAYS_INLINE forEachMeshed(Callback cb) {
     if (cb(this))
       return;
 
@@ -375,6 +375,24 @@ public:
     mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
   }
 
+  // this only works for unmeshed miniheaps
+  inline uint8_t ATTRIBUTE_ALWAYS_INLINE getUnmeshedOff(void *arenaBegin, void *ptr) const {
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+
+    uintptr_t span = reinterpret_cast<uintptr_t>(arenaBegin) + _span.offset * kPageSize;
+    d_assert(span != 0);
+
+    const size_t off = (ptrval - span) * _objectSizeReciprocal;
+#ifndef NDEBUG
+    const size_t off2 = (ptrval - span) / _objectSize;
+    hard_assert_msg(off == off2, "%zu != %zu", off, off2);
+#endif
+
+    d_assert(off < maxCount());
+
+    return off;
+  }
+
   inline ssize_t ATTRIBUTE_ALWAYS_INLINE getOff(void *arenaBegin, void *ptr) const {
     const auto span = spanStart(reinterpret_cast<uintptr_t>(arenaBegin), ptr);
     d_assert(span != 0);
@@ -399,8 +417,9 @@ protected:
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
     uintptr_t spanptr = arenaBegin + _span.offset * kPageSize;
-    if (likely(spanptr <= ptrval && ptrval < spanptr + len))
+    if (likely(spanptr <= ptrval && ptrval < spanptr + len)) {
       return spanptr;
+    }
 
     spanptr = 0;
     if (unlikely(!_nextMiniHeap.hasValue())) {

@@ -48,7 +48,6 @@ void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
 
   void *ptr = shuffleVector.malloc();
   d_assert(ptr != nullptr);
-  _last = &shuffleVector;
 
   return ptr;
 }

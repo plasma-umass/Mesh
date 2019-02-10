@@ -209,6 +209,8 @@ public:
     _littleheaps[mh->sizeClass()].remove(mh);
   }
 
+  void freeFor(MiniHeap *mh, void *ptr);
+
   // called with lock held
   void freeMiniheapAfterMeshLocked(MiniHeap *mh, bool untrack = true) {
     // don't untrack a meshed miniheap -- it has already been untracked
