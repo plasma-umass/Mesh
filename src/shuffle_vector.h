@@ -119,6 +119,12 @@ public:
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE localRefill() {
+    auto miniheapCount = _attachedMiniheaps.size();
+    for (uint32_t i = 0, mhOff = _attachedOff + i; i < miniheapCount; i++, mhOff++) {
+      if (mhOff == miniheapCount) {
+        mhOff = 0;
+      }
+    }
     // const auto origOff = _attachedOff;
     // // look at the rest of the MiniHeaps we already have.  If some have space,
     // // refill the shuffle vector
@@ -185,6 +191,7 @@ public:
 
   // an attach takes ownership of the reference to mh
   inline void attach() {
+    internal::mwcShuffle(_attachedMiniheaps.array_begin(), _attachedMiniheaps.array_end(), _prng);
     for (size_t i = 0; i < _attachedMiniheaps.size(); i++) {
       const auto mh = _attachedMiniheaps[i];
       _start[i] = mh->getSpanStart(_arenaBegin);
@@ -217,7 +224,7 @@ public:
   }
 
   // called once, on initialization of ThreadLocalHeap
-  inline void initialInit(const char *arenaBegin, size_t sz) {
+  inline void initialInit(const char *arenaBegin, uint32_t sz) {
     _arenaBegin = arenaBegin;
     _objectSize = sz;
     _objectSizeReciprocal = 1.0 / (float)sz;

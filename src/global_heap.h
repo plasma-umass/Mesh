@@ -120,7 +120,7 @@ public:
     _littleheaps[sizeClass].postFree(mh, mh->inUseCount());
   }
 
-  template <size_t Size>
+  template <uint32_t Size>
   inline void releaseMiniheaps(FixedArray<MiniHeap, Size> &miniheaps) {
     if (miniheaps.size() == 0) {
       return;
@@ -133,8 +133,8 @@ public:
     miniheaps.clear();
   }
 
-  template <size_t Size>
-  inline void allocSmallMiniheaps(int sizeClass, size_t objectSize, FixedArray<MiniHeap, Size> &miniheaps,
+  template <uint32_t Size>
+  inline void allocSmallMiniheaps(int sizeClass, uint32_t objectSize, FixedArray<MiniHeap, Size> &miniheaps,
                                   pid_t current) {
     lock_guard<mutex> lock(_miniheapLock);
 

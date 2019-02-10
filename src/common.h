@@ -74,7 +74,7 @@ static constexpr int kDefaultMeshPeriod = 10000;
 static constexpr uint32_t kMinArenaExpansion = 4096;  // 16 MB in pages
 
 // ensures we amortize the cost of going to the global heap enough
-static constexpr size_t kMinStringLen = 8;
+static constexpr uint32_t kMinStringLen = 8;
 static constexpr size_t kMiniheapRefillGoalSize = 64 * 1024;  // 64 kB
 static constexpr size_t kMaxMiniheapsPerShuffleVector = 1;
 

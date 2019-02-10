@@ -13,7 +13,7 @@ namespace mesh {
 template <typename FixedArray>
 class FixedArrayIter : public std::iterator<std::forward_iterator_tag, typename FixedArray::value_type> {
 public:
-  FixedArrayIter(const FixedArray &a, const size_t i) : _i(i), _array(a) {
+  FixedArrayIter(const FixedArray &a, const uint32_t i) : _i(i), _array(a) {
   }
   FixedArrayIter &operator++() {
     if (unlikely(_i + 1 >= _array.size())) {
@@ -35,11 +35,11 @@ public:
   }
 
 private:
-  size_t _i;
+  uint32_t _i;
   const FixedArray &_array;
 };
 
-template <typename T, size_t Capacity>
+template <typename T, uint32_t Capacity>
 class FixedArray {
 private:
   DISALLOW_COPY_AND_ASSIGN(FixedArray);
@@ -52,7 +52,7 @@ public:
   FixedArray() {
     d_assert(_size == 0);
 #ifndef NDEBUG
-    for (size_t i = 0; i < Capacity; i++) {
+    for (uint32_t i = 0; i < Capacity; i++) {
       d_assert(_objects[i] == nullptr);
     }
 #endif
@@ -62,7 +62,7 @@ public:
     clear();
   }
 
-  size_t size() const {
+  uint32_t size() const {
     return _size;
   }
 
@@ -81,9 +81,16 @@ public:
     _size++;
   }
 
-  T *operator[](size_t i) const {
-    d_assert(i < _size);
+  T *operator[](uint32_t i) const {
+    // d_assert(i < _size);
     return _objects[i];
+  }
+
+  T **array_begin() {
+    return &_objects[0];
+  }
+  T **array_end() {
+    return &_objects[size()];
   }
 
   iterator begin() {
@@ -106,7 +113,7 @@ public:
   }
 
 private:
-  size_t _size{0};
+  uint32_t _size{0};
   T *_objects[Capacity]{};
 };
 

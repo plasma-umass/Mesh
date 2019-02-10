@@ -12,8 +12,8 @@
 
 using namespace mesh;
 
-static constexpr size_t StrLen = 128;
-static constexpr size_t ObjCount = 32;
+static constexpr uint32_t StrLen = 128;
+static constexpr uint32_t ObjCount = 32;
 
 // shows up in strace logs, but otherwise does nothing
 static inline void note(const char *note) {
