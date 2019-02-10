@@ -208,7 +208,7 @@ public:
     return _span.byteLength();
   }
 
-  inline uint32_t maxCount() const {
+  inline uint32_t ATTRIBUTE_ALWAYS_INLINE maxCount() const {
     return _flags.maxCount();
   }
 
@@ -225,15 +225,15 @@ public:
     return beginval + _span.offset * kPageSize;
   }
 
-  inline bool isEmpty() const {
+  inline bool ATTRIBUTE_ALWAYS_INLINE isEmpty() const {
     return _bitmap.inUseCount() == 0;
   }
 
-  inline bool isFull() const {
+  inline bool ATTRIBUTE_ALWAYS_INLINE isFull() const {
     return _bitmap.inUseCount() == maxCount();
   }
 
-  inline uint32_t inUseCount() const {
+  inline uint32_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
     return _bitmap.inUseCount();
   }
 
