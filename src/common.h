@@ -76,7 +76,7 @@ static constexpr uint32_t kMinArenaExpansion = 4096;  // 16 MB in pages
 // ensures we amortize the cost of going to the global heap enough
 static constexpr uint32_t kMinStringLen = 8;
 static constexpr size_t kMiniheapRefillGoalSize = 64 * 1024;  // 64 kB
-static constexpr size_t kMaxMiniheapsPerShuffleVector = 1;
+static constexpr size_t kMaxMiniheapsPerShuffleVector = 2;
 
 // shuffle vector features
 static constexpr size_t kMaxShuffleVectorLength = 256;  // sizeof(uint8_t) << 8
