@@ -99,7 +99,7 @@ public:
     return length();
   }
 
-  FixedArray<MiniHeap, 1> &miniheaps() {
+  FixedArray<MiniHeap, kMaxMiniheapsPerShuffleVector> &miniheaps() {
     return _attachedMiniheaps;
   }
 
@@ -118,7 +118,7 @@ public:
     return _maxCount;
   }
 
-  inline bool ATTRIBUTE_ALWAYS_INLINE localRefill(void *arenaBegin) {
+  inline bool ATTRIBUTE_ALWAYS_INLINE localRefill() {
     // const auto origOff = _attachedOff;
     // // look at the rest of the MiniHeaps we already have.  If some have space,
     // // refill the shuffle vector
@@ -158,7 +158,6 @@ public:
 
     if (kEnableShuffleOnFree) {
       size_t swapOff = _prng.inRange(_off, maxCount() - 1);
-      _lastOff = swapOff;
       std::swap(_list[_off], _list[swapOff]);
     }
   }
@@ -176,7 +175,7 @@ public:
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     // const size_t off = (ptrval - _start) / _objectSize;
     // const size_t off = (ptrval - _start) * _objectSizeReciprocal;
-    const size_t off = mh->getUnmeshedOff(reinterpret_cast<void *>(_arenaBegin), ptr);
+    const size_t off = mh->getUnmeshedOff(reinterpret_cast<const void *>(_arenaBegin), ptr);
     // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
 
     d_assert(off < 256);
@@ -185,11 +184,10 @@ public:
   }
 
   // an attach takes ownership of the reference to mh
-  inline void attach(const void *arenaBegin) {
-    _arenaBegin = reinterpret_cast<uintptr_t>(arenaBegin);
+  inline void attach() {
     for (size_t i = 0; i < _attachedMiniheaps.size(); i++) {
       const auto mh = _attachedMiniheaps[i];
-      _start[i] = mh->getSpanStart(arenaBegin);
+      _start[i] = mh->getSpanStart(_arenaBegin);
 
       d_assert(mh->isAttached());
 
@@ -199,7 +197,7 @@ public:
         mh->dumpDebug();
       }
 #endif
-      d_assert_msg(allocCount > 0, "no free bits in MH %p", mh->getSpanStart(arenaBegin));
+      d_assert_msg(allocCount > 0, "no free bits in MH %p", mh->getSpanStart(_arenaBegin));
     }
   }
 
@@ -219,7 +217,8 @@ public:
   }
 
   // called once, on initialization of ThreadLocalHeap
-  inline void setObjectSize(size_t sz) {
+  inline void initialInit(const char *arenaBegin, size_t sz) {
+    _arenaBegin = arenaBegin;
     _objectSize = sz;
     _objectSizeReciprocal = 1.0 / (float)sz;
     _maxCount = max(HL::CPUInfo::PageSize / sz, kMinStringLen);
@@ -231,15 +230,15 @@ public:
   }
 
 private:
-  uint32_t _objectSize{0};                       // 4   4
-  float _objectSizeReciprocal{0.0};              // 4   8
-  uintptr_t _arenaBegin;                         //
-  uint16_t _maxCount{0};                         // 2   62
-  uint16_t _off{0};                              // 2   64
-  FixedArray<MiniHeap, 1> _attachedMiniheaps{};  // 16  80
-  uintptr_t _start[1];                           // 8   16
-  MWC _prng;                                     // 36  60
-  volatile uint8_t _lastOff{0};                  // 1   81
+  uintptr_t _start[kMaxMiniheapsPerShuffleVector];                           // 8
+  uint16_t _maxCount{0};                                                     // 2
+  uint16_t _off{0};                                                          // 2
+  uint32_t _objectSize{0};                                                   // 4
+  float _objectSizeReciprocal{0.0};                                          // 4
+  uint16_t _attachedOff{0};                                                  //
+  const char *_arenaBegin;                                                   // 8
+  FixedArray<MiniHeap, kMaxMiniheapsPerShuffleVector> _attachedMiniheaps{};  // 16
+  MWC _prng;                                                                 // 36
   // uint8_t __padding[47];                                       // 47  128
   sv::Entry _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;  // 512 640
 };

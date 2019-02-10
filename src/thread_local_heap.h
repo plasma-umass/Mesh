@@ -46,10 +46,11 @@ public:
         _current(gettid()),
         _prng(internal::seed(), internal::seed()),
         _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)) {
+    const auto arenaBegin = _global->arenaBegin();
     // when asked, give 16-byte allocations for 0-byte requests
-    _shuffleVector[0].setObjectSize(SizeMap::ByteSizeForClass(1));
+    _shuffleVector[0].initialInit(arenaBegin, SizeMap::ByteSizeForClass(1));
     for (size_t i = 1; i < kNumBins; i++) {
-      _shuffleVector[i].setObjectSize(SizeMap::ByteSizeForClass(i));
+      _shuffleVector[i].initialInit(arenaBegin, SizeMap::ByteSizeForClass(i));
     }
     d_assert(_global != nullptr);
   }
@@ -61,8 +62,7 @@ public:
   void releaseAll();
 
   void *ATTRIBUTE_NEVER_INLINE smallAllocSlowpath(size_t sizeClass);
-  void *ATTRIBUTE_NEVER_INLINE smallAllocGlobalRefill(ShuffleVector &shuffleVector, const char *arenaBegin,
-                                                      size_t sizeClass);
+  void *ATTRIBUTE_NEVER_INLINE smallAllocGlobalRefill(ShuffleVector &shuffleVector, size_t sizeClass);
 
   inline void *memalign(size_t alignment, size_t size) {
     // Check for non power-of-two alignment.

@@ -39,24 +39,22 @@ ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
 void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
   ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
 
-  const auto arenaBegin = _global->arenaBegin();
-
   // we grab multiple MiniHeaps at a time from the global heap.  often
   // it is possible to refill the freelist from a not-yet-used
   // MiniHeap we already have, without global cross-thread
   // synchronization
-  if (likely(shuffleVector.localRefill(arenaBegin))) {
+  if (likely(shuffleVector.localRefill())) {
     return shuffleVector.malloc();
   }
 
-  return smallAllocGlobalRefill(shuffleVector, arenaBegin, sizeClass);
+  return smallAllocGlobalRefill(shuffleVector, sizeClass);
 }
 
-void *ThreadLocalHeap::smallAllocGlobalRefill(ShuffleVector &shuffleVector, const char *arenaBegin, size_t sizeClass) {
+void *ThreadLocalHeap::smallAllocGlobalRefill(ShuffleVector &shuffleVector, size_t sizeClass) {
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
   _global->allocSmallMiniheaps(sizeClass, sizeMax, shuffleVector.miniheaps(), _current);
-  shuffleVector.attach(arenaBegin);
+  shuffleVector.attach();
 
   d_assert(!shuffleVector.isExhausted());
 
