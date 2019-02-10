@@ -174,7 +174,7 @@ public:
   }
 
   /// Copies (for meshing) the contents of src into our span.
-  inline void consume(void *arenaBegin, MiniHeap *src) {
+  inline void consume(const void *arenaBegin, MiniHeap *src) {
     // this would be bad
     d_assert(src != this);
     d_assert(objectSize() == src->objectSize());
@@ -218,7 +218,7 @@ public:
     return _flags.sizeClass();
   }
 
-  inline uintptr_t getSpanStart(void *arenaBegin) const {
+  inline uintptr_t getSpanStart(const void *arenaBegin) const {
     const auto beginval = reinterpret_cast<uintptr_t>(arenaBegin);
     return beginval + _span.offset * kPageSize;
   }
@@ -347,7 +347,7 @@ public:
   }
 
   /// public for meshTest only
-  inline void *mallocAt(void *arenaBegin, size_t off) {
+  inline void *mallocAt(const void *arenaBegin, size_t off) {
     if (!_bitmap.tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
@@ -357,7 +357,7 @@ public:
     return ptrFromOffset(arenaBegin, off);
   }
 
-  inline void *ptrFromOffset(void *arenaBegin, size_t off) {
+  inline void *ptrFromOffset(const void *arenaBegin, size_t off) {
     return reinterpret_cast<void *>(getSpanStart(arenaBegin) + off * objectSize());
   }
 
@@ -376,7 +376,7 @@ public:
   }
 
   // this only works for unmeshed miniheaps
-  inline uint8_t ATTRIBUTE_ALWAYS_INLINE getUnmeshedOff(void *arenaBegin, void *ptr) const {
+  inline uint8_t ATTRIBUTE_ALWAYS_INLINE getUnmeshedOff(const void *arenaBegin, void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
     uintptr_t span = reinterpret_cast<uintptr_t>(arenaBegin) + _span.offset * kPageSize;

@@ -185,7 +185,7 @@ public:
   }
 
   // an attach takes ownership of the reference to mh
-  inline void attach(void *arenaBegin) {
+  inline void attach(const void *arenaBegin) {
     _arenaBegin = reinterpret_cast<uintptr_t>(arenaBegin);
     for (size_t i = 0; i < _attachedMiniheaps.size(); i++) {
       const auto mh = _attachedMiniheaps[i];
