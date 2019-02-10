@@ -143,7 +143,7 @@ public:
     return !(oldValue & mask);
   }
 
-  inline uint64_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
+  inline uint32_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
     return __builtin_popcountl(_bits[0]) + __builtin_popcountl(_bits[1]) + __builtin_popcountl(_bits[2]) +
            __builtin_popcountl(_bits[3]);
   }
@@ -232,9 +232,9 @@ public:
     return !(oldValue & mask);
   }
 
-  inline uint64_t inUseCount() const {
+  inline uint32_t inUseCount() const {
     const auto wordCount = representationSize(_bitCount) / sizeof(size_t);
-    uint64_t count = 0;
+    uint32_t count = 0;
     for (size_t i = 0; i < wordCount; i++) {
       count += __builtin_popcountl(_bits[i]);
     }
@@ -319,7 +319,7 @@ public:
 
   inline uint64_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
     constexpr auto wordCount = representationSize(maxBits) / sizeof(size_t);
-    uint64_t count = 0;
+    uint32_t count = 0;
     // for (size_t i = 0; i < wordCount; i++) {
     //   count += __builtin_popcountl(_bits[i]);
     // }

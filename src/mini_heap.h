@@ -206,7 +206,7 @@ public:
     return _span.byteLength();
   }
 
-  inline size_t maxCount() const {
+  inline uint32_t maxCount() const {
     return _flags.maxCount();
   }
 
@@ -231,7 +231,7 @@ public:
     return _bitmap.inUseCount() == maxCount();
   }
 
-  inline size_t inUseCount() const {
+  inline uint32_t inUseCount() const {
     return _bitmap.inUseCount();
   }
 
