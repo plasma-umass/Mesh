@@ -149,11 +149,12 @@ public:
     return val;
   }
 
-  inline void ATTRIBUTE_ALWAYS_INLINE free(void *ptr) {
+  inline void ATTRIBUTE_ALWAYS_INLINE free(MiniHeap *mh, void *ptr) {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     // const size_t off = (ptrval - _start) / _objectSize;
     const size_t off = (ptrval - _start) * _objectSizeReciprocal;
-    // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
+    const size_t off2 = mh->getOff(reinterpret_cast<void *>(_arenaBegin), ptr);
+    hard_assert_msg(off == off2, "%zu != %zu", off, off2);
 
     d_assert(off < 256);
 
@@ -162,6 +163,7 @@ public:
 
   // an attach takes ownership of the reference to mh
   inline void attach(void *arenaBegin) {
+    _arenaBegin = reinterpret_cast<uintptr_t>(arenaBegin);
     for (MiniHeap *mh : _attachedMiniheaps) {
       d_assert(mh->isAttached());
 
@@ -215,10 +217,11 @@ private:
   float _objectSizeReciprocal{0.0};              // 4   8
   uintptr_t _start{0};                           // 8   16
   uintptr_t _end{0};                             // 8   24
-  MWC _prng;                                     // 36  60
+  uintptr_t _arenaBegin;                         //
   uint16_t _maxCount{0};                         // 2   62
   uint16_t _off{0};                              // 2   64
   FixedArray<MiniHeap, 1> _attachedMiniheaps{};  // 16  80
+  MWC _prng;                                     // 36  60
   volatile uint8_t _lastOff{0};                  // 1   81
   // uint8_t __padding[47];                                       // 47  128
   sv::Entry _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;  // 512 640

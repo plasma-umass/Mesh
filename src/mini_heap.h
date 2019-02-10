@@ -244,6 +244,7 @@ public:
   }
 
   inline void setAttached(pid_t current) {
+    // mesh::debug("MiniHeap(%p:%5zu): current <- %u\n", this, objectSize(), current);
     _current.store(current, std::memory_order::memory_order_release);
   }
 
@@ -260,6 +261,7 @@ public:
   }
 
   inline void unsetAttached() {
+    // mesh::debug("MiniHeap(%p:%5zu): current <- UNSET\n", this, objectSize());
     _current.store(0, std::memory_order::memory_order_release);
   }
 
@@ -401,8 +403,8 @@ protected:
       return spanptr;
 
     spanptr = 0;
-    if (!_nextMiniHeap.hasValue()) {
-      d_assert(false);
+    if (unlikely(!_nextMiniHeap.hasValue())) {
+      hard_assert(false);
       return spanptr;
     }
 

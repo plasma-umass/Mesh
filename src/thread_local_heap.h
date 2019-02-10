@@ -182,48 +182,17 @@ public:
     if (unlikely(ptr == nullptr))
       return;
 
-    if (likely(_last != nullptr && _last->contains(ptr))) {
-      _last->free(ptr);
-      return;
-    }
-
     auto mh = _global->miniheapForLocked(ptr);
     if (likely(mh && mh->current() == _current)) {
       ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
-      // ShuffleVectors only refer to the first virtual span of a
-      // Miniheap.  Re-check contains() here to catch the case of a
-      // free for a non-primary-span allocation.  Plus its slightly
-      // faster here to call contains unconditionally rather than
-      // first check !mh->isMeshed :shrug:
-      if (likely(shuffleVector.contains(ptr))) {
-        d_assert(mh->isAttached());
-        _last = &shuffleVector;
-        shuffleVector.free(ptr);
-        return;
-      }
+      shuffleVector.free(mh, ptr);
+      return;
     }
     _global->free(ptr);
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE sizedFree(void *ptr, size_t sz) {
-    if (unlikely(ptr == nullptr))
-      return;
-
-    uint32_t sizeClass = 0;
-
-    // if the size isn't in our sizemap it is a large alloc
-    if (unlikely(!SizeMap::GetSizeClass(sz, &sizeClass))) {
-      _global->free(ptr);
-      return;
-    }
-
-    ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
-    if (likely(shuffleVector.contains(ptr))) {
-      shuffleVector.free(ptr);
-      return;
-    }
-
-    _global->free(ptr);
+    this->free(ptr);
   }
 
   inline size_t getSize(void *ptr) {
