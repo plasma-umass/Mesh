@@ -171,7 +171,7 @@ public:
   }
 
   inline void freeOff(size_t off) {
-    d_assert(_bitmap.isSet(off));
+    d_assert_msg(_bitmap.isSet(off), "MiniHeap(%p) expected bit %zu to be set (svOff:%zu)", this, off, svOffset());
     _bitmap.unset(off);
   }
 
@@ -255,6 +255,7 @@ public:
   }
 
   inline void setSvOffset(uint8_t off) {
+    // debug("MiniHeap(%p) SET svOff:%zu)", this, off);
     _flags.setSvOffset(off);
   }
 
