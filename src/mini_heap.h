@@ -58,11 +58,13 @@ public:
 
   inline void setSvOffset(uint8_t off) {
     d_assert(off < 255);
+    uint32_t mask = ~(static_cast<uint32_t>(0xff) << ShuffleVectorOffsetShift);
+    uint32_t newVal = (static_cast<uint32_t>(off) << ShuffleVectorOffsetShift);
     uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
     while (!atomic_compare_exchange_weak_explicit(&_flags,
-                                                  &oldFlags,                  // old val
-                                                  (oldFlags & ~0xff) | off,   // new val
-                                                  std::memory_order_release,  // success mem model
+                                                  &oldFlags,                   // old val
+                                                  (oldFlags & mask) | newVal,  // new val
+                                                  std::memory_order_release,   // success mem model
                                                   std::memory_order_relaxed)) {
     }
   }
