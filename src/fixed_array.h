@@ -113,8 +113,8 @@ public:
   }
 
 private:
-  uint32_t _size{0};
   T *_objects[Capacity]{};
+  uint32_t _size{0};
 };
 
 }  // namespace mesh
