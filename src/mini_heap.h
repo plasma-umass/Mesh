@@ -374,7 +374,7 @@ public:
   }
 
   inline ssize_t ATTRIBUTE_ALWAYS_INLINE getOff(void *arenaBegin, void *ptr) const {
-    const auto span = spanStart(arenaBegin, ptr);
+    const auto span = spanStart(reinterpret_cast<uintptr_t>(arenaBegin), ptr);
     d_assert(span != 0);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
@@ -390,14 +390,13 @@ public:
   }
 
 protected:
-  inline uintptr_t ATTRIBUTE_ALWAYS_INLINE spanStart(void *arenaBegin, void *ptr) const {
-    const auto arena = reinterpret_cast<uintptr_t>(arenaBegin);
+  inline uintptr_t ATTRIBUTE_ALWAYS_INLINE spanStart(uintptr_t arenaBegin, void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     const auto len = _span.byteLength();
 
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
-    uintptr_t spanptr = arena + _span.offset * kPageSize;
+    uintptr_t spanptr = arenaBegin + _span.offset * kPageSize;
     if (likely(spanptr <= ptrval && ptrval < spanptr + len))
       return spanptr;
 
@@ -408,7 +407,7 @@ protected:
     }
 
     GetMiniHeap(_nextMiniHeap)->forEachMeshed([&](const MiniHeap *mh) {
-      uintptr_t meshedSpanptr = arena + mh->span().offset * kPageSize;
+      uintptr_t meshedSpanptr = arenaBegin + mh->span().offset * kPageSize;
       if (meshedSpanptr <= ptrval && ptrval < meshedSpanptr + len) {
         spanptr = meshedSpanptr;
         return true;
