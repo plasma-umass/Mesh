@@ -308,7 +308,7 @@ public:
 
 public:
   template <class Callback>
-  inline void ATTRIBUTE_ALWAYS_INLINE forEachMeshed(Callback cb) const {
+  inline void forEachMeshed(Callback cb) const {
     if (cb(this))
       return;
 
@@ -319,7 +319,7 @@ public:
   }
 
   template <class Callback>
-  inline void ATTRIBUTE_ALWAYS_INLINE forEachMeshed(Callback cb) {
+  inline void forEachMeshed(Callback cb) {
     if (cb(this))
       return;
 
