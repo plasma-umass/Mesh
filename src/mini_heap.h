@@ -170,7 +170,7 @@ public:
     freeOff(off);
   }
 
-  inline void freeOff(size_t off) {
+  inline void ATTRIBUTE_ALWAYS_INLINE freeOff(size_t off) {
     d_assert_msg(_bitmap.isSet(off), "MiniHeap(%p) expected bit %zu to be set (svOff:%zu)", this, off, svOffset());
     _bitmap.unset(off);
   }

@@ -77,21 +77,22 @@ public:
 
     // d_assert(_maxCount == _attachedMiniheap->maxCount());
 
-    internal::RelaxedFixedBitmap newBitmap{_maxCount};
+    internal::RelaxedFixedBitmap newBitmap{static_cast<uint32_t>(_maxCount)};
     newBitmap.setAll(_maxCount);
 
-    internal::RelaxedFixedBitmap localBits{_maxCount};
+    internal::RelaxedFixedBitmap localBits{static_cast<uint32_t>(_maxCount)};
     bitmap.setAndExchangeAll(localBits.mut_bits(), newBitmap.bits());
     localBits.invert();
 
     uint32_t allocCount = 0;
 
+    const uint32_t maxCount = static_cast<uint32_t>(_maxCount);
     for (auto const &i : localBits) {
       // FIXME: this incredibly lurky conditional is because
       // RelaxedFixedBitmap iterates over all 256 bits it has,
       // regardless of the _maxCount set in the constructor -- we
       // should fix that.
-      if (i >= _maxCount) {
+      if (i >= maxCount) {
         break;
       }
 
@@ -143,19 +144,17 @@ public:
   inline bool ATTRIBUTE_ALWAYS_INLINE localRefill() {
     uint32_t addedCapacity = 0;
     auto miniheapCount = _attachedMiniheaps.size();
-    uint32_t attachedOff = _prng.inRange(0, miniheapCount - 1);
-
-    for (uint32_t i = 0; i < miniheapCount && !isFull(); i++, attachedOff++) {
-      if (attachedOff >= miniheapCount) {
-        attachedOff = 0;
+    for (uint32_t i = 0; i < miniheapCount && !isFull(); i++, _attachedOff++) {
+      if (_attachedOff >= miniheapCount) {
+        _attachedOff = 0;
       }
 
-      auto mh = _attachedMiniheaps[attachedOff];
+      auto mh = _attachedMiniheaps[_attachedOff];
       if (mh->isFull()) {
         continue;
       }
 
-      const auto allocCount = init(attachedOff, mh->writableBitmap());
+      const auto allocCount = init(_attachedOff, mh->writableBitmap());
       addedCapacity |= allocCount;
     }
 
@@ -210,7 +209,7 @@ public:
   // an attach takes ownership of the reference to mh
   inline void reinit() {
     _off = _maxCount;
-    // _attachedOff = 0;
+    _attachedOff = 0;
 
     internal::mwcShuffle(_attachedMiniheaps.array_begin(), _attachedMiniheaps.array_end(), _prng);
 
@@ -256,12 +255,13 @@ public:
 private:
   uintptr_t _start[kMaxMiniheapsPerShuffleVector];                           // 32  32
   const char *_arenaBegin;                                                   // 8   40
-  uint16_t _maxCount{0};                                                     // 2   42
+  int16_t _maxCount{0};                                                      // 2   42
   int16_t _off{0};                                                           // 2   44
   uint32_t _objectSize{0};                                                   // 4   48
   FixedArray<MiniHeap, kMaxMiniheapsPerShuffleVector> _attachedMiniheaps{};  // 36  128
   MWC _prng;                                                                 // 36  84
   float _objectSizeReciprocal{0.0};                                          // 4   88
+  uint32_t _attachedOff{0};                                                  //
   sv::Entry _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;                // 512 640
 };
 
