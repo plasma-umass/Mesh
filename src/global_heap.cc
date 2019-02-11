@@ -58,44 +58,46 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr) {
     return;
   }
 
-  // large objects are tracked with a miniheap per object and don't
-  // trigger meshing, because they are multiples of the page size.
-  // This can also include, for example, single page allocations w/
-  // 16KB alignment.
-  if (mh->maxCount() == 1) {
+  bool shouldConsiderMesh = 0;
+  {
     lock_guard<mutex> lock(_miniheapLock);
-    freeMiniheapLocked(mh, false);
-    return;
-  }
 
-  d_assert(mh->maxCount() > 1);
+    // large objects are tracked with a miniheap per object and don't
+    // trigger meshing, because they are multiples of the page size.
+    // This can also include, for example, single page allocations w/
+    // 16KB alignment.
+    if (mh->maxCount() == 1) {
+      freeMiniheapLocked(mh, false);
+      return;
+    }
 
-  _lastMeshEffective.store(1, std::memory_order::memory_order_release);
-  mh->free(arenaBegin(), ptr);
+    d_assert(mh->maxCount() > 1);
 
-  if (unlikely(mh->isMeshed())) {
-    // our MiniHeap was meshed out from underneath us.  Grab the
-    // global lock to synchronize with a concurrent mesh, and
-    // re-update the bitmap
-    lock_guard<mutex> lock(_miniheapLock);
-    mh = miniheapForLocked(ptr);
-    hard_assert(!mh->isMeshed());
+    _lastMeshEffective.store(1, std::memory_order::memory_order_release);
     mh->free(arenaBegin(), ptr);
-  }
 
-  const auto remaining = mh->inUseCount();
-  const bool shouldConsiderMesh = remaining > 0;
+    if (unlikely(mh->isMeshed())) {
+      // our MiniHeap was meshed out from underneath us.  Grab the
+      // global lock to synchronize with a concurrent mesh, and
+      // re-update the bitmap
+      mh = miniheapForLocked(ptr);
+      hard_assert(!mh->isMeshed());
+      mh->free(arenaBegin(), ptr);
+    }
 
-  const auto sizeClass = mh->sizeClass();
+    const auto remaining = mh->inUseCount();
+    shouldConsiderMesh = remaining > 0;
 
-  // this may free the miniheap -- we can't safely access it after
-  // this point.
-  bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
-  mh = nullptr;
+    const auto sizeClass = mh->sizeClass();
 
-  if (unlikely(shouldFlush)) {
-    lock_guard<mutex> lock(_miniheapLock);
-    flushBinLocked(sizeClass);
+    // this may free the miniheap -- we can't safely access it after
+    // this point.
+    bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
+    mh = nullptr;
+
+    if (unlikely(shouldFlush)) {
+      flushBinLocked(sizeClass);
+    }
   }
 
   if (shouldConsiderMesh) {
