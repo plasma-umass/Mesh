@@ -276,6 +276,10 @@ public:
     return _flags.isMeshed();
   }
 
+  inline bool ATTRIBUTE_ALWAYS_INLINE hasMeshed() const {
+    return _nextMiniHeap.hasValue();
+  }
+
   inline bool isMeshingCandidate() const {
     return !isAttached() && objectSize() < kPageSize;
   }
@@ -381,6 +385,24 @@ public:
                 maxCount(), heapPages, inUseCount, meshCount, _span.offset * kPageSize,
                 _span.offset * kPageSize + spanSize());
     mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
+  }
+
+  // this only works for unmeshed miniheaps
+  inline uint8_t ATTRIBUTE_ALWAYS_INLINE getUnmeshedOff(const void *arenaBegin, void *ptr) const {
+    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
+
+    uintptr_t span = reinterpret_cast<uintptr_t>(arenaBegin) + _span.offset * kPageSize;
+    d_assert(span != 0);
+
+    const size_t off = (ptrval - span) * _objectSizeReciprocal;
+#ifndef NDEBUG
+    const size_t off2 = (ptrval - span) / _objectSize;
+    hard_assert_msg(off == off2, "%zu != %zu", off, off2);
+#endif
+
+    d_assert(off < maxCount());
+
+    return off;
   }
 
   inline uint8_t ATTRIBUTE_ALWAYS_INLINE getOff(const void *arenaBegin, void *ptr) const {

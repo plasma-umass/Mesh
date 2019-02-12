@@ -194,7 +194,7 @@ public:
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     // const size_t off = (ptrval - _start) / _objectSize;
     // const size_t off = (ptrval - _start) * _objectSizeReciprocal;
-    const size_t off = mh->getOff(reinterpret_cast<const void *>(_arenaBegin), ptr);
+    const size_t off = mh->getUnmeshedOff(reinterpret_cast<const void *>(_arenaBegin), ptr);
     // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
 
     d_assert(off < 256);
@@ -268,7 +268,7 @@ private:
 static_assert(HL::gcd<sizeof(ShuffleVector), CACHELINE_SIZE>::value == CACHELINE_SIZE,
               "ShuffleVector not multiple of cacheline size!");
 // FIXME should fit in 640
-//static_assert(sizeof(ShuffleVector) == 704, "ShuffleVector not expected size!");
+// static_assert(sizeof(ShuffleVector) == 704, "ShuffleVector not expected size!");
 }  // namespace mesh
 
 #endif  // MESH__SHUFFLE_VECTOR_H
