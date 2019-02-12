@@ -276,6 +276,10 @@ public:
     return _flags.isMeshed();
   }
 
+  inline bool ATTRIBUTE_ALWAYS_INLINE hasMeshed() const {
+    return _nextMiniHeap.hasValue();
+  }
+
   inline bool isMeshingCandidate() const {
     return !isAttached() && objectSize() < kPageSize;
   }
@@ -407,7 +411,7 @@ protected:
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
     uintptr_t spanptr = arenaBegin + _span.offset * kPageSize;
-    if (likely(spanptr <= ptrval && ptrval < spanptr + len)) {
+    if (likely(!hasMeshed())) {
       return spanptr;
     }
 
@@ -416,7 +420,11 @@ protected:
 
   uintptr_t ATTRIBUTE_NEVER_INLINE spanStartSlowpath(uintptr_t arenaBegin, uintptr_t ptrval) const {
     const auto len = _span.byteLength();
-    uintptr_t spanptr = 0;
+
+    uintptr_t spanptr = arenaBegin + _span.offset * kPageSize;
+    if (likely(spanptr <= ptrval && ptrval < spanptr + len)) {
+      return spanptr;
+    }
 
     const MiniHeap *mh = this;
     while (true) {
