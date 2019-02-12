@@ -334,10 +334,15 @@ public:
 
   size_t meshCount() const {
     size_t count = 0;
-    forEachMeshed([&](const MiniHeap *mh) {
+
+    const MiniHeap *mh = this;
+    while (mh != nullptr) {
       count++;
-      return false;
-    });
+
+      auto next = mh->_nextMiniHeap;
+      mh = next.hasValue() ? GetMiniHeap(next) : nullptr;
+    }
+
     return count;
   }
 
@@ -378,25 +383,7 @@ public:
     mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
   }
 
-  // this only works for unmeshed miniheaps
-  inline uint8_t ATTRIBUTE_ALWAYS_INLINE getUnmeshedOff(const void *arenaBegin, void *ptr) const {
-    const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-
-    uintptr_t span = reinterpret_cast<uintptr_t>(arenaBegin) + _span.offset * kPageSize;
-    d_assert(span != 0);
-
-    const size_t off = (ptrval - span) * _objectSizeReciprocal;
-#ifndef NDEBUG
-    const size_t off2 = (ptrval - span) / _objectSize;
-    hard_assert_msg(off == off2, "%zu != %zu", off, off2);
-#endif
-
-    d_assert(off < maxCount());
-
-    return off;
-  }
-
-  inline ssize_t ATTRIBUTE_ALWAYS_INLINE getOff(void *arenaBegin, void *ptr) const {
+  inline uint8_t ATTRIBUTE_ALWAYS_INLINE getOff(const void *arenaBegin, void *ptr) const {
     const auto span = spanStart(reinterpret_cast<uintptr_t>(arenaBegin), ptr);
     d_assert(span != 0);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
@@ -424,22 +411,28 @@ protected:
       return spanptr;
     }
 
-    spanptr = 0;
-    if (unlikely(!_nextMiniHeap.hasValue())) {
-      hard_assert(false);
-      return spanptr;
-    }
+    return spanStartSlowpath(arenaBegin, ptrval);
+  }
 
-    GetMiniHeap(_nextMiniHeap)->forEachMeshed([&](const MiniHeap *mh) {
-      uintptr_t meshedSpanptr = arenaBegin + mh->span().offset * kPageSize;
+  uintptr_t ATTRIBUTE_NEVER_INLINE spanStartSlowpath(uintptr_t arenaBegin, uintptr_t ptrval) const {
+    const auto len = _span.byteLength();
+    uintptr_t spanptr = 0;
+
+    const MiniHeap *mh = this;
+    while (true) {
+      if (unlikely(!mh->_nextMiniHeap.hasValue())) {
+        abort();
+      }
+
+      mh = GetMiniHeap(mh->_nextMiniHeap);
+
+      const uintptr_t meshedSpanptr = arenaBegin + mh->span().offset * kPageSize;
       if (meshedSpanptr <= ptrval && ptrval < meshedSpanptr + len) {
         spanptr = meshedSpanptr;
-        return true;
+        break;
       }
-      return false;
-    });
+    };
 
-    d_assert(spanptr != 0);
     return spanptr;
   }
 

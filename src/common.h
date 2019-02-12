@@ -79,7 +79,7 @@ static constexpr size_t kMiniheapRefillGoalSize = 256 * 1024;  // 256 kB
 static constexpr size_t kMaxMiniheapsPerShuffleVector = 32;
 
 // shuffle vector features
-static constexpr size_t kMaxShuffleVectorLength = 256;  // sizeof(uint8_t) << 8
+static constexpr int16_t kMaxShuffleVectorLength = 256;  // sizeof(uint8_t) << 8
 static constexpr bool kEnableShuffleOnInit = SHUFFLE_ON_INIT == 1;
 static constexpr bool kEnableShuffleOnFree = SHUFFLE_ON_FREE == 1;
 

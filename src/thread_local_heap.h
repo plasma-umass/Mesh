@@ -185,7 +185,7 @@ public:
       return;
 
     auto mh = _global->miniheapForLocked(ptr);
-    if (likely(mh && mh->current() == _current && !mh->isMeshed())) {
+    if (likely(mh && mh->current() == _current)) {
       ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
       shuffleVector.free(mh, ptr);
       return;
