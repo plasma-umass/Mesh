@@ -67,7 +67,7 @@ public:
   }
 
   // post: list has the index of all bits set to 1 in it, in a random order
-  inline uint32_t ATTRIBUTE_ALWAYS_INLINE init(uint8_t mhOffset, internal::Bitmap &bitmap) {
+  inline uint32_t ATTRIBUTE_ALWAYS_INLINE refillFrom(uint8_t mhOffset, internal::Bitmap &bitmap) {
     d_assert(_maxCount > 0);
     d_assert_msg(_maxCount <= kMaxShuffleVectorLength, "objCount? %zu <= %zu", _maxCount, kMaxShuffleVectorLength);
 
@@ -111,10 +111,6 @@ public:
       }
     }
 
-    if (kEnableShuffleOnInit) {
-      internal::mwcShuffle(&_list[_off], &_list[_maxCount], _prng);
-    }
-
     return allocCount;
   }
 
@@ -154,11 +150,18 @@ public:
         continue;
       }
 
-      const auto allocCount = init(_attachedOff, mh->writableBitmap());
+      const auto allocCount = refillFrom(_attachedOff, mh->writableBitmap());
       addedCapacity |= allocCount;
     }
 
-    return addedCapacity > 0;
+    if (addedCapacity > 0) {
+      if (kEnableShuffleOnInit) {
+        internal::mwcShuffle(&_list[_off], &_list[_maxCount], _prng);
+      }
+      return true;
+    }
+
+    return false;
   }
 
   // number of items in the list
