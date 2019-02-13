@@ -313,10 +313,6 @@ public:
   // PUBLIC ONLY FOR TESTING
   // after call to meshLocked() completes src is a nullptr
   void meshLocked(MiniHeap *dst, MiniHeap *&src) {
-    if (unlikely(dst->meshCount() + src->meshCount() > kMaxMeshes)) {
-      return;
-    }
-
     const size_t dstSpanSize = dst->spanSize();
     const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart(arenaBegin()));
 

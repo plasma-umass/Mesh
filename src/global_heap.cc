@@ -215,8 +215,13 @@ void GlobalHeap::meshAllSizeClasses() {
   for (auto &mergeSet : mergeSets) {
     // merge _into_ the one with a larger mesh count, potentially
     // swapping the order of the pair
-    if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
+    const auto aCount = std::get<0>(mergeSet)->meshCount();
+    const auto bCount = std::get<1>(mergeSet)->meshCount();
+    if (aCount + bCount > kMaxMeshes) {
+      continue;
+    } else if (aCount < bCount) {
       mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
+    }
 
     meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
   }
