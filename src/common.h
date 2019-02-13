@@ -90,7 +90,7 @@ static constexpr std::chrono::nanoseconds kZeroNs{0};
 static constexpr std::chrono::nanoseconds kMeshPeriodNs{100000000};  // 100 ms
 
 // controls aspects of miniheaps
-static constexpr size_t kMaxMeshes = 4;
+static constexpr size_t kMaxMeshes = 256; // 1 per bit
 
 static constexpr size_t kArenaSize = 8ULL * 1024ULL * 1024ULL * 1024ULL;  // 8 GB
 static constexpr size_t kAltStackSize = 16 * 1024UL;                      // 16k sigaltstacks

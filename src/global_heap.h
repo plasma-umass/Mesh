@@ -313,7 +313,7 @@ public:
   // PUBLIC ONLY FOR TESTING
   // after call to meshLocked() completes src is a nullptr
   void meshLocked(MiniHeap *dst, MiniHeap *&src) {
-    if (dst->meshCount() + src->meshCount() > kMaxMeshes) {
+    if (unlikely(dst->meshCount() + src->meshCount() > kMaxMeshes)) {
       return;
     }
 

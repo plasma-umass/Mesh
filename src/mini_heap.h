@@ -300,12 +300,6 @@ public:
   void trackMeshedSpan(MiniHeapID id) {
     hard_assert(id.hasValue());
 
-    if (unlikely(meshCount() >= kMaxMeshes)) {
-      mesh::debug("fatal: too many meshes for one miniheap");
-      dumpDebug();
-      abort();
-    }
-
     if (!_nextMiniHeap.hasValue()) {
       _nextMiniHeap = id;
     } else {
