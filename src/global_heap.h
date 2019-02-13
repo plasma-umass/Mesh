@@ -11,7 +11,6 @@
 #include "binned_tracker.h"
 #include "internal.h"
 #include "meshable_arena.h"
-#include "meshing.h"
 #include "mini_heap.h"
 
 #include "heaplayers.h"
@@ -116,28 +115,35 @@ public:
   }
 
   inline void releaseMiniheapLocked(MiniHeap *mh, int sizeClass) {
+    // ensure this flag is always set with the miniheap lock held
     mh->unsetAttached();
     _littleheaps[sizeClass].postFree(mh, mh->inUseCount());
   }
 
-  inline void releaseMiniheap(MiniHeap *mh) {
-    if (mh == nullptr) {
+  template <uint32_t Size>
+  inline void releaseMiniheaps(FixedArray<MiniHeap, Size> &miniheaps) {
+    if (miniheaps.size() == 0) {
       return;
     }
 
     lock_guard<mutex> lock(_miniheapLock);
-    releaseMiniheapLocked(mh, mh->sizeClass());
+    for (auto mh : miniheaps) {
+      releaseMiniheapLocked(mh, mh->sizeClass());
+    }
+    miniheaps.clear();
   }
 
-  inline MiniHeap *allocSmallMiniheap(int sizeClass, size_t objectSize, MiniHeap *oldMH, pid_t current) {
+  template <uint32_t Size>
+  inline void allocSmallMiniheaps(int sizeClass, uint32_t objectSize, FixedArray<MiniHeap, Size> &miniheaps,
+                                  pid_t current) {
     lock_guard<mutex> lock(_miniheapLock);
 
     d_assert(sizeClass >= 0);
 
-    // ensure this flag is always set with the miniheap lock held
-    if (oldMH != nullptr) {
+    for (MiniHeap *oldMH : miniheaps) {
       releaseMiniheapLocked(oldMH, sizeClass);
     }
+    miniheaps.clear();
 
     d_assert(objectSize <= _maxObjectSize);
 
@@ -150,13 +156,12 @@ public:
     d_assert(sizeClass >= 0);
     d_assert(sizeClass < kNumBins);
 
+    d_assert(miniheaps.size() == 0);
+
     // check our bins for a miniheap to reuse
-    MiniHeap *existing = _littleheaps[sizeClass].selectForReuse();
-    if (existing != nullptr) {
-      d_assert(!existing->isMeshed());
-      d_assert(!existing->isAttached());
-      existing->setAttached(current);
-      return existing;
+    auto bytesFree = _littleheaps[sizeClass].selectForReuse(miniheaps, current);
+    if (bytesFree >= kMiniheapRefillGoalSize || miniheaps.full()) {
+      return;
     }
 
     // if we have objects bigger than the size of a page, allocate
@@ -166,10 +171,15 @@ public:
     const size_t objectCount = max(kPageSize / objectSize, kMinStringLen);
     const size_t pageCount = PageCount(objectSize * objectCount);
 
-    auto mh = allocMiniheapLocked(sizeClass, pageCount, objectCount, objectSize);
-    d_assert(!mh->isAttached());
-    mh->setAttached(current);
-    return mh;
+    while (bytesFree < kMiniheapRefillGoalSize && !miniheaps.full()) {
+      auto mh = allocMiniheapLocked(sizeClass, pageCount, objectCount, objectSize);
+      d_assert(!mh->isAttached());
+      mh->setAttached(current);
+      miniheaps.append(mh);
+      bytesFree += mh->bytesFree();
+    }
+
+    return;
   }
 
   // large, page-multiple allocations
@@ -198,6 +208,8 @@ public:
     _stats.mhAllocCount -= 1;
     _littleheaps[mh->sizeClass()].remove(mh);
   }
+
+  void freeFor(MiniHeap *mh, void *ptr);
 
   // called with lock held
   void freeMiniheapAfterMeshLocked(MiniHeap *mh, bool untrack = true) {
@@ -301,10 +313,6 @@ public:
   // PUBLIC ONLY FOR TESTING
   // after call to meshLocked() completes src is a nullptr
   void meshLocked(MiniHeap *dst, MiniHeap *&src) {
-    if (dst->meshCount() + src->meshCount() > kMaxMeshes) {
-      return;
-    }
-
     const size_t dstSpanSize = dst->spanSize();
     const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart(arenaBegin()));
 
@@ -398,7 +406,7 @@ private:
 
   MWC _fastPrng;
 
-  BinnedTracker<MiniHeap> _littleheaps[kNumBins];
+  BinnedTracker _littleheaps[kNumBins];
 
   mutable mutex _miniheapLock{};
 

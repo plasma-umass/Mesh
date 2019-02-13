@@ -18,7 +18,9 @@ TEST(Alignment, NaturalAlignment) {
 
   for (size_t size = 0; size < 4096; size += 4) {
     for (size_t alignment = 2; alignment <= 4096; alignment *= 2) {
+      // debug("size: %zu align: %zu\n", size, alignment);
       bool logged = false;
+      void **ptrs = reinterpret_cast<void **>(calloc(256, sizeof(void *)));
       for (size_t i = 0; i <= 256; i++) {
         void *ptr = heap->memalign(alignment, size);
         if (!logged) {
@@ -28,7 +30,10 @@ TEST(Alignment, NaturalAlignment) {
         }
         const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
         ASSERT_EQ(ptrval % alignment, 0);
-        heap->free(ptr);
+        ptrs[i] = ptr;
+      }
+      for (size_t i = 0; i <= 256; i++) {
+        heap->free(ptrs[i]);
       }
     }
   }

@@ -46,10 +46,11 @@ public:
         _current(gettid()),
         _prng(internal::seed(), internal::seed()),
         _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)) {
+    const auto arenaBegin = _global->arenaBegin();
     // when asked, give 16-byte allocations for 0-byte requests
-    _shuffleVector[0].setObjectSize(SizeMap::ByteSizeForClass(1));
+    _shuffleVector[0].initialInit(arenaBegin, SizeMap::ByteSizeForClass(1));
     for (size_t i = 1; i < kNumBins; i++) {
-      _shuffleVector[i].setObjectSize(SizeMap::ByteSizeForClass(i));
+      _shuffleVector[i].initialInit(arenaBegin, SizeMap::ByteSizeForClass(i));
     }
     d_assert(_global != nullptr);
   }
@@ -60,7 +61,9 @@ public:
 
   void releaseAll();
 
-  void *smallAllocSlowpath(size_t sizeClass);
+  void *ATTRIBUTE_NEVER_INLINE CACHELINE_ALIGNED_FN smallAllocSlowpath(size_t sizeClass);
+  void *ATTRIBUTE_NEVER_INLINE CACHELINE_ALIGNED_FN smallAllocGlobalRefill(ShuffleVector &shuffleVector,
+                                                                           size_t sizeClass);
 
   inline void *memalign(size_t alignment, size_t size) {
     // Check for non power-of-two alignment.
@@ -174,7 +177,6 @@ public:
       return smallAllocSlowpath(sizeClass);
     }
 
-    _last = &shuffleVector;
     return shuffleVector.malloc();
   }
 
@@ -182,65 +184,27 @@ public:
     if (unlikely(ptr == nullptr))
       return;
 
-    if (likely(_last != nullptr && _last->contains(ptr))) {
-      _last->free(ptr);
+    auto mh = _global->miniheapForLocked(ptr);
+    if (likely(mh && mh->current() == _current && !mh->hasMeshed())) {
+      ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
+      shuffleVector.free(mh, ptr);
       return;
     }
-
-    auto mh = _global->miniheapForLocked(ptr);
-    if (likely(mh && mh->current() == _current)) {
-      ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
-      // ShuffleVectors only refer to the first virtual span of a
-      // Miniheap.  Re-check contains() here to catch the case of a
-      // free for a non-primary-span allocation.  Plus its slightly
-      // faster here to call contains unconditionally rather than
-      // first check !mh->isMeshed :shrug:
-      if (likely(shuffleVector.contains(ptr))) {
-        d_assert(mh->isAttached());
-        _last = &shuffleVector;
-        shuffleVector.free(ptr);
-        return;
-      }
-    }
-    _global->free(ptr);
+    _global->freeFor(mh, ptr);
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE sizedFree(void *ptr, size_t sz) {
-    if (unlikely(ptr == nullptr))
-      return;
-
-    uint32_t sizeClass = 0;
-
-    // if the size isn't in our sizemap it is a large alloc
-    if (unlikely(!SizeMap::GetSizeClass(sz, &sizeClass))) {
-      _global->free(ptr);
-      return;
-    }
-
-    ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
-    if (likely(shuffleVector.contains(ptr))) {
-      shuffleVector.free(ptr);
-      return;
-    }
-
-    _global->free(ptr);
+    this->free(ptr);
   }
 
   inline size_t getSize(void *ptr) {
     if (unlikely(ptr == nullptr))
       return 0;
 
-    if (likely(_last != nullptr && _last->contains(ptr))) {
-      return _last->getSize();
-    }
-
     auto mh = _global->miniheapForLocked(ptr);
-    if (likely(mh && mh->maxCount() > 1)) {
+    if (likely(mh && mh->current() == _current)) {
       ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
-      if (likely(shuffleVector.getAttached() == mh)) {
-        _last = &shuffleVector;
-        return shuffleVector.getSize();
-      }
+      return shuffleVector.getSize();
     }
 
     return _global->getSize(ptr);
@@ -266,7 +230,6 @@ public:
 
 protected:
   ShuffleVector _shuffleVector[kNumBins] CACHELINE_ALIGNED;
-  ShuffleVector *_last{nullptr};
   GlobalHeap *_global;
   pid_t _current{0};
   MWC _prng;

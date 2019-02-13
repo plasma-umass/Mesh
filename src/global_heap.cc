@@ -3,6 +3,7 @@
 
 #include "global_heap.h"
 
+#include "meshing.h"
 #include "runtime.h"
 
 namespace mesh {
@@ -40,54 +41,63 @@ void *GlobalHeap::malloc(size_t sz) {
 }
 
 void GlobalHeap::free(void *ptr) {
-  if (unlikely(ptr == nullptr)) {
-    return;
-  }
-
   auto mh = miniheapForLocked(ptr);
   if (unlikely(!mh)) {
     debug("FIXME: free of untracked ptr %p", ptr);
     return;
   }
+  this->freeFor(mh, ptr);
+}
 
-  // large objects are tracked with a miniheap per object and don't
-  // trigger meshing, because they are multiples of the page size.
-  // This can also include, for example, single page allocations w/
-  // 16KB alignment.
-  if (mh->maxCount() == 1) {
-    lock_guard<mutex> lock(_miniheapLock);
-    freeMiniheapLocked(mh, false);
+void GlobalHeap::freeFor(MiniHeap *mh, void *ptr) {
+  if (unlikely(ptr == nullptr)) {
     return;
   }
 
-  d_assert(mh->maxCount() > 1);
-
-  _lastMeshEffective.store(1, std::memory_order::memory_order_release);
-  mh->free(arenaBegin(), ptr);
-
-  if (unlikely(mh->isMeshed())) {
-    // our MiniHeap was meshed out from underneath us.  Grab the
-    // global lock to synchronize with a concurrent mesh, and
-    // re-update the bitmap
-    lock_guard<mutex> lock(_miniheapLock);
-    mh = miniheapForLocked(ptr);
-    hard_assert(!mh->isMeshed());
-    mh->free(arenaBegin(), ptr);
+  if (unlikely(!mh)) {
+    return;
   }
 
-  const auto remaining = mh->inUseCount();
-  const bool shouldConsiderMesh = remaining > 0;
-
-  const auto sizeClass = mh->sizeClass();
-
-  // this may free the miniheap -- we can't safely access it after
-  // this point.
-  bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
-  mh = nullptr;
-
-  if (unlikely(shouldFlush)) {
+  bool shouldConsiderMesh = 0;
+  {
     lock_guard<mutex> lock(_miniheapLock);
-    flushBinLocked(sizeClass);
+
+    // large objects are tracked with a miniheap per object and don't
+    // trigger meshing, because they are multiples of the page size.
+    // This can also include, for example, single page allocations w/
+    // 16KB alignment.
+    if (mh->maxCount() == 1) {
+      freeMiniheapLocked(mh, false);
+      return;
+    }
+
+    d_assert(mh->maxCount() > 1);
+
+    _lastMeshEffective.store(1, std::memory_order::memory_order_release);
+    mh->free(arenaBegin(), ptr);
+
+    if (unlikely(mh->isMeshed())) {
+      // our MiniHeap was meshed out from underneath us.  Grab the
+      // global lock to synchronize with a concurrent mesh, and
+      // re-update the bitmap
+      mh = miniheapForLocked(ptr);
+      hard_assert(!mh->isMeshed());
+      mh->free(arenaBegin(), ptr);
+    }
+
+    const auto remaining = mh->inUseCount();
+    shouldConsiderMesh = remaining > 0;
+
+    const auto sizeClass = mh->sizeClass();
+
+    // this may free the miniheap -- we can't safely access it after
+    // this point.
+    bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
+    mh = nullptr;
+
+    if (unlikely(shouldFlush)) {
+      flushBinLocked(sizeClass);
+    }
   }
 
   if (shouldConsiderMesh) {
@@ -205,8 +215,13 @@ void GlobalHeap::meshAllSizeClasses() {
   for (auto &mergeSet : mergeSets) {
     // merge _into_ the one with a larger mesh count, potentially
     // swapping the order of the pair
-    if (std::get<0>(mergeSet)->meshCount() < std::get<1>(mergeSet)->meshCount())
+    const auto aCount = std::get<0>(mergeSet)->meshCount();
+    const auto bCount = std::get<1>(mergeSet)->meshCount();
+    if (aCount + bCount > kMaxMeshes) {
+      continue;
+    } else if (aCount < bCount) {
       mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
+    }
 
     meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
   }

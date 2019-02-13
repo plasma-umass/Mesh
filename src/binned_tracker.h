@@ -10,6 +10,8 @@
 
 #include "rng/mwc.h"
 
+#include "mini_heap.h"
+
 // invariants:
 // - MiniHeap only in one one bin in one BinnedTracker
 
@@ -22,7 +24,6 @@
 
 namespace mesh {
 
-template <typename MiniHeap>
 class BinnedTracker {
 private:
   DISALLOW_COPY_AND_ASSIGN(BinnedTracker);
@@ -43,8 +44,11 @@ public:
     return _objectSize;
   }
 
-  MiniHeap *selectForReuse() {
+  template <uint32_t Size>
+  size_t selectForReuse(FixedArray<MiniHeap, Size> &miniheaps, pid_t current) {
     std::lock_guard<std::mutex> lock(_mutex);
+
+    size_t bytesFree = 0;
 
     for (int i = kBinnedTrackerBinCount - 1; i >= 0; i--) {
       while (_partial[i].size() > 0) {
@@ -59,16 +63,24 @@ public:
 
         // this can happen because in use count is updated outside the
         // bin tracker lock -- it may be queued up for reuse.
+        //
+        // FIXME: check for isMeshed?
         if (unlikely(mh->isFull() || mh->isAttached())) {
           debug("I don't know how this could happen");
           continue;
         }
 
-        return mh;
+        mh->setAttached(current);
+        d_assert(!miniheaps.full());
+        miniheaps.append(mh);
+        bytesFree += mh->bytesFree();
+        if (bytesFree >= kMiniheapRefillGoalSize || miniheaps.full()) {
+          return bytesFree;
+        }
       }
     }
 
-    return nullptr;
+    return bytesFree;
   }
 
   internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {
@@ -112,8 +124,9 @@ public:
     // double-check
     oldBinId = mh->getBinToken().bin();
     newBinId = getBinId(mh->inUseCount());
-    if (unlikely(newBinId == oldBinId))
+    if (unlikely(newBinId == oldBinId)) {
       return false;
+    }
 
     move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
 
@@ -125,8 +138,9 @@ public:
 
     d_assert(mh != nullptr);
 
-    if (unlikely(!_hasMetadata))
+    if (unlikely(!_hasMetadata)) {
       setMetadata(mh);
+    }
 
     mh->setBinToken(internal::BinToken::Full());
     addTo(_full, mh);
@@ -213,7 +227,10 @@ public:
       }
     }
 
-    // no need to print occupancy of _empty MiniHeaps
+    for (size_t i = 0; i < _empty.size(); i++) {
+      if (_empty[i] != nullptr)
+        _empty[i]->printOccupancy();
+    }
   }
 
   void dumpStats(bool beDetailed) const {

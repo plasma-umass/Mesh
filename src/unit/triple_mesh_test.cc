@@ -12,14 +12,15 @@
 #include "gtest/gtest.h"
 
 #include "internal.h"
+#include "meshing.h"
 #include "runtime.h"
 #include "shuffle_vector.h"
 
 using namespace std;
 using namespace mesh;
 
-static constexpr size_t StrLen = 128;
-static constexpr size_t ObjCount = 32;
+static constexpr uint32_t StrLen = 128;
+static constexpr uint32_t ObjCount = 32;
 
 static char *s1;
 static char *s2;
@@ -77,10 +78,20 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
-  // allocate two miniheaps for the same object size from our global heap
-  MiniHeap *mh1 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr, tid);
-  MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr, tid);
-  MiniHeap *mh3 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr, tid);
+  FixedArray<MiniHeap, 1> array{};
+
+  // allocate three miniheaps for the same object size from our global heap
+  gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
+  MiniHeap *mh1 = array[0];
+  array.clear();
+
+  gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
+  MiniHeap *mh2 = array[0];
+  array.clear();
+
+  gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
+  MiniHeap *mh3 = array[0];
+  array.clear();
 
   const auto sizeClass = mh1->sizeClass();
   ASSERT_EQ(SizeMap::SizeClass(StrLen), sizeClass);

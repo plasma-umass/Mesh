@@ -217,7 +217,7 @@ typename Map::iterator greatest_leq(Map &m, typename Map::key_type const &k) {
 
 // based on LLVM's libcxx std::shuffle
 template <class _RandomAccessIterator, class _RNG>
-void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RNG &__rng) {
+inline void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __last, _RNG &__rng) {
   typedef typename iterator_traits<_RandomAccessIterator>::difference_type difference_type;
 
   difference_type __d = __last - __first;

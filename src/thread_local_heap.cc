@@ -21,8 +21,8 @@ ThreadLocalHeap *ThreadLocalHeap::CreateThreadLocalHeap() {
 
 void ThreadLocalHeap::releaseAll() {
   for (size_t i = 1; i < kNumBins; i++) {
-    auto mh = _shuffleVector[i].refillAndDetach();
-    _global->releaseMiniheap(mh);
+    _shuffleVector[i].refillMiniheaps();
+    _global->releaseMiniheaps(_shuffleVector[i].miniheaps());
   }
 }
 
@@ -36,31 +36,30 @@ ThreadLocalHeap *ThreadLocalHeap::GetHeap() {
 }
 
 // we get here if the shuffleVector is exhausted
-void *ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
+void *CACHELINE_ALIGNED_FN ThreadLocalHeap::smallAllocSlowpath(size_t sizeClass) {
   ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
 
-  MiniHeap *oldMH = nullptr;
-  // we are in the slowlist because we couldn't allocate out of this
-  // shuffleVector.  If there was an attached miniheap it is now full, so
-  // detach it
-  if (likely(shuffleVector.isAttached())) {
-    oldMH = shuffleVector.detach();
+  // we grab multiple MiniHeaps at a time from the global heap.  often
+  // it is possible to refill the freelist from a not-yet-used
+  // MiniHeap we already have, without global cross-thread
+  // synchronization
+  if (likely(shuffleVector.localRefill())) {
+    return shuffleVector.malloc();
   }
 
+  return smallAllocGlobalRefill(shuffleVector, sizeClass);
+}
+
+void *CACHELINE_ALIGNED_FN ThreadLocalHeap::smallAllocGlobalRefill(ShuffleVector &shuffleVector, size_t sizeClass) {
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
-  MiniHeap *mh = _global->allocSmallMiniheap(sizeClass, sizeMax, oldMH, _current);
-  d_assert(mh != nullptr);
+  _global->allocSmallMiniheaps(sizeClass, sizeMax, shuffleVector.miniheaps(), _current);
+  shuffleVector.reinit();
 
-  shuffleVector.attach(_global->arenaBegin(), mh);
-
-  d_assert(shuffleVector.isAttached());
   d_assert(!shuffleVector.isExhausted());
-  d_assert(mh->isAttached());
 
   void *ptr = shuffleVector.malloc();
   d_assert(ptr != nullptr);
-  _last = &shuffleVector;
 
   return ptr;
 }

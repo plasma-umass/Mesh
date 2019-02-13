@@ -44,10 +44,9 @@ inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bi
 namespace method {
 
 // split miniheaps into two lists in a random order
-template <typename T>
-inline void halfSplit(MWC &prng, BinnedTracker<T> &miniheaps, internal::vector<T *> &left,
-                      internal::vector<T *> &right) noexcept {
-  internal::vector<T *> bucket = miniheaps.meshingCandidates(kOccupancyCutoff);
+inline void halfSplit(MWC &prng, BinnedTracker &miniheaps, internal::vector<MiniHeap *> &left,
+                      internal::vector<MiniHeap *> &right) noexcept {
+  internal::vector<MiniHeap *> bucket = miniheaps.meshingCandidates(kOccupancyCutoff);
 
   internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
 
@@ -63,14 +62,14 @@ inline void halfSplit(MWC &prng, BinnedTracker<T> &miniheaps, internal::vector<T
   }
 }
 
-template <typename T, size_t t = 64>
-inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
-                             const function<void(std::pair<T *, T *> &&)> &meshFound) noexcept {
+template <size_t t = 64>
+inline void shiftedSplitting(MWC &prng, BinnedTracker &miniheaps,
+                             const function<void(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept {
   if (miniheaps.partialSize() == 0)
     return;
 
-  internal::vector<T *> leftBucket{};   // mutable copy
-  internal::vector<T *> rightBucket{};  // mutable copy
+  internal::vector<MiniHeap *> leftBucket{};   // mutable copy
+  internal::vector<MiniHeap *> rightBucket{};  // mutable copy
 
   halfSplit(prng, miniheaps, leftBucket, rightBucket);
 
@@ -102,7 +101,7 @@ inline void shiftedSplitting(MWC &prng, BinnedTracker<T> &miniheaps,
       const auto bitmap2 = h2->bitmap().bits();
 
       if (unlikely(mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes))) {
-        std::pair<T *, T *> heaps{h1, h2};
+        std::pair<MiniHeap *, MiniHeap *> heaps{h1, h2};
         meshFound(std::move(heaps));
         leftBucket[idxLeft] = nullptr;
         rightBucket[idxRight] = nullptr;

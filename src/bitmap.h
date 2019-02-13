@@ -143,7 +143,7 @@ public:
     return !(oldValue & mask);
   }
 
-  inline uint64_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
+  inline uint32_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
     return __builtin_popcountl(_bits[0]) + __builtin_popcountl(_bits[1]) + __builtin_popcountl(_bits[2]) +
            __builtin_popcountl(_bits[3]);
   }
@@ -232,9 +232,9 @@ public:
     return !(oldValue & mask);
   }
 
-  inline uint64_t inUseCount() const {
+  inline uint32_t inUseCount() const {
     const auto wordCount = representationSize(_bitCount) / sizeof(size_t);
-    uint64_t count = 0;
+    uint32_t count = 0;
     for (size_t i = 0; i < wordCount; i++) {
       count += __builtin_popcountl(_bits[i]);
     }
@@ -319,7 +319,7 @@ public:
 
   inline uint64_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
     constexpr auto wordCount = representationSize(maxBits) / sizeof(size_t);
-    uint64_t count = 0;
+    uint32_t count = 0;
     // for (size_t i = 0; i < wordCount; i++) {
     //   count += __builtin_popcountl(_bits[i]);
     // }
@@ -463,14 +463,14 @@ public:
   }
 
   /// @return true iff the bit was not set (but it is now).
-  inline bool tryToSet(uint64_t index) {
+  inline bool ATTRIBUTE_ALWAYS_INLINE tryToSet(uint64_t index) {
     uint32_t item, position;
     computeItemPosition(index, item, position);
     return Super::setAt(item, position);
   }
 
   /// Clears the bit at the given index.
-  inline bool unset(uint64_t index) {
+  inline bool ATTRIBUTE_ALWAYS_INLINE unset(uint64_t index) {
     uint32_t item, position;
     computeItemPosition(index, item, position);
 
@@ -478,7 +478,7 @@ public:
   }
 
   // FIXME: who uses this? bad idea with atomics
-  inline bool isSet(uint64_t index) const {
+  inline bool ATTRIBUTE_ALWAYS_INLINE isSet(uint64_t index) const {
     uint32_t item, position;
     computeItemPosition(index, item, position);
 
@@ -566,7 +566,7 @@ public:
 
 private:
   /// Given an index, compute its item (word) and position within the word.
-  inline void computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
+  inline void ATTRIBUTE_ALWAYS_INLINE computeItemPosition(uint64_t index, uint32_t &item, uint32_t &position) const {
     d_assert(index < bitCount());
     item = index >> kWordBitshift;
     position = index & (kWordBits - 1);

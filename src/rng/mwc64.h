@@ -8,8 +8,6 @@
 #include "common.h"
 
 class MWC64 {
-  uint64_t _x, _c, _t;
-
   inline void ATTRIBUTE_ALWAYS_INLINE init(uint64_t seed1, uint64_t seed2) {
     _x = seed1;
     _x <<= 32;
@@ -26,8 +24,11 @@ class MWC64 {
     return _x;
   }
 
-  int _index;
+  uint64_t _x;
+  uint64_t _c;
+  uint64_t _t;
   uint64_t _value;
+  int _index;
 
 public:
   MWC64() {

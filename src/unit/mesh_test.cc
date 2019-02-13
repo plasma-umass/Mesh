@@ -7,12 +7,13 @@
 #include "gtest/gtest.h"
 
 #include "internal.h"
+#include "meshing.h"
 #include "runtime.h"
 
 using namespace mesh;
 
-static constexpr size_t StrLen = 128;
-static constexpr size_t ObjCount = 32;
+static constexpr uint32_t StrLen = 128;
+static constexpr uint32_t ObjCount = 32;
 
 // shows up in strace logs, but otherwise does nothing
 static inline void note(const char *note) {
@@ -32,9 +33,16 @@ static void meshTest(bool invert) {
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
+  FixedArray<MiniHeap, 1> array{};
+
   // allocate two miniheaps for the same object size from our global heap
-  MiniHeap *mh1 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr, tid);
-  MiniHeap *mh2 = gheap.allocSmallMiniheap(SizeMap::SizeClass(StrLen), StrLen, nullptr, tid);
+  gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
+  MiniHeap *mh1 = array[0];
+  array.clear();
+
+  gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
+  MiniHeap *mh2 = array[0];
+  array.clear();
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 2UL);
 
