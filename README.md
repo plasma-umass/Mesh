@@ -2,8 +2,7 @@ Mesh: A compacting malloc(3) implementation
 ===========================================
 
 Mesh is a drop in replacement for
-[malloc(3)](http://man7.org/linux/man-pages/man3/malloc.3.html), that
-can compact the heap without rewriting application pointers.
+[malloc(3)](http://man7.org/linux/man-pages/man3/malloc.3.html) that compacts the heap of C and C++ programs without rewriting application pointers.
 
 Implementation Overview
 -----------------------
