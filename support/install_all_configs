@@ -6,6 +6,6 @@ for n in 0 1 2; do
         ./configure --no-debug --randomization $n $meshing --suffix
         make clean
         make -j5 lib test
-        sudo make install
+        sudo make install $1
     done
 done
