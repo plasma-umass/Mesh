@@ -1,5 +1,9 @@
-Meshing: Compaction without Relocation
-======================================
+Mesh: A compacting malloc(3) implementation
+===========================================
+
+Mesh is a drop in replacement for
+[malloc(3)](http://man7.org/linux/man-pages/man3/malloc.3.html), that
+can compact the heap without rewriting application pointers.
 
 Implementation Overview
 -----------------------
@@ -35,6 +39,5 @@ BUILDING
 --------
 
 ```
-$ git submodule update --init; ./configure --debug; make test
+$ git submodule update --init; ./configure; make
 ```
-
