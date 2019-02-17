@@ -1,11 +1,9 @@
-// -*- C++ -*-
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
+// Copyright 2019 The Heap-Layers and Mesh Authors. All rights reserved.
+// Use of this source code is governed by the Apache License,
+// Version 2.0, that can be found in the LICENSE file.
 
-/**
- * @file   gnuwrapper.cpp
- * @brief  Replaces malloc family on GNU/Linux with custom versions.
- * @author Emery Berger <http://www.cs.umass.edu/~emery>
- * @note   Copyright (C) 2010 by Emery Berger, University of Massachusetts Amherst.
- */
+
 
 #ifndef __GNUC__
 #error "This file requires the GNU compiler."

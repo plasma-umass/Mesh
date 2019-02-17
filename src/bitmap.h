@@ -1,10 +1,7 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
-/**
- * @file   bitmap.h
- * @brief  A bitmap class, with one bit per element.
- * @author Emery Berger <http://www.cs.umass.edu/~emery>
- * @note   Copyright (C) 2005 by Emery Berger, University of Massachusetts Amherst.
- */
+// Copyright 2019 The Mesh Authors. All rights reserved.
+// Use of this source code is governed by the Apache License,
+// Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
 #ifndef MESH__BITMAP_H

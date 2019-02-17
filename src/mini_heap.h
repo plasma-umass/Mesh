@@ -1,5 +1,7 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil -*-
-// Copyright 2017 University of Massachusetts, Amherst
+// Copyright 2019 The Mesh Authors. All rights reserved.
+// Use of this source code is governed by the Apache License,
+// Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
 #ifndef MESH__MINI_HEAP_H
