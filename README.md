@@ -5,6 +5,10 @@ Mesh is a drop in replacement for
 [malloc(3)](http://man7.org/linux/man-pages/man3/malloc.3.html) that
 compacts the heap without rewriting application pointers.
 
+Mesh is described in an [academic paper (arxiv
+PDF)](https://arxiv.org/abs/1902.04738) that will appear at PLDI
+2019.
+
 Mesh runs on Linux; macOS support should be considered alpha-quality,
 and Windows is a work-in-progress.
 
