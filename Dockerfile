@@ -25,4 +25,6 @@ RUN support/install_all_configs PREFIX=/usr/local
 
 FROM ubuntu:18.04
 
-COPY --from=builder /usr/local/lib/libmesh* /usr/local
+COPY --from=builder /usr/local/lib/libmesh* /usr/local/lib/
+
+RUN ldconfig
