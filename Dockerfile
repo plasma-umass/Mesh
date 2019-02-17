@@ -1,5 +1,5 @@
 # docker build -t bpowers/mesh .
-FROM ubuntu:18.04
+FROM ubuntu:18.04 as builder
 MAINTAINER Bobby Powers <bobbypowers@gmail.com>
 
 RUN apt-get update && apt-get install -y \
@@ -21,3 +21,8 @@ COPY . .
 ENV PREFIX /usr/local
 
 RUN support/install_all_configs PREFIX=/usr/local
+
+
+FROM ubuntu:18.04
+
+COPY --from=builder /usr/local/lib/libmesh* /usr/local
