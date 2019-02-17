@@ -47,11 +47,21 @@ DEFINITIONS
   system, 4Kb on most architectures.  Memory given to the allocator by
   the operating system is always in multiples of the page size, and
   aligned to the page size.
-- **Span**: The size of memory managed by Mesh -- [currently 128
-  Kb](src/include/miniheap.h#L36).
-  It is larger than the page size to amortize the cost of heap
-  metadata.
-- [**MiniHeap**](src/include/miniheap.h): A bitmap, metadata and associated Span for a
-  particular size of objects (size class).
-- [**MeshingHeap**](src/include/meshingheap.h): A collection of miniheaps for a particular size
-  class, including a _current_ MiniHeap that we are allocating out of.
+- **Span**: A contiguous run of 1 or more pages.  It is often larger
+  than the page size to account for large allocations and amortize the
+  cost of heap metadata.
+- **Arena**: A contiguous range of virtual address space we allocate
+  out of.  All allocations returned by
+  [`malloc(3)`](http://man7.org/linux/man-pages/man3/malloc.3.html)
+  reside within the arena.
+- [**GlobalHeap**](src/global_heap.h): The global heap carves out the
+  Arena into Spans and performs meshing.
+- [**MiniHeap**](src/mini_heap.h): Metadata for a Span -- at any time
+  a live Span has a single MiniHeap owner.  For small objects,
+  MiniHeaps have a bitmap to track whether an allocation is live or
+  freed.
+- [**ThreadLocalHeap**](src/thread_local_heap.h): A collections of
+  MiniHeaps and a ShuffleVector so that most allocations and
+  `free(3)`s can be fast and lock-free.
+- [**ShuffleVector**](src/shuffle_vector.h): A novel data structure
+  that enables randomized allocation with bump-pointer-like speed.
