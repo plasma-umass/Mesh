@@ -1,8 +1,26 @@
-Mesh: A compacting malloc(3) implementation
-===========================================
+Mesh: Compacting Memory Management for C, C++, and Rust
+=======================================================
 
 Mesh is a drop in replacement for
-[malloc(3)](http://man7.org/linux/man-pages/man3/malloc.3.html) that compacts the heap of C and C++ programs without rewriting application pointers.
+[malloc(3)](http://man7.org/linux/man-pages/man3/malloc.3.html) that
+compacts the heap without rewriting application pointers.
+
+Mesh runs on Linux; macOS support should be considered alpha-quality,
+and Windows is a work-in-progress.
+
+Mesh has a standard C++ build process, and has no runtime dependencies
+other than libc-related libs:
+
+```
+$ git clone --recurse-submodules https://github.com/plasma-umass/mesh
+$ cd mesh
+$ ./configure; make; sudo make install
+# example: run git with mesh as its allocator:
+$ LD_PRELOAD=libmesh.so git status
+```
+
+More docs coming soon, but please open up an issue if you have questions (or issues)!
+
 
 Implementation Overview
 -----------------------
@@ -33,10 +51,3 @@ DEFINITIONS
   particular size of objects (size class).
 - [**MeshingHeap**](src/include/meshingheap.h): A collection of miniheaps for a particular size
   class, including a _current_ MiniHeap that we are allocating out of.
-
-BUILDING
---------
-
-```
-$ git submodule update --init; ./configure; make
-```
