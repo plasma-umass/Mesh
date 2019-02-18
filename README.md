@@ -33,7 +33,7 @@ Mesh is built on [Heap Layers](http://heaplayers.org/), an
 infrastructure for building high performance memory allocators in C++
 (see
 [paper](https://people.cs.umass.edu/~emery/pubs/berger-pldi2001.pdf)
-for details.
+for details.)
 
 The entry point of the library is [`libmesh.cc`](src/libmesh.cc).
 This file is where `malloc`, `free` and the instantiations of the
