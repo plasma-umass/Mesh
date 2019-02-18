@@ -29,7 +29,7 @@ TEST(Alignment, NaturalAlignment) {
           logged = true;
         }
         const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-        ASSERT_EQ(ptrval % alignment, 0);
+        ASSERT_EQ(ptrval % alignment, 0UL);
         ptrs[i] = ptr;
       }
       for (size_t i = 0; i <= 256; i++) {
