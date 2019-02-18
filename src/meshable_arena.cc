@@ -81,7 +81,7 @@ char *MeshableArena::openSpanDir(int pid) {
       if (result != 0) {
         if (errno == EEXIST) {
           // we will get EEXIST if we have re-execed -- we need to use a
-          // new directory because we could have dropped priviledges in
+          // new directory because we could have dropped privileges in
           // the meantime.
           continue;
         } else {
@@ -171,7 +171,7 @@ bool MeshableArena::findPages(const Length pageCount, Span &result, internal::Pa
     }
   }
 
-  // if no dirty pages are avaiable, search clean pages.  An allocated
+  // if no dirty pages are available, search clean pages.  An allocated
   // clean page (once it is written to) means an increased RSS.
   for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
     if (findPagesInner(_clean, i, pageCount, result)) {

@@ -212,7 +212,7 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_STREQ(s2, v2);
   ASSERT_STREQ(s3, v3);
 
-  // get an aliased pointer to the second string by pointer arithmatic
+  // get an aliased pointer to the second string by pointer arithmetic
   // on the first string
   char *t2 = s1 + (ObjCount - 1) * StrLen;
   ASSERT_STREQ(s2, t2);

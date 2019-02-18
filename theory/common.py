@@ -7,7 +7,7 @@ __all__ = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'log', 'slurp']
 # from rainbow
 def make_reporter(verbosity, quiet, filelike):
     '''
-    Returns a function suitible for logging use.
+    Returns a function suitable for logging use.
     '''
     if not quiet:
 

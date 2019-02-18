@@ -21,7 +21,7 @@
 #include "common.h"
 #include "rng/mwc.h"
 
-// never allocate exeecutable heap
+// never allocate executable heap
 #define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)
 #define MALLOC_TRACE 0
 
