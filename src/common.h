@@ -264,7 +264,7 @@ private:
   }
 
   // If size is no more than kMaxSize, compute index of the
-  // class_array[] entry for it, putting the class index in noutput
+  // class_array[] entry for it, putting the class index in output
   // parameter idx and returning true. Otherwise return false.
   static inline bool ATTRIBUTE_ALWAYS_INLINE ClassIndexMaybe(size_t s, uint32_t *idx) {
     if (PREDICT_TRUE(s <= kMaxSmallSize)) {
