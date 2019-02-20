@@ -167,7 +167,14 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_calloc(size_t count, size
 }
 
 extern "C" {
+#ifdef __linux__
 size_t MESH_EXPORT mesh_usable_size(void *ptr) __attribute__((weak, alias("mesh_malloc_usable_size")));
+#else
+// aliases are not supported on darwin
+size_t MESH_EXPORT mesh_usable_size(void *ptr) {
+  return mesh_malloc_usable_size(ptr);
+}
+#endif // __linux__
 
 // ensure we don't concurrently allocate/mess with internal heap data
 // structures while forking.  This is not normally invoked when
