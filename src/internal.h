@@ -34,6 +34,13 @@ inline pid_t gettid(void) {
   return syscall(__NR_gettid);
 }
 #endif
+#ifdef __APPLE__
+inline pid_t gettid(void) {
+  uint64_t tid;
+  pthread_threadid_np(NULL, &tid);
+  return static_cast<uint32_t>(tid);
+}
+#endif
 
 namespace mesh {
 
