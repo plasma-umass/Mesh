@@ -188,7 +188,7 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
 
   {
     const internal::vector<MiniHeap *> candidates = gheap.meshingCandidates(mh1->sizeClass());
-    ASSERT_EQ(candidates.size(), 3);
+    ASSERT_EQ(candidates.size(), 3ULL);
     ASSERT_TRUE(std::find(candidates.begin(), candidates.end(), mh1) != candidates.end());
     ASSERT_TRUE(std::find(candidates.begin(), candidates.end(), mh2) != candidates.end());
     ASSERT_TRUE(std::find(candidates.begin(), candidates.end(), mh3) != candidates.end());
@@ -238,7 +238,7 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
 
   {
     const internal::vector<MiniHeap *> candidates = gheap.meshingCandidates(mh1->sizeClass());
-    ASSERT_EQ(candidates.size(), 1);
+    ASSERT_EQ(candidates.size(), 1ULL);
     ASSERT_EQ(candidates[0], mh1);
   }
 
