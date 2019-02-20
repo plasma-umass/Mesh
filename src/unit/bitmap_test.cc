@@ -12,36 +12,36 @@
 #include <heaplayers.h>
 
 TEST(BitmapTest, RepresentationSize) {
-  ASSERT_EQ(0, mesh::bitmap::representationSize(0));
-  ASSERT_EQ(8, mesh::bitmap::representationSize(1));
-  ASSERT_EQ(8, mesh::bitmap::representationSize(64));
-  ASSERT_EQ(32, mesh::bitmap::representationSize(256));
-  ASSERT_EQ(4, mesh::bitmap::representationSize(256) / sizeof(size_t));
+  ASSERT_EQ(0UL, mesh::bitmap::representationSize(0));
+  ASSERT_EQ(8UL, mesh::bitmap::representationSize(1));
+  ASSERT_EQ(8UL, mesh::bitmap::representationSize(64));
+  ASSERT_EQ(32UL, mesh::bitmap::representationSize(256));
+  ASSERT_EQ(4UL, mesh::bitmap::representationSize(256) / sizeof(size_t));
 }
 
 TEST(BitmapTest, LowestSetBitAt) {
   mesh::internal::RelaxedBitmap bits{128};
 
   bits.tryToSet(6);
-  ASSERT_EQ(6, bits.lowestSetBitAt(0));
-  ASSERT_EQ(6, bits.lowestSetBitAt(5));
-  ASSERT_EQ(6, bits.lowestSetBitAt(6));
-  ASSERT_EQ(128, bits.lowestSetBitAt(7));
+  ASSERT_EQ(6UL, bits.lowestSetBitAt(0));
+  ASSERT_EQ(6UL, bits.lowestSetBitAt(5));
+  ASSERT_EQ(6UL, bits.lowestSetBitAt(6));
+  ASSERT_EQ(128UL, bits.lowestSetBitAt(7));
   bits.tryToSet(123);
-  ASSERT_EQ(123, bits.lowestSetBitAt(7));
+  ASSERT_EQ(123UL, bits.lowestSetBitAt(7));
 }
 
 TEST(BitmapTest, HighestSetBitAt) {
   mesh::internal::RelaxedBitmap bits{128};
 
   bits.tryToSet(6);
-  ASSERT_EQ(0, bits.highestSetBitBeforeOrAt(0));
-  ASSERT_EQ(0, bits.highestSetBitBeforeOrAt(5));
-  ASSERT_EQ(6, bits.highestSetBitBeforeOrAt(6));
-  ASSERT_EQ(6, bits.highestSetBitBeforeOrAt(7));
-  ASSERT_EQ(6, bits.highestSetBitBeforeOrAt(127));
+  ASSERT_EQ(0UL, bits.highestSetBitBeforeOrAt(0));
+  ASSERT_EQ(0UL, bits.highestSetBitBeforeOrAt(5));
+  ASSERT_EQ(6UL, bits.highestSetBitBeforeOrAt(6));
+  ASSERT_EQ(6UL, bits.highestSetBitBeforeOrAt(7));
+  ASSERT_EQ(6UL, bits.highestSetBitBeforeOrAt(127));
   bits.tryToSet(123);
-  ASSERT_EQ(123, bits.highestSetBitBeforeOrAt(127));
+  ASSERT_EQ(123UL, bits.highestSetBitBeforeOrAt(127));
 }
 
 TEST(BitmapTest, SetAndExchangeAll) {
