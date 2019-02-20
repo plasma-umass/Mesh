@@ -101,7 +101,7 @@ protected:
   ~AtomicBitmapBase() {
   }
 
-  inline void ATTRIBUTE_ALWAYS_INLINE setAndExchangeAll(uint64_t *oldBits, const uint64_t *newBits) {
+  inline void ATTRIBUTE_ALWAYS_INLINE setAndExchangeAll(size_t *oldBits, const size_t *newBits) {
     // for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
     //   oldBits[i] = _bits[i].exchange(newBits[i]);
     // }
@@ -557,7 +557,7 @@ public:
     return 0;
   }
 
-  inline void setAndExchangeAll(uint64_t *oldBits, const uint64_t *newBits) {
+  inline void setAndExchangeAll(size_t *oldBits, const size_t *newBits) {
     Super::setAndExchangeAll(oldBits, newBits);
   }
 
