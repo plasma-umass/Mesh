@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 #-*- mode: python; -*-
+from platform import system
 from support.config import ConfigBuilder, slurp, exe_available
 from os import environ, curdir, listdir
 from os.path import abspath
@@ -41,9 +42,18 @@ if c.clangcov_build:
     c.prefer('ranlib', 'llvm-ranlib')
     c.append('ldflags', '-fuse-ld=lld')
 
-c.append('cflags', '-march=westmere')
-c.append('ldflags', '-march=westmere')
-c.append('cflags', '-mavx')
+modern_cpu = True
+if system() == 'Linux':
+    # we need to check if the CPU is recent enough to use popcnt and
+    # AVX instructions
+    cpuinfo = slurp('/proc/cpuinfo').splitlines()
+    flags = [l for l in cpuinfo if l.startswith('flags')][0]
+    modern_cpu = 'popcnt' in flags and 'avx' in flags
+
+if modern_cpu:
+    c.append('cflags', '-march=westmere')
+    c.append('ldflags', '-march=westmere')
+    c.append('cflags', '-mavx')
 
 c.append('cflags', '-fPIC')
 c.append('cflags', '-pipe')
