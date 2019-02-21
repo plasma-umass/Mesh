@@ -7,16 +7,13 @@
 
 namespace mesh {
 
+static __thread char threadLocalBuffer[RoundUpToPage(sizeof(ThreadLocalHeap))] CACHELINE_ALIGNED ATTR_INITIAL_EXEC;
 __thread ThreadLocalHeap::ThreadLocalData ThreadLocalHeap::_threadLocalData ATTR_INITIAL_EXEC CACHELINE_ALIGNED;
 
 ThreadLocalHeap *ThreadLocalHeap::CreateThreadLocalHeap() {
-  void *buf = mesh::internal::Heap().malloc(RoundUpToPage(sizeof(ThreadLocalHeap)));
-  if (buf == nullptr) {
-    mesh::debug("mesh: unable to allocate ThreadLocalHeap, aborting.\n");
-    abort();
-  }
-
-  // hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
+  void *buf = &threadLocalBuffer;
+  hard_assert(buf != nullptr);
+  hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
   return new (buf) ThreadLocalHeap(&mesh::runtime().heap());
 }

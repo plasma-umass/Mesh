@@ -149,7 +149,6 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
   if (heap != nullptr) {
     heap->releaseAll();
   }
-  // ThreadLocalHeap::FreeHeap();
 
   return result;
 }

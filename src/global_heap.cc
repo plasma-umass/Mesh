@@ -45,7 +45,11 @@ void *GlobalHeap::malloc(size_t sz) {
 void GlobalHeap::free(void *ptr) {
   auto mh = miniheapForLocked(ptr);
   if (unlikely(!mh)) {
-    debug("FIXME: free of untracked ptr %p", ptr);
+#ifndef NDEBUG
+    if (ptr != nullptr) {
+      debug("FIXME: free of untracked ptr %p", ptr);
+    }
+#endif
     return;
   }
   this->freeFor(mh, ptr);
