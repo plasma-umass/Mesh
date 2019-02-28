@@ -113,7 +113,7 @@ private:
     }
   }
 
-  atomic_uint32_t _flags;
+  std::atomic<uint32_t> _flags;
 };
 
 class MiniHeap {

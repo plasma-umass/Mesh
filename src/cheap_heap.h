@@ -121,7 +121,7 @@ public:
     return ptrFromOffset(off);
   }
 
-  constexpr size_t getSize(void *ptr) const {
+  size_t getSize(void *ptr) const {
     return _allocSize;
   }
 

@@ -98,7 +98,7 @@ struct Span {
   Span(const Span &rhs) : offset(rhs.offset), length(rhs.length) {
   }
 
-  constexpr Span &operator=(const Span &rhs) {
+  Span &operator=(const Span &rhs) {
     offset = rhs.offset;
     length = rhs.length;
     return *this;
