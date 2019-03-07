@@ -83,9 +83,9 @@ public:
 
   inline void *miniheapForArenaOffset(Offset arenaOff) const {
     const MiniHeapID mhOff = _mhIndex[arenaOff].load(std::memory_order_acquire);
-    // d_assert(mhOff.hasValue());
+    d_assert(mhOff.hasValue());
     const auto result = _mhAllocator.ptrFromOffset(mhOff.value());
-    // debug("lookup ok for (%zu) %zu %p\n", off, mhOff, result);
+    // debug("lookup ok for (%zu) %zu %p\n", arenaOff, mhOff, result);
 
     return result;
   }

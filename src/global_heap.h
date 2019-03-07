@@ -81,6 +81,8 @@ public:
     void *buf = _mhAllocator.alloc();
     d_assert(buf != nullptr);
 
+    // Super::scavenge(true);
+
     // allocate out of the arena
     Span span{0, 0};
     char *spanBegin = Super::pageAlloc(span, pageCount, pageAlignment);
