@@ -106,6 +106,12 @@ void MeshableArena::expandArena(Length minPagesAdded) {
   Span expansion(_end, pageCount);
   _end += pageCount;
 
+  if (unlikely(_end >= kArenaSize / kPageSize)) {
+    debug("Mesh: arena exhausted: current arena size is %.1f GB; recompile with larger arena size.",
+          kArenaSize / 1024.0 / 1024.0);
+    abort();
+  }
+
   _clean[expansion.spanClass()].push_back(expansion);
 }
 
@@ -326,8 +332,9 @@ void MeshableArena::partialScavenge() {
 }
 
 void MeshableArena::scavenge(bool force) {
-  if (!force && _dirtyPageCount < kMinDirtyPageThreshold)
+  if (!force && _dirtyPageCount < kMinDirtyPageThreshold) {
     return;
+  }
 
   // the inverse of the allocated bitmap is all of the spans in _clear
   // (since we just MADV_DONTNEED'ed everything in dirty)
