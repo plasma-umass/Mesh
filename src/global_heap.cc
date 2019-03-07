@@ -220,23 +220,18 @@ void GlobalHeap::meshAllSizeClasses() {
     flushBinLocked(i);
   }
 
-  // FIXME: is it safe to have this function not use internal::allocator?
   auto meshFound = function<void(std::pair<MiniHeap *, MiniHeap *> &&)>(
-      // std::allocator_arg, internal::allocator,
       [&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
         if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<0>(miniheaps)->isMeshingCandidate())
           mergeSets.push_back(std::move(miniheaps));
       });
 
   for (size_t i = 0; i < kNumBins; i++) {
-    // method::randomSort(_prng, _littleheapCounts[i], _littleheaps[i], meshFound);
-    // method::greedySplitting(_prng, _littleheaps[i], meshFound);
-    // method::simpleGreedySplitting(_prng, _littleheaps[i], meshFound);
     partialCount += _littleheaps[i].partialSize();
     method::shiftedSplitting(_fastPrng, _littleheaps[i], meshFound);
   }
 
-  // more than ~ 1 MB saved
+  // we consider this effective if more than ~ 1 MB saved
   _lastMeshEffective = mergeSets.size() > 256;
 
   if (mergeSets.size() == 0) {

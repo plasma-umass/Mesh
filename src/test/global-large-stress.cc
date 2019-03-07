@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <cstdlib>
 #include <vector>
 
@@ -7,6 +8,11 @@ static constexpr unsigned kMaxLiveAlloc = 128;  // keep no more than 128 * kMaxA
 
 int main(void) {
   std::vector<void *> alloc(kMaxLiveAlloc, nullptr);
+  for (size_t i = 0; i < kMaxLiveAlloc; i++) {
+    if (alloc[i] != nullptr) {
+      fprintf(stderr, "alloc not zero initialized!\n");
+    }
+  }
 
   while (1) {
     const size_t ix = rand() % kMaxLiveAlloc;
