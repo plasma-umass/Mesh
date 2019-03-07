@@ -174,7 +174,7 @@ size_t MESH_EXPORT mesh_usable_size(void *ptr) __attribute__((weak, alias("mesh_
 size_t MESH_EXPORT mesh_usable_size(void *ptr) {
   return mesh_malloc_usable_size(ptr);
 }
-#endif // __linux__
+#endif  // __linux__
 
 // ensure we don't concurrently allocate/mess with internal heap data
 // structures while forking.  This is not normally invoked when
@@ -201,7 +201,8 @@ int MESH_EXPORT sigprocmask(int how, const sigset_t *set, sigset_t *oldset) thro
 // we need to wrap pthread_create so that we can safely implement a
 // stop-the-world quiescent period for the copy/mremap phase of
 // meshing
-int MESH_EXPORT pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg) throw() {
+int MESH_EXPORT pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
+                               void *arg) throw() {
   return mesh::runtime().createThread(thread, attr, startRoutine, arg);
 }
 
@@ -223,10 +224,6 @@ int MESH_EXPORT epoll_pwait(int __epfd, struct epoll_event *__events, int __maxe
 }
 
 #endif
-
-int MESH_EXPORT mesh_in_bounds(void *ptr) {
-  return mesh::runtime().heap().inBounds(ptr);
-}
 }
 
 #ifdef __linux__

@@ -3,8 +3,6 @@
 // Use of this source code is governed by the Apache License,
 // Version 2.0, that can be found in the LICENSE file.
 
-
-
 #ifndef __GNUC__
 #error "This file requires the GNU compiler."
 #endif

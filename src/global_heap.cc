@@ -43,7 +43,7 @@ void *GlobalHeap::malloc(size_t sz) {
 }
 
 void GlobalHeap::free(void *ptr) {
-  auto mh = miniheapForLocked(ptr);
+  auto mh = miniheapFor(ptr);
   if (unlikely(!mh)) {
 #ifndef NDEBUG
     if (ptr != nullptr) {
@@ -86,7 +86,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr) {
       // our MiniHeap was meshed out from underneath us.  Grab the
       // global lock to synchronize with a concurrent mesh, and
       // re-update the bitmap
-      mh = miniheapForLocked(ptr);
+      mh = miniheapFor(ptr);
       hard_assert(!mh->isMeshed());
       mh->free(arenaBegin(), ptr);
     }
@@ -166,6 +166,35 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
     *statp = sz;
   }
   return 0;
+}
+
+void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
+  const size_t dstSpanSize = dst->spanSize();
+  const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart(arenaBegin()));
+
+  src->forEachMeshed([&](const MiniHeap *mh) {
+    // marks srcSpans read-only
+    const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
+    Super::beginMesh(dstSpanStart, srcSpan, dstSpanSize);
+    return false;
+  });
+
+  // does the copying of objects and updating of span metadata
+  dst->consume(arenaBegin(), src);
+  d_assert(src->isMeshed());
+
+  src->forEachMeshed([&](const MiniHeap *mh) {
+    d_assert(mh->isMeshed());
+    const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
+    // frees physical memory + re-marks srcSpans as read/write
+    Super::finalizeMesh(dstSpanStart, srcSpan, dstSpanSize);
+    return false;
+  });
+
+  // make sure we adjust what bin the destination is in -- it might
+  // now be full and not a candidate for meshing
+  _littleheaps[dst->sizeClass()].postFree(dst, dst->inUseCount());
+  untrackMiniheapLocked(src);
 }
 
 void GlobalHeap::meshAllSizeClasses() {

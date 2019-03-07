@@ -187,7 +187,7 @@ public:
   // large, page-multiple allocations
   void *ATTRIBUTE_NEVER_INLINE malloc(size_t sz);
 
-  inline MiniHeap *miniheapForLocked(const void *ptr) const {
+  inline MiniHeap *miniheapFor(const void *ptr) const {
     auto mh = reinterpret_cast<MiniHeap *>(Super::lookupMiniheap(ptr));
     return mh;
   }
@@ -270,25 +270,12 @@ public:
       return 0;
 
     lock_guard<mutex> lock(_miniheapLock);
-    // shared_lock<shared_mutex> lock(_miniheapLock);
-    auto mh = miniheapForLocked(ptr);
+    auto mh = miniheapFor(ptr);
     if (likely(mh)) {
       return mh->objectSize();
     } else {
       return 0;
     }
-  }
-
-  inline bool inBounds(void *ptr) const {
-    debug("TODO: I don't think this is correct.");
-
-    if (unlikely(ptr == nullptr))
-      return false;
-
-    lock_guard<mutex> lock(_miniheapLock);
-    // shared_lock<shared_mutex> lock(_miniheapLock);
-    auto mh = miniheapForLocked(ptr);
-    return mh != nullptr;
   }
 
   int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
@@ -314,34 +301,7 @@ public:
 
   // PUBLIC ONLY FOR TESTING
   // after call to meshLocked() completes src is a nullptr
-  void meshLocked(MiniHeap *dst, MiniHeap *&src) {
-    const size_t dstSpanSize = dst->spanSize();
-    const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart(arenaBegin()));
-
-    src->forEachMeshed([&](const MiniHeap *mh) {
-      // marks srcSpans read-only
-      const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
-      Super::beginMesh(dstSpanStart, srcSpan, dstSpanSize);
-      return false;
-    });
-
-    // does the copying of objects and updating of span metadata
-    dst->consume(arenaBegin(), src);
-    d_assert(src->isMeshed());
-
-    src->forEachMeshed([&](const MiniHeap *mh) {
-      d_assert(mh->isMeshed());
-      const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
-      // frees physical memory + re-marks srcSpans as read/write
-      Super::finalizeMesh(dstSpanStart, srcSpan, dstSpanSize);
-      return false;
-    });
-
-    // make sure we adjust what bin the destination is in -- it might
-    // now be full and not a candidate for meshing
-    _littleheaps[dst->sizeClass()].postFree(dst, dst->inUseCount());
-    untrackMiniheapLocked(src);
-  }
+  void ATTRIBUTE_NEVER_INLINE meshLocked(MiniHeap *dst, MiniHeap *&src);
 
   inline void ATTRIBUTE_ALWAYS_INLINE maybeMesh() {
     if (!kMeshingEnabled) {
@@ -388,7 +348,7 @@ public:
     if (ptr == nullptr)
       return false;
 
-    return miniheapForLocked(ptr) != nullptr;
+    return miniheapFor(ptr) != nullptr;
   }
 
   inline internal::vector<MiniHeap *> meshingCandidates(int sizeClass) const {
