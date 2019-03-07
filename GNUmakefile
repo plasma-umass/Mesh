@@ -176,6 +176,9 @@ src/test/big-alloc-glibc: src/test/big-alloc.c $(CONFIG)
 src/test/thread-example: src/test/thread.cc $(CONFIG)
 	$(CXX) -std=c++11 -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)" -lpthread
 
+src/test/global-large-stress: src/test/global-large-stress.cc $(CONFIG)
+	$(CXX) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -O3 -DNDEBUG -Isrc -Isrc/vendor/Heap-Layers -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)"
+
 src/test/larson-mesh: src/test/larson.cc $(CONFIG)
 	$(CXX) -pipe -fno-builtin-malloc -fno-omit-frame-pointer -g -O3 -DNDEBUG -Isrc -Isrc/vendor/Heap-Layers -o $@ $< -L$(PWD) -lmesh -Wl,-rpath,"$(PWD)" -lpthread
 

@@ -31,6 +31,7 @@ __pycache__
 /src/test/local-alloc-tcmalloc
 /src/test/local-alloc-jemalloc
 /src/test/local-alloc-mesh
+/src/test/global-large-stress
 /test/docker/*/mstatgcc
 /test/docker/*/mstat
 /test/spec/data
