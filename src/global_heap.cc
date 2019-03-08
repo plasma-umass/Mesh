@@ -210,7 +210,7 @@ void GlobalHeap::meshAllSizeClasses() {
 
   _lastMeshEffective = 1;
 
-  // const auto start = std::chrono::high_resolution_clock::now();
+  // const auto start = time::now();
   size_t partialCount = 0;
 
   internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
@@ -258,7 +258,7 @@ void GlobalHeap::meshAllSizeClasses() {
 
   Super::scavenge(false);
 
-  _lastMesh = std::chrono::high_resolution_clock::now();
+  _lastMesh = time::now();
 
   // const std::chrono::duration<double> duration = _lastMesh - start;
   // debug("mesh took %f, found %zu", duration.count(), mergeSets.size());

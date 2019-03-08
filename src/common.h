@@ -16,6 +16,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 #endif
 
@@ -182,6 +183,22 @@ namespace mesh {
 
 // logging
 void debug(const char *fmt, ...);
+
+  namespace time {
+    using clock = std::chrono::high_resolution_clock;
+    using time_point = std::chrono::time_point<clock>;
+    inline time_point ATTRIBUTE_ALWAYS_INLINE now() {
+#ifdef __linux__
+      struct timespec ts;
+      clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+      const auto sec = std::chrono::seconds{ts.tv_sec};
+      const auto nsec = std::chrono::nanoseconds{ts.tv_nsec};
+      return time_point{sec + nsec};
+#else
+      return std::chrono::high_resolution_clock::now();
+#endif
+    }
+  }
 
 namespace internal {
 

@@ -316,7 +316,7 @@ public:
       return;
     }
 
-    const auto now = std::chrono::high_resolution_clock::now();
+    const auto now = time::now();
     auto duration = chrono::duration_cast<chrono::nanoseconds>(now - _lastMesh);
 
     if (likely(duration < _meshPeriodNs)) {
@@ -329,7 +329,7 @@ public:
       // ensure if two threads tried to grab the mesh lock at the same
       // time, the second one bows out gracefully without meshing
       // twice in a row.
-      const auto lockedNow = std::chrono::high_resolution_clock::now();
+      const auto lockedNow = time::now();
       auto duration = chrono::duration_cast<chrono::nanoseconds>(lockedNow - _lastMesh);
 
       if (unlikely(duration < _meshPeriodNs)) {
@@ -376,7 +376,7 @@ private:
 
   std::chrono::nanoseconds _meshPeriodNs{kMeshPeriodNs};
   // XXX: should be atomic, but has exception spec?
-  std::chrono::time_point<std::chrono::high_resolution_clock> _lastMesh;
+  time::time_point _lastMesh;
 };
 }  // namespace mesh
 
