@@ -108,7 +108,7 @@ void MeshableArena::expandArena(Length minPagesAdded) {
 
   if (unlikely(_end >= kArenaSize / kPageSize)) {
     debug("Mesh: arena exhausted: current arena size is %.1f GB; recompile with larger arena size.",
-          kArenaSize / 1024.0 / 1024.0);
+          kArenaSize / 1024.0 / 1024.0 / 1024.0);
     abort();
   }
 
