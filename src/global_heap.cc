@@ -220,8 +220,8 @@ void GlobalHeap::meshAllSizeClasses() {
     flushBinLocked(i);
   }
 
-  auto meshFound = function<void(std::pair<MiniHeap *, MiniHeap *> &&)>(
-      [&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
+  auto meshFound =
+      function<void(std::pair<MiniHeap *, MiniHeap *> &&)>([&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
         if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<0>(miniheaps)->isMeshingCandidate())
           mergeSets.push_back(std::move(miniheaps));
       });

@@ -75,7 +75,7 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   GlobalHeap &gheap = runtime().heap();
 
   // disable automatic meshing for this test
-  gheap.setMeshPeriodNs(std::chrono::nanoseconds{0});
+  gheap.setMeshPeriodMs(kZeroMs);
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 

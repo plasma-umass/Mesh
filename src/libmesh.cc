@@ -23,7 +23,7 @@ static __attribute__((constructor)) void libmesh_init() {
     if (period < 0) {
       period = 0;
     }
-    runtime().setMeshPeriodNs(std::chrono::milliseconds{period});
+    runtime().setMeshPeriodMs(std::chrono::milliseconds{period});
   }
 
   char *bgThread = getenv("MESH_BACKGROUND_THREAD");

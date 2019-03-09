@@ -89,8 +89,8 @@ static constexpr bool kEnableShuffleOnFree = SHUFFLE_ON_FREE == 1;
 // madvise(DONTDUMP) the heap to make reasonable coredumps
 static constexpr bool kAdviseDump = false;
 
-static constexpr std::chrono::nanoseconds kZeroNs{0};
-static constexpr std::chrono::nanoseconds kMeshPeriodNs{100000000};  // 100 ms
+static constexpr std::chrono::milliseconds kZeroMs{0};
+static constexpr std::chrono::milliseconds kMeshPeriodMs{100};  // 100 ms
 
 // controls aspects of miniheaps
 static constexpr size_t kMaxMeshes = 256;  // 1 per bit
@@ -184,22 +184,6 @@ namespace mesh {
 // logging
 void debug(const char *fmt, ...);
 
-  namespace time {
-    using clock = std::chrono::high_resolution_clock;
-    using time_point = std::chrono::time_point<clock>;
-    inline time_point ATTRIBUTE_ALWAYS_INLINE now() {
-#ifdef __linux__
-      struct timespec ts;
-      clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
-      const auto sec = std::chrono::seconds{ts.tv_sec};
-      const auto nsec = std::chrono::nanoseconds{ts.tv_nsec};
-      return time_point{sec + nsec};
-#else
-      return std::chrono::high_resolution_clock::now();
-#endif
-    }
-  }
-
 namespace internal {
 
 inline static mutex *getSeedMutex() {
@@ -240,6 +224,23 @@ inline uint64_t seed() {
 void __attribute__((noreturn))
 __mesh_assert_fail(const char *assertion, const char *file, const char *func, int line, const char *fmt, ...);
 }  // namespace internal
+
+namespace time {
+using clock = std::chrono::high_resolution_clock;
+using time_point = std::chrono::time_point<clock>;
+
+inline time_point ATTRIBUTE_ALWAYS_INLINE now() {
+#ifdef __linux__
+  using namespace std::chrono;
+  struct timespec tp;
+  auto err = clock_gettime(CLOCK_MONOTONIC_COARSE, &tp);
+  hard_assert(err == 0);
+  return time_point(seconds(tp.tv_sec) + nanoseconds(tp.tv_nsec));
+#else
+  return std::chrono::high_resolution_clock::now();
+#endif
+}
+}  // namespace time
 
 #define PREDICT_TRUE likely
 
