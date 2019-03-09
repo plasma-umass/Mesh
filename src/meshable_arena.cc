@@ -38,7 +38,7 @@ static const char *const TMP_DIRS[] = {
     "/tmp",
 };
 
-MeshableArena::MeshableArena() : SuperHeap() {
+MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), internal::seed()) {
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 

@@ -45,10 +45,7 @@ private:
 public:
   enum { Alignment = 16 };
 
-  GlobalHeap()
-      : _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)),
-        _fastPrng(internal::seed(), internal::seed()),
-        _lastMesh{time::now()} {
+  GlobalHeap() : Super(), _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)), _lastMesh{time::now()} {
   }
 
   inline void dumpStrings() const {
@@ -365,8 +362,6 @@ private:
 
   // always accessed with the mhRWLock exclusively locked
   size_t _miniheapCount{0};
-
-  MWC _fastPrng;
 
   BinnedTracker _littleheaps[kNumBins];
 

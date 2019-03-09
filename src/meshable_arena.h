@@ -145,7 +145,8 @@ public:
 private:
   void expandArena(Length minPagesAdded);
   bool findPages(Length pageCount, Span &result, internal::PageType &type);
-  bool findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i, Length pageCount, Span &result);
+  bool ATTRIBUTE_NEVER_INLINE findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i,
+                                             Length pageCount, Span &result);
   Span reservePages(Length pageCount, Length pageAlignment);
   void freePhys(void *ptr, size_t sz);
   internal::RelaxedBitmap allocatedBitmap(bool includeDirty = true) const;
@@ -189,8 +190,14 @@ private:
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
       _dirtyPageCount += span.length;
+
       if (_dirtyPageCount > kMaxDirtyPageThreshold) {
-        partialScavenge();
+        // do a full scavenge with a probability 1/10
+        if (_fastPrng.inRange(0, 9) == 9) {
+          scavenge(true);
+        } else {
+          partialScavenge();
+        }
       }
     } else if (flags == internal::PageType::Meshed) {
       // delay restoring the identity mapping
@@ -270,6 +277,7 @@ private:
 
 protected:
   CheapHeap<64, kArenaSize / kPageSize> _mhAllocator{};
+  MWC _fastPrng;
 
 private:
   Offset _end{};  // in pages
