@@ -51,7 +51,7 @@ static constexpr size_t kMaxSize = 16384;
 static constexpr size_t kClassSizesMax = 96;
 static constexpr size_t kAlignment = 8;
 static constexpr int kMinAlign = 16;
-static constexpr int kPageSize = 4096;
+static constexpr uint64_t kPageSize = 4096;
 static constexpr size_t kMaxFastLargeSize = 256 * 1024;  // 256Kb
 
 // cutoff to be considered for meshing
@@ -77,7 +77,7 @@ static constexpr int kDefaultMeshPeriod = 10000;
 static constexpr uint32_t kMinArenaExpansion = 4096;  // 16 MB in pages
 
 // ensures we amortize the cost of going to the global heap enough
-static constexpr uint32_t kMinStringLen = 8;
+static constexpr uint64_t kMinStringLen = 8;
 static constexpr size_t kMiniheapRefillGoalSize = 4 * 1024;
 static constexpr size_t kMaxMiniheapsPerShuffleVector = 8;
 

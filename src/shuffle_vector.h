@@ -249,7 +249,7 @@ public:
     _arenaBegin = arenaBegin;
     _objectSize = sz;
     _objectSizeReciprocal = 1.0 / (float)sz;
-    _maxCount = max(HL::CPUInfo::PageSize / sz, kMinStringLen);
+    _maxCount = max(kPageSize / sz, kMinStringLen);
     // initially, we are unattached and therefor have no capacity.
     // Setting _off to _maxCount causes isExhausted() to return true
     // so that we don't separately have to check !isAttached() in the
