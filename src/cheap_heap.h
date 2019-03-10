@@ -45,7 +45,9 @@ public:
     }
 
     const auto off = _arenaOff++;
-    return ptrFromOffset(off);
+    const auto ptr = ptrFromOffset(off);
+    hard_assert(ptr < arenaEnd());
+    return ptr;
   }
 
   constexpr size_t getSize(void *ptr) const {
@@ -119,7 +121,9 @@ public:
     }
 
     const auto off = _arenaOff++;
-    return ptrFromOffset(off);
+    const auto ptr = ptrFromOffset(off);
+    hard_assert(ptr < arenaEnd());
+    return ptr;
   }
 
   size_t getSize(void *ptr) const {
