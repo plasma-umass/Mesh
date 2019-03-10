@@ -95,7 +95,7 @@ static constexpr std::chrono::milliseconds kMeshPeriodMs{100};  // 100 ms
 // controls aspects of miniheaps
 static constexpr size_t kMaxMeshes = 256;  // 1 per bit
 
-static constexpr size_t kArenaSize = 16ULL * 1024ULL * 1024ULL * 1024ULL;  // 16 GB
+static constexpr size_t kArenaSize = 64ULL * 1024ULL * 1024ULL * 1024ULL;  // 64 GB
 static constexpr size_t kAltStackSize = 16 * 1024UL;                       // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 #define SIGDUMP (SIGRTMIN + 8)
