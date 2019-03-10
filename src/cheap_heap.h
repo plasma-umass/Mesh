@@ -20,6 +20,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(CheapHeap);
   typedef OneWayMmapHeap SuperHeap;
 
+  static_assert(maxCount <= (1 << 30), "expected maxCount <= 2^30");
   static_assert(allocSize % 2 == 0, "expected allocSize to be even");
 
 public:

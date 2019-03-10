@@ -184,12 +184,12 @@ public:
   // large, page-multiple allocations
   void *ATTRIBUTE_NEVER_INLINE malloc(size_t sz);
 
-  inline MiniHeap *miniheapFor(const void *ptr) const {
+  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE miniheapFor(const void *ptr) const {
     auto mh = reinterpret_cast<MiniHeap *>(Super::lookupMiniheap(ptr));
     return mh;
   }
 
-  inline MiniHeap *miniheapForID(const MiniHeapID id) const {
+  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE miniheapForID(const MiniHeapID id) const {
     auto mh = reinterpret_cast<MiniHeap *>(_mhAllocator.ptrFromOffset(id.value()));
     __builtin_prefetch(mh, 1, 2);
     return mh;

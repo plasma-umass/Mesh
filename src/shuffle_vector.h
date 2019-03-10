@@ -103,7 +103,7 @@ public:
         // for these bits we've pulled out of the MiniHeap's bitmap,
         // so we need to set them as free again.  we should measure
         // how often this happens, as its gonna be slow
-        bitmap.unset(i);
+        refillFullSlowpath(bitmap, i);
       } else {
         _off--;
         d_assert(_off >= 0);
@@ -114,6 +114,10 @@ public:
     }
 
     return allocCount;
+  }
+
+  void ATTRIBUTE_NEVER_INLINE refillFullSlowpath(internal::Bitmap &bitmap, size_t i) {
+    bitmap.unset(i);
   }
 
   FixedArray<MiniHeap, kMaxMiniheapsPerShuffleVector> &miniheaps() {
@@ -207,8 +211,12 @@ public:
     if (likely(_off > 0)) {
       push(sv::Entry{mh->svOffset(), static_cast<uint8_t>(off)});
     } else {
-      mh->freeOff(off);
+      freeFullSlowpath(mh, off);
     }
+  }
+
+  void ATTRIBUTE_NEVER_INLINE freeFullSlowpath(MiniHeap *mh, size_t off) {
+    mh->freeOff(off);
   }
 
   // an attach takes ownership of the reference to mh
