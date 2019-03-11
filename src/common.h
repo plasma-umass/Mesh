@@ -74,7 +74,7 @@ static constexpr uint32_t kSpanClassCount = 256;
 static constexpr int kNumBins = 25;  // 16Kb max object size
 static constexpr int kDefaultMeshPeriod = 10000;
 
-static constexpr uint32_t kMinArenaExpansion = 4096;  // 16 MB in pages
+static constexpr size_t kMinArenaExpansion = 4096;  // 16 MB in pages
 
 // ensures we amortize the cost of going to the global heap enough
 static constexpr uint64_t kMinStringLen = 8;

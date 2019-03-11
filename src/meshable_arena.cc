@@ -100,7 +100,7 @@ char *MeshableArena::openSpanDir(int pid) {
   return nullptr;
 }
 
-void MeshableArena::expandArena(Length minPagesAdded) {
+void MeshableArena::expandArena(size_t minPagesAdded) {
   const size_t pageCount = std::max(minPagesAdded, kMinArenaExpansion);
 
   Span expansion(_end, pageCount);
@@ -116,7 +116,7 @@ void MeshableArena::expandArena(Length minPagesAdded) {
 }
 
 bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], const size_t i,
-                                   const Length pageCount, Span &result) {
+                                   const size_t pageCount, Span &result) {
   internal::vector<Span> &spanList = freeSpans[i];
   if (spanList.empty())
     return false;
@@ -166,7 +166,7 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
   return true;
 }
 
-bool MeshableArena::findPages(const Length pageCount, Span &result, internal::PageType &type) {
+bool MeshableArena::findPages(const size_t pageCount, Span &result, internal::PageType &type) {
   // Search through all dirty spans first.  We don't worry about
   // fragmenting dirty pages, as being able to reuse dirty pages means
   // we don't increase RSS.
@@ -189,7 +189,7 @@ bool MeshableArena::findPages(const Length pageCount, Span &result, internal::Pa
   return false;
 }
 
-Span MeshableArena::reservePages(const Length pageCount, const Length pageAlignment) {
+Span MeshableArena::reservePages(const size_t pageCount, const size_t pageAlignment) {
   d_assert(pageCount >= 1);
 
   internal::PageType flags(internal::PageType::Unknown);
@@ -453,13 +453,14 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const auto keepOff = offsetFor(keep);
   const auto removeOff = offsetFor(remove);
 
-  const Length pageCount = sz / kPageSize;
+  const size_t pageCount = sz / kPageSize;
   const MiniHeapID keepID = _mhIndex[keepOff].load(std::memory_order_acquire);
   for (size_t i = 0; i < pageCount; i++) {
     setIndex(removeOff + i, keepID);
   }
 
-  const Span removedSpan{removeOff, pageCount};
+  hard_assert(pageCount < std::numeric_limits<Length>::max());
+  const Span removedSpan{removeOff, static_cast<Length>(pageCount)};
   trackMeshed(removedSpan);
 
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * kPageSize);

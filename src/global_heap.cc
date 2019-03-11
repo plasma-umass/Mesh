@@ -34,11 +34,6 @@ void *GlobalHeap::malloc(size_t sz) {
 
   const auto pageCount = PageCount(sz);
 
-  // prevent integer underflows
-  if (unlikely(pageCount * kPageSize > INT_MAX)) {
-    return nullptr;
-  }
-
   return pageAlignedAlloc(1, pageCount);
 }
 

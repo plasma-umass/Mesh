@@ -89,8 +89,9 @@ public:
 
     MiniHeap *mh = new (buf) MiniHeap(arenaBegin(), span, objectCount, objectSize);
 
-    if (sizeClass >= 0)
+    if (sizeClass >= 0) {
       trackMiniheapLocked(mh);
+    }
 
     _miniheapCount++;
     _stats.mhAllocCount++;

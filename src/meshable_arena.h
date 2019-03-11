@@ -143,17 +143,17 @@ public:
   void doAfterForkChild();
 
 private:
-  void expandArena(Length minPagesAdded);
-  bool findPages(Length pageCount, Span &result, internal::PageType &type);
+  void expandArena(size_t minPagesAdded);
+  bool findPages(size_t pageCount, Span &result, internal::PageType &type);
   bool ATTRIBUTE_NEVER_INLINE findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i,
-                                             Length pageCount, Span &result);
-  Span reservePages(Length pageCount, Length pageAlignment);
+                                             size_t pageCount, Span &result);
+  Span reservePages(size_t pageCount, size_t pageAlignment);
   void freePhys(void *ptr, size_t sz);
   internal::RelaxedBitmap allocatedBitmap(bool includeDirty = true) const;
 
   void *malloc(size_t sz) = delete;
 
-  inline bool isAligned(const Span &span, const Length pageAlignment) const {
+  inline bool isAligned(const Span &span, const size_t pageAlignment) const {
     return ptrvalFromOffset(span.offset) % (pageAlignment * kPageSize) == 0;
   }
 
