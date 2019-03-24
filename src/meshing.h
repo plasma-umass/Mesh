@@ -48,7 +48,7 @@ namespace method {
 // split miniheaps into two lists in a random order
 inline void halfSplit(MWC &prng, BinnedTracker &miniheaps, internal::vector<MiniHeap *> &left,
                       internal::vector<MiniHeap *> &right) noexcept {
-  internal::vector<MiniHeap *> bucket = miniheaps.meshingCandidates(kOccupancyCutoff);
+  internal::vector<MiniHeap *> bucket = miniheaps.meshingCandidatesLocked(kOccupancyCutoff);
 
   internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
 
@@ -67,8 +67,11 @@ inline void halfSplit(MWC &prng, BinnedTracker &miniheaps, internal::vector<Mini
 template <size_t t = 64>
 inline void shiftedSplitting(MWC &prng, BinnedTracker &miniheaps,
                              const function<void(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept {
-  if (miniheaps.partialSize() == 0)
+  lock_guard<BinnedTracker> binLock(miniheaps);
+
+  if (miniheaps.partialSizeLocked() == 0) {
     return;
+  }
 
   internal::vector<MiniHeap *> leftBucket{};   // mutable copy
   internal::vector<MiniHeap *> rightBucket{};  // mutable copy

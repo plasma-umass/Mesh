@@ -186,13 +186,14 @@ public:
     if (unlikely(ptr == nullptr))
       return;
 
-    auto mh = _global->miniheapFor(ptr);
+    size_t startEpoch{0};
+    auto mh = _global->miniheapForWithEpoch(ptr, startEpoch);
     if (likely(mh && mh->current() == _current && !mh->hasMeshed())) {
       ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
       shuffleVector.free(mh, ptr);
       return;
     }
-    _global->freeFor(mh, ptr);
+    _global->freeFor(mh, ptr, startEpoch);
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE sizedFree(void *ptr, size_t sz) {

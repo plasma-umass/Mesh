@@ -87,8 +87,11 @@ public:
   }
 
   internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {
-    std::lock_guard<std::mutex> lock(_mutex);
+    lock_guard<mutex> lock(_mutex);
+    return meshingCandidatesLocked(occupancyCutoff);
+  }
 
+  internal::vector<MiniHeap *> meshingCandidatesLocked(double occupancyCutoff) const {
     internal::vector<MiniHeap *> bucket{};
 
     // consider all of our partially filled miniheaps
@@ -283,6 +286,14 @@ public:
     _empty.clear();
 
     return toFree;
+  }
+
+  inline void lock() {
+    _mutex.lock();
+  }
+
+  inline void unlock() {
+    _mutex.unlock();
   }
 
 private:
