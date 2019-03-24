@@ -206,7 +206,7 @@ int MESH_EXPORT pthread_create(pthread_t *thread, const pthread_attr_t *attr, me
 }
 
 void MESH_EXPORT pthread_exit(void *retval) throw() {
-  return mesh::runtime().exitThread(retval);
+  mesh::runtime().exitThread(retval);
 }
 
 // Same API as je_mallctl, allows a program to query stats and set

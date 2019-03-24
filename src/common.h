@@ -141,6 +141,7 @@ using std::unique_lock;
 #define ATTRIBUTE_PACKED __attribute__((packed))
 #define ATTRIBUTE_NEVER_INLINE __attribute__((noinline))
 #define ATTRIBUTE_ALWAYS_INLINE __attribute__((always_inline))
+#define ATTRIBUTE_NORETURN __attribute__((noreturn))
 #define ATTRIBUTE_HIDDEN __attribute__((visibility("hidden")))
 #define ATTRIBUTE_ALIGNED(s) __attribute__((aligned(s)))
 #define CACHELINE_SIZE 64

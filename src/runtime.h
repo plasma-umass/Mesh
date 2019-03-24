@@ -45,7 +45,7 @@ public:
   // we need to wrap pthread_create and pthread_exit so that we can
   // install our segfault handler and cleanup thread-local heaps.
   int createThread(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg);
-  void exitThread(void *retval);
+  void ATTRIBUTE_NORETURN exitThread(void *retval);
 
   void setMeshPeriodMs(std::chrono::milliseconds period) {
     _heap.setMeshPeriodMs(period);

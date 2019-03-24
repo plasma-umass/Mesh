@@ -158,6 +158,9 @@ void Runtime::exitThread(void *retval) {
   }
 
   mesh::real::pthread_exit(retval);
+
+  // pthread_exit doesn't return
+  __builtin_unreachable();
 }
 
 void Runtime::createSignalFd() {
