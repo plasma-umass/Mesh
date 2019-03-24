@@ -42,10 +42,10 @@ public:
   void startBgThread();
   void initMaxMapCount();
 
-  // we need to wrap pthread_create so that we can safely implement a
-  // stop-the-world quiescent period for the copy/mremap phase of
-  // meshing
+  // we need to wrap pthread_create and pthread_exit so that we can
+  // install our segfault handler and cleanup thread-local heaps.
   int createThread(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg);
+  void exitThread(void *retval);
 
   void setMeshPeriodMs(std::chrono::milliseconds period) {
     _heap.setMeshPeriodMs(period);

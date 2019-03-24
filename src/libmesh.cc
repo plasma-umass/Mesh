@@ -198,12 +198,15 @@ int MESH_EXPORT sigprocmask(int how, const sigset_t *set, sigset_t *oldset) thro
   return mesh::runtime().sigprocmask(how, set, oldset);
 }
 
-// we need to wrap pthread_create so that we can safely implement a
-// stop-the-world quiescent period for the copy/mremap phase of
-// meshing
+// we need to wrap pthread_create and pthread_exit so that we can
+// install our segfault handler and cleanup thread-local heaps.
 int MESH_EXPORT pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
                                void *arg) throw() {
   return mesh::runtime().createThread(thread, attr, startRoutine, arg);
+}
+
+void MESH_EXPORT pthread_exit(void *retval) throw() {
+  return mesh::runtime().exitThread(retval);
 }
 
 // Same API as je_mallctl, allows a program to query stats and set

@@ -121,8 +121,9 @@ void Runtime::initMaxMapCount() {
 int Runtime::createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg) {
   lock_guard<Runtime> lock(*this);
 
-  if (mesh::real::pthread_create == nullptr)
+  if (unlikely(mesh::real::pthread_create == nullptr)) {
     mesh::real::init();
+  }
 
   void *threadArgsBuf = mesh::internal::Heap().malloc(sizeof(StartThreadArgs));
   d_assert(threadArgsBuf != nullptr);
@@ -143,14 +144,20 @@ void *Runtime::startThread(StartThreadArgs *threadArgs) {
 
   runtime->installSegfaultHandler();
 
-  auto result = startRoutine(arg);
+  return startRoutine(arg);
+}
+
+void Runtime::exitThread(void *retval) {
+  if (unlikely(mesh::real::pthread_exit == nullptr)) {
+    mesh::real::init();
+  }
 
   auto heap = ThreadLocalHeap::GetFastPathHeap();
   if (heap != nullptr) {
     heap->releaseAll();
   }
 
-  return result;
+  mesh::real::pthread_exit(retval);
 }
 
 void Runtime::createSignalFd() {

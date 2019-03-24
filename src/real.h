@@ -26,6 +26,7 @@ DECLARE_REAL(epoll_wait);
 #endif
 
 DECLARE_REAL(pthread_create);
+DECLARE_REAL(pthread_exit);
 
 DECLARE_REAL(sigaction);
 DECLARE_REAL(sigprocmask);

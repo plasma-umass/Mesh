@@ -24,6 +24,7 @@ DEFINE_REAL(epoll_wait);
 #endif
 
 DEFINE_REAL(pthread_create);
+DEFINE_REAL(pthread_exit);
 
 DEFINE_REAL(sigaction);
 DEFINE_REAL(sigprocmask);
@@ -42,6 +43,7 @@ void init() {
 #endif
 
   INIT_REAL(pthread_create, RTLD_NEXT);
+  INIT_REAL(pthread_exit, RTLD_NEXT);
 
   INIT_REAL(sigaction, RTLD_NEXT);
   INIT_REAL(sigprocmask, RTLD_NEXT);
