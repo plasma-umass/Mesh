@@ -21,44 +21,6 @@ using namespace HL;
 
 namespace mesh {
 
-class EpochLock {
-private:
-  DISALLOW_COPY_AND_ASSIGN(EpochLock);
-public:
-  EpochLock() {}
-
-  inline size_t ATTRIBUTE_ALWAYS_INLINE current() const noexcept {
-    return _epoch.load(std::memory_order::memory_order_acquire);
-  }
-
-  inline size_t ATTRIBUTE_ALWAYS_INLINE isSame(size_t startEpoch) const noexcept {
-    return current() == startEpoch;
-  }
-
-  inline void ATTRIBUTE_ALWAYS_INLINE lock() noexcept {
-#ifndef NDEBUG
-    // make sure that the previous epoch was even
-    const auto old = _epoch.fetch_add(1, std::memory_order::memory_order_release);
-    d_assert(old % 2 == 0);
-#else
-    _epoch.fetch_add(1, std::memory_order::memory_order_release);
-#endif
-  }
-
-  inline void ATTRIBUTE_ALWAYS_INLINE unlock() noexcept {
-#ifndef NDEBUG
-    // make sure that the previous epoch was odd
-    const auto old = _epoch.fetch_add(1, std::memory_order::memory_order_release);
-    d_assert(old % 2 == 1);
-#else
-    _epoch.fetch_add(1, std::memory_order::memory_order_release);
-#endif
-  }
-
-private:
-  atomic_size_t _epoch{0};
-};
-
 class GlobalHeapStats {
 public:
   atomic_size_t meshCount;
@@ -223,11 +185,6 @@ public:
   // large, page-multiple allocations
   void *ATTRIBUTE_NEVER_INLINE malloc(size_t sz);
 
-  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE miniheapForWithEpoch(const void *ptr, size_t &currentEpoch) const {
-    currentEpoch = _meshEpoch.current();
-    return miniheapFor(ptr);
-  }
-
   inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE miniheapFor(const void *ptr) const {
     auto mh = reinterpret_cast<MiniHeap *>(Super::lookupMiniheap(ptr));
     return mh;
@@ -252,7 +209,7 @@ public:
     _littleheaps[mh->sizeClass()].remove(mh);
   }
 
-  void freeFor(MiniHeap *mh, void *ptr, size_t startEpoch);
+  void freeFor(MiniHeap *mh, void *ptr);
 
   // called with lock held
   void freeMiniheapAfterMeshLocked(MiniHeap *mh, bool untrack = true) {
@@ -403,7 +360,6 @@ private:
   const size_t _maxObjectSize;
   atomic_size_t _lastMeshEffective{0};
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};
-  EpochLock _meshEpoch{};
 
   // always accessed with the mhRWLock exclusively locked
   size_t _miniheapCount{0};
