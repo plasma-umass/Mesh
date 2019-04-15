@@ -31,11 +31,17 @@ static atomic<int> ShouldContinueTest1;
 static atomic<int> ShouldExit2;
 static atomic<int> ShouldContinueTest2;
 
+#ifdef __APPLE__
+#define PTHREAD_CREATE_THROW
+#else
+#define PTHREAD_CREATE_THROW throw()
+#endif
+
 // we need to wrap pthread_create so that we can safely implement a
 // stop-the-world quiescent period for the copy/mremap phase of
 // meshing -- copied from libmesh.cc
 extern "C" int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
-                              void *arg) throw();
+                              void *arg) PTHREAD_CREATE_THROW;
 
 static void writerThread1() {
   ShouldContinueTest1 = 1;
