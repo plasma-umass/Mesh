@@ -40,3 +40,4 @@ __pycache__
 /src/test/larson-glibc
 /src/test/larson-tcmalloc
 /src/test/larson-hoard
+/.idea
