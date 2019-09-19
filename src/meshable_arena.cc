@@ -252,7 +252,7 @@ internal::RelaxedBitmap MeshableArena::allocatedBitmap(bool includeDirty) const 
 
   auto unmarkPages = [&](const Span &span) {
     for (size_t k = 0; k < span.length; k++) {
-#ifdef NDEBUG
+#ifndef NDEBUG
       if (!bitmap.isSet(span.offset + k)) {
         debug("arena: bit %zu already unset 1 (%zu/%zu)\n", k, span.offset, span.length);
       }

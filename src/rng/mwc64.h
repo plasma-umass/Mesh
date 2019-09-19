@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-#include "common.h"
+#include "../common.h"
 
 class MWC64 {
   inline void ATTRIBUTE_ALWAYS_INLINE init(uint64_t seed1, uint64_t seed2) {

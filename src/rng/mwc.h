@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <iostream>
 
-#include "common.h"
+#include "../common.h"
 //#include <assert.h>
 //#define d_assert assert
 
