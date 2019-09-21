@@ -36,6 +36,12 @@
 
 #include "config.h"
 
+#ifdef __linux__
+#define MESH_THROW throw()
+#else
+#define MESH_THROW
+#endif
+
 namespace mesh {
 static constexpr bool kMeshingEnabled = MESHING_ENABLED == 1;
 

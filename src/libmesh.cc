@@ -190,22 +190,22 @@ void MESH_EXPORT xxmalloc_unlock(void) {
   mesh::runtime().unlock();
 }
 
-int MESH_EXPORT sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) throw() {
+int MESH_EXPORT sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) MESH_THROW {
   return mesh::runtime().sigaction(signum, act, oldact);
 }
 
-int MESH_EXPORT sigprocmask(int how, const sigset_t *set, sigset_t *oldset) throw() {
+int MESH_EXPORT sigprocmask(int how, const sigset_t *set, sigset_t *oldset) MESH_THROW {
   return mesh::runtime().sigprocmask(how, set, oldset);
 }
 
 // we need to wrap pthread_create and pthread_exit so that we can
 // install our segfault handler and cleanup thread-local heaps.
 int MESH_EXPORT pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
-                               void *arg) throw() {
+                               void *arg) MESH_THROW {
   return mesh::runtime().createThread(thread, attr, startRoutine, arg);
 }
 
-void MESH_EXPORT pthread_exit(void *retval) throw() {
+void MESH_EXPORT ATTRIBUTE_NORETURN pthread_exit(void *retval) {
   mesh::runtime().exitThread(retval);
 }
 
