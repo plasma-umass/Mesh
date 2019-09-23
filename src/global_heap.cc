@@ -38,7 +38,8 @@ void *GlobalHeap::malloc(size_t sz) {
 }
 
 void GlobalHeap::free(void *ptr) {
-  auto mh = miniheapFor(ptr);
+  size_t startEpoch{0};
+  auto mh = miniheapForWithEpoch(ptr, startEpoch);
   if (unlikely(!mh)) {
 #ifndef NDEBUG
     if (ptr != nullptr) {
@@ -47,10 +48,10 @@ void GlobalHeap::free(void *ptr) {
 #endif
     return;
   }
-  this->freeFor(mh, ptr);
+  this->freeFor(mh, ptr, startEpoch);
 }
 
-void GlobalHeap::freeFor(MiniHeap *mh, void *ptr) {
+void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
   if (unlikely(ptr == nullptr)) {
     return;
   }
@@ -59,49 +60,75 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr) {
     return;
   }
 
-  bool shouldConsiderMesh = 0;
-  {
+  // large objects are tracked with a miniheap per object and don't
+  // trigger meshing, because they are multiples of the page size.
+  // This can also include, for example, single page allocations w/
+  // 16KB alignment.
+  if (mh->maxCount() == 1) {
+    lock_guard<mutex> lock(_miniheapLock);
+    freeMiniheapLocked(mh, false);
+    return;
+  }
+
+  d_assert(mh->maxCount() > 1);
+
+  auto binToken = mh->getBinToken();
+
+  _lastMeshEffective.store(1, std::memory_order::memory_order_release);
+  mh->free(arenaBegin(), ptr);
+
+  auto remaining = mh->inUseCount();
+  auto sizeClass = mh->sizeClass();
+
+  bool shouldMesh = false;
+
+  // the epoch will be odd if a mesh was in progress when we looked up
+  // the miniheap; if that is true, or a meshing started between then
+  // and now we can't be sure the above free was successful
+  if (startEpoch % 2 == 1 || !_meshEpoch.isSame(startEpoch)) {
+    // a mesh was started in between when we looked up our miniheap
+    // and now.  synchronize to avoid races
     lock_guard<mutex> lock(_miniheapLock);
 
-    // large objects are tracked with a miniheap per object and don't
-    // trigger meshing, because they are multiples of the page size.
-    // This can also include, for example, single page allocations w/
-    // 16KB alignment.
-    if (mh->maxCount() == 1) {
-      freeMiniheapLocked(mh, false);
-      return;
-    }
-
-    d_assert(mh->maxCount() > 1);
-
-    _lastMeshEffective.store(1, std::memory_order::memory_order_release);
-    mh->free(arenaBegin(), ptr);
-
     if (unlikely(mh->isMeshed())) {
-      // our MiniHeap was meshed out from underneath us.  Grab the
-      // global lock to synchronize with a concurrent mesh, and
-      // re-update the bitmap
-      mh = miniheapFor(ptr);
+      mh = miniheapForWithEpoch(ptr, startEpoch);
       hard_assert(!mh->isMeshed());
       mh->free(arenaBegin(), ptr);
+    } else {
+      startEpoch = _meshEpoch.current();
     }
 
-    const auto remaining = mh->inUseCount();
-    shouldConsiderMesh = remaining > 0;
+    remaining = mh->inUseCount();
+    sizeClass = mh->sizeClass();
+    binToken = mh->getBinToken();
 
-    const auto sizeClass = mh->sizeClass();
-
-    // this may free the miniheap -- we can't safely access it after
-    // this point.
-    bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
-    mh = nullptr;
-
-    if (unlikely(shouldFlush)) {
-      flushBinLocked(sizeClass);
+    if (remaining == 0 || binToken.bin() == internal::bintoken::FlagFull) {
+      // this may free the miniheap -- we can't safely access it after
+      // this point.
+      const bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
+      mh = nullptr;
+      if (unlikely(shouldFlush)) {
+        flushBinLocked(sizeClass);
+      }
+    } else {
+      shouldMesh = true;
+    }
+  } else {
+    // the free went through ok; if we _were_ full, or now _are_ empty,
+    // make sure to update the littleheaps
+    if (remaining == 0 || binToken.bin() == internal::bintoken::FlagFull) {
+      lock_guard<mutex> lock(_miniheapLock);
+      bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
+      mh = nullptr;
+      if (unlikely(shouldFlush)) {
+        flushBinLocked(sizeClass);
+      }
+    } else {
+      shouldMesh = true;
     }
   }
 
-  if (shouldConsiderMesh) {
+  if (shouldMesh) {
     maybeMesh();
   }
 }
@@ -126,7 +153,7 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
     scavenge(true);
     lock.lock();
   } else if (strcmp(name, "mesh.compact") == 0) {
-    meshAllSizeClasses();
+    meshAllSizeClassesLocked();
     lock.unlock();
     scavenge(true);
     lock.lock();
@@ -192,7 +219,7 @@ void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
   untrackMiniheapLocked(src);
 }
 
-void GlobalHeap::meshAllSizeClasses() {
+void GlobalHeap::meshAllSizeClassesLocked() {
   Super::scavenge(false);
 
   if (!_lastMeshEffective.load(std::memory_order::memory_order_acquire)) {
@@ -202,6 +229,8 @@ void GlobalHeap::meshAllSizeClasses() {
   if (Super::aboveMeshThreshold()) {
     return;
   }
+
+  lock_guard<EpochLock> epochLock(_meshEpoch);
 
   _lastMeshEffective = 1;
 

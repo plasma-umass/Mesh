@@ -16,8 +16,8 @@
 #include "internal.h"
 #include "mini_heap.h"
 
-#include "binned_tracker.h"
 #include "bitmap.h"
+#include "striped_tracker.h"
 
 namespace mesh {
 
@@ -46,7 +46,7 @@ inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bi
 namespace method {
 
 // split miniheaps into two lists in a random order
-inline void halfSplit(MWC &prng, BinnedTracker &miniheaps, internal::vector<MiniHeap *> &left,
+inline void halfSplit(MWC &prng, StripedTracker &miniheaps, internal::vector<MiniHeap *> &left,
                       internal::vector<MiniHeap *> &right) noexcept {
   internal::vector<MiniHeap *> bucket = miniheaps.meshingCandidates(kOccupancyCutoff);
 
@@ -65,10 +65,11 @@ inline void halfSplit(MWC &prng, BinnedTracker &miniheaps, internal::vector<Mini
 }
 
 template <size_t t = 64>
-inline void shiftedSplitting(MWC &prng, BinnedTracker &miniheaps,
+inline void shiftedSplitting(MWC &prng, StripedTracker &miniheaps,
                              const function<void(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept {
-  if (miniheaps.partialSize() == 0)
+  if (miniheaps.partialSize() == 0) {
     return;
+  }
 
   internal::vector<MiniHeap *> leftBucket{};   // mutable copy
   internal::vector<MiniHeap *> rightBucket{};  // mutable copy
