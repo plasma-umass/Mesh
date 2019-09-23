@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 
-#include "binned_tracker.h"
+#include "striped_tracker.h"
 
 #include "gtest/gtest.h"
 

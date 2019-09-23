@@ -107,7 +107,7 @@ static constexpr size_t kAltStackSize = 16 * 1024UL;                       // 16
 #define SIGDUMP (SIGRTMIN + 8)
 
 // BinnedTracker
-static constexpr size_t kBinnedTrackerBinCount = 4;
+static constexpr size_t kBinnedTrackerBinCount = 1;
 static constexpr size_t kBinnedTrackerMaxEmpty = 128;
 
 static inline constexpr size_t PageCount(size_t sz) {

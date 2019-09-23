@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__BINNED_TRACKER_H
-#define MESH__BINNED_TRACKER_H
+#ifndef MESH__STRIPED_TRACKER_H
+#define MESH__STRIPED_TRACKER_H
 
 #include <mutex>
 
@@ -27,76 +27,71 @@
 
 namespace mesh {
 
-class BinnedTracker {
+class StripedTracker {
 private:
-  DISALLOW_COPY_AND_ASSIGN(BinnedTracker);
+  DISALLOW_COPY_AND_ASSIGN(StripedTracker);
 
 public:
-  BinnedTracker() : _fastPrng(internal::seed(), internal::seed()) {
+  StripedTracker() : _fastPrng(internal::seed(), internal::seed()) {
   }
 
   size_t objectCount() const {
-    if (unlikely(!_hasMetadata))
-      mesh::debug("BinnedTracker.objectCount() called before set");
+    if (unlikely(!_hasMetadata)) {
+      mesh::debug("StripedTracker.objectCount() called before set");
+    }
     return _objectCount;
   }
 
   size_t objectSize() const {
-    if (unlikely(!_hasMetadata))
-      mesh::debug("BinnedTracker.objectSize() called before set");
+    if (unlikely(!_hasMetadata)) {
+      mesh::debug("StripedTracker.objectSize() called before set");
+    }
     return _objectSize;
   }
 
   template <uint32_t Size>
-  size_t selectForReuse(FixedArray<MiniHeap, Size> &miniheaps, pid_t current) {
-    std::lock_guard<std::mutex> lock(_mutex);
-
-    size_t bytesFree = 0;
-
-    for (int i = kBinnedTrackerBinCount - 1; i >= 0; i--) {
-      while (_partial[i].size() > 0) {
-        auto mh = popRandomLocked(_partial[i]);
-        // if we didn't find something in popRandom, break out of the
-        // while loop and try the next fullness size
-        if (unlikely(mh == nullptr)) {
-          break;
-        }
-
-        d_assert(!mh->isAttached());
-
-        // this can happen because in use count is updated outside the
-        // bin tracker lock -- it may be queued up for reuse.
-        //
-        // FIXME: check for isMeshed?
-        if (unlikely(mh->isFull() || mh->isAttached())) {
-          debug("I don't know how this could happen");
-          continue;
-        }
-
-        mh->setAttached(current);
-        d_assert(!miniheaps.full());
-        miniheaps.append(mh);
-        bytesFree += mh->bytesFree();
-        if (bytesFree >= kMiniheapRefillGoalSize || miniheaps.full()) {
-          return bytesFree;
-        }
+  size_t fillFromBinLocked(FixedArray<MiniHeap, Size> &miniheaps, pid_t current, internal::vector<MiniHeap *> &bin,
+                           size_t bytesFree) {
+    while (bin.size() > 0 && bytesFree < kMiniheapRefillGoalSize && !miniheaps.full()) {
+      auto mh = popRandomLocked(bin);
+      // if we didn't find something in popRandom, break out of the
+      // while loop and try the next fullness size
+      if (unlikely(mh == nullptr)) {
+        break;
       }
+
+      d_assert(!mh->isFull() && !mh->isAttached() && !mh->isMeshed());
+
+      mh->setAttached(current);
+      d_assert(!miniheaps.full());
+      miniheaps.append(mh);
     }
 
     return bytesFree;
   }
 
-  internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {
-    std::lock_guard<std::mutex> lock(_mutex);
+  template <uint32_t Size>
+  size_t selectForReuse(FixedArray<MiniHeap, Size> &miniheaps, pid_t current) {
+    size_t bytesFree = fillFromBinLocked(miniheaps, current, _partial[0], 0);
 
+    if (bytesFree >= kMiniheapRefillGoalSize || miniheaps.full()) {
+      return bytesFree;
+    }
+
+    // we've exhausted all of our partially full MiniHeaps, but there
+    // might still be empty ones we could reuse.
+    return fillFromBinLocked(miniheaps, current, _empty, bytesFree);
+  }
+
+  internal::vector<MiniHeap *> meshingCandidates(double occupancyCutoff) const {
     internal::vector<MiniHeap *> bucket{};
 
     // consider all of our partially filled miniheaps
     for (size_t i = 0; i < kBinnedTrackerBinCount; i++) {
       const auto partial = _partial[i];
-      if (i == kBinnedTrackerBinCount / 2 + 1 && bucket.size() == 0) {
-        break;
-      }
+      // if (i == kBinnedTrackerBinCount / 2 + 1 && bucket.size() == 0) {
+      //   break;
+      // }
       for (size_t j = 0; j < partial.size(); j++) {
         const auto mh = partial[j];
         if (mh->isMeshingCandidate() && (mh->fullness() < occupancyCutoff))
@@ -114,22 +109,23 @@ public:
       return false;
     }
 
-    std::atomic_thread_fence(std::memory_order_acquire);
+    // std::atomic_thread_fence(std::memory_order_acquire);
 
     auto oldBinId = mh->getBinToken().bin();
     auto newBinId = getBinId(inUseCount);
 
-    if (likely(newBinId == oldBinId))
-      return false;
-
-    std::lock_guard<std::mutex> lock(_mutex);
-
-    // double-check
-    oldBinId = mh->getBinToken().bin();
-    newBinId = getBinId(mh->inUseCount());
-    if (unlikely(newBinId == oldBinId)) {
+    if (likely(newBinId == oldBinId)) {
       return false;
     }
+
+    // std::lock_guard<std::mutex> lock(_mutex);
+
+    // double-check
+    // oldBinId = mh->getBinToken().bin();
+    // newBinId = getBinId(mh->inUseCount());
+    // if (unlikely(newBinId == oldBinId)) {
+    //   return false;
+    // }
 
     move(getBin(newBinId), getBin(oldBinId), mh, newBinId);
 
@@ -137,8 +133,6 @@ public:
   }
 
   void add(MiniHeap *mh) {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     d_assert(mh != nullptr);
 
     if (unlikely(!_hasMetadata)) {
@@ -147,12 +141,10 @@ public:
 
     mh->setBinToken(internal::BinToken::Full());
     addTo(_full, mh);
-    std::atomic_thread_fence(std::memory_order_release);
+    // std::atomic_thread_fence(std::memory_order_release);
   }
 
   void remove(MiniHeap *mh) {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     if (unlikely(!mh->getBinToken().valid())) {
       mesh::debug("ERROR: bad bin token");
       d_assert(false);
@@ -161,12 +153,10 @@ public:
 
     const auto bin = mh->getBinToken().bin();
     removeFrom(getBin(bin), mh);
-    std::atomic_thread_fence(std::memory_order_release);
+    // std::atomic_thread_fence(std::memory_order_release);
   }
 
   size_t allocatedObjectCount() const {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     size_t sz = 0;
 
     for (size_t i = 0; i < _full.size(); i++) {
@@ -188,20 +178,14 @@ public:
 
   // number of MiniHeaps we are tracking
   size_t count() const {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     return _empty.size() + _full.size() + partialSizeLocked();
   }
 
   size_t nonEmptyCount() const {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     return _full.size() + partialSizeLocked();
   }
 
   size_t partialSize() const {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     return partialSizeLocked();
   }
 
@@ -214,8 +198,6 @@ public:
   }
 
   void printOccupancy() const {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     for (size_t i = 0; i < _full.size(); i++) {
       if (_full[i] != nullptr)
         _full[i]->printOccupancy();
@@ -237,8 +219,6 @@ public:
   }
 
   void dumpStats(bool beDetailed) const {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     const auto mhCount = count();
 
     if (mhCount == 0) {
@@ -272,8 +252,6 @@ public:
   }
 
   internal::vector<MiniHeap *> getFreeMiniheaps() {
-    std::lock_guard<std::mutex> lock(_mutex);
-
     internal::vector<MiniHeap *> toFree;
 
     for (size_t i = 0; i < _empty.size(); i++) {
@@ -288,19 +266,17 @@ public:
 private:
   // remove and return a MiniHeap uniformly at random from the given vector
   MiniHeap *popRandomLocked(internal::vector<MiniHeap *> &vec) {
-    for (size_t i = 0; i < 16; i++) {
-      const size_t off = _fastPrng.inRange(0, vec.size() - 1);
+    // because whenever we add an item in we add it at a random
+    // offset, we can sequentially search here
+    for (size_t i = 0; i < vec.size(); i++) {
+      MiniHeap *mh = vec[i];
 
-      MiniHeap *mh = vec[off];
-      // we hold the mhRWLock exclusively at this point.  If a
-      // miniheap is attached to a freelist it is not a candidate for
-      // allocation.
-      if (unlikely(mh->isAttached())) {
+      if (mh->isAttached() || mh->isFull()) {
         continue;
       }
 
       // when we pop for reuse, we effectively "top off" a MiniHeap, so
-      // it moves into the full bin
+      // it moves into the "attached" bin
       move(_full, vec, mh, internal::bintoken::FlagFull);
 
       return mh;
@@ -319,14 +295,14 @@ private:
     const auto temp = mh1->getBinToken();
     mh1->setBinToken(mh2->getBinToken());
     mh2->setBinToken(temp);
-    std::atomic_thread_fence(std::memory_order_release);
+    // std::atomic_thread_fence(std::memory_order_release);
   }
 
   void move(internal::vector<MiniHeap *> &to, internal::vector<MiniHeap *> &from, MiniHeap *mh, uint32_t size) {
     removeFrom(from, mh);
     mh->setBinToken(internal::BinToken(size, internal::bintoken::FlagNoOff));
     addTo(to, mh);
-    std::atomic_thread_fence(std::memory_order_release);
+    // std::atomic_thread_fence(std::memory_order_release);
   }
 
   // must be called with _mutex held
@@ -378,7 +354,8 @@ private:
     } else if (inUseCount == 0) {
       return internal::bintoken::FlagEmpty;
     } else {
-      return (inUseCount * kBinnedTrackerBinCount) * _objectCountReciprocal;
+      static_assert(kBinnedTrackerBinCount == 1, "expected 1 bin");
+      return 0;
     }
   }
 
@@ -400,8 +377,6 @@ private:
 
   MWC _fastPrng;
 
-  mutable std::mutex _mutex{};
-
   bool _hasMetadata{false};
 
   internal::vector<MiniHeap *> _full;
@@ -410,4 +385,4 @@ private:
 };
 }  // namespace mesh
 
-#endif  // MESH__BINNED_TRACKER_H
+#endif  // MESH__STRIPED_TRACKER_H
