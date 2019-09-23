@@ -79,6 +79,8 @@ class ConfigBuilder:
                             help='disable meshing')
         parser.add_argument('--suffix', action='store_true', default=False,
                             help='always suffix the mesh binary with randomization + meshing info')
+        parser.add_argument('--clang', action='store_true', default=False,
+                            help='build with clang')
 
         args = parser.parse_args()
 
@@ -86,6 +88,7 @@ class ConfigBuilder:
         self.gcov_build = args.gcov
         self.clangcov_build = args.clangcov
         self.optimize_build = args.optimize
+        self.clang = args.clang
 
         self.pkg_config = 'pkg-config'
 

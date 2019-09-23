@@ -111,14 +111,17 @@ c.append('libs', '-ldl')
 c.append('cxxflags', '-std=c++14 -I src')
 c.append('cxxflags', '$(CFLAGS)')
 
-# for development work, clang has much, much nicer error messages
-# c.prefer('cc', 'clang')
-# c.prefer('cxx', 'clang++')
+if c.clang:
+    # for development work, clang has much, much nicer error messages
+    c.prefer('cc', 'clang')
+    c.prefer('cxx', 'clang++')
 
-# c.prefer('ar', 'llvm-ar')
-# c.prefer('ranlib', 'llvm-ranlib')
+    c.prefer('ar', 'llvm-ar')
+    c.prefer('ranlib', 'llvm-ranlib')
 
 if not 'cc' in c.env or c.env['cc'] != 'clang':
     c.append('cflags', '-Wa,--noexecstack')
+else:
+    c.append('ldflags', '-fuse-ld=lld')
 
 c.generate()
