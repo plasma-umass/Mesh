@@ -73,12 +73,13 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
   d_assert(mh->maxCount() > 1);
 
   auto binToken = mh->getBinToken();
+  auto isAttached = mh->isAttached();
+  auto sizeClass = mh->sizeClass();
 
   _lastMeshEffective.store(1, std::memory_order::memory_order_release);
   mh->free(arenaBegin(), ptr);
 
   auto remaining = mh->inUseCount();
-  auto sizeClass = mh->sizeClass();
 
   bool shouldMesh = false;
 
@@ -99,10 +100,10 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
     }
 
     remaining = mh->inUseCount();
-    sizeClass = mh->sizeClass();
     binToken = mh->getBinToken();
+    isAttached = mh->isAttached();
 
-    if (remaining == 0 || binToken.bin() == internal::bintoken::FlagFull) {
+    if (!isAttached && (remaining == 0 || binToken.bin() == internal::bintoken::FlagFull)) {
       // this may free the miniheap -- we can't safely access it after
       // this point.
       const bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
@@ -116,7 +117,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
   } else {
     // the free went through ok; if we _were_ full, or now _are_ empty,
     // make sure to update the littleheaps
-    if (remaining == 0 || binToken.bin() == internal::bintoken::FlagFull) {
+    if (!isAttached && (remaining == 0 || binToken.bin() == internal::bintoken::FlagFull)) {
       lock_guard<mutex> lock(_miniheapLock);
       bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
       mh = nullptr;
