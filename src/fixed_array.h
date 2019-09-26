@@ -73,7 +73,7 @@ public:
   }
 
   void clear() {
-    memset(_objects, 0, Capacity * sizeof(T *));
+    // memset(_objects, 0, Capacity * sizeof(T *));
     _size = 0;
   }
 
