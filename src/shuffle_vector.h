@@ -145,7 +145,7 @@ public:
 
   inline bool ATTRIBUTE_ALWAYS_INLINE localRefill() {
     uint32_t addedCapacity = 0;
-    auto miniheapCount = _attachedMiniheaps.size();
+    const auto miniheapCount = _attachedMiniheaps.size();
     for (uint32_t i = 0; i < miniheapCount && !isFull(); i++, _attachedOff++) {
       if (_attachedOff >= miniheapCount) {
         _attachedOff = 0;
