@@ -221,7 +221,10 @@ void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
 }
 
 void GlobalHeap::meshAllSizeClassesLocked() {
-  Super::scavenge(false);
+  // if we have freed but not reset meshed mappings, this will reset
+  // them to the identity mapping, ensuring we don't blow past our VMA
+  // limit (which is why we set the force flag to true)
+  Super::scavenge(true);
 
   if (!_lastMeshEffective.load(std::memory_order::memory_order_acquire)) {
     return;
@@ -260,7 +263,6 @@ void GlobalHeap::meshAllSizeClassesLocked() {
   _lastMeshEffective = mergeSets.size() > 256;
 
   if (mergeSets.size() == 0) {
-    Super::scavenge(false);
     // debug("nothing to mesh.");
     return;
   }
@@ -297,8 +299,8 @@ void GlobalHeap::dumpStats(int level, bool beDetailed) const {
 
   const auto meshedPageHWM = meshedPageHighWaterMark();
 
-  // debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
-  // debug("Meshed MB (total):  %.1f\n", (size_t)_stats.meshCount * 4096.0 / 1024.0 / 1024.0);
+  debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
+  debug("Meshed MB (total):  %.1f\n", (size_t)_stats.meshCount * 4096.0 / 1024.0 / 1024.0);
   debug("Meshed pages HWM:   %zu\n", meshedPageHWM);
   debug("Meshed MB HWM:      %.1f\n", meshedPageHWM * 4096.0 / 1024.0 / 1024.0);
   // debug("Peak RSS reduction: %.2f\n", rssSavings);
