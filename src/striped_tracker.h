@@ -271,7 +271,7 @@ private:
     for (size_t i = 0; i < vec.size(); i++) {
       MiniHeap *mh = vec[i];
 
-      if (mh->isAttached() || mh->isFull()) {
+      if (mh->isAttached() || mh->isFull() || mh->isMeshed()) {
         continue;
       }
 
