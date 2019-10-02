@@ -8,7 +8,7 @@ compacts the heap without rewriting application pointers.
 Mesh is described in an [academic paper (PDF)](https://github.com/plasma-umass/Mesh/raw/master/mesh-pldi19-powers.pdf) that appeared at PLDI 2019.
 
 Mesh runs on Linux; macOS support should be considered alpha-quality,
-and Windows is a work-in-progress.
+and Windows is a work in progress.
 
 Mesh has a standard C++ build process, and has no runtime dependencies
 other than libc-related libs:
@@ -21,7 +21,7 @@ $ ./configure; make; sudo make install
 $ LD_PRELOAD=libmesh.so git status
 ```
 
-Please open up an issue if you have questions (or issues)!
+Please open an issue if you have questions (or issues)!
 
 
 Implementation Overview
