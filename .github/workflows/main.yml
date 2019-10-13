@@ -92,7 +92,7 @@ jobs:
         brew install cmake gcc@9 lcov make
     - name: Configure CMake in debug mode
       run: |
-        export PATH=/usr/local/bin:/usr/local/opt/qt/bin:$PATH
+        export PATH=/usr/local/bin:$PATH
         export CXX=g++-9
         export CC=gcc-9
         mkdir cmake-cache
@@ -100,11 +100,13 @@ jobs:
         cmake -DGCOV=ON ..
     - name: Build 
       run: |
-        export PATH="/usr/local/opt/qt/bin:$PATH"
+        export PATH="/usr/local/bin:$PATH"
         cd cmake-cache
         make all
     -  name: Run tests
        run: |
+         export PATH="/usr/local/bin:$PATH"
+         cd cmake-cache
          make coverage
   
   #Windows_Visual_Studio:   #not working
@@ -121,14 +123,15 @@ jobs:
   #      %comspec% /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\Tools\VsDevCmd.bat"
   #      mkdir cmake-cache
   #      cd cmake-cache
-  #      cmake -DCMAKE_BUILD_TYPE=RELEASE -G"Ninja" ..
-  #  - name: Build ns-3
+  #      cmake -DGCOV=ON -G"Ninja" ..
+  #  - name: Build
   #    run: |
   #      %comspec% /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\Tools\VsDevCmd.bat"
   #      cd cmake-cache
   #      ninja
-  #  -  name: Run tests
-  #     run: |
-  #       python3 ./utils/test-runner-script.py
+  #  - name: Run tests
+  #    run: |
+  #      cd cmake-cache
+  #      ninja coverage
 
 

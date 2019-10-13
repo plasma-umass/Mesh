@@ -2,6 +2,14 @@
 #Include current folder to guarantee headers are found by files
 include_directories(./)
 include_directories(./vendor/Heap-Layers)
+include_directories(./vendor/AlignedMalloc)
+
+#Create a set of sources for cross platform aligned malloc
+set(aligned_malloc_src
+	vendor/AlignedMalloc/aligned_free.c
+	vendor/AlignedMalloc/aligned_malloc.c
+	)
+
 
 #Add a target to fragmenter executable
 add_executable(fragmenter fragmenter.cc measure_rss.cc)
@@ -71,10 +79,10 @@ target_compile_options(unit.test PRIVATE -Wno-unused-const-variable)
 
 #Create targets for each test
 function (add_mesh_test testname testfilename libraries_to_link)
-    add_executable(${testname} test/${testfilename})
+    add_executable(${testname} test/${testfilename} ${aligned_malloc_src})
     list(LENGTH libraries_to_link length)
     if (length GREATER 0)
-        target_link_libraries(${libraries_to_link})
+        target_link_libraries(${testname} "${libraries_to_link}")
     endif()
     target_compile_options(${testname} PRIVATE -pipe -fno-builtin-malloc -fno-omit-frame-pointer)
 endfunction(add_mesh_test)
@@ -87,9 +95,11 @@ set(test_filenames
         local-alloc.c
         thread.cc
     )
+
 set (libraries_to_link
         mesh
         )
+
 foreach(testfile ${test_filenames})
     string(REPLACE "." ";" filename_list ${testfile})
     list(GET filename_list 0 testname)
@@ -109,6 +119,7 @@ add_mesh_test(larson-glibc larson.cc "")
 #Create additional larson that relies on tcmalloc_minimal
 #add_test(larson-tcmalloc larson.cc tcmalloc_minimal)
 
+if(UNIX AND NOT APPLE)
 #Build hoard
 set(hoard_src
         vendor/Hoard/src/source/libhoard.cpp
@@ -130,17 +141,17 @@ add_library(hoard SHARED ${hoard_src})
 #Create additional tests that require hoard
 add_mesh_test(big-alloc-hoard big-alloc.c hoard)
 add_mesh_test(larson-hoard larson.cc hoard)
-
+endif()
 
 #Deal with coverage
 if(${GCOV})
     target_compile_options(unit.test PRIVATE -fprofile-arcs -ftest-coverage)
     target_link_options(unit.test PRIVATE -fprofile-arcs -ftest-coverage)
     add_custom_target(coverage
-            COMMAND ${PROJECT_SOURCE_DIR}/cmake-cache/src/unit.test
-            COMMAND lcov -o app.info -c --directory ${PROJECT_SOURCE_DIR}/cmake-cache/src/
+            COMMAND cd ${CMAKE_SOURCE_DIR}/cmake-cache/src/CMakeFiles/unit.test.dir/ && ${CMAKE_SOURCE_DIR}/build/bin/unit.test
+            COMMAND lcov -o app.info -c --directory ${CMAKE_SOURCE_DIR}/cmake-cache/src/CMakeFiles/unit.test.dir/
             COMMAND genhtml app.info
-            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/coverage/
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
             DEPENDS unit.test)
 endif()
 

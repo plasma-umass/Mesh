@@ -1,7 +1,16 @@
-cmake_minimum_required(VERSION 3.13.5)
+cmake_minimum_required(VERSION 3.13.0)
+
+project(Mesh CXX C)
+
+
 SET(CMAKE_BUILD_TYPE "" CACHE STRING "Just making sure the default CMAKE_BUILD_TYPE configurations won't interfere" FORCE)
 
-project(Mesh C CXX)
+#Set output folders 
+set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/build)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_HEADER_OUTPUT_DIRECTORY  ${CMAKE_BINARY_DIR}/include)
 
 
 #Fetch submodules
@@ -23,6 +32,7 @@ endif()
 
 #Check if submodules were downloaded
 set(submodules
+	src/vendor/AlignedMalloc
         src/vendor/gflags
         src/vendor/googletest
         src/vendor/gperftools
@@ -38,6 +48,38 @@ foreach (submodule ${submodules})
         message(FATAL_ERROR "The ${submodule_name} submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodule and try again.")
     endif()
 endforeach()
+
+
+#Identify compiler and set specific flag
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    set(GCC TRUE)
+    set(CLANG FALSE)
+    set(MSVC FALSE)
+    set(ICC FALSE)
+endif()
+
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    set(GCC FALSE)
+    set(CLANG TRUE)
+    set(MSVC FALSE)
+    set(ICC FALSE)
+endif()
+
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    set(GCC FALSE)
+    set(CLANG FALSE)
+    set(MSVC TRUE)
+    set(ICC FALSE)
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+    set(BUILD_SHARED_LIBS TRUE)
+endif()
+
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
+    set(GCC FALSE)
+    set(CLANG FALSE)
+    set(MSVC FALSE)
+    set(ICC TRUE)
+endif()
 
 #Create configure options
 option(DEBUG "Build with debugging symbols" OFF) #replace with CMAKE_BUILD_TYPE?
@@ -64,7 +106,7 @@ else()
     add_definitions(-O0)
 endif()
 
-if (${GCOV})
+if (${GCOV} AND GCC)
     add_definitions(--coverage)
     link_libraries(gcov)
 endif()

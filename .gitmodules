@@ -16,4 +16,6 @@
 [submodule "src/vendor/gperftools"]
 	path = src/vendor/gperftools
 	url = https://github.com/gperftools/gperftools
-
+[submodule "src/vendor/AlignedMalloc"]
+	path = src/vendor/AlignedMalloc
+	url = https://github.com/NickStrupat/AlignedMalloc.git
