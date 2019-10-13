@@ -1,0 +1,134 @@
+name: CI
+
+on: [push]
+  #schedule:
+  #  - cron:  '0 5 * * *'  #daily build at 5AM
+jobs:
+
+  Ubuntu: 
+  
+    runs-on: ubuntu-latest
+  
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install required packages
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install git gcc g++ make lcov wget libpthread-stubs0-dev
+    - name: Configure CMake 
+      run: |
+        mkdir cmake
+        cd cmake
+        wget https://github.com/Kitware/CMake/releases/download/v3.16.0-rc1/cmake-3.16.0-rc1-Linux-x86_64.sh
+        chmod +x cmake-3.16.0-rc1-Linux-x86_64.sh
+        ./cmake-3.16.0-rc1-Linux-x86_64.sh --skip-license
+        cd ../
+        mkdir cmake-cache
+        cd cmake-cache
+        ../cmake/bin/cmake -DGCOV=ON ..
+    - name: Build mesh
+      run: |
+        cd cmake-cache
+        make all
+    -  name: Run tests
+       run: |
+        cd cmake-cache
+        make coverage
+
+  Windows_MinGW:   
+  
+    runs-on: windows-latest
+  
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install msys2/mingw64
+      #steps from https://github.com/msys2/MINGW-packages/blob/master/azure-pipelines.yml
+      run: |
+        git clone https://github.com/msys2/msys2-ci-base.git %CD:~0,2%\msys64
+        %CD:~0,2%\msys64\usr\bin\rm -rf %CD:~0,2%\msys64\.git
+        set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+        %CD:~0,2%\msys64\usr\bin\pacman --noconfirm -Syyuu
+        set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+        %CD:~0,2%\msys64\usr\bin\pacman --noconfirm --needed -S git base-devel
+        %CD:~0,2%\msys64\usr\bin\pacman --noconfirm -Scc
+    - name: Install required packages
+      run: |
+        set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+        pacman -S --noconfirm mingw-w64-x86_64-binutils
+        pacman -S --noconfirm mingw-w64-x86_64-cmake
+        pacman -S --noconfirm mingw-w64-x86_64-gcc
+        pacman -S --noconfirm mingw-w64-x86_64-gcc-libs
+        pacman -S --noconfirm mingw-w64-x86_64-gcc-objc
+        pacman -S --noconfirm mingw-w64-x86_64-gdb
+        pacman -S --noconfirm mingw-w64-x86_64-ninja
+        pacman -S --noconfirm mingw-w64-x86_64-lcov
+        pacman -S --noconfirm mingw-w64-x86_64-winpthreads-git
+        pacman --noconfirm -Scc
+    - name: Configure CMake 
+      run: |
+        set PATH=%CD:~0,2%\msys64\mingw64\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+        mkdir cmake-cache
+        cd cmake-cache
+        cmake -DGCOV=ON -G"Ninja" ..
+    - name: Build 
+      run: |
+        set PATH=%CD:~0,2%\msys64\mingw64\bin;%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+        cd cmake-cache
+        ninja
+    - name: Run tests
+      run: |
+        set PATH=%CD:~0,2%\msys64\mingw64\bin;%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+        cd cmake-cache
+        ninja coverage
+ 
+  Mac_OS_X:   
+  
+    runs-on: macos-latest
+  
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install required packages
+      run: |
+        brew install cmake gcc@9 lcov make
+    - name: Configure CMake in debug mode
+      run: |
+        export PATH=/usr/local/bin:/usr/local/opt/qt/bin:$PATH
+        export CXX=g++-9
+        export CC=gcc-9
+        mkdir cmake-cache
+        cd cmake-cache
+        cmake -DGCOV=ON ..
+    - name: Build 
+      run: |
+        export PATH="/usr/local/opt/qt/bin:$PATH"
+        cd cmake-cache
+        make all
+    -  name: Run tests
+       run: |
+         make coverage
+  
+  #Windows_Visual_Studio:   #not working
+  #
+  #  runs-on: windows-latest
+  #
+  #  steps:
+  #  - uses: actions/checkout@v1
+  #  - name: Install required packages
+  #    run: |
+  #      ????
+  #  - name: Configure CMake
+  #    run: |
+  #      %comspec% /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\Tools\VsDevCmd.bat"
+  #      mkdir cmake-cache
+  #      cd cmake-cache
+  #      cmake -DCMAKE_BUILD_TYPE=RELEASE -G"Ninja" ..
+  #  - name: Build ns-3
+  #    run: |
+  #      %comspec% /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\Tools\VsDevCmd.bat"
+  #      cd cmake-cache
+  #      ninja
+  #  -  name: Run tests
+  #     run: |
+  #       python3 ./utils/test-runner-script.py
+
+

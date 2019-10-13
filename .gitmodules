@@ -10,3 +10,10 @@
 [submodule "test/atsy/atsy"]
 	path = test/atsy/atsy
 	url = https://github.com/bpowers/atsy
+[submodule "src/vendor/Hoard"]
+	path = src/vendor/Hoard
+	url = https://github.com/emeryberger/Hoard
+[submodule "src/vendor/gperftools"]
+	path = src/vendor/gperftools
+	url = https://github.com/gperftools/gperftools
+
