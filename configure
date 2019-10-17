@@ -102,6 +102,8 @@ if platform != 'darwin':
     c.append('ldflags', '-Wl,-z,now,-z,relro')
     c.append('ldflags', '-ftls-model=initial-exec')
 
+    # this ensures we don't re-export symbols from libstdc++
+    c.append('ldflags', '-Wl,--exclude-libs,ALL')
     c.append('ldflags', '-static-libstdc++ -static-libgcc')
     c.append('ldflags', '-lrt')
 
