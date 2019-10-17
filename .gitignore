@@ -42,3 +42,4 @@ __pycache__
 /src/test/larson-hoard
 /.idea
 /.clwb
+/cmake-build*
