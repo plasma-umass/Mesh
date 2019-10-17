@@ -191,6 +191,7 @@ if (NOT APPLE AND NOT WIN32)
             -Wl,-Bsymbolic-functions
             -Wl,-z,now,-z,relro
             -ftls-model=initial-exec
+            -Wl,--exclude-libs,ALL
             -static-libstdc++ -static-libgcc
             -lrt
         )
