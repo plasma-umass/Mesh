@@ -231,7 +231,7 @@ void *Runtime::bgThread(void *arg) {
 
       // debug("<<<<<<<<<<\n");
     } else {
-      printf("Read unexpected signal\n");
+      write(STDERR_FILENO, "Read unexpected signal\n", strlen("Read unexpected signal\n"));
     }
   }
 #endif
