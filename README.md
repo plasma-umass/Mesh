@@ -7,6 +7,10 @@ compacts the heap without rewriting application pointers.
 
 Mesh is described in an [academic paper (PDF)](https://github.com/plasma-umass/Mesh/raw/master/mesh-pldi19-powers.pdf) that appeared at PLDI 2019.
 
+Or watch this talk by Bobby Powers at Strange Loop:
+
+[![Compacting the Uncompactable](https://img.youtube.com/vi/c1UBJbfR-H0/0.jpg)](https://www.youtube.com/watch?v=c1UBJbfR-H0)
+
 Mesh runs on Linux; macOS support should be considered alpha-quality,
 and Windows is a work in progress.
 
