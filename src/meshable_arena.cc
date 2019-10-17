@@ -511,7 +511,8 @@ int MeshableArena::openShmSpanFile(size_t sz) {
   _spanDir = openSpanDir(getpid());
   d_assert(_spanDir != nullptr);
 
-  sprintf(buf, "%s/XXXXXX", _spanDir);
+  char *next = strcat(buf, _spanDir);
+  strcat(next, "/XXXXXX");
 
   int fd = mkstemp(buf);
   if (fd < 0) {
