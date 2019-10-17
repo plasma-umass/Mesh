@@ -11,7 +11,6 @@
 
 #ifdef USE_MEMFD
 #include <sys/syscall.h>
-
 #include <unistd.h>
 
 //#include <sys/memfd.h>
@@ -24,9 +23,7 @@
 #include <algorithm>
 
 #include "meshable_arena.h"
-
 #include "mini_heap.h"
-
 #include "runtime.h"
 
 namespace mesh {
@@ -68,6 +65,28 @@ MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), intern
   pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
 }
 
+char *uintToStr(char *dst, uint32_t i) {
+  constexpr size_t maxLen = sizeof("4294967295") + 1;
+  char buf[maxLen];
+  memset(buf, 0, sizeof(buf));
+
+  char *digit = buf + maxLen - 2;
+  // capture the case where i == 0
+  *digit = '0';
+  while (i > 0) {
+    hard_assert(reinterpret_cast<uintptr_t>(digit) >= reinterpret_cast<uintptr_t>(buf));
+    const char c = '0' + (i % 10);
+    *digit = c;
+    digit--;
+    i /= 10;
+  }
+  if (*digit == '\0') {
+    digit++;
+  }
+
+  return strcat(dst, digit);
+}
+
 char *MeshableArena::openSpanDir(int pid) {
   constexpr size_t buf_len = 128;
 
@@ -76,7 +95,20 @@ char *MeshableArena::openSpanDir(int pid) {
       char buf[buf_len];
       memset(buf, 0, buf_len);
 
-      snprintf(buf, buf_len - 1, "%s/alloc-mesh-%d.%zud", tmpDir, pid, i);
+      // on some platforms snprintf actually calls out to malloc,
+      // despite us passing in a reasonable buffer.  Since what we're doing is
+      // reasonably simple, just build the path ourselves to avoid this.
+      char *next = buf;
+      hard_assert(strlen(tmpDir) < buf_len);
+      next = strcat(next, tmpDir);
+      next = strcat(next, "/alloc-mesh-");
+      next = uintToStr(next, pid);
+      next = strcat(next, ".");
+      next = uintToStr(next, i);
+
+      // ensure we haven't overflown our buffer
+      hard_assert(reinterpret_cast<uintptr_t>(next) <= reinterpret_cast<uintptr_t>(buf) + buf_len);
+
       int result = mkdir(buf, 0755);
       if (result != 0) {
         if (errno == EEXIST) {
