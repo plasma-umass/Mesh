@@ -169,7 +169,7 @@ add_definitions(-fPIC
 # c.append('cflags', '-Wno-c99-extensions
 
 #Language specific definitions
-#Quotes and slashes to scape spaces.
+#Quotes for string and backslashes to scape newline.
 set(custom_c_flags
      "-Werror=implicit-function-declaration\
       -Werror=implicit-int\
