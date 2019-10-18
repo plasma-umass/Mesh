@@ -39,7 +39,7 @@ jobs:
     - name: Run fork example
       run: cd cmake-cache && make run_fork-example
     - name: Run global-large-stress
-      run: cd cmake-cache && make global-large-stress
+      run: cd cmake-cache && make run_global-large-stress
     - name: Run local alloc
       run: cd cmake-cache && make run_local-alloc
     - name: Run thread
@@ -78,7 +78,7 @@ jobs:
     - name: Run fork example
       run: cd cmake-cache && make run_fork-example
     - name: Run global-large-stress
-      run: cd cmake-cache && make global-large-stress
+      run: cd cmake-cache && make run_global-large-stress
     - name: Run local alloc
       run: cd cmake-cache && make run_local-alloc
     - name: Run thread
@@ -113,7 +113,7 @@ jobs:
     - name: Run fork example
       run: cd cmake-cache && make run_fork-example
     - name: Run global-large-stress
-      run: cd cmake-cache && make global-large-stress
+      run: cd cmake-cache && make run_global-large-stress
     - name: Run local alloc
       run: cd cmake-cache && make run_local-alloc
     - name: Run thread
@@ -171,7 +171,7 @@ jobs:
   #  - name: Run fork example
   #    run: cd cmake-cache && ninja run_fork-example
   #  - name: Run global-large-stress
-  #    run: cd cmake-cache && ninja global-large-stress
+  #    run: cd cmake-cache && ninja run_global-large-stress
   #  - name: Run local alloc
   #    run: cd cmake-cache && ninja run_local-alloc
   #  - name: Run thread
@@ -206,7 +206,7 @@ jobs:
   #  - name: Run fork example
   #    run: cd cmake-cache && ninja run_fork-example
   #  - name: Run global-large-stress
-  #    run: cd cmake-cache && ninja global-large-stress
+  #    run: cd cmake-cache && ninja run_global-large-stress
   #  - name: Run local alloc
   #    run: cd cmake-cache && ninja run_local-alloc
   #  - name: Run thread
