@@ -43,7 +43,7 @@ set(google_src
         )
 
 #Add definition required by the Google tests
-if (WIN32)
+if (WIN)
     add_definitions(-DGTEST_OS_WINDOWS)
 elseif(APPLE)
     add_definitions(-DGTEST_OS_MAC)
@@ -85,6 +85,12 @@ function (add_mesh_test testname testfilename libraries_to_link)
         target_link_libraries(${testname} "${libraries_to_link}")
     endif()
     target_compile_options(${testname} PRIVATE -pipe -fno-builtin-malloc -fno-omit-frame-pointer)
+
+    #Include target to run the executable
+    add_custom_target(run_${testname}
+            COMMAND ${testname}
+            WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+            DEPENDS ${testname})
 endfunction(add_mesh_test)
 
 set(test_filenames
@@ -125,7 +131,7 @@ set(hoard_src
         vendor/Hoard/src/source/libhoard.cpp
         vendor/Hoard/src/source/uselibhoard.cpp
         )
-if(WIN32)
+if(WIN)
     list(APPEND hoard_src vendor/Hoard/src/source/wintls.cpp)
 elseif(APPLE)
     list(APPEND hoard_src vendor/Hoard/src/source/mactls.cpp)
@@ -148,8 +154,8 @@ if(${GCOV})
     target_compile_options(unit.test PRIVATE -fprofile-arcs -ftest-coverage)
     target_link_options(unit.test PRIVATE -fprofile-arcs -ftest-coverage)
     add_custom_target(coverage
-            COMMAND cd ${CMAKE_SOURCE_DIR}/cmake-cache/src/CMakeFiles/unit.test.dir/ && ${CMAKE_SOURCE_DIR}/build/bin/unit.test
-            COMMAND lcov -o app.info -c --directory ${CMAKE_SOURCE_DIR}/cmake-cache/src/CMakeFiles/unit.test.dir/
+            COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
+            COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/
             COMMAND genhtml app.info
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
             DEPENDS unit.test)

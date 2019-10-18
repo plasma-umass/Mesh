@@ -6,11 +6,11 @@ project(Mesh CXX C)
 SET(CMAKE_BUILD_TYPE "" CACHE STRING "Just making sure the default CMAKE_BUILD_TYPE configurations won't interfere" FORCE)
 
 #Set output folders 
-set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/build)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_HEADER_OUTPUT_DIRECTORY  ${CMAKE_BINARY_DIR}/include)
+set(CMAKE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib)
+set(CMAKE_HEADER_OUTPUT_DIRECTORY  ${CMAKE_OUTPUT_DIRECTORY}/include)
 
 
 #Fetch submodules
@@ -176,7 +176,7 @@ add_definitions(-fPIC
 # c.append('cflags', '-Wno-gnu-statement-expression
 # c.append('cflags', '-Wno-c99-extensions
 
-if (NOT APPLE AND NOT WIN32)
+if (NOT APPLE AND NOT WIN)
     add_definitions(
             -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700
             -Wundef
@@ -196,6 +196,7 @@ if (NOT APPLE AND NOT WIN32)
             -lrt
         )
 endif()
+
 
 add_link_options(-lm -lpthread -pthread -ldl)
 
