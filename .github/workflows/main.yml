@@ -30,58 +30,23 @@ jobs:
       run: |
         cd cmake-cache
         make all
-    -  name: Run tests
-       run: |
-        cd cmake-cache
-        make coverage
-
-  Windows_MinGW:   
-  
-    runs-on: windows-latest
-  
-    steps:
-    - uses: actions/checkout@v1
-    - name: Install msys2/mingw64
-      #steps from https://github.com/msys2/MINGW-packages/blob/master/azure-pipelines.yml
-      run: |
-        git clone https://github.com/msys2/msys2-ci-base.git %CD:~0,2%\msys64
-        %CD:~0,2%\msys64\usr\bin\rm -rf %CD:~0,2%\msys64\.git
-        set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
-        %CD:~0,2%\msys64\usr\bin\pacman --noconfirm -Syyuu
-        set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
-        %CD:~0,2%\msys64\usr\bin\pacman --noconfirm --needed -S git base-devel
-        %CD:~0,2%\msys64\usr\bin\pacman --noconfirm -Scc
-    - name: Install required packages
-      run: |
-        set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
-        pacman -S --noconfirm mingw-w64-x86_64-binutils
-        pacman -S --noconfirm mingw-w64-x86_64-cmake
-        pacman -S --noconfirm mingw-w64-x86_64-gcc
-        pacman -S --noconfirm mingw-w64-x86_64-gcc-libs
-        pacman -S --noconfirm mingw-w64-x86_64-gcc-objc
-        pacman -S --noconfirm mingw-w64-x86_64-gdb
-        pacman -S --noconfirm mingw-w64-x86_64-ninja
-        pacman -S --noconfirm mingw-w64-x86_64-lcov
-        pacman -S --noconfirm mingw-w64-x86_64-winpthreads-git
-        pacman --noconfirm -Scc
-    - name: Configure CMake 
-      run: |
-        set PATH=%CD:~0,2%\msys64\mingw64\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
-        mkdir cmake-cache
-        cd cmake-cache
-        cmake -DGCOV=ON -G"Ninja" ..
-    - name: Build 
-      run: |
-        set PATH=%CD:~0,2%\msys64\mingw64\bin;%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
-        cd cmake-cache
-        ninja
     - name: Run tests
       run: |
-        set PATH=%CD:~0,2%\msys64\mingw64\bin;%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
-        cd cmake-cache
-        ninja coverage
+       cd cmake-cache
+       make coverage
+    - name: Run big alloc
+      run: cd cmake-cache && make run_big-alloc
+    - name: Run fork example
+      run: cd cmake-cache && make run_fork-example
+    - name: Run global-large-stress
+      run: cd cmake-cache && make run_global-large-stress
+    - name: Run local alloc
+      run: cd cmake-cache && make run_local-alloc
+    - name: Run thread
+      run: cd cmake-cache && make run_thread
+
  
-  Mac_OS_X:   
+  Mac_OS_X_GCC:   
   
     runs-on: macos-latest
   
@@ -103,12 +68,115 @@ jobs:
         export PATH="/usr/local/bin:$PATH"
         cd cmake-cache
         make all
-    -  name: Run tests
-       run: |
-         export PATH="/usr/local/bin:$PATH"
-         cd cmake-cache
-         make coverage
+    - name: Run tests
+      run: |
+        export PATH="/usr/local/bin:$PATH"
+        cd cmake-cache
+        make coverage
+    - name: Run big alloc
+      run: cd cmake-cache && make run_big-alloc
+    - name: Run fork example
+      run: cd cmake-cache && make run_fork-example
+    - name: Run global-large-stress
+      run: cd cmake-cache && make run_global-large-stress
+    - name: Run local alloc
+      run: cd cmake-cache && make run_local-alloc
+    - name: Run thread
+      run: cd cmake-cache && make run_thread
+
+
+ 
+  Mac_OS_X_Xcode:   
   
+    runs-on: macos-latest
+  
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install required packages
+      run: |
+        brew install cmake lcov make
+    - name: Configure CMake in debug mode
+      run: |
+        mkdir cmake-cache
+        cd cmake-cache
+        cmake -DGCOV=ON ..
+    - name: Build 
+      run: |
+        cd cmake-cache
+        make all
+    - name: Run tests
+      run: |
+        cd cmake-cache
+        make coverage
+    - name: Run big alloc
+      run: cd cmake-cache && make run_big-alloc
+    - name: Run fork example
+      run: cd cmake-cache && make run_fork-example
+    - name: Run global-large-stress
+      run: cd cmake-cache && make run_global-large-stress
+    - name: Run local alloc
+      run: cd cmake-cache && make run_local-alloc
+    - name: Run thread
+      run: cd cmake-cache && make run_thread
+  
+
+
+  #Windows_MinGW:   
+  #
+  #  runs-on: windows-latest
+  #
+  #  steps:
+  #  - uses: actions/checkout@v1
+  #  - name: Install msys2/mingw64
+  #    #steps from https://github.com/msys2/MINGW-packages/blob/master/azure-pipelines.yml
+  #    run: |
+  #      git clone https://github.com/msys2/msys2-ci-base.git %CD:~0,2%\msys64
+  #      %CD:~0,2%\msys64\usr\bin\rm -rf %CD:~0,2%\msys64\.git
+  #      set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+  #      %CD:~0,2%\msys64\usr\bin\pacman --noconfirm -Syyuu
+  #      set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+  #      %CD:~0,2%\msys64\usr\bin\pacman --noconfirm --needed -S git base-devel
+  #      %CD:~0,2%\msys64\usr\bin\pacman --noconfirm -Scc
+  #  - name: Install required packages
+  #    run: |
+  #      set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+  #      pacman -S --noconfirm mingw-w64-x86_64-binutils
+  #      pacman -S --noconfirm mingw-w64-x86_64-cmake
+  #      pacman -S --noconfirm mingw-w64-x86_64-gcc
+  #      pacman -S --noconfirm mingw-w64-x86_64-gcc-libs
+  #      pacman -S --noconfirm mingw-w64-x86_64-gcc-objc
+  #      pacman -S --noconfirm mingw-w64-x86_64-gdb
+  #      pacman -S --noconfirm mingw-w64-x86_64-ninja
+  #      pacman -S --noconfirm mingw-w64-x86_64-lcov
+  #      pacman -S --noconfirm mingw-w64-x86_64-winpthreads-git
+  #      pacman --noconfirm -Scc
+  #  - name: Configure CMake
+  #    run: |
+  #      set PATH=%CD:~0,2%\msys64\mingw64\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+  #      mkdir cmake-cache
+  #      cd cmake-cache
+  #      cmake -DGCOV=ON -G"Ninja" ..
+  #  - name: Build
+  #    run: |
+  #      set PATH=%CD:~0,2%\msys64\mingw64\bin;%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+  #      cd cmake-cache
+  #      ninja
+  #  - name: Run tests
+  #    run: |
+  #      set PATH=%CD:~0,2%\msys64\mingw64\bin;%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+  #      cd cmake-cache
+  #      ninja coverage
+  #  - name: Run big alloc
+  #    run: cd cmake-cache && ninja run_big-alloc
+  #  - name: Run fork example
+  #    run: cd cmake-cache && ninja run_fork-example
+  #  - name: Run global-large-stress
+  #    run: cd cmake-cache && ninja run_global-large-stress
+  #  - name: Run local alloc
+  #    run: cd cmake-cache && ninja run_local-alloc
+  #  - name: Run thread
+  #    run: cd cmake-cache && ninja run_thread
+
   #Windows_Visual_Studio:   #not working
   #
   #  runs-on: windows-latest
@@ -133,5 +201,14 @@ jobs:
   #    run: |
   #      cd cmake-cache
   #      ninja coverage
-
+  #  - name: Run big alloc
+  #    run: cd cmake-cache && ninja run_big-alloc
+  #  - name: Run fork example
+  #    run: cd cmake-cache && ninja run_fork-example
+  #  - name: Run global-large-stress
+  #    run: cd cmake-cache && ninja run_global-large-stress
+  #  - name: Run local alloc
+  #    run: cd cmake-cache && ninja run_local-alloc
+  #  - name: Run thread
+  #    run: cd cmake-cache && ninja run_thread
 

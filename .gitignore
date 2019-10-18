@@ -43,3 +43,13 @@ __pycache__
 /.idea
 /.clwb
 /cmake-build*
+
+cmake-cache/
+
+cmake-build-debug/
+
+cmake-build-release/
+
+cmake-build-relwithdebinfo/
+
+cmake-build-minsizerel/

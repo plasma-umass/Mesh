@@ -42,16 +42,49 @@ set(google_src
         vendor/googletest/googletest/src/gtest_main.cc
         )
 
-#Add definition required by the Google tests
-if (WIN32)
-    add_definitions(-DGTEST_OS_WINDOWS)
+#Add definition required by the Google tests (to make it stop complaining)
+if (WIN)
+    set(win_def -DGTEST_OS_MAC=0
+                -DGTEST_OS_LINUX=0
+                -DGTEST_OS_WINDOWS
+            )
 elseif(APPLE)
-    add_definitions(-DGTEST_OS_MAC)
+    set(apple_def -DGTEST_OS_MAC
+                  -DGTEST_OS_LINUX=0
+                  -DGTEST_OS_WINDOWS=0
+            )
 elseif(UNIX AND NOT APPLE)
-    add_definitions(-DGTEST_OS_LINUX)
+    set(linux_def -DGTEST_OS_MAC=0
+                  -DGTEST_OS_LINUX
+                  -DGTEST_OS_WINDOWS=0
+            )
 else()
     message(FATAL_ERROR Unsupported platform)
 endif()
+set(google_tests_definitions
+        -DGTEST_FOR_GOOGLE_=0
+        -DGTEST_HAS_ABSL=0
+        -DGTEST_IS_THREADSAFE=1
+        -DGTEST_OS_AIX=0
+        -DGTEST_OS_FUCHSIA=0
+        -DGTEST_OS_IOS=0
+        ${linux_def}
+        -DGTEST_OS_LINUX_ANDROID=0
+        ${apple_def}
+        -DGTEST_OS_NACL=0
+        -DGTEST_OS_OS2=0
+        -DGTEST_OS_QNX=0
+        -DGTEST_OS_SYMBIAN=0
+        -DGTEST_OS_USES_PCRE=0
+        ${win_def}
+        -DGTEST_OS_WINDOWS_MOBILE=0
+        -DGTEST_OS_WINDOWS_PHONE=0
+        -DGTEST_OS_WINDOWS_RT=0
+        -DGTEST_OS_ZOS=0
+        -DGTEST_USES_PCRE=0
+        -DGTEST_USES_SIMPLE_RE=0
+)
+
 
 #Create a set of source files for the unit tests
 set(unit_src
@@ -74,7 +107,7 @@ target_include_directories(unit.test SYSTEM PRIVATE vendor/googletest/googletest
 target_include_directories(unit.test PRIVATE vendor/googletest/googletest)
 
 #Set specific compiler flags for the unit tests
-target_compile_definitions(unit.test PRIVATE -DGTEST_HAS_PTHREAD=1)
+target_compile_definitions(unit.test PRIVATE -DGTEST_HAS_PTHREAD=1 ${google_tests_definitions})
 target_compile_options(unit.test PRIVATE -Wno-unused-const-variable)
 
 #Create targets for each test
@@ -85,6 +118,12 @@ function (add_mesh_test testname testfilename libraries_to_link)
         target_link_libraries(${testname} "${libraries_to_link}")
     endif()
     target_compile_options(${testname} PRIVATE -pipe -fno-builtin-malloc -fno-omit-frame-pointer)
+
+    #Include target to run the executable
+    add_custom_target(run_${testname}
+            COMMAND ${testname}
+            WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+            DEPENDS ${testname})
 endfunction(add_mesh_test)
 
 set(test_filenames
@@ -125,7 +164,7 @@ set(hoard_src
         vendor/Hoard/src/source/libhoard.cpp
         vendor/Hoard/src/source/uselibhoard.cpp
         )
-if(WIN32)
+if(WIN)
     list(APPEND hoard_src vendor/Hoard/src/source/wintls.cpp)
 elseif(APPLE)
     list(APPEND hoard_src vendor/Hoard/src/source/mactls.cpp)
@@ -148,8 +187,8 @@ if(${GCOV})
     target_compile_options(unit.test PRIVATE -fprofile-arcs -ftest-coverage)
     target_link_options(unit.test PRIVATE -fprofile-arcs -ftest-coverage)
     add_custom_target(coverage
-            COMMAND cd ${CMAKE_SOURCE_DIR}/cmake-cache/src/CMakeFiles/unit.test.dir/ && ${CMAKE_SOURCE_DIR}/build/bin/unit.test
-            COMMAND lcov -o app.info -c --directory ${CMAKE_SOURCE_DIR}/cmake-cache/src/CMakeFiles/unit.test.dir/
+            COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
+            COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/
             COMMAND genhtml app.info
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
             DEPENDS unit.test)
