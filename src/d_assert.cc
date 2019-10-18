@@ -3,8 +3,6 @@
 // Use of this source code is governed by the Apache License,
 // Version 2.0, that can be found in the LICENSE file.
 
-#include <execinfo.h>
-
 #include <cstdarg>
 #include <cstdio>   // for sprintf
 #include <cstdlib>  // for abort
