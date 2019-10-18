@@ -1,3 +1,5 @@
+#include <aligned_free.h>
+#include <aligned_malloc.h>
 #include <assert.h>
 #include <ctype.h>
 #include <pthread.h>
@@ -10,9 +12,6 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
-#include <aligned_malloc.h>
-#include <aligned_free.h>
-
 
 #include <atomic>
 
@@ -145,8 +144,8 @@ int main(int argc, char *argv[]) {
 }
 
 void runthreads(MWC &rng, long sleep_cnt, int min_threads, int max_threads, int chperthread, int num_rounds) {
-  ThreadData *de_area =
-      reinterpret_cast<ThreadData *>(aligned_malloc((size_t)sizeof(ThreadData), (size_t)(sizeof(ThreadData) * max_threads) ));
+  ThreadData *de_area = reinterpret_cast<ThreadData *>(
+      aligned_malloc((size_t)sizeof(ThreadData), (size_t)(sizeof(ThreadData) * max_threads)));
 
   for (size_t i = 0; i < max_threads; i++) {
     new ((void *)&de_area[i]) ThreadData(rng);
