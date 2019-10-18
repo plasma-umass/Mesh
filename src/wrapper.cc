@@ -217,7 +217,7 @@ extern "C" MESH_EXPORT int CUSTOM_MALLOC_SET_STATE(void * /* ptr */) {
   return 0;  // success.
 }
 
-#if defined(__GNUC__) && !defined(__FreeBSD__)
+#if defined(__GNUC__) && !defined(__FreeBSD__) && defined(__GLIBC__)
 extern "C" MESH_EXPORT struct mallinfo CUSTOM_MALLINFO() {
   // For now, we return useless stats.
   struct mallinfo m;

@@ -13,10 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/cdefs.h>
 #include <new>
-
-#include "heaplayers.h"
 
 /*
   To use this library,
@@ -72,4 +69,7 @@ WEAK_REDEF1(size_t, malloc_usable_size, void *);
 }
 
 #include "wrapper.cc"
+#ifdef __GLIBC__
+// don't do this under musl
 #include "wrappers/gnuwrapper-hooks.cpp"
+#endif
