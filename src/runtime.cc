@@ -231,7 +231,7 @@ void *Runtime::bgThread(void *arg) {
 
       // debug("<<<<<<<<<<\n");
     } else {
-      write(STDERR_FILENO, "Read unexpected signal\n", strlen("Read unexpected signal\n"));
+      auto _ __attribute__((unused)) = write(STDERR_FILENO, "Read unexpected signal\n", strlen("Read unexpected signal\n"));
     }
   }
 #endif
