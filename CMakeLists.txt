@@ -156,25 +156,35 @@ add_definitions(-fPIC
                 -fno-omit-frame-pointer
                 -ffunction-sections
                 -fdata-sections
-                -Werror=implicit-function-declaration
-                -Werror=implicit-int
-                -Werror=pointer-sign
                 -Werror=pointer-arith
                 -Wall -Wextra -pedantic
-                -Wno-unused-parameter
-                -Wno-unused-variable
-                -Woverloaded-virtual
                 -Werror=return-type
                 -Wtype-limits
                 -Wempty-body
-                -Wno-ctor-dtor-privacy
-                -Winvalid-offsetof
                 -Wvariadic-macros
                 -Wcast-align
                 -fvisibility=hidden
         )
 # c.append('cflags', '-Wno-gnu-statement-expression
 # c.append('cflags', '-Wno-c99-extensions
+
+#Language specific definitions
+#Quotes and slashes to scape spaces.
+set(custom_c_flags
+     "-Werror=implicit-function-declaration\
+      -Werror=implicit-int\
+      -Werror=pointer-sign\
+     ")
+set(custom_cxx_flags
+    "-Wno-unused-parameter\
+     -Wno-unused-variable\
+     -Woverloaded-virtual\
+     -Wno-ctor-dtor-privacy\
+     -Winvalid-offsetof\
+    ")
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${custom_c_flags}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${custom_cxx_flags}")
 
 if (NOT APPLE AND NOT WIN)
     add_definitions(

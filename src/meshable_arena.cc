@@ -471,6 +471,7 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
     int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
     d_assert(result == 0);
 #else
+    #warning macOS version of fallocate goes here
     fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0,(long long) sz, 0};
     int result = fcntl(_fd, F_PREALLOCATE, &store);
     if (result == -1) {
