@@ -50,37 +50,6 @@ foreach (submodule ${submodules})
 endforeach()
 
 
-#Identify compiler and set specific flag
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    set(GCC TRUE)
-    set(CLANG FALSE)
-    set(MSVC FALSE)
-    set(ICC FALSE)
-endif()
-
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-    set(GCC FALSE)
-    set(CLANG TRUE)
-    set(MSVC FALSE)
-    set(ICC FALSE)
-endif()
-
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-    set(GCC FALSE)
-    set(CLANG FALSE)
-    set(MSVC TRUE)
-    set(ICC FALSE)
-    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
-    set(BUILD_SHARED_LIBS TRUE)
-endif()
-
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
-    set(GCC FALSE)
-    set(CLANG FALSE)
-    set(MSVC FALSE)
-    set(ICC TRUE)
-endif()
-
 #Create configure options
 option(DEBUG "Build with debugging symbols" OFF) #replace with CMAKE_BUILD_TYPE?
 option(OPTIMIZE " Build with optimizations" ON) #replace with CMAKE_BUILD_TYPE?
@@ -92,29 +61,76 @@ option(DISABLE_MESHING "Disable meshing" OFF)
 option(SUFFIX "Always suffix the mesh library with randomization + meshing info" OFF)
 option(CLANG "Build with clang" OFF)
 
+
+
+
 #Parse options
 set(CXX_FLAGS )
 set(ENV{CXX_FLAGS} )
+
+if (${CLANG})
+    set(CMAKE_CXX_COMPILER clang++)
+    set(CMAKE_C_COMPILER clang)
+endif()
+
+#Identify compiler and set specific flag
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
+    set(GCC TRUE)
+    set(CLANGC FALSE)
+    set(MSVC FALSE)
+    set(ICC FALSE)
+endif()
+
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    set(GCC FALSE)
+    set(CLANGC TRUE)
+    set(MSVC FALSE)
+    set(ICC FALSE)
+endif()
+
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "MSVC")
+    set(GCC FALSE)
+    set(CLANGC FALSE)
+    set(MSVC TRUE)
+    set(ICC FALSE)
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+    set(BUILD_SHARED_LIBS TRUE)
+endif()
+
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
+    set(GCC FALSE)
+    set(CLANGC FALSE)
+    set(MSVC FALSE)
+    set(ICC TRUE)
+endif()
 
 if (${DEBUG})
     add_definitions(-g)
 endif()
 
 if(${OPTIMIZE})
-    add_definitions(-O3 -flto -D_FORTIFY_SOURCE=2 -pthread)
+    add_definitions(-O3 -flto -D_FORTIFY_SOURCE=2)
 else()
     add_definitions(-O0)
 endif()
 
 if (${GCOV} AND GCC)
-    add_definitions(--coverage)
-    link_libraries(gcov)
+    find_program(GCOVp gcov)
+    if (GCOVp)
+        add_definitions(--coverage)
+        link_libraries(-lgcov)
+    endif()
+    find_program(LCOVp lcov)
+    if (NOT LCOVp)
+        message(WARNING "LCOV is not installed.")
+    endif()
 endif()
 
-if (${CLANGCOV})
-    add_definitions(-fprofile-instr-generate -fcoverage-mapping)
-
+if (${CLANGCOV} AND CLANGC)
+    add_definitions(--coverage)#ftest-coverage)
+    link_libraries(--coverage)
     #todo:
+    #add_definitions(-fprofile-instr-generate -fcoverage-mapping)
     #c.prefer('cc', 'clang')
     #c.prefer('cxx', 'clang++')
     #c.prefer('ar', 'llvm-ar')
@@ -122,10 +138,7 @@ if (${CLANGCOV})
     #c.append('ldflags', '-fuse-ld=lld')
 endif()
 
-if (${CLANG})
-    set(CMAKE_CXX_COMPILER clang++)
-    set(CMAKE_C_COMPILER clang)
-endif()
+
 
 if (NOT ${DISABLE_MESHING})
     set(MESHING_ENABLED 1)
@@ -186,7 +199,7 @@ set(custom_cxx_flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${custom_c_flags}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${custom_cxx_flags}")
 
-if (NOT APPLE AND NOT WIN)
+if (NOT APPLE AND GCC)
     add_definitions(
             -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700
             -Wundef
@@ -207,9 +220,6 @@ if (NOT APPLE AND NOT WIN)
         )
 endif()
 
-
-add_link_options(-lm -lpthread -pthread -ldl)
-
 set(CMAKE_CXX_STANDARD 14)
 
 #Create folder for coverage
@@ -217,6 +227,7 @@ file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/coverage)
 
 #Go to subdirectory to build libraries
 add_subdirectory(src)
+
 
 
 #Todo: deal with installation
