@@ -33,13 +33,13 @@ jobs:
     - name: Run tests
       run: |
        cd cmake-cache
-       make coverage
+       make coverage_gcc
     - name: Run big alloc
       run: cd cmake-cache && make run_big-alloc
     - name: Run fork example
       run: cd cmake-cache && make run_fork-example
-    - name: Run global-large-stress
-      run: cd cmake-cache && make run_global-large-stress
+    #- name: Run global-large-stress
+    #  run: cd cmake-cache && make run_global-large-stress
     - name: Run local alloc
       run: cd cmake-cache && make run_local-alloc
     - name: Run thread
@@ -72,13 +72,13 @@ jobs:
       run: |
         export PATH="/usr/local/bin:$PATH"
         cd cmake-cache
-        make coverage
+        make coverage_gcc
     - name: Run big alloc
       run: cd cmake-cache && make run_big-alloc
     - name: Run fork example
       run: cd cmake-cache && make run_fork-example
-    - name: Run global-large-stress
-      run: cd cmake-cache && make run_global-large-stress
+    #- name: Run global-large-stress
+    #  run: cd cmake-cache && make run_global-large-stress
     - name: Run local alloc
       run: cd cmake-cache && make run_local-alloc
     - name: Run thread
@@ -99,7 +99,7 @@ jobs:
       run: |
         mkdir cmake-cache
         cd cmake-cache
-        cmake -DGCOV=ON ..
+        cmake -DCLANG=ON -DCLANGCOV=ON ..
     - name: Build 
       run: |
         cd cmake-cache
@@ -107,13 +107,13 @@ jobs:
     - name: Run tests
       run: |
         cd cmake-cache
-        make coverage
+        make coverage_clang
     - name: Run big alloc
       run: cd cmake-cache && make run_big-alloc
     - name: Run fork example
       run: cd cmake-cache && make run_fork-example
-    - name: Run global-large-stress
-      run: cd cmake-cache && make run_global-large-stress
+    #- name: Run global-large-stress
+    #  run: cd cmake-cache && make run_global-large-stress
     - name: Run local alloc
       run: cd cmake-cache && make run_local-alloc
     - name: Run thread

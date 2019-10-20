@@ -13,6 +13,9 @@
 #include <fcntl.h>
 
 #if !defined(_WIN32)
+    #ifdef __APPLE__
+    #define _DARWIN_C_SOURCE //exposes MAP_ANONYMOUS and MAP_NORESERVE
+    #endif
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>

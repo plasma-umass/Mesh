@@ -1,18 +1,18 @@
-
 #Include current folder to guarantee headers are found by files
 include_directories(./)
 include_directories(./vendor/Heap-Layers)
 include_directories(./vendor/AlignedMalloc)
+
 
 #Create a set of sources for cross platform aligned malloc
 set(aligned_malloc_src
 	vendor/AlignedMalloc/aligned_free.c
 	vendor/AlignedMalloc/aligned_malloc.c
 	)
-
-
 #Add a target to fragmenter executable
 add_executable(fragmenter fragmenter.cc measure_rss.cc)
+target_link_libraries(fragmenter PRIVATE -pthread)
+
 
 #Create a common set of source files
 set(common_src
@@ -26,6 +26,8 @@ set(common_src
         )
 #Add a target to the meshing benchmark executable
 add_executable(meshing-benchmark meshing_benchmark.cc ${common_src})
+target_link_libraries(meshing-benchmark PRIVATE -ldl -pthread)
+
 
 #Create the set of source files for the mesh library
 set(mesh_src
@@ -34,6 +36,7 @@ set(mesh_src
         )
 #Add a target for the mesh shared library
 add_library(mesh SHARED ${mesh_src})
+target_link_libraries(mesh PRIVATE -pthread -ldl)
 
 
 #Create a set of source files from the google test suite for the unit tests
@@ -43,7 +46,7 @@ set(google_src
         )
 
 #Add definition required by the Google tests (to make it stop complaining)
-if (WIN)
+if (WIN32)
     set(win_def -DGTEST_OS_MAC=0
                 -DGTEST_OS_LINUX=0
                 -DGTEST_OS_WINDOWS
@@ -101,6 +104,7 @@ set(unit_src
         )
 #Add a target to the unit tests executable
 add_executable(unit.test ${unit_src})
+target_link_libraries(unit.test PRIVATE -ldl -pthread )
 
 #Include header file paths to the unit tests
 target_include_directories(unit.test SYSTEM PRIVATE vendor/googletest/googletest/include)
@@ -136,6 +140,7 @@ set(test_filenames
     )
 
 set (libraries_to_link
+        -pthread
         mesh
         )
 
@@ -147,6 +152,7 @@ endforeach()
 
 #Create additional larson that relies on GCC allocator
 add_mesh_test(larson-glibc larson.cc "")
+target_link_libraries(larson-glibc PRIVATE -pthread)
 
 #todo: build and link tcmalloc
 #Build tcmalloc
@@ -164,7 +170,7 @@ set(hoard_src
         vendor/Hoard/src/source/libhoard.cpp
         vendor/Hoard/src/source/uselibhoard.cpp
         )
-if(WIN)
+if(WIN32)
     list(APPEND hoard_src vendor/Hoard/src/source/wintls.cpp)
 elseif(APPLE)
     list(APPEND hoard_src vendor/Hoard/src/source/mactls.cpp)
@@ -176,6 +182,8 @@ include_directories(vendor/Hoard/src/include/hoard)
 include_directories(vendor/Hoard/src/include/superblocks)
 include_directories(vendor/Hoard/src/include/util)
 add_library(hoard SHARED ${hoard_src})
+target_link_libraries(hoard PRIVATE -ldl)
+
 
 #Create additional tests that require hoard
 add_mesh_test(big-alloc-hoard big-alloc.c hoard)
@@ -184,9 +192,7 @@ endif()
 
 #Deal with coverage
 if(${GCOV})
-    target_compile_options(unit.test PRIVATE -fprofile-arcs -ftest-coverage)
-    target_link_options(unit.test PRIVATE -fprofile-arcs -ftest-coverage)
-    add_custom_target(coverage
+    add_custom_target(coverage_gcc
             COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
             COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/
             COMMAND genhtml app.info
@@ -195,6 +201,21 @@ if(${GCOV})
 endif()
 
 #todo
-#if(${CLANGCOV})
-#endif()
+if(${CLANGCOV})
+    add_custom_target(coverage_clang
+            COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
+            COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/
+            COMMAND genhtml app.info
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
+            DEPENDS unit.test)
+    #add_custom_target(coverage_clang
+    #        COMMAND rm -f unit.test.profdata
+    #        COMMAND LLVM_PROFILE_FILE=default.profraw ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
+    #        COMMAND llvm-profdata merge -sparse default.profraw -o unit.test.profdata
+    #        COMMAND "llvm-cov show -format=html -instr-profile=unit.test.profdata ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test -ignore-filename-regex=\\'.*(vendor|unit)/.*\\' >index.html"
+    #        COMMAND "llvm-cov report -instr-profile=unit.test.profdata ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test -ignore-filename-regex='.*(vendor|unit)/.*' -use-color"
+    #        COMMAND rm -f default.profraw
+    #        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
+    #        DEPENDS unit.test)
+endif()
 
