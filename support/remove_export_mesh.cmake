@@ -2,7 +2,7 @@
 
 function(get_rid_of_path bash_config_contents path_to_get_rid bash_contents_updated)
     #Remove libmesh path export
-    string(REPLACE "export LIBMESH_PATH=\"${path_to_get_rid}\"\n" " " bash_config_content_lines "${bash_config_contents}")
+    string(REPLACE "export LIBMESH_PATH=\"${path_to_get_rid}\"\n" "" bash_config_content_lines "${bash_config_contents}")
     #Remove DYLD_FALLBACK export
     string(REPLACE "export DYLD_FALLBACK_LIBRARY_PATH=\"${path_to_get_rid}\"\n" "" bash_config_contents "${bash_config_content_lines}")
     #Save results to the variable from the parent scope
