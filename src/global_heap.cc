@@ -250,7 +250,7 @@ void GlobalHeap::meshAllSizeClassesLocked() {
 
   auto meshFound =
       function<void(std::pair<MiniHeap *, MiniHeap *> &&)>([&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
-        if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<0>(miniheaps)->isMeshingCandidate())
+        if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<1>(miniheaps)->isMeshingCandidate())
           mergeSets.push_back(std::move(miniheaps));
       });
 
