@@ -60,6 +60,8 @@ set_property(CACHE RANDOMIZATION PROPERTY STRINGS "0;1;2")
 option(DISABLE_MESHING "Disable meshing" OFF)
 option(SUFFIX "Always suffix the mesh library with randomization + meshing info" OFF)
 option(CLANG "Build with clang" OFF)
+option(INSTALL_MESH "Install mesh to the system" OFF)
+option(SYS_WIDE_INSTALL "Install mesh as a system-wide library" OFF)
 
 
 
@@ -228,6 +230,75 @@ file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/coverage)
 #Go to subdirectory to build libraries
 add_subdirectory(src)
 
+#Installation procedures
+if(INSTALL_MESH)
+    #Check OS and target installation directories
+    if(WIN32)
+        set(system_wide_installation_dir C:\\Program Files\\mesh)
+        set(user_wide_installation_dir C:\\User\\$ENV{USERNAME}\\AppData\\Local\\mesh)
+        set(user $ENV{USERNAME})
+        add_custom_target(delete_local_installation_dir
+                COMMAND ${CMAKE_COMMAND} -E remove_directory ${user_wide_installation_dir})
+    elseif(APPLE)
+        set(system_wide_installation_dir /usr/local)
+        set(user_wide_installation_dir /Users/$ENV{USER}/Library/mesh)
+        set(user $ENV{USER})
+        add_custom_target(delete_local_installation_dir
+                COMMAND ${CMAKE_COMMAND} -E remove_directory ${user_wide_installation_dir})
+    else()
+        #Linux
+        set(system_wide_installation_dir /usr/local)
+        set(user_wide_installation_dir /home/$ENV{USERNAME}/.local)
+        set(user $ENV{USERNAME})
+        add_custom_target(delete_local_installation_dir)
+    endif()
 
+    #This check prevents that running installation as sudo changes the username
+    if(NOT ENV{mesh_install_dir})
+        if(SYS_WIDE_INSTALL)
+            set(ENV{mesh_install_dir} ${system_wide_installation_dir})
+            set(ENV{mesh_syswide} ON)
+        else()
+            set(ENV{mesh_install_dir} ${user_wide_installation_dir})
+            set(ENV{mesh_syswide} OFF)
+        endif()
+        set(ENV{mesh_user} ${user})
+    endif()
 
-#Todo: deal with installation
+    #Create target for copying library and header dir
+    add_custom_target(install_mesh
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:mesh> $ENV{mesh_install_dir}/lib/$<TARGET_FILE_NAME:mesh>
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/plasma/mesh.h $ENV{mesh_install_dir}/include/plasma/mesh.h
+            )
+    #Create target for deleting library and header dir
+    add_custom_target(uninstall_mesh
+            COMMAND ${CMAKE_COMMAND} -E remove -f $ENV{mesh_install_dir}/lib/$<TARGET_FILE_NAME:mesh>
+            COMMAND ${CMAKE_COMMAND} -E remove -f $ENV{mesh_install_dir}/include/plasma/mesh.h
+            COMMAND ${CMAKE_COMMAND} -E remove_directory $ENV{mesh_install_dir}/include/plasma
+            )
+
+    #Export or remove library paths (you will need to run with sudo/elevated privileges if doing a system wide installation)
+    #I didn't add a DEPENDS clause on purpose, or the mesh and install_mesh targets would run as root
+    add_custom_target(export_mesh
+            COMMAND ${CMAKE_COMMAND} -DINSTALLATION_DIR="$ENV{mesh_install_dir}" -DUSER="$ENV{mesh_user}" -DSYSWIDE="$ENV{mesh_syswide}" -P ${CMAKE_SOURCE_DIR}/support/export_mesh.cmake
+            )
+    add_custom_target(remove_export_mesh
+            COMMAND ${CMAKE_COMMAND} -DINSTALLATION_DIR="$ENV{mesh_install_dir}" -DUSER="$ENV{mesh_user}" -DSYSWIDE="$ENV{mesh_syswide}" -P ${CMAKE_SOURCE_DIR}/support/remove_export_mesh.cmake
+            )
+
+    #Additional glue targets that trigger both install&export or uninstall&remove export
+    add_custom_target(install_and_export
+            DEPENDS install_mesh export_mesh
+            )
+
+    if(SYS_WIDE_INSTALL)
+        add_custom_target(uninstall_and_remove_export
+                DEPENDS uninstall_mesh remove_export_mesh
+                )
+    else()
+        add_custom_target(uninstall_and_remove_export
+                DEPENDS uninstall_mesh remove_export_mesh delete_local_installation_dir
+                )
+    endif()
+
+endif()
