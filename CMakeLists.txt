@@ -5,7 +5,7 @@ project(Mesh CXX C)
 
 SET(CMAKE_BUILD_TYPE "" CACHE STRING "Just making sure the default CMAKE_BUILD_TYPE configurations won't interfere" FORCE)
 
-#Set output folders 
+#Set output folders
 set(CMAKE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib)
@@ -33,7 +33,6 @@ endif()
 #Check if submodules were downloaded
 set(submodules
 	src/vendor/AlignedMalloc
-        src/vendor/gflags
         src/vendor/googletest
         src/vendor/gperftools
         src/vendor/Heap-Layers

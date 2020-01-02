@@ -1,7 +1,7 @@
 # For Windows; see GNUmakefile for the Unix Makefile
 
 CC = cl
-CFLAGS = /Ox # -O0 -DSANITIZER_GO=0 -march=westmere -fPIC -pipe -fno-builtin-malloc -fno-omit-frame-pointer -ffunction-sections -fdata-sections -Werror=implicit-function-declaration -Werror=implicit-int -Werror=pointer-sign -Werror=pointer-arith -Wall -Wextra -pedantic -Wno-unused-parameter -Wno-unused-variable -Werror=return-type -Wtype-limits -Wempty-body -Wvariadic-macros -Wcast-align -Isrc/vendor/googletest/googletest/include -Isrc/vendor/googletest/googletest -isystem build/src/vendor/gflags/include -Isrc/vendor/Heap-Layers -Wa,--noexecstack
+CFLAGS = /Ox # -O0 -DSANITIZER_GO=0 -march=westmere -fPIC -pipe -fno-builtin-malloc -fno-omit-frame-pointer -ffunction-sections -fdata-sections -Werror=implicit-function-declaration -Werror=implicit-int -Werror=pointer-sign -Werror=pointer-arith -Wall -Wextra -pedantic -Wno-unused-parameter -Wno-unused-variable -Werror=return-type -Wtype-limits -Wempty-body -Wvariadic-macros -Wcast-align -Isrc/vendor/googletest/googletest/include -Isrc/vendor/googletest/googletest -Isrc/vendor/Heap-Layers -Wa,--noexecstack
 CXXFLAGS = /std:c++17 /Isrc /Isrc\vendor\Heap-Layers $(CFLAGS) # -Woverloaded-virtual -Wno-ctor-dtor-privacy -Winvalid-offsetof -std=c++1z -I src $(CFLAGS)
 LDFLAGS = # -march=westmere
 LIBS = /Md # -lm -lpthread -ldl
