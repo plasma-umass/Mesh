@@ -11,12 +11,10 @@
 #include <atomic>
 #include <limits>
 
+#include "bitmap.h"
 #include "common.h"
-
 #include "internal.h"
 #include "mini_heap.h"
-
-#include "bitmap.h"
 #include "striped_tracker.h"
 
 namespace mesh {
@@ -30,92 +28,33 @@ inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bi
   d_assert(byteLen >= 8);
   d_assert(byteLen % 8 == 0);
 
-  bitmap1 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap1, 16);
-  bitmap2 = (const Bitmap::word_t *)__builtin_assume_aligned(bitmap2, 16);
+  // because we hold the global lock (so no miniheap can transition
+  // from 'free' to 'attached'), the only possible data race we have
+  // here is our read with a write changing a bit from 1 -> 0.  That
+  // makes this race benign - we may have a false positive if an
+  // allocation is freed (it may cause 2 bitmaps to look like they
+  // overlap when _now_ they don't actually), but it won't cause
+  // correctness issues.
+  const auto bitmapL = (const uint64_t *)__builtin_assume_aligned(bitmap1, 16);
+  const auto bitmapR = (const uint64_t *)__builtin_assume_aligned(bitmap2, 16);
+
+  uint64_t result = 0;
 
   for (size_t i = 0; i < byteLen / sizeof(size_t); i++) {
-    if ((bitmap1[i] & bitmap2[i]) != 0) {
-      // debug("%zu/%zu bitmap cmp failed: %zx & %zx != 0 (%zx)", i, byteLen, bitmap1[i].load(), bitmap2[i].load(),
-      //       bitmap1[i].load() & bitmap2[i].load());
-      return false;
-    }
+    result |= bitmapL[i] & bitmapR[i];
   }
-  return true;
+
+  return result == 0;
 }
 
 namespace method {
 
 // split miniheaps into two lists in a random order
-inline void halfSplit(MWC &prng, StripedTracker &miniheaps, internal::vector<MiniHeap *> &left,
-                      internal::vector<MiniHeap *> &right) noexcept {
-  internal::vector<MiniHeap *> bucket = miniheaps.meshingCandidates(kOccupancyCutoff);
+void halfSplit(MWC &prng, StripedTracker &miniheaps, internal::vector<MiniHeap *> &left,
+               internal::vector<MiniHeap *> &right) noexcept;
 
-  internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
-
-  for (size_t i = 0; i < bucket.size(); i++) {
-    auto mh = bucket[i];
-    if (!mh->isMeshingCandidate() || mh->fullness() >= kOccupancyCutoff)
-      continue;
-
-    if (left.size() <= right.size())
-      left.push_back(mh);
-    else
-      right.push_back(mh);
-  }
-}
-
-template <size_t t = 64>
-inline void shiftedSplitting(MWC &prng, StripedTracker &miniheaps,
-                             const function<void(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept {
-  if (miniheaps.partialSize() == 0) {
-    return;
-  }
-
-  internal::vector<MiniHeap *> leftBucket{};   // mutable copy
-  internal::vector<MiniHeap *> rightBucket{};  // mutable copy
-
-  halfSplit(prng, miniheaps, leftBucket, rightBucket);
-
-  const auto leftSize = leftBucket.size();
-  const auto rightSize = rightBucket.size();
-
-  if (leftSize == 0 || rightSize == 0)
-    return;
-
-  const size_t limit = rightSize < t ? rightSize : t;
-  constexpr size_t nBytes = 32;
-  d_assert(nBytes == leftBucket[0]->bitmap().byteCount());
-
-  size_t foundCount = 0;
-  for (size_t j = 0; j < leftSize; j++) {
-    const size_t idxLeft = j;
-    size_t idxRight = j;
-    for (size_t i = 0; i < limit; i++, idxRight++) {
-      if (unlikely(idxRight >= rightSize)) {
-        idxRight %= rightSize;
-      }
-      auto h1 = leftBucket[idxLeft];
-      auto h2 = rightBucket[idxRight];
-
-      if (h1 == nullptr || h2 == nullptr)
-        continue;
-
-      const auto bitmap1 = h1->bitmap().bits();
-      const auto bitmap2 = h2->bitmap().bits();
-
-      if (unlikely(mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes))) {
-        std::pair<MiniHeap *, MiniHeap *> heaps{h1, h2};
-        meshFound(std::move(heaps));
-        leftBucket[idxLeft] = nullptr;
-        rightBucket[idxRight] = nullptr;
-        foundCount++;
-        if (foundCount > kMaxMeshesPerIteration) {
-          return;
-        }
-      }
-    }
-  }
-}
+void shiftedSplitting(MWC &prng, StripedTracker &miniheaps,
+                      const function<void(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept;
 }  // namespace method
 }  // namespace mesh
 

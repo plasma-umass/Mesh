@@ -312,4 +312,85 @@ void GlobalHeap::dumpStats(int level, bool beDetailed) const {
       _littleheaps[i].dumpStats(beDetailed);
   }
 }
+
+namespace method {
+
+void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, StripedTracker &miniheaps, internal::vector<MiniHeap *> &left,
+                                      internal::vector<MiniHeap *> &right) noexcept {
+  internal::vector<MiniHeap *> bucket = miniheaps.meshingCandidates(kOccupancyCutoff);
+
+  internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
+
+  for (size_t i = 0; i < bucket.size(); i++) {
+    auto mh = bucket[i];
+    if (!mh->isMeshingCandidate() || mh->fullness() >= kOccupancyCutoff) {
+      continue;
+    }
+
+    if (left.size() <= right.size()) {
+      left.push_back(mh);
+    } else {
+      right.push_back(mh);
+    }
+  }
+}
+
+void ATTRIBUTE_NEVER_INLINE
+shiftedSplitting(MWC &prng, StripedTracker &miniheaps,
+                 const function<void(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept {
+  constexpr size_t t = 64;
+
+  if (miniheaps.partialSize() == 0) {
+    return;
+  }
+
+  internal::vector<MiniHeap *> leftBucket{};   // mutable copy
+  internal::vector<MiniHeap *> rightBucket{};  // mutable copy
+
+  halfSplit(prng, miniheaps, leftBucket, rightBucket);
+
+  const auto leftSize = leftBucket.size();
+  const auto rightSize = rightBucket.size();
+
+  if (leftSize == 0 || rightSize == 0)
+    return;
+
+  constexpr size_t nBytes = 32;
+  const size_t limit = rightSize < t ? rightSize : t;
+  d_assert(nBytes == leftBucket[0]->bitmap().byteCount());
+
+  size_t foundCount = 0;
+  for (size_t j = 0; j < leftSize; j++) {
+    const size_t idxLeft = j;
+    size_t idxRight = j;
+    for (size_t i = 0; i < limit; i++, idxRight++) {
+      if (unlikely(idxRight >= rightSize)) {
+        idxRight %= rightSize;
+      }
+      auto h1 = leftBucket[idxLeft];
+      auto h2 = rightBucket[idxRight];
+
+      if (h1 == nullptr || h2 == nullptr)
+        continue;
+
+      const auto bitmap1 = h1->bitmap().bits();
+      const auto bitmap2 = h2->bitmap().bits();
+
+      const bool areMeshable = mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes);
+
+      if (unlikely(areMeshable)) {
+        std::pair<MiniHeap *, MiniHeap *> heaps{h1, h2};
+        meshFound(std::move(heaps));
+        leftBucket[idxLeft] = nullptr;
+        rightBucket[idxRight] = nullptr;
+        foundCount++;
+        if (foundCount > kMaxMeshesPerIteration) {
+          return;
+        }
+      }
+    }
+  }
+}
+
+}  // namespace method
 }  // namespace mesh
