@@ -3,9 +3,6 @@
 #ifndef MESH_MWC_H
 #define MESH_MWC_H
 
-#include <stdio.h>
-#include <iostream>
-
 #include "../common.h"
 //#include <assert.h>
 //#define d_assert assert
