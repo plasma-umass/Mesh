@@ -38,7 +38,6 @@ set(submodules
         src/vendor/gperftools
         src/vendor/Heap-Layers
         src/vendor/Hoard
-        test/atsy/atsy
         )
 foreach (submodule ${submodules})
     if(NOT EXISTS "${PROJECT_SOURCE_DIR}/${submodule}/.git")
