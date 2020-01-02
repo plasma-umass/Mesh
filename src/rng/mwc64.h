@@ -46,7 +46,8 @@ public:
       _value = MWC();
       _index = 0;
     }
-    auto v = ((uint64_t *)&_value)[_index];
+    // grab either the top or bottom 32-bits of the 64-bit _value
+    uint32_t v = ((uint32_t *)&_value)[_index];
     _index++;
     return v;
   }
