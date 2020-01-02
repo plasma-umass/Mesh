@@ -61,9 +61,6 @@ c.append('cflags', '-fno-builtin-malloc')
 c.append('cflags', '-fno-omit-frame-pointer')
 c.append('cflags', '-ffunction-sections')
 c.append('cflags', '-fdata-sections')
-c.append('cflags', '-Werror=implicit-function-declaration')
-c.append('cflags', '-Werror=implicit-int')
-c.append('cflags', '-Werror=pointer-sign')
 c.append('cflags', '-Werror=pointer-arith')
 
 if platform != 'darwin':
