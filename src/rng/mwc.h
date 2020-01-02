@@ -1,7 +1,7 @@
 // -*- C++ -*-
 
-#ifndef _MWC_H_
-#define _MWC_H_
+#ifndef MESH_MWC_H
+#define MESH_MWC_H
 
 #include <stdio.h>
 #include <iostream>

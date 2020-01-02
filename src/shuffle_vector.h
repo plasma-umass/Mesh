@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__SHUFFLE_VECTOR_H
-#define MESH__SHUFFLE_VECTOR_H
+#ifndef MESH_SHUFFLE_VECTOR_H
+#define MESH_SHUFFLE_VECTOR_H
 
 #include <iterator>
 #include <random>
@@ -284,4 +284,4 @@ static_assert(HL::gcd<sizeof(ShuffleVector), CACHELINE_SIZE>::value == CACHELINE
 // static_assert(sizeof(ShuffleVector) == 704, "ShuffleVector not expected size!");
 }  // namespace mesh
 
-#endif  // MESH__SHUFFLE_VECTOR_H
+#endif  // MESH_SHUFFLE_VECTOR_H

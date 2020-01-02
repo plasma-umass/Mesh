@@ -3,8 +3,8 @@
 // Use of this source code is governed by the Apache License,
 // Version 2.0, that can be found in the LICENSE file.
 
-#ifndef MESH__THREAD_LOCAL_HEAP_H
-#define MESH__THREAD_LOCAL_HEAP_H
+#ifndef MESH_THREAD_LOCAL_HEAP_H
+#define MESH_THREAD_LOCAL_HEAP_H
 
 #if !defined(_WIN32)
 #include <pthread.h>
@@ -247,4 +247,4 @@ protected:
 };
 }  // namespace mesh
 
-#endif  // MESH__THREAD_LOCAL_HEAP_H
+#endif  // MESH_THREAD_LOCAL_HEAP_H

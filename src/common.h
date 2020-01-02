@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__COMMON_H
-#define MESH__COMMON_H
+#ifndef MESH_COMMON_H
+#define MESH_COMMON_H
 
 #include <cstddef>
 #include <cstdint>
@@ -360,4 +360,4 @@ public:
 };
 }  // namespace mesh
 
-#endif  // MESH__COMMON_H
+#endif  // MESH_COMMON_H

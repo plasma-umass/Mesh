@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__MINI_HEAP_H
-#define MESH__MINI_HEAP_H
+#ifndef MESH_MINI_HEAP_H
+#define MESH_MINI_HEAP_H
 
 #include <pthread.h>
 
@@ -475,4 +475,4 @@ static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
 static_assert(sizeof(MiniHeapArray) == 64 * sizeof(void *), "MiniHeapArray too big!");
 }  // namespace mesh
 
-#endif  // MESH__MINI_HEAP_H
+#endif  // MESH_MINI_HEAP_H

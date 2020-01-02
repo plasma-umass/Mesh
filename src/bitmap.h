@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__BITMAP_H
-#define MESH__BITMAP_H
+#ifndef MESH_BITMAP_H
+#define MESH_BITMAP_H
 
 #include <atomic>
 #include <cstdint>
@@ -584,4 +584,4 @@ static_assert(sizeof(RelaxedBitmap) == sizeof(size_t) * 2, "Bitmap unexpected si
 }  // namespace internal
 }  // namespace mesh
 
-#endif  // MESH__BITMAP_H
+#endif  // MESH_BITMAP_H

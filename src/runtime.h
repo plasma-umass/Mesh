@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__RUNTIME_H
-#define MESH__RUNTIME_H
+#ifndef MESH_RUNTIME_H
+#define MESH_RUNTIME_H
 
 #include <pthread.h>
 #include <signal.h>  // for stack_t
@@ -111,4 +111,4 @@ inline Runtime &runtime() {
 }
 }  // namespace mesh
 
-#endif  // MESH__RUNTIME_H
+#endif  // MESH_RUNTIME_H

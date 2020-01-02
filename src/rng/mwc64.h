@@ -1,7 +1,7 @@
 // -*- C++ -*-
 
-#ifndef MWC64_H_
-#define MWC64_H_
+#ifndef MESH_MWC64_H
+#define MESH_MWC64_H
 
 #include <stdint.h>
 

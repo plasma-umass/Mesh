@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__MESHING_H
-#define MESH__MESHING_H
+#ifndef MESH_MESHING_H
+#define MESH_MESHING_H
 
 #include <algorithm>
 #include <atomic>
@@ -58,4 +58,4 @@ void shiftedSplitting(MWC &prng, StripedTracker &miniheaps,
 }  // namespace method
 }  // namespace mesh
 
-#endif  // MESH__MESHING_H
+#endif  // MESH_MESHING_H

@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__MEASURE_RSS_H
-#define MESH__MEASURE_RSS_H
+#ifndef MESH_MEASURE_RSS_H
+#define MESH_MEASURE_RSS_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,4 +17,4 @@ int get_rss_kb(void);
 }
 #endif
 
-#endif  // MESH__MEASURE_RSS_H
+#endif  // MESH_MEASURE_RSS_H

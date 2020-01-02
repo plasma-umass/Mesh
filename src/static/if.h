@@ -8,8 +8,8 @@
  */
 
 #pragma once
-#ifndef MESH__STATIC__IF_H
-#define MESH__STATIC__IF_H
+#ifndef MESH_STATIC__IF_H
+#define MESH_STATIC__IF_H
 
 template <class TYPE>
 TYPE constexpr staticif(bool v, TYPE a, TYPE b) {

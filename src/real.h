@@ -11,8 +11,8 @@
 #endif
 
 #pragma once
-#ifndef MESH__REAL_H
-#define MESH__REAL_H
+#ifndef MESH_REAL_H
+#define MESH_REAL_H
 
 #define DECLARE_REAL(name) extern decltype(::name) *name
 
@@ -33,4 +33,4 @@ DECLARE_REAL(sigprocmask);
 }  // namespace real
 }  // namespace mesh
 
-#endif  // MESH__REAL_H
+#endif  // MESH_REAL_H

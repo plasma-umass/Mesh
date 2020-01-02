@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__CHEAP_HEAP_H
-#define MESH__CHEAP_HEAP_H
+#ifndef MESH_CHEAP_HEAP_H
+#define MESH_CHEAP_HEAP_H
 
 #include "internal.h"
 
@@ -168,4 +168,4 @@ protected:
 };
 }  // namespace mesh
 
-#endif  // MESH__CHEAP_HEAP_H
+#endif  // MESH_CHEAP_HEAP_H

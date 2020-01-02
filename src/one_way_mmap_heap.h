@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__ONE_WAY_MMAP_HEAP_H
-#define MESH__ONE_WAY_MMAP_HEAP_H
+#ifndef MESH_ONE_WAY_MMAP_HEAP_H
+#define MESH_ONE_WAY_MMAP_HEAP_H
 
 #if defined(_WIN32)
 #error "TODO"
@@ -75,4 +75,4 @@ public:
 
 }  // namespace mesh
 
-#endif  // MESH__ONE_WAY_MMAP_HEAP_H
+#endif  // MESH_ONE_WAY_MMAP_HEAP_H

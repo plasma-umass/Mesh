@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__STRIPED_TRACKER_H
-#define MESH__STRIPED_TRACKER_H
+#ifndef MESH_STRIPED_TRACKER_H
+#define MESH_STRIPED_TRACKER_H
 
 #include <mutex>
 
@@ -385,4 +385,4 @@ private:
 };
 }  // namespace mesh
 
-#endif  // MESH__STRIPED_TRACKER_H
+#endif  // MESH_STRIPED_TRACKER_H

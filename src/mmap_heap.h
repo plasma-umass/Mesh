@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__MMAP_HEAP_H
-#define MESH__MMAP_HEAP_H
+#ifndef MESH_MMAP_HEAP_H
+#define MESH_MMAP_HEAP_H
 
 #if defined(_WIN32)
 #error "TODO"
@@ -101,4 +101,4 @@ protected:
 };
 }  // namespace mesh
 
-#endif  // MESH__MESH_MMAP_H
+#endif  // MESH_MESH_MMAP_H

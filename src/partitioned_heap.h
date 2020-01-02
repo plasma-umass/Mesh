@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__PARTITIONED_HEAP_H
-#define MESH__PARTITIONED_HEAP_H
+#ifndef MESH_PARTITIONED_HEAP_H
+#define MESH_PARTITIONED_HEAP_H
 
 // we can only include "common.h", as the partitioned heap is used as
 // the allocator-internal heap in "internal.h"
@@ -101,4 +101,4 @@ private:
 };
 }  // namespace mesh
 
-#endif  // MESH__PARTITIONED_HEAP_H
+#endif  // MESH_PARTITIONED_HEAP_H

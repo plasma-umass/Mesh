@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__FIXED_ARRAY_H
-#define MESH__FIXED_ARRAY_H
+#ifndef MESH_FIXED_ARRAY_H
+#define MESH_FIXED_ARRAY_H
 
 #include <iterator>
 
@@ -121,4 +121,4 @@ private:
 
 }  // namespace mesh
 
-#endif  // MESH__FIXED_ARRAY_H
+#endif  // MESH_FIXED_ARRAY_H

@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__INTERNAL_H
-#define MESH__INTERNAL_H
+#ifndef MESH_INTERNAL_H
+#define MESH_INTERNAL_H
 
 #ifdef __linux__
 #include <sys/syscall.h>
@@ -306,4 +306,4 @@ static_assert(sizeof(BinToken) == 4, "BinToken too big!");
 }  // namespace internal
 }  // namespace mesh
 
-#endif  // MESH__INTERNAL_H
+#endif  // MESH_INTERNAL_H

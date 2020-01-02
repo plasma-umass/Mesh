@@ -8,8 +8,8 @@
  */
 
 #pragma once
-#ifndef MESH__STATIC__LOG_H
-#define MESH__STATIC__LOG_H
+#ifndef MESH_STATIC__LOG_H
+#define MESH_STATIC__LOG_H
 
 #include "if.h"
 

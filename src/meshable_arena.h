@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__MESHABLE_ARENA_H
-#define MESH__MESHABLE_ARENA_H
+#ifndef MESH_MESHABLE_ARENA_H
+#define MESH_MESHABLE_ARENA_H
 
 #if defined(_WIN32)
 #error "TODO"
@@ -305,4 +305,4 @@ private:
 };
 }  // namespace mesh
 
-#endif  // MESH__MESHABLE_ARENA_H
+#endif  // MESH_MESHABLE_ARENA_H

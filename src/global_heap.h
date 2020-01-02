@@ -4,8 +4,8 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #pragma once
-#ifndef MESH__GLOBAL_HEAP_H
-#define MESH__GLOBAL_HEAP_H
+#ifndef MESH_GLOBAL_HEAP_H
+#define MESH_GLOBAL_HEAP_H
 
 #include <algorithm>
 #include <mutex>
@@ -423,4 +423,4 @@ private:
 };
 }  // namespace mesh
 
-#endif  // MESH__GLOBAL_HEAP_H
+#endif  // MESH_GLOBAL_HEAP_H
