@@ -26,7 +26,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <functional>
-#include <map>
 #include <mutex>
 #include <random>
 #include <unordered_map>
@@ -46,7 +45,7 @@
 #endif
 
 namespace mesh {
-    
+
 static constexpr bool kMeshingEnabled = MESHING_ENABLED == 1;
 
 #if defined(_WIN32)

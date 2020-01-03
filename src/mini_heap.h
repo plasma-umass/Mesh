@@ -14,11 +14,9 @@
 
 #include "bitmap.h"
 #include "fixed_array.h"
-#include "internal.h"
-
-#include "rng/mwc.h"
-
 #include "heaplayers.h"
+#include "internal.h"
+#include "rng/mwc.h"
 
 namespace mesh {
 
@@ -154,8 +152,8 @@ public:
   }
 
   void printOccupancy() const {
-    mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"mesh-count\": %d, \"bitmap\": \"%s\"}\n",
-                this, objectSize(), maxCount(), meshCount(), _bitmap.to_string(maxCount()).c_str());
+    // mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"mesh-count\": %d, \"bitmap\": \"%s\"}\n",
+    //            this, objectSize(), maxCount(), meshCount(), _bitmap.to_string(maxCount()).c_str());
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *arenaBegin, void *ptr) {
@@ -380,7 +378,7 @@ public:
     mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, spans: %zu)\t%p-%p\n", this, objectSize(),
                 maxCount(), heapPages, inUseCount, meshCount, _span.offset * kPageSize,
                 _span.offset * kPageSize + spanSize());
-    mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
+    // mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
   }
 
   // this only works for unmeshed miniheaps

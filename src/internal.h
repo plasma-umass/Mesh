@@ -199,7 +199,7 @@ using unordered_set = std::unordered_set<K, hash<K>, equal_to<K>, STLAllocator<K
 template <typename K, typename V>
 using map = std::map<K, V, std::less<K>, STLAllocator<pair<const K, V>, Heap>>;
 
-typedef std::basic_string<char, std::char_traits<char>, STLAllocator<char, Heap>> string;
+// typedef std::basic_string<char, std::char_traits<char>, STLAllocator<char, Heap>> string;
 
 template <typename T>
 using vector = std::vector<T, STLAllocator<T, Heap>>;
