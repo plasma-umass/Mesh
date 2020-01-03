@@ -1,14 +1,7 @@
 #Include current folder to guarantee headers are found by files
 include_directories(./)
 include_directories(./vendor/Heap-Layers)
-include_directories(./vendor/AlignedMalloc)
 
-
-#Create a set of sources for cross platform aligned malloc
-set(aligned_malloc_src
-	vendor/AlignedMalloc/aligned_free.c
-	vendor/AlignedMalloc/aligned_malloc.c
-	)
 #Add a target to fragmenter executable
 add_executable(fragmenter fragmenter.cc measure_rss.cc)
 target_link_libraries(fragmenter PRIVATE -pthread)

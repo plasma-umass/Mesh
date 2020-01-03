@@ -53,7 +53,7 @@ if system() == 'Linux':
 if modern_cpu:
     c.append('cflags', '-march=westmere')
     c.append('ldflags', '-march=westmere')
-    c.append('cflags', '-mavx')
+    c.append('cflags', '-mavx2')
 
 c.append('cflags', '-fPIC')
 c.append('cflags', '-pipe')

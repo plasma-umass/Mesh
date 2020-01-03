@@ -32,12 +32,11 @@ endif()
 
 #Check if submodules were downloaded
 set(submodules
-	src/vendor/AlignedMalloc
-        src/vendor/googletest
-        src/vendor/gperftools
-        src/vendor/Heap-Layers
-        src/vendor/Hoard
-        )
+    src/vendor/googletest
+    src/vendor/gperftools
+    src/vendor/Heap-Layers
+    src/vendor/Hoard
+)
 foreach (submodule ${submodules})
     if(NOT EXISTS "${PROJECT_SOURCE_DIR}/${submodule}/.git")
         #Split path to submodule folders to get their name
