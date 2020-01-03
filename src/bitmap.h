@@ -368,7 +368,6 @@ public:
   explicit BitmapBase(size_t bitCount, char *backingMemory, bool clear = true) : Super(bitCount, backingMemory, clear) {
   }
 
-#if 0
   explicit BitmapBase(const std::string &str) : Super(str.length()) {
     for (size_t i = 0; i < str.length(); ++i) {
       char c = str[i];
@@ -386,13 +385,11 @@ public:
         tryToSet(i);
     }
   }
-#endif
 
   BitmapBase(Bitmap &&rhs) : Super(rhs.bitCount()) {
     rhs.Super::nullBits();
   }
 
-#if 0
   internal::string to_string(ssize_t bitCount = -1) const {
     if (bitCount == -1)
       bitCount = this->bitCount();
@@ -406,7 +403,6 @@ public:
 
     return s;
   }
-#endif
 
   // number of bytes used to store the bitmap -- rounds up to nearest sizeof(size_t)
   inline size_t byteCount() const {
