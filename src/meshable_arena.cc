@@ -451,8 +451,8 @@ void MeshableArena::scavenge(bool force) {
   for (size_t i = 0; i < bitmap.byteCount() / sizeof(size_t); i++) {
     if (bits1[i] != bits2[i]) {
       debug("bitmaps don't match %zu:\n", i);
-      debug("\t%s\n", bitmap.to_string().c_str());
-      debug("\t%s\n", newBitmap.to_string().c_str());
+      // debug("\t%s\n", bitmap.to_string().c_str());
+      // debug("\t%s\n", newBitmap.to_string().c_str());
       hard_assert(false);
     }
   }
