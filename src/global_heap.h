@@ -141,6 +141,13 @@ public:
   }
 
   inline void *pageAlignedAlloc(size_t pageAlignment, size_t pageCount) {
+    // if given a very large allocation size (e.g. (uint64_t)-8), it is possible
+    // the pageCount calculation overflowed.  An allocation that big is impossible
+    // to satisfy anyway, so just fail early.
+    if (unlikely(pageCount == 0)) {
+      return nullptr;
+    }
+
     lock_guard<mutex> lock(_miniheapLock);
 
     MiniHeap *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * kPageSize, pageAlignment);

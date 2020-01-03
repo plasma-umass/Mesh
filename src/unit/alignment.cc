@@ -41,3 +41,15 @@ TEST(Alignment, NaturalAlignment) {
   heap->releaseAll();
   mesh::runtime().heap().flushAllBins();
 }
+
+TEST(Alignment, NonOverlapping) {
+  auto heap = ThreadLocalHeap::GetHeap();
+
+  const uintptr_t a = reinterpret_cast<uintptr_t>(heap->malloc(-8));
+  const uintptr_t b = reinterpret_cast<uintptr_t>(heap->malloc(-8));
+
+  // we should return nullptr for crazy allocations like this.
+  // Fixes #62
+  ASSERT_EQ(a, NULL);
+  ASSERT_EQ(b, NULL);
+}
