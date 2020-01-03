@@ -150,6 +150,7 @@ using std::unique_lock;
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#define ATTRIBUTE_UNUSED __attribute__((unused))
 #define ATTRIBUTE_PACKED __attribute__((packed))
 #define ATTRIBUTE_NEVER_INLINE __attribute__((noinline))
 #define ATTRIBUTE_ALWAYS_INLINE __attribute__((always_inline))
@@ -198,6 +199,9 @@ namespace mesh {
 void debug(const char *fmt, ...);
 
 namespace internal {
+// assertions that don't attempt to recursively malloc
+void __attribute__((noreturn))
+__mesh_assert_fail(const char *assertion, const char *file, const char *func, int line, const char *fmt, ...);
 
 inline static mutex *getSeedMutex() {
   static char muBuf[sizeof(mutex)];
@@ -216,6 +220,7 @@ inline mt19937_64 *initSeed() {
   int fd = open("/dev/urandom", O_RDONLY);
   unsigned long buf;
   auto sz = read(fd, (void *)&buf, sizeof(unsigned long));
+  hard_assert(sz == sizeof(unsigned long));
   //  std::random_device rd;
   // return new (mtBuf) std::mt19937_64(rd());
   return new (mtBuf) std::mt19937_64(buf);
@@ -232,10 +237,6 @@ inline uint64_t seed() {
 
   return (*mt)();
 }
-
-// assertions that don't attempt to recursively malloc
-void __attribute__((noreturn))
-__mesh_assert_fail(const char *assertion, const char *file, const char *func, int line, const char *fmt, ...);
 }  // namespace internal
 
 namespace time {

@@ -18,7 +18,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <map>
 #endif
 
 #include "common.h"
@@ -65,11 +64,11 @@ public:
     return map(sz, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1);
   }
 
-  inline size_t getSize(void *ptr) const {
+  inline size_t getSize(void *ATTRIBUTE_UNUSED ptr) const {
     return 0;
   }
 
-  inline void free(void *ptr) {
+  inline void free(void *ATTRIBUTE_UNUSED ptr) {
   }
 };
 

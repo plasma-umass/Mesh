@@ -8,7 +8,6 @@
 #define MESH_CHEAP_HEAP_H
 
 #include "internal.h"
-
 #include "one_way_mmap_heap.h"
 
 namespace mesh {
@@ -50,7 +49,7 @@ public:
     return ptr;
   }
 
-  constexpr size_t getSize(void *ptr) const {
+  constexpr size_t getSize(void *ATTRIBUTE_UNUSED ptr) const {
     return allocSize;
   }
 
@@ -126,7 +125,7 @@ public:
     return ptr;
   }
 
-  size_t getSize(void *ptr) const {
+  size_t getSize(void *ATTRIBUTE_UNUSED ptr) const {
     return _allocSize;
   }
 

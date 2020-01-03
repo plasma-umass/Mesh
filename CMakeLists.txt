@@ -183,16 +183,16 @@ add_definitions(-fPIC
 #Language specific definitions
 #Quotes for string and backslashes to escape newline.
 set(custom_c_flags
-     "-Werror=implicit-function-declaration\
-      -Werror=implicit-int\
-      -Werror=pointer-sign\
+     "-Werror=implicit-function-declaration \
+      -Werror=implicit-int \
+      -Werror=pointer-sign \
      ")
 set(custom_cxx_flags
-    "-Wno-unused-parameter\
-     -Wno-unused-variable\
-     -Woverloaded-virtual\
-     -Wno-ctor-dtor-privacy\
-     -Winvalid-offsetof\
+    "-Wno-unused-parameter \
+     -Wno-unused-variable \
+     -Woverloaded-virtual \
+     -Wno-ctor-dtor-privacy \
+     -Winvalid-offsetof \
     ")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${custom_c_flags}")
