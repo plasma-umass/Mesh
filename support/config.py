@@ -132,7 +132,7 @@ class ConfigBuilder:
 
         env = self.env
         path = run_cmd('which %s' % (program))
-        if len(path) is 0:
+        if len(path) == 0:
             stderr.write('required program "%s" not found.\n' % program)
             exit(1)
 
