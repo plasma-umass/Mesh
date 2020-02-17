@@ -130,11 +130,11 @@ set(test_filenames
         larson.cc
         local-alloc.c
         thread.cc
+        userfaultfd-kernel-copy.cc
     )
 
 set (libraries_to_link
         -pthread
-        mesh
         )
 
 foreach(testfile ${test_filenames})
