@@ -47,15 +47,15 @@ public:
 
   inline uint32_t maxCount() const {
     // XXX: does this assume little endian?
-    return (_flags.load(std::memory_order_relaxed) >> MaxCountShift) & 0x1ff;
+    return (_flags.load(std::memory_order_seq_cst) >> MaxCountShift) & 0x1ff;
   }
 
   inline uint32_t sizeClass() const {
-    return (_flags.load(std::memory_order_relaxed) >> SizeClassShift) & 0xff;
+    return (_flags.load(std::memory_order_seq_cst) >> SizeClassShift) & 0xff;
   }
 
   inline uint8_t svOffset() const {
-    return (_flags.load(std::memory_order_relaxed) >> ShuffleVectorOffsetShift) & 0xff;
+    return (_flags.load(std::memory_order_seq_cst) >> ShuffleVectorOffsetShift) & 0xff;
   }
 
   inline void setSvOffset(uint8_t off) {

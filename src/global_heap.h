@@ -30,7 +30,7 @@ public:
   }
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE current() const noexcept {
-    return _epoch.load(std::memory_order::memory_order_acquire);
+    return _epoch.load(std::memory_order::memory_order_seq_cst);
   }
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE isSame(size_t startEpoch) const noexcept {
@@ -38,22 +38,18 @@ public:
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE lock() noexcept {
-#ifndef NDEBUG
     // make sure that the previous epoch was even
-    const auto old = _epoch.fetch_add(1, std::memory_order::memory_order_release);
-    d_assert(old % 2 == 0);
-#else
-    _epoch.fetch_add(1, std::memory_order::memory_order_release);
-#endif
+    const auto old = _epoch.fetch_add(1, std::memory_order::memory_order_seq_cst);
+    hard_assert(old % 2 == 0);
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE unlock() noexcept {
 #ifndef NDEBUG
     // make sure that the previous epoch was odd
-    const auto old = _epoch.fetch_add(1, std::memory_order::memory_order_release);
+    const auto old = _epoch.fetch_add(1, std::memory_order::memory_order_seq_cst);
     d_assert(old % 2 == 1);
 #else
-    _epoch.fetch_add(1, std::memory_order::memory_order_release);
+    _epoch.fetch_add(1, std::memory_order::memory_order_seq_cst);
 #endif
   }
 
@@ -124,14 +120,14 @@ public:
     d_assert(spanBegin != nullptr);
     d_assert((reinterpret_cast<uintptr_t>(spanBegin) / kPageSize) % pageAlignment == 0);
 
-    const auto miniheapID = MiniHeapID{_mhAllocator.offsetFor(buf)};
-    Super::trackMiniHeap(span, miniheapID);
-
     MiniHeap *mh = new (buf) MiniHeap(arenaBegin(), span, objectCount, objectSize);
 
     if (sizeClass >= 0) {
       trackMiniheapLocked(mh);
     }
+
+    const auto miniheapID = MiniHeapID{_mhAllocator.offsetFor(buf)};
+    Super::trackMiniHeap(span, miniheapID);
 
     _miniheapCount++;
     _stats.mhAllocCount++;
@@ -271,7 +267,7 @@ public:
     }
 
     mh->MiniHeap::~MiniHeap();
-    // memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
+    memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
     _mhAllocator.free(mh);
     _miniheapCount--;
   }
