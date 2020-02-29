@@ -83,11 +83,11 @@ public:
 
   inline void *ATTRIBUTE_ALWAYS_INLINE miniheapForArenaOffset(Offset arenaOff) const {
     const MiniHeapID mhOff = _mhIndex[arenaOff].load(std::memory_order_acquire);
-    d_assert(mhOff.hasValue());
-    const auto result = _mhAllocator.ptrFromOffset(mhOff.value());
-    // debug("lookup ok for (%zu) %zu %p\n", arenaOff, mhOff, result);
+    if (likely(mhOff.hasValue())) {
+      return _mhAllocator.ptrFromOffset(mhOff.value());
+    }
 
-    return result;
+    return nullptr;
   }
 
   inline void *ATTRIBUTE_ALWAYS_INLINE lookupMiniheap(const void *ptr) const {
