@@ -377,9 +377,9 @@ public:
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = this->inUseCount();
     const size_t meshCount = this->meshCount();
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, spans: %zu)\t%p-%p\n", this, objectSize(),
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, spans: %zu)\t%p-%p\tBinToken{valid:%d flagOk:%d, bin:%u off:%u}\n", this, objectSize(),
                 maxCount(), heapPages, inUseCount, meshCount, _span.offset * kPageSize,
-                _span.offset * kPageSize + spanSize());
+                _span.offset * kPageSize + spanSize(), _token.valid(), _token.flagOk(), _token.bin(), _token.off());
     mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
   }
 
