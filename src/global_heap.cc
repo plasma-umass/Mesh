@@ -76,7 +76,11 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
   auto isAttached = mh->isAttached();
   auto sizeClass = mh->sizeClass();
 
-  _lastMeshEffective.store(1, std::memory_order::memory_order_release);
+  // try to avoid storing to this cacheline; the branch is worth it to avoid
+  // multi-threaded contention
+  if (_lastMeshEffective.load(std::memory_order::memory_order_acquire) == 0) {
+    _lastMeshEffective.store(1, std::memory_order::memory_order_release);
+  }
   mh->free(arenaBegin(), ptr);
 
   auto remaining = mh->inUseCount();
@@ -91,12 +95,12 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
     // and now.  synchronize to avoid races
     lock_guard<mutex> lock(_miniheapLock);
 
-    if (unlikely(mh->isMeshed())) {
-      mh = miniheapForWithEpoch(ptr, startEpoch);
+    const auto origMh = mh;
+    mh = miniheapForWithEpoch(ptr, startEpoch);
+
+    if (unlikely(mh != origMh)) {
       hard_assert(!mh->isMeshed());
       mh->free(arenaBegin(), ptr);
-    } else {
-      startEpoch = _meshEpoch.current();
     }
 
     remaining = mh->inUseCount();

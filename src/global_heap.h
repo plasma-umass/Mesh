@@ -407,20 +407,23 @@ private:
   void meshAllSizeClassesLocked();
 
   const size_t _maxObjectSize;
-  atomic_size_t _lastMeshEffective{0};
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};
-  EpochLock _meshEpoch{};
+  std::chrono::milliseconds _meshPeriodMs{kMeshPeriodMs};
 
-  // always accessed with the mhRWLock exclusively locked
-  size_t _miniheapCount{0};
+  atomic_size_t ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _lastMeshEffective{0};
 
+  // we want this on its own cacheline
+  EpochLock ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _meshEpoch{};
+
+  // always accessed with the mhRWLock exclusively locked.  cachline
+  // aligned to avoid sharing cacheline with _meshEpoch
+  size_t  ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _miniheapCount{0};
   StripedTracker _littleheaps[kNumBins];
 
   mutable mutex _miniheapLock{};
 
   GlobalHeapStats _stats{};
 
-  std::chrono::milliseconds _meshPeriodMs{kMeshPeriodMs};
   // XXX: should be atomic, but has exception spec?
   time::time_point _lastMesh;
 };
