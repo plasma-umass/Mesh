@@ -123,13 +123,69 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
     // make sure to update the littleheaps
     if (!isAttached && (remaining == 0 || binToken.bin() == internal::bintoken::FlagFull)) {
       lock_guard<mutex> lock(_miniheapLock);
+
+      // there are 2 ways we could have raced with meshing:
+      //
+      // 1. when writing to the MiniHeap's bitmap (which we check for
+      //    above with the !_meshEpoch.isSame(current)).  this is what
+      //    the outer if statement here takes care of.
+      //
+      // 2. this thread losing the race with acquiring _miniheapLock
+      //    (what we care about here).  for thi case, we know a) our
+      //    write to the MiniHeap's bitmap succeeded (or we would be
+      //    in the other side of the outer if statement), and b) our
+      //    MiniHeap could have been freed from under us while we were
+      //    waiting for this lock (if e.g. remaining == 0, a mesh
+      //    happened on another thread, and the other thread notices
+      //    this MiniHeap is empty (b.c. an empty MiniHeap meshes with
+      //    every other MiniHeap).  We need to be careful here.
+
+      const auto origMh = mh;
+      // we have to reload the miniheap here because of the
+      // just-described possible race
+      mh = miniheapForWithEpoch(ptr, startEpoch);
+
+      // if the MiniHeap associated with the ptr we freed has changed,
+      // there are a few possibilities.
+      if (unlikely(mh != origMh)) {
+        // another thread took care of freeing this MiniHeap for us,
+        // super!  nothing else to do.
+        if (mh == nullptr) {
+          return;
+        }
+
+        // check to make sure the new MiniHeap is related (via a
+        // meshing relationship) to the one we had before grabbing the
+        // lock.
+        auto origFound = false;
+        mh->forEachMeshed([&](const MiniHeap *eachMh) {
+          const auto found = eachMh == origMh;
+          origFound = found;
+          return found;
+        });
+
+        if (!origFound) {
+          // the original miniheap was freed and a new (unrelated)
+          // Miniheap allocated for the address space.  nothing else
+          // for us to do.
+          return;
+        } else {
+          // our MiniHeap was meshed into another one; lets reload
+          // remaining count.
+          remaining = mh->inUseCount();
+
+          // TODO: we should really store 'created epoch' on mh and
+          // check those are the same here, too.
+        }
+      }
+
       bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
       mh = nullptr;
       if (unlikely(shouldFlush)) {
         flushBinLocked(sizeClass);
       }
     } else {
-      shouldMesh = true;
+      shouldMesh = !isAttached;
     }
   }
 
@@ -196,6 +252,9 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
 }
 
 void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
+  // mesh::debug("mesh dst:%p <- src:%p\n", dst, src);
+  // dst->dumpDebug();
+  // src->dumpDebug();
   const size_t dstSpanSize = dst->spanSize();
   const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart(arenaBegin()));
 
@@ -284,10 +343,35 @@ void GlobalHeap::meshAllSizeClassesLocked() {
       mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
     }
 
-    meshLocked(std::get<0>(mergeSet), std::get<1>(mergeSet));
+    auto dst = std::get<0>(mergeSet);
+    auto src = std::get<1>(mergeSet);
+
+    // final check: if one of these miniheaps is now empty
+    // (e.g. because a parallel thread is freeing a bunch of objects
+    // in a row) save ourselves some work by just tracking this as a
+    // regular postFree
+    auto oneEmpty = false;
+    if (dst->inUseCount() == 0) {
+      _littleheaps[dst->sizeClass()].postFree(dst, 0);
+      oneEmpty = true;
+    }
+    if (src->inUseCount() == 0) {
+      _littleheaps[src->sizeClass()].postFree(src, 0);
+      oneEmpty = true;
+    }
+
+    if (!oneEmpty) {
+      meshLocked(dst, src);
+    }
   }
 
-  Super::scavenge(false);
+  // flush things once more (since we may have called postFree instead
+  // of mesh above)
+  for (size_t i = 0; i < kNumBins; i++) {
+    flushBinLocked(i);
+  }
+
+  Super::scavenge(true);
 
   _lastMesh = time::now();
 
