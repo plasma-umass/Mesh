@@ -323,7 +323,7 @@ private:
   // must be called with _mutex held
   void removeFrom(internal::vector<MiniHeap *> &vec, MiniHeap *mh) {
     // a bug if we try to remove a miniheap from an empty vector
-    d_assert(vec.size() > 0);
+    hard_assert(vec.size() > 0);
 
     const size_t off = mh->getBinToken().off();
     const size_t endOff = vec.size() - 1;
