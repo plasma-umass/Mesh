@@ -466,10 +466,16 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
   d_assert(sz / CPUInfo::PageSize > 0);
   d_assert(sz % CPUInfo::PageSize == 0);
 
+  // we madvise(MADV_DONTNEED) elsewhere; this function is only needed
+  // when our heap is a shared mapping
+  if (!kMeshingEnabled) {
+    return;
+  }
+
   const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
 #ifndef __APPLE__
     int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
-    d_assert(result == 0);
+    d_assert_msg(result == 0, "result(fd %d): %d errno %d (%s)\n", _fd, result, errno, strerror(errno));
 #else
     #warning macOS version of fallocate goes here
     fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0,(long long) sz, 0};
