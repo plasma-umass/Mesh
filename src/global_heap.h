@@ -148,7 +148,7 @@ public:
 
     MiniHeap *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * kPageSize, pageAlignment);
 
-    d_assert(mh->maxCount() == 1);
+    d_assert(mh->isLargeAlloc());
     d_assert(mh->spanSize() == pageCount * kPageSize);
     // d_assert(mh->objectSize() == pageCount * kPageSize);
 

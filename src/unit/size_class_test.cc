@@ -59,5 +59,8 @@ TEST(SizeClass, Reciprocal) {
       volatile const size_t off2 = j / objectSize;
       ASSERT_TRUE(off == off2);
     }
+
+    const size_t newObjectSize = __builtin_roundf(1 / recip);
+    ASSERT_TRUE(newObjectSize == objectSize);
   }
 }

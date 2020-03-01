@@ -125,7 +125,6 @@ public:
       : _bitmap(objectCount),
         _span(span),
         _flags(objectCount, objectCount > 1 ? SizeMap::SizeClass(objectSize) : 1, 0),
-        _objectSize(objectSize),
         _objectSizeReciprocal(1.0 / (float)objectSize) {
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
 
@@ -185,6 +184,7 @@ public:
 
     src->setMeshed();
     const auto srcSpan = src->getSpanStart(arenaBegin);
+    const auto objectSize = this->objectSize();
 
     // for each object in src, copy it to our backing span + update
     // our bitmap and in-use count
@@ -192,12 +192,12 @@ public:
       d_assert(off < maxCount());
       d_assert(!_bitmap.isSet(off));
 
-      void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize());
+      void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize);
       // need to ensure we update the bitmap and in-use count
       void *dstObject = mallocAt(arenaBegin, off);
       // debug("meshing: %zu (%p <- %p, %zu)\n", off, dstObject, srcObject, objectSize());
       d_assert(dstObject != nullptr);
-      memcpy(dstObject, srcObject, objectSize());
+      memcpy(dstObject, srcObject, objectSize);
       // debug("\t'%s'\n", dstObject);
       // debug("\t'%s'\n", srcObject);
       src->freeOff(off);
@@ -214,8 +214,18 @@ public:
     return _flags.maxCount();
   }
 
+  inline bool ATTRIBUTE_ALWAYS_INLINE isLargeAlloc() const {
+    return maxCount() == 1;
+  }
+
   inline size_t objectSize() const {
-    return _objectSize;
+    if (likely(!isLargeAlloc())) {
+      // this doesn't handle all the corner cases of roundf(3),
+      // but it does work for all of our small object size classes
+      return static_cast<size_t>(1 / _objectSizeReciprocal + 0.5);
+    } else {
+      return _span.length * kPageSize;
+    }
   }
 
   inline int sizeClass() const {
@@ -391,11 +401,6 @@ public:
     d_assert(span != 0);
 
     const size_t off = (ptrval - span) * _objectSizeReciprocal;
-#ifndef NDEBUG
-    const size_t off2 = (ptrval - span) / _objectSize;
-    hard_assert_msg(off == off2, "%zu != %zu", off, off2);
-#endif
-
     d_assert(off < maxCount());
 
     return off;
@@ -407,11 +412,6 @@ public:
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
     const size_t off = (ptrval - span) * _objectSizeReciprocal;
-#ifndef NDEBUG
-    const size_t off2 = (ptrval - span) / _objectSize;
-    hard_assert_msg(off == off2, "%zu != %zu", off, off2);
-#endif
-
     d_assert(off < maxCount());
 
     return off;
@@ -462,7 +462,7 @@ protected:
   atomic<pid_t> _current{0};          // 4        40
   const Span _span;                   // 8        48
   Flags _flags;                       // 4        52
-  const uint32_t _objectSize;         // 4        56
+  const uint32_t _UNUSED{};           // 4        56
   const float _objectSizeReciprocal;  // 4        60
   MiniHeapID _nextMiniHeap{};         // 4        64
 };

@@ -64,7 +64,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
   // trigger meshing, because they are multiples of the page size.
   // This can also include, for example, single page allocations w/
   // 16KB alignment.
-  if (mh->maxCount() == 1) {
+  if (mh->isLargeAlloc()) {
     lock_guard<mutex> lock(_miniheapLock);
     freeMiniheapLocked(mh, false);
     return;
