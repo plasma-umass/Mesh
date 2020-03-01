@@ -57,7 +57,7 @@ static constexpr int kMapShared = kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | M
 
 static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;
-static constexpr size_t kClassSizesMax = 96;
+static constexpr size_t kClassSizesMax = 25;
 static constexpr size_t kAlignment = 8;
 static constexpr int kMinAlign = 16;
 static constexpr uint64_t kPageSize = 4096;

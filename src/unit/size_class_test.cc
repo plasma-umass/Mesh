@@ -45,3 +45,19 @@ TEST(SizeClass, PowerOfTwo) {
   pow2Roundtrip(16);
   pow2Roundtrip(32);
 }
+
+TEST(SizeClass, Reciprocal) {
+  for (size_t i = 0; i < kClassSizesMax; i++) {
+    volatile const size_t objectSize = SizeMap::class_to_size(i);
+    // volatile to avoid the compiler compiling it away
+    volatile const float recip = 1.0 / (float)objectSize;
+
+    for (size_t j = 0; j <= kPageSize; j += 8) {
+      // we depend on this floating point calcuation always being
+      // equivalent to the integer division operation
+      volatile const size_t off = j * recip;
+      volatile const size_t off2 = j / objectSize;
+      ASSERT_TRUE(off == off2);
+    }
+  }
+}
