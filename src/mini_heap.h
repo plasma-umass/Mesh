@@ -28,21 +28,45 @@ class Flags {
 private:
   DISALLOW_COPY_AND_ASSIGN(Flags);
 
-  static inline constexpr uint32_t ATTRIBUTE_ALWAYS_INLINE getMask(uint32_t pos) {
+  static inline constexpr uint32_t ATTRIBUTE_ALWAYS_INLINE getSingleBitMask(uint32_t pos) {
     return 1UL << pos;
   }
-  static constexpr uint32_t MeshedOffset = 30;
-  static constexpr uint32_t MaxCountShift = 16;
   static constexpr uint32_t SizeClassShift = 0;
+  static constexpr uint32_t FreelistIdShift = 6;
   static constexpr uint32_t ShuffleVectorOffsetShift = 8;
+  static constexpr uint32_t MaxCountShift = 16;
+  static constexpr uint32_t MeshedOffset = 30;
+
+  inline void ATTRIBUTE_ALWAYS_INLINE setMasked(uint32_t mask, uint32_t newVal) {
+    uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(&_flags,
+                                                  &oldFlags,                   // old val
+                                                  (oldFlags & mask) | newVal,  // new val
+                                                  std::memory_order_release,   // success mem model
+                                                  std::memory_order_relaxed)) {
+    }
+  }
 
 public:
-  explicit Flags(uint32_t maxCount, uint32_t sizeClass, uint32_t svOffset) noexcept
-      : _flags{(maxCount << MaxCountShift) + (sizeClass << SizeClassShift) + (svOffset << ShuffleVectorOffsetShift)} {
+  explicit Flags(uint32_t maxCount, uint32_t sizeClass, uint32_t svOffset, uint32_t freelistId) noexcept
+      : _flags{(maxCount << MaxCountShift) + (sizeClass << SizeClassShift) + (svOffset << ShuffleVectorOffsetShift) + (freelistId << FreelistIdShift)} {    d_assert((freelistId & 0x3) == freelistId);
+    d_assert((sizeClass & ((1 << FreelistIdShift) - 1)) == sizeClass);
     d_assert(svOffset < 255);
     d_assert_msg(sizeClass < 255, "sizeClass: %u", sizeClass);
     d_assert(maxCount <= 256);
     d_assert(this->maxCount() == maxCount);
+  }
+
+  inline uint32_t freelistId() const {
+    return (_flags.load(std::memory_order_seq_cst) >> FreelistIdShift) & 0x3;
+  }
+
+  inline void setFreelistId(uint32_t freelistId) {
+    static_assert(list::Max <= (1 << FreelistIdShift), "expected max < 4");
+    d_assert(freelistId < list::Max);
+    uint32_t mask = ~(static_cast<uint32_t>(0x3) << FreelistIdShift);
+    uint32_t newVal = (static_cast<uint32_t>(freelistId) << FreelistIdShift);
+    setMasked(mask, newVal);
   }
 
   inline uint32_t maxCount() const {
@@ -51,7 +75,7 @@ public:
   }
 
   inline uint32_t sizeClass() const {
-    return (_flags.load(std::memory_order_seq_cst) >> SizeClassShift) & 0xff;
+    return (_flags.load(std::memory_order_seq_cst) >> SizeClassShift) & 0x3f;
   }
 
   inline uint8_t svOffset() const {
@@ -62,13 +86,7 @@ public:
     d_assert(off < 255);
     uint32_t mask = ~(static_cast<uint32_t>(0xff) << ShuffleVectorOffsetShift);
     uint32_t newVal = (static_cast<uint32_t>(off) << ShuffleVectorOffsetShift);
-    uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
-    while (!atomic_compare_exchange_weak_explicit(&_flags,
-                                                  &oldFlags,                   // old val
-                                                  (oldFlags & mask) | newVal,  // new val
-                                                  std::memory_order_release,   // success mem model
-                                                  std::memory_order_relaxed)) {
-    }
+    setMasked(mask, newVal);
   }
 
   inline void setMeshed() {
@@ -85,12 +103,12 @@ public:
 
 private:
   inline bool ATTRIBUTE_ALWAYS_INLINE is(size_t offset) const {
-    const auto mask = getMask(offset);
+    const auto mask = getSingleBitMask(offset);
     return (_flags.load(std::memory_order_acquire) & mask) == mask;
   }
 
   inline void set(size_t offset) {
-    const uint32_t mask = getMask(offset);
+    const uint32_t mask = getSingleBitMask(offset);
 
     uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
     while (!atomic_compare_exchange_weak_explicit(&_flags,
@@ -102,7 +120,7 @@ private:
   }
 
   inline void unset(size_t offset) {
-    const uint32_t mask = getMask(offset);
+    const uint32_t mask = getSingleBitMask(offset);
 
     uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
     while (!atomic_compare_exchange_weak_explicit(&_flags,
@@ -124,7 +142,7 @@ public:
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
       : _bitmap(objectCount),
         _span(span),
-        _flags(objectCount, objectCount > 1 ? SizeMap::SizeClass(objectSize) : 1, 0),
+        _flags(objectCount, objectCount > 1 ? SizeMap::SizeClass(objectSize) : 1, 0, list::Attached),
         _objectSizeReciprocal(1.0 / (float)objectSize) {
     // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
 
@@ -137,7 +155,7 @@ public:
     // d_assert_msg(spanSize == static_cast<size_t>(_spanSize), "%zu != %hu", spanSize, _spanSize);
     // d_assert_msg(objectSize == static_cast<size_t>(objectSize()), "%zu != %hu", objectSize, _objectSize);
 
-    d_assert(!_nextMiniHeap.hasValue());
+    d_assert(!_nextMeshed.hasValue());
 
     // debug("new:\n");
     // dumpDebug();
@@ -257,9 +275,13 @@ public:
     _flags.setMeshed();
   }
 
-  inline void setAttached(pid_t current) {
+  inline void setAttached(pid_t current, MiniHeapListEntry *listHead) {
     // mesh::debug("MiniHeap(%p:%5zu): current <- %u\n", this, objectSize(), current);
     _current.store(current, std::memory_order::memory_order_release);
+    if (listHead != nullptr) {
+      _freelist.remove(listHead);
+    }
+    this->setFreelistId(list::Attached);
   }
 
   inline uint8_t svOffset() const {
@@ -269,6 +291,14 @@ public:
   inline void setSvOffset(uint8_t off) {
     // debug("MiniHeap(%p) SET svOff:%zu)", this, off);
     _flags.setSvOffset(off);
+  }
+
+  inline uint8_t freelistId() const {
+    return _flags.freelistId();
+  }
+
+  inline void setFreelistId(uint8_t id) {
+    _flags.setFreelistId(id);
   }
 
   inline pid_t current() const {
@@ -289,7 +319,7 @@ public:
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE hasMeshed() const {
-    return _nextMiniHeap.hasValue();
+    return _nextMeshed.hasValue();
   }
 
   inline bool isMeshingCandidate() const {
@@ -312,10 +342,10 @@ public:
   void trackMeshedSpan(MiniHeapID id) {
     hard_assert(id.hasValue());
 
-    if (!_nextMiniHeap.hasValue()) {
-      _nextMiniHeap = id;
+    if (!_nextMeshed.hasValue()) {
+      _nextMeshed = id;
     } else {
-      GetMiniHeap(_nextMiniHeap)->trackMeshedSpan(id);
+      GetMiniHeap(_nextMeshed)->trackMeshedSpan(id);
     }
   }
 
@@ -325,8 +355,8 @@ public:
     if (cb(this))
       return;
 
-    if (_nextMiniHeap.hasValue()) {
-      const auto mh = GetMiniHeap(_nextMiniHeap);
+    if (_nextMeshed.hasValue()) {
+      const auto mh = GetMiniHeap(_nextMeshed);
       mh->forEachMeshed(cb);
     }
   }
@@ -336,8 +366,8 @@ public:
     if (cb(this))
       return;
 
-    if (_nextMiniHeap.hasValue()) {
-      auto mh = GetMiniHeap(_nextMiniHeap);
+    if (_nextMeshed.hasValue()) {
+      auto mh = GetMiniHeap(_nextMeshed);
       mh->forEachMeshed(cb);
     }
   }
@@ -349,19 +379,15 @@ public:
     while (mh != nullptr) {
       count++;
 
-      auto next = mh->_nextMiniHeap;
+      auto next = mh->_nextMeshed;
       mh = next.hasValue() ? GetMiniHeap(next) : nullptr;
     }
 
     return count;
   }
 
-  internal::BinToken getBinToken() const {
-    return _token;
-  }
-
-  void setBinToken(internal::BinToken token) {
-    _token = token;
+  MiniHeapListEntry *getFreelist() {
+    return &_freelist;
   }
 
   /// public for meshTest only
@@ -387,9 +413,9 @@ public:
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = this->inUseCount();
     const size_t meshCount = this->meshCount();
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, spans: %zu)\t%p-%p\tBinToken{valid:%d flagOk:%d, bin:%u off:%u}\n", this, objectSize(),
+    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, spans: %zu)\t%p-%p\tFreelist{prev:%u, next:%u}\n", this, objectSize(),
                 maxCount(), heapPages, inUseCount, meshCount, _span.offset * kPageSize,
-                _span.offset * kPageSize + spanSize(), _token.valid(), _token.flagOk(), _token.bin(), _token.off());
+                _span.offset * kPageSize + spanSize(), _freelist.prev(), _freelist.next());
     mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
   }
 
@@ -438,11 +464,11 @@ protected:
 
     const MiniHeap *mh = this;
     while (true) {
-      if (unlikely(!mh->_nextMiniHeap.hasValue())) {
+      if (unlikely(!mh->_nextMeshed.hasValue())) {
         abort();
       }
 
-      mh = GetMiniHeap(mh->_nextMiniHeap);
+      mh = GetMiniHeap(mh->_nextMeshed);
 
       const uintptr_t meshedSpanptr = arenaBegin + mh->span().offset * kPageSize;
       if (meshedSpanptr <= ptrval && ptrval < meshedSpanptr + len) {
@@ -454,17 +480,13 @@ protected:
     return spanptr;
   }
 
-  internal::Bitmap _bitmap;  // 32 bytes 32
-  internal::BinToken _token{
-      internal::bintoken::BinMax,
-      internal::bintoken::Max,
-  };                                  // 4        36
-  atomic<pid_t> _current{0};          // 4        40
-  const Span _span;                   // 8        48
-  Flags _flags;                       // 4        52
-  const uint32_t _UNUSED{};           // 4        56
+  internal::Bitmap _bitmap;           // 32 bytes 32
+  const Span _span;                   // 8        40
+  MiniHeapListEntry _freelist{};      // 8        48
+  atomic<pid_t> _current{0};          // 4        52
+  Flags _flags;                       // 4        56
   const float _objectSizeReciprocal;  // 4        60
-  MiniHeapID _nextMiniHeap{};         // 4        64
+  MiniHeapID _nextMeshed{};           // 4        64
 };
 
 typedef FixedArray<MiniHeap, 63> MiniHeapArray;

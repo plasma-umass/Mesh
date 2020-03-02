@@ -11,7 +11,7 @@
 namespace mesh {
 
 MiniHeap *GetMiniHeap(const MiniHeapID id) {
-  hard_assert(id.hasValue());
+  hard_assert(id.hasValue() && id != list::Head);
 
   return runtime().heap().miniheapForID(id);
 }
@@ -72,7 +72,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
 
   d_assert(mh->maxCount() > 1);
 
-  auto binToken = mh->getBinToken();
+  auto freelistId = mh->freelistId();
   auto isAttached = mh->isAttached();
   auto sizeClass = mh->sizeClass();
 
@@ -104,13 +104,13 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
     }
 
     remaining = mh->inUseCount();
-    binToken = mh->getBinToken();
+    freelistId = mh->freelistId();
     isAttached = mh->isAttached();
 
-    if (!isAttached && (remaining == 0 || binToken.bin() == internal::bintoken::FlagFull)) {
+    if (!isAttached && (remaining == 0 || freelistId == list::Full)) {
       // this may free the miniheap -- we can't safely access it after
       // this point.
-      const bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
+      const bool shouldFlush = postFreeLocked(mh, sizeClass, remaining);
       mh = nullptr;
       if (unlikely(shouldFlush)) {
         flushBinLocked(sizeClass);
@@ -121,7 +121,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
   } else {
     // the free went through ok; if we _were_ full, or now _are_ empty,
     // make sure to update the littleheaps
-    if (!isAttached && (remaining == 0 || binToken.bin() == internal::bintoken::FlagFull)) {
+    if (!isAttached && (remaining == 0 || freelistId == list::Full)) {
       lock_guard<mutex> lock(_miniheapLock);
 
       // there are 2 ways we could have raced with meshing:
@@ -179,7 +179,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
         }
       }
 
-      bool shouldFlush = _littleheaps[sizeClass].postFree(mh, remaining);
+      const bool shouldFlush = postFreeLocked(mh, sizeClass, remaining);
       mh = nullptr;
       if (unlikely(shouldFlush)) {
         flushBinLocked(sizeClass);
@@ -228,23 +228,23 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
   } else if (strcmp(name, "stats.active") == 0) {
     // all miniheaps at least partially full
     size_t sz = 0;
-    for (size_t i = 0; i < kNumBins; i++) {
-      const auto count = _littleheaps[i].nonEmptyCount();
-      if (count == 0)
-        continue;
-      sz += count * _littleheaps[i].objectSize() * _littleheaps[i].objectCount();
-    }
+//    for (size_t i = 0; i < kNumBins; i++) {
+//      const auto count = _littleheaps[i].nonEmptyCount();
+//      if (count == 0)
+//        continue;
+//      sz += count * _littleheaps[i].objectSize() * _littleheaps[i].objectCount();
+//    }
     *statp = sz;
   } else if (strcmp(name, "stats.allocated") == 0) {
     // TODO: revisit this
     // same as active for us, for now -- memory not returned to the OS
     size_t sz = 0;
     for (size_t i = 0; i < kNumBins; i++) {
-      const auto &bin = _littleheaps[i];
-      const auto count = bin.nonEmptyCount();
-      if (count == 0)
-        continue;
-      sz += bin.objectSize() * bin.allocatedObjectCount();
+//      const auto &bin = _littleheaps[i];
+//      const auto count = bin.nonEmptyCount();
+//      if (count == 0)
+//        continue;
+//      sz += bin.objectSize() * bin.allocatedObjectCount();
     }
     *statp = sz;
   }
@@ -279,7 +279,7 @@ void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
 
   // make sure we adjust what bin the destination is in -- it might
   // now be full and not a candidate for meshing
-  _littleheaps[dst->sizeClass()].postFree(dst, dst->inUseCount());
+  postFreeLocked(dst, dst->sizeClass(), dst->inUseCount());
   untrackMiniheapLocked(src);
 }
 
@@ -302,7 +302,6 @@ void GlobalHeap::meshAllSizeClassesLocked() {
   _lastMeshEffective = 1;
 
   // const auto start = time::now();
-  size_t partialCount = 0;
 
   internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
 
@@ -318,8 +317,7 @@ void GlobalHeap::meshAllSizeClassesLocked() {
       });
 
   for (size_t i = 0; i < kNumBins; i++) {
-    partialCount += _littleheaps[i].partialSize();
-    method::shiftedSplitting(_fastPrng, _littleheaps[i], meshFound);
+    method::shiftedSplitting(_fastPrng, &_partialFreelist[i].first, meshFound);
   }
 
   // we consider this effective if more than ~ 1 MB saved
@@ -352,11 +350,11 @@ void GlobalHeap::meshAllSizeClassesLocked() {
     // regular postFree
     auto oneEmpty = false;
     if (dst->inUseCount() == 0) {
-      _littleheaps[dst->sizeClass()].postFree(dst, 0);
+      postFreeLocked(dst, dst->sizeClass(), 0);
       oneEmpty = true;
     }
     if (src->inUseCount() == 0) {
-      _littleheaps[src->sizeClass()].postFree(src, 0);
+      postFreeLocked(src, src->sizeClass(), 0);
       oneEmpty = true;
     }
 
@@ -396,16 +394,28 @@ void GlobalHeap::dumpStats(int level, bool beDetailed) const {
   debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
   debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
   if (level > 1) {
-    for (size_t i = 0; i < kNumBins; i++)
-      _littleheaps[i].dumpStats(beDetailed);
+//    for (size_t i = 0; i < kNumBins; i++) {
+//      _littleheaps[i].dumpStats(beDetailed);
+//    }
   }
 }
 
 namespace method {
 
-void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, StripedTracker &miniheaps, internal::vector<MiniHeap *> &left,
+void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry *miniheaps, internal::vector<MiniHeap *> &left,
                                       internal::vector<MiniHeap *> &right) noexcept {
-  internal::vector<MiniHeap *> bucket = miniheaps.meshingCandidates(kOccupancyCutoff);
+  internal::vector<MiniHeap *> bucket{};
+
+  MiniHeapID mhId = miniheaps->next();
+  while (mhId != list::Head) {
+    auto mh = GetMiniHeap(mhId);
+    if (mh->isMeshingCandidate() && (mh->fullness() < kOccupancyCutoff)) {
+      bucket.push_back(mh);
+    }
+
+    mhId = mh->getFreelist()->next();
+  }
+
 
   internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
 
@@ -424,11 +434,11 @@ void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, StripedTracker &miniheaps, inte
 }
 
 void ATTRIBUTE_NEVER_INLINE
-shiftedSplitting(MWC &prng, StripedTracker &miniheaps,
+shiftedSplitting(MWC &prng, MiniHeapListEntry *miniheaps,
                  const function<void(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept {
   constexpr size_t t = 64;
 
-  if (miniheaps.partialSize() == 0) {
+  if (miniheaps->empty()) {
     return;
   }
 

@@ -58,7 +58,7 @@ public:
   MiniHeapID() noexcept : _id{0} {
   }
 
-  explicit MiniHeapID(uint32_t id) : _id{id} {
+  explicit constexpr MiniHeapID(uint32_t id) : _id{id} {
   }
 
   MiniHeapID(const MiniHeapID &rhs) = default;
@@ -66,6 +66,10 @@ public:
   constexpr MiniHeapID(MiniHeapID &&rhs) = default;
 
   MiniHeapID &operator=(const MiniHeapID &rhs) = default;
+
+  bool operator!=(const MiniHeapID &rhs) const {
+    return _id != rhs._id;
+  }
 
   bool operator==(const MiniHeapID &rhs) const {
     return _id == rhs._id;
@@ -83,9 +87,121 @@ private:
   uint32_t _id;
 };
 
+namespace list {
+static constexpr MiniHeapID Head{UINT32_MAX};
+// TODO: add a type to represent this
+static constexpr uint8_t Full = 0;
+static constexpr uint8_t Partial = 1;
+static constexpr uint8_t Empty = 2;
+static constexpr uint8_t Attached = 3;
+static constexpr uint8_t Max = 4;
+}
+
 class MiniHeap;
 MiniHeap *GetMiniHeap(const MiniHeapID id);
 MiniHeapID GetMiniHeapID(const MiniHeap *mh);
+
+template<typename Object, typename ID>
+class ListEntry {
+public:
+  typedef ListEntry<Object, ID> Entry;
+
+  ListEntry() noexcept : _prev{}, _next{} {
+  }
+
+  explicit constexpr ListEntry(ID prev, ID next) : _prev{prev}, _next{next} {
+  }
+
+  ListEntry(const ListEntry &rhs) = default;
+  ListEntry & operator=(const ListEntry &) = default;
+
+  inline bool empty() const {
+    return !_prev.hasValue() || !_next.hasValue();
+  }
+
+  inline ID next() const {
+    return _next;
+  }
+
+  inline ID prev() const {
+    return _prev;
+  }
+
+  inline void setNext(ID next) {
+    // mesh::debug("%p.setNext: %u\n", this, next);
+    _next = next;
+  }
+
+  inline void setPrev(ID prev) {
+    _prev = prev;
+  }
+
+  // add calls remove for you
+  void add(Entry *listHead, uint8_t listId, ID selfId, Object *newEntry) {
+    const uint8_t oldId = newEntry->freelistId();
+    // TODO: change to debug assert
+    hard_assert(oldId != listId);
+    d_assert(!newEntry->isLargeAlloc());
+
+    Entry *newEntryFreelist = newEntry->getFreelist();
+    if (likely(newEntryFreelist->next().hasValue())) {
+      // we will be part of a list every time except the first time add is called after alloc
+      newEntryFreelist->remove(listHead);
+    }
+
+    newEntry->setFreelistId(listId);
+
+    const ID newEntryId = GetMiniHeapID(newEntry);
+    ID lastId = prev();
+    Entry *prevList = nullptr;
+    if (lastId == list::Head) {
+      prevList = this;
+    } else {
+      Object *last = GetMiniHeap(lastId);
+      prevList = last->getFreelist();
+    }
+    prevList->setNext(newEntryId);
+    *newEntry->getFreelist() = ListEntry{lastId, selfId};
+    this->setPrev(newEntryId);
+  }
+
+  void remove(Entry *listHead) {
+    ID prevId = _prev;
+    ID nextId = _next;
+    // we may have just been created + not added to any freelist yet
+    if (!prevId.hasValue() || !nextId.hasValue()) {
+      return;
+    }
+    Entry *prev = nullptr;
+    if (prevId == list::Head) {
+      prev = listHead;
+    } else {
+      Object *mh = GetMiniHeap(prevId);
+      d_assert(mh != nullptr);
+      prev = mh->getFreelist();
+    }
+    Entry *next = nullptr;
+    if (nextId == list::Head) {
+      next = listHead;
+    } else {
+      Object *mh = GetMiniHeap(nextId);
+      d_assert(mh != nullptr);
+      next = mh->getFreelist();
+    }
+
+    prev->setNext(nextId);
+    next->setPrev(prevId);
+    _prev = MiniHeapID{};
+    _next = MiniHeapID{};
+  }
+
+private:
+
+  MiniHeapID _prev{};
+  MiniHeapID _next{};
+};
+
+typedef ListEntry<MiniHeap, MiniHeapID> MiniHeapListEntry;
 
 typedef uint32_t Offset;
 typedef uint32_t Length;
@@ -238,71 +354,6 @@ inline void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __la
     }
   }
 }
-
-// ideally these would be static constants on BinToken, but that
-// requires C++17
-namespace bintoken {
-static constexpr uint8_t BinMax = (1 << 3) - 1;
-static constexpr uint32_t Max = (1 << 28) - 1;
-static constexpr uint32_t MinFlags = Max - 1;
-static constexpr uint8_t FlagFull = (1 << 3) - 2;
-static constexpr uint8_t FlagEmpty = (1 << 3) - 3;
-static constexpr uint32_t FlagNoOff = (1 << 28) - 1;
-
-static_assert(FlagFull > kBinnedTrackerBinCount, "Full flag too small");
-static_assert(FlagEmpty > kBinnedTrackerBinCount, "Full flag too small");
-}  // namespace bintoken
-
-// BinTokens are stored on MiniHeaps and used by the BinTracker to
-// store occupancy metadata.  They are opaque to the MiniHeap, but
-// storing the BinTracker's metadata on the MiniHeap saves a bunch of
-// internal allocations and indirections.
-class BinToken {
-public:
-  typedef uint8_t Bin;
-  typedef uint32_t Size;
-
-  BinToken() noexcept : _bin(bintoken::BinMax), _off(bintoken::Max) {
-  }
-
-  BinToken(Bin bin, Size off) noexcept : _bin(bin), _off(off) {
-  }
-
-  // whether this is a valid token, or just a default initialized one
-  bool valid() const {
-    return _bin < bintoken::BinMax && _off < bintoken::Max;
-  }
-
-  bool flagOk() const {
-    return _off < bintoken::MinFlags;
-  }
-
-  static BinToken Full() {
-    return BinToken{bintoken::FlagFull, bintoken::FlagNoOff};
-  }
-
-  static BinToken Empty() {
-    return BinToken{bintoken::FlagEmpty, bintoken::FlagNoOff};
-  }
-
-  BinToken newOff(Size newOff) const {
-    return BinToken{_bin, newOff};
-  }
-
-  Bin bin() const {
-    return _bin;
-  }
-
-  Size off() const {
-    return _off;
-  }
-
-private:
-  Bin _bin : 4;
-  Size _off : 28;
-};
-
-static_assert(sizeof(BinToken) == 4, "BinToken too big!");
 }  // namespace internal
 }  // namespace mesh
 
