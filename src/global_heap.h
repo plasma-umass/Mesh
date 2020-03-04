@@ -171,6 +171,11 @@ public:
   }
 
   inline bool postFreeLocked(MiniHeap *mh, int sizeClass, size_t inUse) {
+    // its possible we raced between reading isAttached + grabbing a lock.
+    // just check here to avoid having to play whack-a-mole at each call site.
+    if (mh->isAttached()) {
+      return false;
+    }
     const auto currFreelistId = mh->freelistId();
     auto currFreelist = freelistFor(currFreelistId, sizeClass);
     const auto max = mh->maxCount();
