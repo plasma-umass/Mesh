@@ -9,6 +9,7 @@ IndentCaseLabels: false
 AlwaysBreakTemplateDeclarations: true
 AccessModifierOffset: -2
 Standard: Cpp11
+SortIncludes: false
 
 DerivePointerAlignment: false
 PointerAlignment: Right
