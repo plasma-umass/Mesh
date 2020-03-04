@@ -53,7 +53,7 @@ void halfSplit(MWC &prng, MiniHeapListEntry *miniheaps, internal::vector<MiniHea
                internal::vector<MiniHeap *> &right) noexcept;
 
 void shiftedSplitting(MWC &prng, MiniHeapListEntry *miniheaps,
-                      const function<void(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept;
+                      const function<bool(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept;
 }  // namespace method
 }  // namespace mesh
 

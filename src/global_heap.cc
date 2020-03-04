@@ -25,6 +25,14 @@ MiniHeapID GetMiniHeapID(const MiniHeap *mh) {
   return runtime().heap().miniheapIDFor(mh);
 }
 
+static std::array<MiniHeap *, kMaxSplitListSize> PAGE_ALIGNED Left;
+static std::array<MiniHeap *, kMaxSplitListSize> PAGE_ALIGNED Right;
+static std::array<std::pair<MiniHeap *, MiniHeap *>, kMaxMergeSets> PAGE_ALIGNED MergeSets;
+
+static_assert(sizeof(Left) == sizeof(void *) * 16384, "array too big");
+static_assert(sizeof(Right) == sizeof(void *) * 16384, "array too big");
+static_assert(sizeof(MergeSets) == sizeof(void *) * 2 * 4096, "array too big");
+
 void *GlobalHeap::malloc(size_t sz) {
 #ifndef NDEBUG
   if (unlikely(sz <= kMaxSize)) {
@@ -282,24 +290,29 @@ void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
 }
 
 size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass) {
-  internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
+  size_t mergeSetCount = 0;
+  memset(&MergeSets, 0, sizeof(MergeSets));
 
   auto meshFound =
-      function<void(std::pair<MiniHeap *, MiniHeap *> &&)>([&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
-        if (std::get<0>(miniheaps)->isMeshingCandidate() && std::get<1>(miniheaps)->isMeshingCandidate())
-          mergeSets.push_back(std::move(miniheaps));
+      function<bool(std::pair<MiniHeap *, MiniHeap *> &&)>([&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
+        if (miniheaps.first->isMeshingCandidate() && miniheaps.second->isMeshingCandidate()) {
+          MergeSets[mergeSetCount] = std::move(miniheaps);
+          mergeSetCount++;
+        }
+        return mergeSetCount < kMaxMergeSets;
       });
 
   method::shiftedSplitting(_fastPrng, &_partialFreelist[sizeClass].first, meshFound);
 
-  if (mergeSets.size() == 0) {
+  if (mergeSetCount == 0) {
     // debug("nothing to mesh.");
     return 0;
   }
 
   size_t meshCount = 0;
 
-  for (auto &mergeSet : mergeSets) {
+  for (size_t i = 0; i < mergeSetCount; i++) {
+    std::pair<MiniHeap *, MiniHeap *> &mergeSet = MergeSets[i];
     // merge _into_ the one with a larger mesh count, potentially
     // swapping the order of the pair
     const auto aCount = std::get<0>(mergeSet)->meshCount();
@@ -358,7 +371,7 @@ void GlobalHeap::meshAllSizeClassesLocked() {
 
   // const auto start = time::now();
 
-    // first, clear out any free memory we might have
+  // first, clear out any free memory we might have
   for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
     flushBinLocked(sizeClass);
   }
@@ -369,6 +382,10 @@ void GlobalHeap::meshAllSizeClassesLocked() {
     totalMeshCount += meshSizeClassLocked(sizeClass);
   }
 
+  madvise(&Left, sizeof(Left), MADV_DONTNEED);
+  madvise(&Right, sizeof(Right), MADV_DONTNEED);
+  madvise(&MergeSets, sizeof(MergeSets), MADV_DONTNEED);
+
   _lastMeshEffective = totalMeshCount > 256;
   _stats.meshCount += totalMeshCount;
 
@@ -377,7 +394,7 @@ void GlobalHeap::meshAllSizeClassesLocked() {
   _lastMesh = time::now();
 
   // const std::chrono::duration<double> duration = _lastMesh - start;
-  // debug("mesh took %f, found %zu", duration.count(), mergeSets.size());
+  // debug("mesh took %f, found %zu", duration.count(), totalMeshCount);
 }
 
 void GlobalHeap::dumpStats(int level, bool beDetailed) const {
@@ -407,23 +424,12 @@ namespace method {
 
 void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry *miniheaps, internal::vector<MiniHeap *> &left,
                                       internal::vector<MiniHeap *> &right) noexcept {
-  internal::vector<MiniHeap *> bucket{};
-
   MiniHeapID mhId = miniheaps->next();
   while (mhId != list::Head) {
     auto mh = GetMiniHeap(mhId);
-    if (mh->isMeshingCandidate() && (mh->fullness() < kOccupancyCutoff)) {
-      bucket.push_back(mh);
-    }
-
     mhId = mh->getFreelist()->next();
-  }
 
-  internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
-
-  for (size_t i = 0; i < bucket.size(); i++) {
-    auto mh = bucket[i];
-    if (!mh->isMeshingCandidate() || mh->fullness() >= kOccupancyCutoff) {
+    if (!mh->isMeshingCandidate() || (mh->fullness() >= kOccupancyCutoff)) {
       continue;
     }
 
@@ -433,11 +439,14 @@ void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry *miniheaps, i
       right.push_back(mh);
     }
   }
+
+  internal::mwcShuffle(left.begin(), left.end(), prng);
+  internal::mwcShuffle(right.begin(), right.end(), prng);
 }
 
 void ATTRIBUTE_NEVER_INLINE
 shiftedSplitting(MWC &prng, MiniHeapListEntry *miniheaps,
-                 const function<void(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept {
+                 const function<bool(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept {
   constexpr size_t t = 64;
 
   if (miniheaps->empty()) {
@@ -463,6 +472,7 @@ shiftedSplitting(MWC &prng, MiniHeapListEntry *miniheaps,
   for (size_t j = 0; j < leftSize; j++) {
     const size_t idxLeft = j;
     size_t idxRight = j;
+
     for (size_t i = 0; i < limit; i++, idxRight++) {
       if (unlikely(idxRight >= rightSize)) {
         idxRight %= rightSize;
@@ -480,11 +490,11 @@ shiftedSplitting(MWC &prng, MiniHeapListEntry *miniheaps,
 
       if (unlikely(areMeshable)) {
         std::pair<MiniHeap *, MiniHeap *> heaps{h1, h2};
-        meshFound(std::move(heaps));
+        bool shouldContinue = meshFound(std::move(heaps));
         leftBucket[idxLeft] = nullptr;
         rightBucket[idxRight] = nullptr;
         foundCount++;
-        if (foundCount > kMaxMeshesPerIteration) {
+        if (unlikely(foundCount > kMaxMeshesPerIteration || !shouldContinue)) {
           return;
         }
       }

@@ -63,6 +63,9 @@ static constexpr int kMinAlign = 16;
 static constexpr uint64_t kPageSize = 4096;
 static constexpr size_t kMaxFastLargeSize = 256 * 1024;  // 256Kb
 
+static constexpr size_t kMaxSplitListSize = 16384;
+static constexpr size_t kMaxMergeSets = 4096;
+
 // cutoff to be considered for meshing
 static constexpr double kOccupancyCutoff = .8;
 
@@ -160,6 +163,7 @@ using std::unique_lock;
 #define CACHELINE_SIZE 64
 #define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 #define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
+#define PAGE_ALIGNED ATTRIBUTE_ALIGNED(kPageSize)
 
 #define MESH_EXPORT __attribute__((visibility("default")))
 
