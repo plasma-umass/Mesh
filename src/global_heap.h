@@ -244,9 +244,12 @@ public:
       nextId = mh->getFreelist()->next();
 
       // TODO: we can eventually remove this
-      hard_assert(!(mh->isFull() || mh->isAttached() || mh->isMeshed()));
+      d_assert(!(mh->isFull() || mh->isAttached() || mh->isMeshed()));
 
-      bytesFree += mh->bytesFree();
+      // TODO: this is commented out to match a bug in the previous implementation;
+      // it turns out if you don't track bytes free and give more memory to the
+      // thread-local cache, things perform better!
+      // bytesFree += mh->bytesFree();
       d_assert(!mh->isAttached());
       mh->setAttached(current, freelistFor(mh->freelistId(), mh->sizeClass()));
       d_assert(mh->isAttached() && mh->current() == current);
