@@ -530,6 +530,8 @@ public:
 private:
   // check for meshes in all size classes -- must be called LOCKED
   void meshAllSizeClassesLocked();
+  // meshSizeClassLocked returns the number of merged sets found
+  size_t meshSizeClassLocked(size_t sizeClass);
 
   const size_t _maxObjectSize;
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};

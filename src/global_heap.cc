@@ -281,32 +281,8 @@ void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
   untrackMiniheapLocked(src);
 }
 
-void GlobalHeap::meshAllSizeClassesLocked() {
-  // if we have freed but not reset meshed mappings, this will reset
-  // them to the identity mapping, ensuring we don't blow past our VMA
-  // limit (which is why we set the force flag to true)
-  Super::scavenge(true);
-
-  if (!_lastMeshEffective.load(std::memory_order::memory_order_acquire)) {
-    return;
-  }
-
-  if (Super::aboveMeshThreshold()) {
-    return;
-  }
-
-  lock_guard<EpochLock> epochLock(_meshEpoch);
-
-  _lastMeshEffective = 1;
-
-  // const auto start = time::now();
-
+size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass) {
   internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
-
-  // first, clear out any free memory we might have
-  for (size_t i = 0; i < kNumBins; i++) {
-    flushBinLocked(i);
-  }
 
   auto meshFound =
       function<void(std::pair<MiniHeap *, MiniHeap *> &&)>([&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
@@ -314,19 +290,14 @@ void GlobalHeap::meshAllSizeClassesLocked() {
           mergeSets.push_back(std::move(miniheaps));
       });
 
-  for (size_t i = 0; i < kNumBins; i++) {
-    method::shiftedSplitting(_fastPrng, &_partialFreelist[i].first, meshFound);
-  }
-
-  // we consider this effective if more than ~ 1 MB saved
-  _lastMeshEffective = mergeSets.size() > 256;
+  method::shiftedSplitting(_fastPrng, &_partialFreelist[sizeClass].first, meshFound);
 
   if (mergeSets.size() == 0) {
     // debug("nothing to mesh.");
-    return;
+    return 0;
   }
 
-  _stats.meshCount += mergeSets.size();
+  size_t meshCount = 0;
 
   for (auto &mergeSet : mergeSets) {
     // merge _into_ the one with a larger mesh count, potentially
@@ -348,24 +319,58 @@ void GlobalHeap::meshAllSizeClassesLocked() {
     // regular postFree
     auto oneEmpty = false;
     if (dst->inUseCount() == 0) {
-      postFreeLocked(dst, dst->sizeClass(), 0);
+      postFreeLocked(dst, sizeClass, 0);
       oneEmpty = true;
     }
     if (src->inUseCount() == 0) {
-      postFreeLocked(src, src->sizeClass(), 0);
+      postFreeLocked(src, sizeClass, 0);
       oneEmpty = true;
     }
 
     if (!oneEmpty) {
       meshLocked(dst, src);
+      meshCount++;
     }
   }
 
   // flush things once more (since we may have called postFree instead
   // of mesh above)
-  for (size_t i = 0; i < kNumBins; i++) {
-    flushBinLocked(i);
+  flushBinLocked(sizeClass);
+
+  return meshCount;
+}
+
+void GlobalHeap::meshAllSizeClassesLocked() {
+  // if we have freed but not reset meshed mappings, this will reset
+  // them to the identity mapping, ensuring we don't blow past our VMA
+  // limit (which is why we set the force flag to true)
+  Super::scavenge(true);
+
+  if (!_lastMeshEffective.load(std::memory_order::memory_order_acquire)) {
+    return;
   }
+
+  if (Super::aboveMeshThreshold()) {
+    return;
+  }
+
+  lock_guard<EpochLock> epochLock(_meshEpoch);
+
+  // const auto start = time::now();
+
+    // first, clear out any free memory we might have
+  for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
+    flushBinLocked(sizeClass);
+  }
+
+  size_t totalMeshCount = 0;
+
+  for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
+    totalMeshCount += meshSizeClassLocked(sizeClass);
+  }
+
+  _lastMeshEffective = totalMeshCount > 256;
+  _stats.meshCount += totalMeshCount;
 
   Super::scavenge(true);
 
