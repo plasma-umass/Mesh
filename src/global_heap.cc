@@ -170,17 +170,15 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
           // for us to do.
           return;
         } else {
-          // our MiniHeap was meshed into another one; lets reload
-          // remaining count.
-          remaining = mh->inUseCount();
-
           // TODO: we should really store 'created epoch' on mh and
           // check those are the same here, too.
         }
       }
 
+      // a lot could have happened between when we read this without
+      // the lock held and now; just recalculate it.
+      remaining = mh->inUseCount();
       const bool shouldFlush = postFreeLocked(mh, sizeClass, remaining);
-      mh = nullptr;
       if (unlikely(shouldFlush)) {
         flushBinLocked(sizeClass);
       }
