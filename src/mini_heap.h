@@ -49,7 +49,9 @@ private:
 
 public:
   explicit Flags(uint32_t maxCount, uint32_t sizeClass, uint32_t svOffset, uint32_t freelistId) noexcept
-      : _flags{(maxCount << MaxCountShift) + (sizeClass << SizeClassShift) + (svOffset << ShuffleVectorOffsetShift) + (freelistId << FreelistIdShift)} {    d_assert((freelistId & 0x3) == freelistId);
+      : _flags{(maxCount << MaxCountShift) + (sizeClass << SizeClassShift) + (svOffset << ShuffleVectorOffsetShift) +
+               (freelistId << FreelistIdShift)} {
+    d_assert((freelistId & 0x3) == freelistId);
     d_assert((sizeClass & ((1 << FreelistIdShift) - 1)) == sizeClass);
     d_assert(svOffset < 255);
     d_assert_msg(sizeClass < 255, "sizeClass: %u", sizeClass);
@@ -413,9 +415,10 @@ public:
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = this->inUseCount();
     const size_t meshCount = this->meshCount();
-    mesh::debug("MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, spans: %zu)\t%p-%p\tFreelist{prev:%u, next:%u}\n", this, objectSize(),
-                maxCount(), heapPages, inUseCount, meshCount, _span.offset * kPageSize,
-                _span.offset * kPageSize + spanSize(), _freelist.prev(), _freelist.next());
+    mesh::debug(
+        "MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, spans: %zu)\t%p-%p\tFreelist{prev:%u, next:%u}\n",
+        this, objectSize(), maxCount(), heapPages, inUseCount, meshCount, _span.offset * kPageSize,
+        _span.offset * kPageSize + spanSize(), _freelist.prev(), _freelist.next());
     mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
   }
 

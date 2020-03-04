@@ -95,13 +95,13 @@ static constexpr uint8_t Partial = 1;
 static constexpr uint8_t Empty = 2;
 static constexpr uint8_t Attached = 3;
 static constexpr uint8_t Max = 4;
-}
+}  // namespace list
 
 class MiniHeap;
 MiniHeap *GetMiniHeap(const MiniHeapID id);
 MiniHeapID GetMiniHeapID(const MiniHeap *mh);
 
-template<typename Object, typename ID>
+template <typename Object, typename ID>
 class ListEntry {
 public:
   typedef ListEntry<Object, ID> Entry;
@@ -113,7 +113,7 @@ public:
   }
 
   ListEntry(const ListEntry &rhs) = default;
-  ListEntry & operator=(const ListEntry &) = default;
+  ListEntry &operator=(const ListEntry &) = default;
 
   inline bool empty() const {
     return !_prev.hasValue() || !_next.hasValue();
@@ -196,7 +196,6 @@ public:
   }
 
 private:
-
   MiniHeapID _prev{};
   MiniHeapID _next{};
 };

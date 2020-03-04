@@ -157,7 +157,7 @@ public:
     return ptr;
   }
 
-  inline MiniHeapListEntry* freelistFor(uint8_t freelistId, int sizeClass) {
+  inline MiniHeapListEntry *freelistFor(uint8_t freelistId, int sizeClass) {
     switch (freelistId) {
     case list::Empty:
       return &_emptyFreelist[sizeClass].first;
@@ -231,7 +231,8 @@ public:
   }
 
   template <uint32_t Size>
-  size_t fillFromList(FixedArray<MiniHeap, Size> &miniheaps, pid_t current, std::pair<MiniHeapListEntry, size_t> &freelist, size_t bytesFree) {
+  size_t fillFromList(FixedArray<MiniHeap, Size> &miniheaps, pid_t current,
+                      std::pair<MiniHeapListEntry, size_t> &freelist, size_t bytesFree) {
     if (freelist.first.empty()) {
       return bytesFree;
     }
@@ -345,7 +346,7 @@ public:
   }
 
   void untrackMiniheapLocked(MiniHeap *mh) {
-//    mesh::debug("%p (%u) untracked!\n", mh, GetMiniHeapID(mh));
+    // mesh::debug("%p (%u) untracked!\n", mh, GetMiniHeapID(mh));
     _stats.mhAllocCount -= 1;
     mh->getFreelist()->remove(freelistFor(mh->freelistId(), mh->sizeClass()));
   }
@@ -399,7 +400,7 @@ public:
 
   // flushBinLocked empties _emptyFreelist[sizeClass]
   inline void flushBinLocked(size_t sizeClass) {
-//    mesh::debug("flush bin %zu\n", sizeClass);
+    // mesh::debug("flush bin %zu\n", sizeClass);
     d_assert(!_emptyFreelist[sizeClass].first.empty());
     if (_emptyFreelist[sizeClass].first.next() == list::Head) {
       return;
@@ -542,17 +543,14 @@ private:
 
   // these must only be accessed or modified with the _miniheapLock held
   std::array<std::pair<MiniHeapListEntry, size_t>, kNumBins> _emptyFreelist{
-      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
-      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
-      Head, Head, Head, Head, Head};
+      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
+      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
   std::array<std::pair<MiniHeapListEntry, size_t>, kNumBins> _partialFreelist{
-      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
-      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
-      Head, Head, Head, Head, Head};
+      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
+      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
   std::array<std::pair<MiniHeapListEntry, size_t>, kNumBins> _fullList{
-      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
-      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
-      Head, Head, Head, Head, Head};
+      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
+      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
 
   mutable mutex _miniheapLock{};
 

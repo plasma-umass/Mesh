@@ -226,23 +226,23 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
   } else if (strcmp(name, "stats.active") == 0) {
     // all miniheaps at least partially full
     size_t sz = 0;
-//    for (size_t i = 0; i < kNumBins; i++) {
-//      const auto count = _littleheaps[i].nonEmptyCount();
-//      if (count == 0)
-//        continue;
-//      sz += count * _littleheaps[i].objectSize() * _littleheaps[i].objectCount();
-//    }
+    // for (size_t i = 0; i < kNumBins; i++) {
+    //   const auto count = _littleheaps[i].nonEmptyCount();
+    //   if (count == 0)
+    //     continue;
+    //   sz += count * _littleheaps[i].objectSize() * _littleheaps[i].objectCount();
+    // }
     *statp = sz;
   } else if (strcmp(name, "stats.allocated") == 0) {
     // TODO: revisit this
     // same as active for us, for now -- memory not returned to the OS
     size_t sz = 0;
     for (size_t i = 0; i < kNumBins; i++) {
-//      const auto &bin = _littleheaps[i];
-//      const auto count = bin.nonEmptyCount();
-//      if (count == 0)
-//        continue;
-//      sz += bin.objectSize() * bin.allocatedObjectCount();
+      // const auto &bin = _littleheaps[i];
+      // const auto count = bin.nonEmptyCount();
+      // if (count == 0)
+      //   continue;
+      // sz += bin.objectSize() * bin.allocatedObjectCount();
     }
     *statp = sz;
   }
@@ -392,9 +392,9 @@ void GlobalHeap::dumpStats(int level, bool beDetailed) const {
   debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
   debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
   if (level > 1) {
-//    for (size_t i = 0; i < kNumBins; i++) {
-//      _littleheaps[i].dumpStats(beDetailed);
-//    }
+    // for (size_t i = 0; i < kNumBins; i++) {
+    //   _littleheaps[i].dumpStats(beDetailed);
+    // }
   }
 }
 
@@ -413,7 +413,6 @@ void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry *miniheaps, i
 
     mhId = mh->getFreelist()->next();
   }
-
 
   internal::mwcShuffle(bucket.begin(), bucket.end(), prng);
 
