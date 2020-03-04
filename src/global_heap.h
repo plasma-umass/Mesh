@@ -233,23 +233,19 @@ public:
 
     auto nextId = freelist.first.next();
     while (nextId != list::Head && bytesFree < kMiniheapRefillGoalSize && !miniheaps.full()) {
-      auto next = GetMiniHeap(nextId);
-      auto candidate = next;
-      hard_assert(candidate != nullptr);
-      nextId = candidate->getFreelist()->next();
+      auto mh = GetMiniHeap(nextId);
+      d_assert(mh != nullptr);
+      nextId = mh->getFreelist()->next();
 
-      if (unlikely(candidate->isFull() || candidate->isAttached() || candidate->isMeshed())) {
-        // FIXME: the first two of these conditions we should assert on.
-        //  not sure why the last one is here?  (ported from StripedTracker code)
-        continue;
-      }
+      // TODO: we can eventually remove this
+      hard_assert(!(mh->isFull() || mh->isAttached() || mh->isMeshed()));
 
-      bytesFree += candidate->bytesFree();
-      d_assert(!candidate->isAttached());
-      candidate->setAttached(current, freelistFor(candidate->freelistId(), candidate->sizeClass()));
-      d_assert(candidate->isAttached() && candidate->current() == current);
+      bytesFree += mh->bytesFree();
+      d_assert(!mh->isAttached());
+      mh->setAttached(current, freelistFor(mh->freelistId(), mh->sizeClass()));
+      d_assert(mh->isAttached() && mh->current() == current);
       hard_assert(!miniheaps.full());
-      miniheaps.append(candidate);
+      miniheaps.append(mh);
       d_assert(freelist.second > 0);
       freelist.second--;
     }
