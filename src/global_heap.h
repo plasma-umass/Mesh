@@ -74,11 +74,6 @@ private:
   static_assert(HL::gcd<MmapHeap::Alignment, Alignment>::value == Alignment,
                 "expected MmapHeap to have 16-byte alignment");
 
-  struct MeshArguments {
-    GlobalHeap *instance;
-    internal::vector<std::pair<MiniHeap *, MiniHeap *>> mergeSets;
-  };
-
 public:
   enum { Alignment = 16 };
 
