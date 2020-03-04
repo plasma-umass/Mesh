@@ -175,30 +175,33 @@ public:
     auto currFreelist = freelistFor(currFreelistId, sizeClass);
     const auto max = mh->maxCount();
 
+    std::pair<MiniHeapListEntry, size_t> *list;
+    uint8_t newListId;
+
     if (inUse == 0) {
+      // if the miniheap is already in the right list there is nothing to do
       if (currFreelistId == list::Empty) {
         return false;
       }
-      std::pair<MiniHeapListEntry, size_t> &list = _emptyFreelist[sizeClass];
-      list.first.add(currFreelist, list::Empty, list::Head, mh);
-      list.second++;
+      newListId = list::Empty;
+      list = &_emptyFreelist[sizeClass];
     } else if (inUse == max) {
       if (currFreelistId == list::Full) {
         return false;
       }
-      std::pair<MiniHeapListEntry, size_t> &list = _fullList[sizeClass];
-      list.first.add(currFreelist, list::Full, list::Head, mh);
-      list.second++;
+      newListId = list::Full;
+      list = &_fullList[sizeClass];
     } else {
       if (currFreelistId == list::Partial) {
         return false;
       }
-      std::pair<MiniHeapListEntry, size_t> &list = _partialFreelist[sizeClass];
-      list.first.add(currFreelist, list::Partial, list::Head, mh);
-      list.second++;
+      newListId = list::Partial;
+      list = &_partialFreelist[sizeClass];
     }
 
-    // FIXME: track list length explicitly
+    list->first.add(currFreelist, newListId, list::Head, mh);
+    list->second++;
+
     return _emptyFreelist[sizeClass].second > kBinnedTrackerMaxEmpty;
   }
 
