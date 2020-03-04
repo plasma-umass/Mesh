@@ -139,8 +139,7 @@ public:
   // add calls remove for you
   void add(Entry *listHead, uint8_t listId, ID selfId, Object *newEntry) {
     const uint8_t oldId = newEntry->freelistId();
-    // TODO: change to debug assert
-    hard_assert(oldId != listId);
+    d_assert(oldId != listId);
     d_assert(!newEntry->isLargeAlloc());
 
     Entry *newEntryFreelist = newEntry->getFreelist();
