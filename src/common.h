@@ -13,9 +13,9 @@
 #include <fcntl.h>
 
 #if !defined(_WIN32)
-    #ifdef __APPLE__
-    #define _DARWIN_C_SOURCE //exposes MAP_ANONYMOUS and MAP_NORESERVE
-    #endif
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE  // exposes MAP_ANONYMOUS and MAP_NORESERVE
+#endif
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -108,7 +108,7 @@ static constexpr size_t kArenaSize = 32ULL * 1024ULL * 1024ULL * 1024ULL;  // 16
 #else
 static constexpr size_t kArenaSize = 64ULL * 1024ULL * 1024ULL * 1024ULL;  // 64 GB
 #endif
-static constexpr size_t kAltStackSize = 16 * 1024UL;                       // 16k sigaltstacks
+static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 #define SIGDUMP (SIGRTMIN + 8)
 

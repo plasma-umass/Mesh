@@ -249,6 +249,11 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
     ASSERT_EQ(candidates[0], mh1);
   }
 
+  // we need to attach the miniheap, otherwise
+  ASSERT_TRUE(!mh1->isAttached());
+  mh1->setAttached(gettid(), gheap.freelistFor(mh1->freelistId(), sizeClass));
+  ASSERT_TRUE(mh1->isAttached());
+
   // now free the objects by going through the global heap -- it
   // should redirect both objects to the same miniheap
   gheap.free(s1);

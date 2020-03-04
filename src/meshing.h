@@ -15,7 +15,6 @@
 #include "common.h"
 #include "internal.h"
 #include "mini_heap.h"
-#include "striped_tracker.h"
 
 namespace mesh {
 
@@ -50,10 +49,10 @@ inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bi
 namespace method {
 
 // split miniheaps into two lists in a random order
-void halfSplit(MWC &prng, StripedTracker &miniheaps, internal::vector<MiniHeap *> &left,
+void halfSplit(MWC &prng, MiniHeapListEntry *miniheaps, internal::vector<MiniHeap *> &left,
                internal::vector<MiniHeap *> &right) noexcept;
 
-void shiftedSplitting(MWC &prng, StripedTracker &miniheaps,
+void shiftedSplitting(MWC &prng, MiniHeapListEntry *miniheaps,
                       const function<void(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept;
 }  // namespace method
 }  // namespace mesh

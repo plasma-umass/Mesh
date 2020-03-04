@@ -87,7 +87,6 @@ set(unit_src
         ${common_src}
         ${google_src}
         unit/alignment.cc
-        unit/binned_tracker_test.cc
         unit/bitmap_test.cc
         unit/concurrent_mesh_test.cc
         unit/mesh_test.cc

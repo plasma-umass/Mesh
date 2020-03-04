@@ -96,10 +96,10 @@ private:
 
   friend Runtime &runtime();
 
-  GlobalHeap _heap{};
   mutex _mutex{};
   int _signalFd{-2};
   pid_t _pid{};
+  GlobalHeap _heap{};
 };
 
 // get a reference to the Runtime singleton
