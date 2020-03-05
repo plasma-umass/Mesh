@@ -288,11 +288,6 @@ public:
   Heap() : SuperHeap() {
     static_assert(Alignment % 16 == 0, "16-byte alignment");
   }
-
-  // inline void *malloc(size_t sz) {
-  //   debug("internal::Heap(%p)::malloc(%zu)\n", this, sz);
-  //   return SuperHeap::malloc(sz);
-  // }
 };
 
 // make a shared pointer allocated from our internal heap that will
