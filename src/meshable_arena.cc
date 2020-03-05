@@ -358,6 +358,8 @@ void MeshableArena::partialScavenge() {
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _dirty[i].clear();
+    internal::vector<Span> empty{};
+    _dirty[i].swap(empty);
   }
 
   _dirtyPageCount = 0;
@@ -395,6 +397,12 @@ void MeshableArena::scavenge(bool force) {
   // now that we've finally reset to identity all delayed-reset
   // mappings, empty the list
   _toReset.clear();
+  {
+    // force freeing our internal allocations
+    internal::vector<Span> empty{};
+    _toReset.swap(empty);
+  }
+
 
   _meshedPageCount = _meshedBitmap.inUseCount();
   if (_meshedPageCount > _meshedPageCountHWM) {
@@ -412,12 +420,16 @@ void MeshableArena::scavenge(bool force) {
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _dirty[i].clear();
+    internal::vector<Span> empty{};
+    _dirty[i].swap(empty);
   }
 
   _dirtyPageCount = 0;
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _clean[i].clear();
+    internal::vector<Span> empty{};
+    _clean[i].swap(empty);
   }
 
   // coalesce adjacent spans
