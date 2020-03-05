@@ -403,7 +403,6 @@ void MeshableArena::scavenge(bool force) {
     _toReset.swap(empty);
   }
 
-
   _meshedPageCount = _meshedBitmap.inUseCount();
   if (_meshedPageCount > _meshedPageCountHWM) {
     _meshedPageCountHWM = _meshedPageCount;
