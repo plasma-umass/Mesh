@@ -83,9 +83,10 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
   if (_lastMeshEffective.load(std::memory_order::memory_order_acquire) == 0) {
     _lastMeshEffective.store(1, std::memory_order::memory_order_release);
   }
+  // read inUseCount before calling free to avoid stalling after the
+  // LOCK CMPXCHG in mh->free
+  auto remaining = mh->inUseCount() - 1;
   mh->free(arenaBegin(), ptr);
-
-  auto remaining = mh->inUseCount();
 
   bool shouldMesh = false;
 
