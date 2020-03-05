@@ -16,8 +16,8 @@
 
 namespace mesh {
 
-static constexpr int kPartitionedHeapNBins = 10;
-static constexpr int kPartitionedHeapArenaSize = 250 * 1024 * 1024;  // 256 MB
+static constexpr int kPartitionedHeapNBins = 16;
+static constexpr int kPartitionedHeapArenaSize = 512 * 1024 * 1024;  // 512 MB
 static constexpr int kPartitionedHeapSizePer = kPartitionedHeapArenaSize / kPartitionedHeapNBins;
 
 // Fast allocation for multiple size classes
@@ -42,6 +42,8 @@ public:
       const auto allocSize = powerOfTwo::ByteSizeForClass(i);
       const auto maxCount = kPartitionedHeapSizePer / allocSize;
 
+      // mesh::debug("internal heap of allocSize %zu\n", allocSize);
+
       _smallHeaps[i].init(allocSize, maxCount, arenaStart, reinterpret_cast<void **>(freelistStart));
     }
 
@@ -52,13 +54,18 @@ public:
     const auto sizeClass = powerOfTwo::ClassForByteSize(sz);
 
     if (unlikely(sizeClass >= kPartitionedHeapNBins)) {
-      return _bigHeap.malloc(sz);
+      auto res = _bigHeap.malloc(sz);
+      // debug("internalHeap::malloc(%zu): %p (big)\n", sz, res);
+      return res;
     }
 
-    return _smallHeaps[sizeClass].alloc();
+    auto res = _smallHeaps[sizeClass].alloc();
+    // debug("internalHeap::malloc(%zu): %p\n", sz, res);
+    return res;
   }
 
   inline void free(void *ptr) {
+    // debug("internalHeap::free(): %p\n", ptr);
     if (unlikely(!contains(ptr))) {
       _bigHeap.free(ptr);
       return;
