@@ -361,7 +361,7 @@ public:
     d_assert(!mh->getFreelist()->prev().hasValue());
     d_assert(!mh->getFreelist()->next().hasValue());
     mh->MiniHeap::~MiniHeap();
-    memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
+    // memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
     _mhAllocator.free(mh);
     _miniheapCount--;
   }

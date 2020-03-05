@@ -286,9 +286,9 @@ void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
 size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSets, SplitArray &left,
                                        SplitArray &right) {
   size_t mergeSetCount = 0;
-  memset(reinterpret_cast<void *>(&mergeSets), 0, sizeof(mergeSets));
-  memset(&left, 0, sizeof(left));
-  memset(&right, 0, sizeof(right));
+  // memset(reinterpret_cast<void *>(&mergeSets), 0, sizeof(mergeSets));
+  // memset(&left, 0, sizeof(left));
+  // memset(&right, 0, sizeof(right));
 
   auto meshFound =
       function<bool(std::pair<MiniHeap *, MiniHeap *> &&)>([&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
