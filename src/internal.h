@@ -101,6 +101,9 @@ class MiniHeap;
 MiniHeap *GetMiniHeap(const MiniHeapID id);
 MiniHeapID GetMiniHeapID(const MiniHeap *mh);
 
+typedef std::array<MiniHeap *, kMaxSplitListSize> SplitArray;
+typedef std::array<std::pair<MiniHeap *, MiniHeap *>, kMaxMergeSets> MergeSetArray;
+
 template <typename Object, typename ID>
 class ListEntry {
 public:
