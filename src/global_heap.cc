@@ -27,6 +27,10 @@ MiniHeapID GetMiniHeapID(const MiniHeap *mh) {
   return runtime().heap().miniheapIDFor(mh);
 }
 
+void PrefetchMiniHeap(const MiniHeapID id) {
+  return runtime().heap().prefetchMiniheapForID(id);
+}
+
 void *GlobalHeap::malloc(size_t sz) {
 #ifndef NDEBUG
   if (unlikely(sz <= kMaxSize)) {
@@ -441,6 +445,7 @@ void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry *miniheaps, S
   while (mhId != list::Head && leftSize < kMaxSplitListSize && rightSize < kMaxSplitListSize) {
     auto mh = GetMiniHeap(mhId);
     mhId = mh->getFreelist()->next();
+    PrefetchMiniHeap(mhId);
 
     if (!mh->isMeshingCandidate() || (mh->fullness() >= kOccupancyCutoff)) {
       continue;

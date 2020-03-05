@@ -100,6 +100,7 @@ static constexpr uint8_t Max = 4;
 class MiniHeap;
 MiniHeap *GetMiniHeap(const MiniHeapID id);
 MiniHeapID GetMiniHeapID(const MiniHeap *mh);
+void PrefetchMiniHeap(const MiniHeapID id);
 
 typedef std::array<MiniHeap *, kMaxSplitListSize> SplitArray;
 typedef std::array<std::pair<MiniHeap *, MiniHeap *>, kMaxMergeSets> MergeSetArray;
