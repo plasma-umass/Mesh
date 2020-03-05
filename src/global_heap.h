@@ -339,10 +339,6 @@ public:
     return mh;
   }
 
-  inline void ATTRIBUTE_ALWAYS_INLINE prefetchMiniheapForID(const MiniHeapID id) const {
-    _mhAllocator.prefetchPtrFromOffset(id.value());
-  }
-
   inline MiniHeapID miniheapIDFor(const MiniHeap *mh) const {
     return MiniHeapID{_mhAllocator.offsetFor(mh)};
   }

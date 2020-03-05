@@ -77,12 +77,6 @@ public:
     return _arena + off * allocSize;
   }
 
-  inline void prefetchPtrFromOffset(size_t off) const {
-    // don't check its within bounds because builtin_prefetch don't care
-    auto ptr =  _arena + off * allocSize;
-    __builtin_prefetch(ptr, 0, 2);
-  }
-
   inline char *arenaEnd() const {
     return _arena + allocSize * maxCount;
   }
