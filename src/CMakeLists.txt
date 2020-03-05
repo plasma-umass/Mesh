@@ -146,42 +146,6 @@ endforeach()
 add_mesh_test(larson-glibc larson.cc "")
 target_link_libraries(larson-glibc PRIVATE -pthread)
 
-#todo: build and link tcmalloc
-#Build tcmalloc
-#set(tcmalloc_src
-#        vendor/gperftools/src/
-#        )
-#add_library(tcmalloc_minimal SHARED ${tcmalloc_src})
-
-#Create additional larson that relies on tcmalloc_minimal
-#add_test(larson-tcmalloc larson.cc tcmalloc_minimal)
-
-if(UNIX AND NOT APPLE)
-#Build hoard
-set(hoard_src
-        vendor/Hoard/src/source/libhoard.cpp
-        vendor/Hoard/src/source/uselibhoard.cpp
-        )
-if(WIN32)
-    list(APPEND hoard_src vendor/Hoard/src/source/wintls.cpp)
-elseif(APPLE)
-    list(APPEND hoard_src vendor/Hoard/src/source/mactls.cpp)
-else()
-    list(APPEND hoard_src vendor/Hoard/src/source/unixtls.cpp)
-endif()
-include_directories(vendor/Hoard/src/include)
-include_directories(vendor/Hoard/src/include/hoard)
-include_directories(vendor/Hoard/src/include/superblocks)
-include_directories(vendor/Hoard/src/include/util)
-add_library(hoard SHARED ${hoard_src})
-target_link_libraries(hoard PRIVATE -ldl)
-
-
-#Create additional tests that require hoard
-add_mesh_test(big-alloc-hoard big-alloc.c hoard)
-add_mesh_test(larson-hoard larson.cc hoard)
-endif()
-
 #Deal with coverage
 if(${GCOV})
     add_custom_target(coverage_gcc

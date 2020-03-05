@@ -4,12 +4,6 @@
 [submodule "src/vendor/googletest"]
 	path = src/vendor/googletest
 	url = https://github.com/google/googletest.git
-[submodule "src/vendor/Hoard"]
-	path = src/vendor/Hoard
-	url = https://github.com/emeryberger/Hoard
-[submodule "src/vendor/gperftools"]
-	path = src/vendor/gperftools
-	url = https://github.com/gperftools/gperftools
 [submodule "src/vendor/benchmark"]
 	path = src/vendor/benchmark
 	url = https://github.com/google/benchmark
