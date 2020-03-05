@@ -315,16 +315,16 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass) {
     std::pair<MiniHeap *, MiniHeap *> &mergeSet = MergeSets[i];
     // merge _into_ the one with a larger mesh count, potentially
     // swapping the order of the pair
-    const auto aCount = std::get<0>(mergeSet)->meshCount();
-    const auto bCount = std::get<1>(mergeSet)->meshCount();
+    const auto aCount = mergeSet.first->meshCount();
+    const auto bCount = mergeSet.second->meshCount();
     if (aCount + bCount > kMaxMeshes) {
       continue;
     } else if (aCount < bCount) {
-      mergeSet = std::pair<MiniHeap *, MiniHeap *>(std::get<1>(mergeSet), std::get<0>(mergeSet));
+      mergeSet = std::pair<MiniHeap *, MiniHeap *>(mergeSet.second, mergeSet.first);
     }
 
-    auto dst = std::get<0>(mergeSet);
-    auto src = std::get<1>(mergeSet);
+    auto dst = mergeSet.first;
+    auto src = mergeSet.second;
 
     // final check: if one of these miniheaps is now empty
     // (e.g. because a parallel thread is freeing a bunch of objects
