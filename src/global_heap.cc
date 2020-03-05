@@ -3,6 +3,8 @@
 // Use of this source code is governed by the Apache License,
 // Version 2.0, that can be found in the LICENSE file.
 
+#include <utility>
+
 #include "global_heap.h"
 
 #include "meshing.h"
@@ -305,18 +307,21 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
 
   for (size_t i = 0; i < mergeSetCount; i++) {
     std::pair<MiniHeap *, MiniHeap *> &mergeSet = mergeSets[i];
+    MiniHeap *dst = mergeSet.first;
+    MiniHeap *src = mergeSet.second;
+    d_assert(dst != nullptr);
+    d_assert(src != nullptr);
+
     // merge _into_ the one with a larger mesh count, potentially
     // swapping the order of the pair
-    const auto aCount = mergeSet.first->meshCount();
-    const auto bCount = mergeSet.second->meshCount();
-    if (aCount + bCount > kMaxMeshes) {
+    const auto dstCount = src->meshCount();
+    const auto srcCount = src->meshCount();
+    if (srcCount + srcCount > kMaxMeshes) {
       continue;
-    } else if (aCount < bCount) {
-      mergeSet = std::pair<MiniHeap *, MiniHeap *>(mergeSet.second, mergeSet.first);
     }
-
-    auto dst = mergeSet.first;
-    auto src = mergeSet.second;
+    if (dstCount < srcCount) {
+      std::swap(dst, src);
+    }
 
     // final check: if one of these miniheaps is now empty
     // (e.g. because a parallel thread is freeing a bunch of objects
