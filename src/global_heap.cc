@@ -25,14 +25,6 @@ MiniHeapID GetMiniHeapID(const MiniHeap *mh) {
   return runtime().heap().miniheapIDFor(mh);
 }
 
-static std::array<MiniHeap *, kMaxSplitListSize> PAGE_ALIGNED Left;
-static std::array<MiniHeap *, kMaxSplitListSize> PAGE_ALIGNED Right;
-static std::array<std::pair<MiniHeap *, MiniHeap *>, kMaxMergeSets> PAGE_ALIGNED MergeSets;
-
-static_assert(sizeof(Left) == sizeof(void *) * 16384, "array too big");
-static_assert(sizeof(Right) == sizeof(void *) * 16384, "array too big");
-static_assert(sizeof(MergeSets) == sizeof(void *) * 2 * 4096, "array too big");
-
 void *GlobalHeap::malloc(size_t sz) {
 #ifndef NDEBUG
   if (unlikely(sz <= kMaxSize)) {
@@ -289,14 +281,14 @@ void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
   untrackMiniheapLocked(src);
 }
 
-size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass) {
+size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSets) {
   size_t mergeSetCount = 0;
-  memset(&MergeSets, 0, sizeof(MergeSets));
+  memset(&mergeSets, 0, sizeof(mergeSets));
 
   auto meshFound =
       function<bool(std::pair<MiniHeap *, MiniHeap *> &&)>([&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
         if (miniheaps.first->isMeshingCandidate() && miniheaps.second->isMeshingCandidate()) {
-          MergeSets[mergeSetCount] = std::move(miniheaps);
+          mergeSets[mergeSetCount] = std::move(miniheaps);
           mergeSetCount++;
         }
         return mergeSetCount < kMaxMergeSets;
@@ -312,7 +304,7 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass) {
   size_t meshCount = 0;
 
   for (size_t i = 0; i < mergeSetCount; i++) {
-    std::pair<MiniHeap *, MiniHeap *> &mergeSet = MergeSets[i];
+    std::pair<MiniHeap *, MiniHeap *> &mergeSet = mergeSets[i];
     // merge _into_ the one with a larger mesh count, potentially
     // swapping the order of the pair
     const auto aCount = mergeSet.first->meshCount();
@@ -354,6 +346,17 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass) {
 }
 
 void GlobalHeap::meshAllSizeClassesLocked() {
+  static MergeSetArray PAGE_ALIGNED MergeSets;
+  static_assert(sizeof(MergeSets) == sizeof(void *) * 2 * 4096, "array too big");
+  d_assert((reinterpret_cast<uintptr_t>(&MergeSets) & (kPageSize - 1)) == 0);
+
+  static SplitArray PAGE_ALIGNED Left;
+  static SplitArray PAGE_ALIGNED Right;
+  static_assert(sizeof(Left) == sizeof(void *) * 16384, "array too big");
+  static_assert(sizeof(Right) == sizeof(void *) * 16384, "array too big");
+  d_assert((reinterpret_cast<uintptr_t>(&Left) & (kPageSize - 1)) == 0);
+  d_assert((reinterpret_cast<uintptr_t>(&Right) & (kPageSize - 1)) == 0);
+
   // if we have freed but not reset meshed mappings, this will reset
   // them to the identity mapping, ensuring we don't blow past our VMA
   // limit (which is why we set the force flag to true)
@@ -379,7 +382,7 @@ void GlobalHeap::meshAllSizeClassesLocked() {
   size_t totalMeshCount = 0;
 
   for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
-    totalMeshCount += meshSizeClassLocked(sizeClass);
+    totalMeshCount += meshSizeClassLocked(sizeClass, MergeSets);
   }
 
   madvise(&Left, sizeof(Left), MADV_DONTNEED);

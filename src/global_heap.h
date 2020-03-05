@@ -20,6 +20,9 @@ using namespace HL;
 
 namespace mesh {
 
+typedef std::array<MiniHeap *, kMaxSplitListSize> SplitArray;
+typedef std::array<std::pair<MiniHeap *, MiniHeap *>, kMaxMergeSets> MergeSetArray;
+
 static constexpr std::pair<MiniHeapListEntry, size_t> Head{MiniHeapListEntry{list::Head, list::Head}, 0};
 
 class EpochLock {
@@ -526,7 +529,7 @@ private:
   // check for meshes in all size classes -- must be called LOCKED
   void meshAllSizeClassesLocked();
   // meshSizeClassLocked returns the number of merged sets found
-  size_t meshSizeClassLocked(size_t sizeClass);
+  size_t meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSets);
 
   const size_t _maxObjectSize;
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};
