@@ -1,3 +1,7 @@
+# Copyright 2020 The Mesh Authors. All rights reserved.
+# Use of this source code is governed by the Apache License,
+# Version 2.0, that can be found in the LICENSE file.
+
 common_defines = [
     "MESHING_ENABLED=1",
     "SHUFFLE_ON_FREE=1",

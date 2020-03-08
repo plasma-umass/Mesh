@@ -1,42 +1,59 @@
-workspace(name = "org_libmesh")
+# Copyright 2020 The Mesh Authors. All rights reserved.
+# Use of this source code is governed by the Apache License,
+# Version 2.0, that can be found in the LICENSE file.
 
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+workspace(name = 'org_libmesh')
 
-llvm_toolchain_commit = "df0f2eb6fe698b4483bb2d5b5670c17ac69c6362"
+load('@bazel_tools//tools/build_defs/repo:http.bzl', 'http_archive')
 
-googletest_commit = "f2fb48c3b3d79a75a88a99fba6576b25d42ec528"
-
-heaplayers_commit = "fbbf8b46e608e6b9e0a4ee2e180a243c5a15d743"
+commit = {
+    'llvm_toolchain': '6f99e79bb4f8ad1c8c362745d648197e536826ab',
+    'rules_cc': 'd545fa4f798f2a0b82f556b8b0ec59a93c100df7',
+    'googletest': '703bd9caab50b139428cea1aaff9974ebee5742e',
+    'heap_layers': 'a80041cc15174ab82a39bae1cd750b52955c7eef',
+}
 
 http_archive(
-    name = "com_grail_bazel_toolchain",
-    sha256 = "105bfaf1355fb1d98781000a2986fd50424e1923e951d75aa6d3bbec6dba6907",
-    strip_prefix = "bazel-toolchain-" + llvm_toolchain_commit,
-    urls = ["https://github.com/grailbio/bazel-toolchain/archive/{}.tar.gz".format(llvm_toolchain_commit)],
+    name = 'rules_cc',
+    urls = [
+        'https://github.com/bazelbuild/rules_cc/archive/{}.zip'.format(commit['rules_cc']),
+    ],
+    strip_prefix = 'rules_cc-{}'.format(commit['rules_cc']),
+    sha256 = '682a0ce1ccdac678d07df56a5f8cf0880fd7d9e08302b8f677b92db22e72052e',
 )
 
-load("@com_grail_bazel_toolchain//toolchain:rules.bzl", "llvm_toolchain")
+http_archive(
+    name = 'com_grail_bazel_toolchain',
+    urls = [
+        'https://github.com/grailbio/bazel-toolchain/archive/{}.zip'.format(commit['llvm_toolchain']),
+    ],
+    strip_prefix = 'bazel-toolchain-{}'.format(commit['llvm_toolchain']),
+    sha256 = '581b7bfb2962a7daf19c4a66b37d97001ab7017126530978aef252615184fef7',
+)
+
+load('@com_grail_bazel_toolchain//toolchain:rules.bzl', 'llvm_toolchain')
 
 llvm_toolchain(
-    name = "llvm_toolchain",
-    llvm_version = "8.0.0",
+    name = 'llvm_toolchain',
+    llvm_version = '9.0.0',
 )
 
-load("@llvm_toolchain//:toolchains.bzl", "llvm_register_toolchains")
+load('@llvm_toolchain//:toolchains.bzl', 'llvm_register_toolchains')
 
 llvm_register_toolchains()
 
-git_repository(
-    name = "com_google_googletest",
-    commit = googletest_commit,
-    remote = "https://github.com/google/googletest.git",
-    shallow_since = "1565193450 -0400",
+http_archive(
+    name = 'org_heaplayers',
+    urls = [
+        'https://github.com/google/googletest/archive/{}.zip'.format(commit['googletest']),
+    ],
+    strip_prefix = 'googletest-{}'.format(commit['googletest']),
 )
 
-git_repository(
-    name = "org_heaplayers",
-    commit = heaplayers_commit,
-    remote = "https://github.com/bpowers/Heap-Layers.git",
-    shallow_since = "1568864248 -0700",
+http_archive(
+    name = 'org_heaplayers',
+    urls = [
+        'https://github.com/emeryberger/Heap-Layers/archive/{}.zip'.format(commit['heap_layers']),
+    ],
+    strip_prefix = 'Heap-Layers-{}'.format(commit['heap_layers']),
 )
