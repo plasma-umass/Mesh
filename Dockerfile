@@ -20,8 +20,7 @@ COPY . .
 
 ENV PREFIX /usr/local
 
-RUN git submodule update --init --recursive \
- && support/install_all_configs PREFIX=/usr/local
+RUN support/install_all_configs PREFIX=/usr/local
 
 
 FROM ubuntu:18.04

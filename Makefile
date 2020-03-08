@@ -1,11 +1,19 @@
 PREFIX = /usr
 
-UNAME_S := $(shell uname -s)
+BAZEL_CONFIG = ''
+
+LIB_SUFFIX = ''
+
+UNAME_S = $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-LIB     = libmesh.dylib
+LIB_EXT = dylib
 else
-LIB     = libmesh.so
+LIB_EXT = so
 endif
+
+LIB         = libmesh.$(LIB_EXT)
+INSTALL_LIB = libmesh$(LIB_SUFFIX).$(LIB_EXT)
+
 COV_DIR = coverage
 CONFIG  = Makefile
 
@@ -21,14 +29,14 @@ endif
 
 all: test build
 
-build:
-	./bazel build -c opt //src:$(LIB)
+build lib:
+	./bazel build $(BAZEL_CONFIG) -c opt //src:$(LIB)
 
 test check:
 	./bazel test //src:unit-tests
 
 install:
-	install -c -m 0755 bazel-out/k8-opt/bin/src/$(LIB) $(PREFIX)/lib/$(LIB)
+	install -c -m 0755 bazel-out/k8-opt/bin/src/$(LIB) $(PREFIX)/lib/$(INSTALL_LIB)
 	ldconfig
 	mkdir -p $(PREFIX)/include/plasma
 	install -c -m 0755 src/plasma/mesh.h $(PREFIX)/include/plasma/mesh.h

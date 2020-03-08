@@ -1,11 +1,33 @@
 #!/bin/bash
+set -euo pipefail
 
 for n in 0 1 2; do
-    for meshing in '--disable-meshing' ''; do
-        echo building --randomization $n $meshing
-        ./configure --no-debug --randomization $n $meshing --suffix
-        make clean
-        make -j5 lib test
-        sudo make install $1
+    for meshing in y n; do
+        suffix="${n}${meshing}"
+        rand_config=''
+        meshing_config=''
+        case "$n" in
+            0)
+                rand_config='--config=disable-randomization'
+                ;;
+            1)
+                # already the default
+                ;;
+            2)
+                rand_config='--config=shuffle-on-free'
+                ;;
+        esac
+        case "$meshing" in
+            n)
+                meshing_config='--config=disable-meshing'
+                ;;
+            y)
+                # already the default
+                ;;
+        esac
+        bazel_config="$rand_config $meshing_config"
+        echo building "'" "$bazel_config" "'"
+        make V=1 BAZEL_CONFIG="$bazel_config"
+        sudo V=1 make install LIB_SUFFIX="$suffix"
     done
 done
