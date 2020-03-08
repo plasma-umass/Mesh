@@ -2,4 +2,5 @@
 # Use of this source code is governed by the Apache License,
 # Version 2.0, that can be found in the LICENSE file.
 
-build --crosstool_top=@llvm_toolchain//:toolchain --copt=-D_LIBCPP_ENABLE_NODISCARD --cxxopt='-std=c++17'
+build --cxxopt='-std=c++17'
+build --crosstool_top=@llvm_toolchain//:toolchain --copt=-D_LIBCPP_ENABLE_NODISCARD

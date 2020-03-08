@@ -3,15 +3,20 @@
 # Version 2.0, that can be found in the LICENSE file.
 
 COMMON_FLAGS = [
+    # TODO: why doesn't this come from Heap-Layers?
     "-Iexternal/org_heaplayers",
 
     # TODO: have config option to disable this
     "-march=westmere",
     "-mavx",
-    "-Werror=pointer-arith",
+
+    # default to hidden visibility for symbols; we will explicitly export what we want
+    "-fvisibility=hidden",
+
     # warn on lots of stuff; this is cargo-culted from the old Make build system
     "-Wall",
     "-Wextra",
+    "-Werror=pointer-arith",
     "-pedantic",
     "-Wno-unused-parameter",
     "-Wno-unused-variable",
@@ -22,12 +27,7 @@ COMMON_FLAGS = [
     "-Winvalid-offsetof",
     "-Wvariadic-macros",
     "-Wcast-align",
-]  #  + select({
-#     "@bazel_tools//src/conditions:linux_x86_64": [
-#         "-Wundef",
-#     ],
-#     "//conditions:default": [],
-# })
+]
 
 MESH_LLVM_FLAGS = []
 
