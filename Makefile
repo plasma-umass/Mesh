@@ -1,8 +1,10 @@
-PREFIX = /usr
+# Copyright 2020 The Mesh Authors. All rights reserved.
+# Use of this source code is governed by the Apache License,
+# Version 2.0, that can be found in the LICENSE file.
 
-BAZEL_CONFIG = ''
-
-LIB_SUFFIX = ''
+PREFIX       = /usr
+BAZEL_CONFIG =
+LIB_SUFFIX   =
 
 UNAME_S = $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
