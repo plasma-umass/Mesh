@@ -16,16 +16,45 @@ config_setting(
     visibility = ["//visibility:private"],
 )
 
+config_setting(
+    name = "disable_meshing",
+    values = {
+        "define": "disable_meshing=true",
+    },
+    visibility = ["//visibility:private"],
+)
+
+config_setting(
+    name = "disable_randomization",
+    values = {
+        "define": "disable_randomization=true",
+    },
+    visibility = ["//visibility:private"],
+)
+
+config_setting(
+    name = "shuffle_on_free",
+    values = {
+        "define": "shuffle_on_free=true",
+    },
+    visibility = ["//visibility:private"],
+)
+
 NO_BUILTIN_MALLOC = [
     "-fno-builtin-malloc",
     "-fno-builtin-free",
 ]
 
-COMMON_DEFINES = [
-    "MESHING_ENABLED=1",
-    "SHUFFLE_ON_FREE=1",
-    "SHUFFLE_ON_INIT=1",
-] + select({
+COMMON_DEFINES = [] + select({
+    ":disable_meshing": ["MESHING_ENABLED=0"],
+    "//conditions:default": ["MESHING_ENABLED=1"],
+}) + select({
+    ":disable_randomization": ["SHUFFLE_ON_INIT=0"],
+    "//conditions:default": ["SHUFFLE_ON_INIT=1"],
+}) + select({
+    ":shuffle_on_free": ["SHUFFLE_ON_FREE=1"],
+    "//conditions:default": ["SHUFFLE_ON_FREE=0"],
+}) + select({
     "@bazel_tools//src/conditions:linux_x86_64": [
         # "_FORTIFY_SOURCE=2",  # TODO: only in release; but I think Bazel takes care of this?
         "_DEFAULT_SOURCE",

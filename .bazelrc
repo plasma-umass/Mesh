@@ -4,3 +4,7 @@
 
 build --cxxopt='-std=c++17'
 build --crosstool_top=@llvm_toolchain//:toolchain --copt=-D_LIBCPP_ENABLE_NODISCARD
+
+build:disable-meshing --define disable_meshing=true
+build:disable-randomization --define disable_randomization=true
+build:shuffle-on-free --define shuffle_on_free=true
