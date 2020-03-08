@@ -8,7 +8,6 @@ COMMON_FLAGS = [
     # TODO: have config option to disable this
     "-march=westmere",
     "-mavx",
-
     "-Werror=pointer-arith",
     # warn on lots of stuff; this is cargo-culted from the old Make build system
     "-Wall",
@@ -23,13 +22,12 @@ COMMON_FLAGS = [
     "-Winvalid-offsetof",
     "-Wvariadic-macros",
     "-Wcast-align",
-]#  + select({
+]  #  + select({
 #     "@bazel_tools//src/conditions:linux_x86_64": [
 #         "-Wundef",
 #     ],
 #     "//conditions:default": [],
 # })
-
 
 MESH_LLVM_FLAGS = []
 

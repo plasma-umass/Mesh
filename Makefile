@@ -22,10 +22,10 @@ endif
 all: test build
 
 build:
-	bazel build -c opt //src:$(LIB)
+	./bazel build -c opt //src:$(LIB)
 
 test check:
-	bazel test //src:unit-tests
+	./bazel test //src:unit-tests
 
 install:
 	install -c -m 0755 bazel-bin/src/$(LIB) $(PREFIX)/lib/$(LIB)
@@ -46,12 +46,12 @@ format:
 
 clean:
 	find . -name '*~' -print0 | xargs -0 rm -f
-	bazel clean
-	bazel shutdown
+	./bazel clean
+	./bazel shutdown
 
 
 distclean: clean
-	bazel clean --expunge
+	./bazel clean --expunge
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:

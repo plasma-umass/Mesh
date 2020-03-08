@@ -6,7 +6,7 @@ load("//src:copts.bzl", "MESH_DEFAULT_COPTS")
 
 package(default_visibility = ["//visibility:private"])
 
-licenses(["notice"])
+licenses(["notice"])  # Apache 2.0
 
 config_setting(
     name = "llvm",
@@ -62,7 +62,7 @@ COMMON_LINKOPTS = [
     "-lpthread",
     "-ldl",
     "-march=westmere",
-    "-mavx"
+    "-mavx",
     # default to hidden visibility for symbols; we will explicitly export what we want
     # "-fvisibility=hidden",
 ] + select({
@@ -106,8 +106,8 @@ cc_library(
         "plasma/mesh.h",
         "real.cc",
         "real.h",
-        "rng/mwc64.h",
         "rng/mwc.h",
+        "rng/mwc64.h",
         "runtime.cc",
         "runtime.h",
         "shuffle_vector.h",
