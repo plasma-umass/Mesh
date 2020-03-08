@@ -28,7 +28,7 @@ test check:
 	./bazel test //src:unit-tests
 
 install:
-	install -c -m 0755 bazel-bin/src/$(LIB) $(PREFIX)/lib/$(LIB)
+	install -c -m 0755 bazel-out/k8-opt/bin/src/$(LIB) $(PREFIX)/lib/$(LIB)
 	ldconfig
 	mkdir -p $(PREFIX)/include/plasma
 	install -c -m 0755 src/plasma/mesh.h $(PREFIX)/include/plasma/mesh.h
