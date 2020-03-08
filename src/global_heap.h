@@ -8,6 +8,7 @@
 #define MESH_GLOBAL_HEAP_H
 
 #include <algorithm>
+#include <array>
 #include <mutex>
 
 #include "internal.h"

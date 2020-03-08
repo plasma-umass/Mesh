@@ -2,13 +2,32 @@
 # Use of this source code is governed by the Apache License,
 # Version 2.0, that can be found in the LICENSE file.
 
-common_defines = [
+load("//src:copts.bzl", "MESH_DEFAULT_COPTS")
+
+package(default_visibility = ["//visibility:private"])
+
+licenses(["notice"])
+
+config_setting(
+    name = "llvm",
+    flag_values = {
+        "@bazel_tools//tools/cpp:compiler": "llvm",
+    },
+    visibility = ["//visibility:private"],
+)
+
+NO_BUILTIN_MALLOC = [
+    "-fno-builtin-malloc",
+    "-fno-builtin-free",
+]
+
+COMMON_DEFINES = [
     "MESHING_ENABLED=1",
     "SHUFFLE_ON_FREE=1",
     "SHUFFLE_ON_INIT=1",
 ] + select({
     "@bazel_tools//src/conditions:linux_x86_64": [
-        # "_FORTIFY_SOURCE=2",  # TODO: only in release
+        # "_FORTIFY_SOURCE=2",  # TODO: only in release; but I think Bazel takes care of this?
         "_DEFAULT_SOURCE",
         "_BSD_SOURCE",
         "_XOPEN_SOURCE=700",
@@ -16,65 +35,49 @@ common_defines = [
     "//conditions:default": [],
 })
 
-common_copts = [
-    # this doesn't seem to work -- both this and -std=c++11 end up on the commandline
-    "-std=c++14",
-    "-Iexternal/org_heaplayers",
-    # TODO: have config option to disable this
-    "-march=westmere",
-    "-mavx",
-    # general good stuff for malloc-y libs
-    "-fPIC",
-    "-fno-builtin-malloc",
-    # "-ffunction-sections",
-    # "-fdata-sections",
-    "-Werror=pointer-arith",
-    # warn on lots of stuff; this is cargo-culted from the old Make build system
-    "-Wall",
-    "-Wextra",
-    "-pedantic",
-    "-Wno-unused-parameter",
-    "-Wno-unused-variable",
-    "-Woverloaded-virtual",
-    "-Werror=return-type",
-    "-Wtype-limits",
-    "-Wempty-body",
-    "-Winvalid-offsetof",
-    "-Wvariadic-macros",
-    "-Wcast-align",
-    # default to hidden visibility for symbols; we will explicitly export what we want
-    "-fvisibility=hidden",
-    # "-Wa,--noexecstack", # TODO: only for gcc
-] + select({
-    "@bazel_tools//src/conditions:linux_x86_64": [
-        "-Wundef",
-        "-flto",
-    ],
-    "//conditions:default": [],
-})
+# common_copts = [
+#     # this doesn't seem to work -- both this and -std=c++11 end up on the commandline
+#     # TODO: have config option to disable this
+#     "-march=westmere",
+#     "-mavx",
+#     # TODO: should we specify this or should a toolchain opt take care of it?
+#     # "-fPIC",
+#     # "-ffunction-sections",
+#     # "-fdata-sections",
+#     #
+#     # default to hidden visibility for symbols; we will explicitly export what we want
+#     # "-fvisibility=hidden", # TODO: I'm pretty sure toolchain takes care of this
+#     # "-Wa,--noexecstack", # TODO: only for gcc
+# ] + select({
+#     "@bazel_tools//src/conditions:linux_x86_64": [
+#         # "-flto",
+#     ],
+#     "//conditions:default": [],
+# })
 
-common_linkopts = [
+COMMON_LINKOPTS = [
     # TODO: only in release/opt build
     "-O3",
     "-lm",
     "-lpthread",
     "-ldl",
     "-march=westmere",
+    "-mavx"
     # default to hidden visibility for symbols; we will explicitly export what we want
-    "-fvisibility=hidden",
+    # "-fvisibility=hidden",
 ] + select({
     "@bazel_tools//src/conditions:linux_x86_64": [
-        "-flto",
-        "-Wl,--no-as-needed",
-        "-Wl,--no-add-needed",
-        "-Wl,--sort-common",
-        # "-Wl,--gc-sections", # set by toolchain on --opt
-        "-Wl,--hash-style=both",
-        "-Wl,--no-undefined",
-        "-Wl,-Bsymbolic-functions",
-        "-Wl,-z,now,-z,relro",
-        "-ftls-model=initial-exec",
-        "-lrt",
+        # "-flto",
+        # "-Wl,--no-as-needed",
+        # "-Wl,--no-add-needed",
+        # "-Wl,--sort-common",
+        # # "-Wl,--gc-sections", # set by toolchain on --opt
+        # "-Wl,--hash-style=both",
+        # "-Wl,--no-undefined",
+        # "-Wl,-Bsymbolic-functions",
+        # "-Wl,-z,now,-z,relro",
+        # "-ftls-model=initial-exec",
+        # "-lrt",
     ],
     "//conditions:default": [],
 })
@@ -98,9 +101,9 @@ cc_library(
         "static/*.h",
         "size_classes.def",
     ]),
-    copts = common_copts,
-    defines = common_defines,
-    linkopts = common_linkopts,
+    copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = COMMON_LINKOPTS,
     linkstatic = True,
     visibility = ["//visibility:private"],
     deps = [
@@ -123,9 +126,10 @@ cc_library(
         "wrapper.cc",
     ]),
     # TODO: config options here too
-    copts = common_copts,
-    defines = common_defines,
-    linkopts = common_linkopts,
+    copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = COMMON_LINKOPTS,
+    linkstatic = True,
     visibility = ["//visibility:private"],
     deps = [
         "@org_heaplayers",
@@ -134,46 +138,29 @@ cc_library(
 
 cc_binary(
     name = "libmesh.so",
-    copts = common_copts,
-    defines = common_defines,
-    linkopts = common_linkopts,
+    copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = COMMON_LINKOPTS,
     linkshared = True,
     visibility = ["//visibility:public"],
     deps = [
         ":mesh-core",
         ":mesh-lib",
     ],
-)
-
-# TODO: dedup this with the above, which only differ in 'name'
-cc_binary(
-    name = "libmesh.dylib",
-    copts = common_copts,
-    defines = common_defines,
-    linkopts = common_linkopts,
-    linkshared = True,
-    visibility = ["//visibility:public"],
-    deps = [
-        ":mesh-core",
-        ":mesh-lib",
-    ],
+    # only valid for cc_library
+    # alwayslink = 1,
 )
 
 cc_test(
     name = "unit-tests",
-    size = "small",
     srcs = glob([
         "unit/*.cc",
     ]),
     copts = [
         "-Isrc",
-        "-Iexternal/gtest/include",
-    ] + common_copts,
-    linkstatic = True,
-    visibility = ["//tools:__pkg__"],
+    ] + MESH_DEFAULT_COPTS,
     deps = [
         ":mesh-core",
-        "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],
 )
