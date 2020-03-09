@@ -92,6 +92,7 @@ COMMON_LINKOPTS = [
     "-ldl",
     "-march=westmere",
     "-mavx",
+    "-ftls-model=initial-exec",
 ] + select({
     "@bazel_tools//src/conditions:linux_x86_64": [
         "-Wl,--no-as-needed",
@@ -101,7 +102,6 @@ COMMON_LINKOPTS = [
         "-Wl,--no-undefined",
         "-Wl,-Bsymbolic-functions",
         "-Wl,-z,now,-z,relro",
-        "-ftls-model=initial-exec",
         "-Wl,--exclude-libs=libc++.a",
         "-Wl,--exclude-libs=libc++abi.a",
         "-Wl,--exclude-libs=libunwind.a",
