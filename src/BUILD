@@ -178,6 +178,21 @@ cc_binary(
     # alwayslink = 1,
 )
 
+cc_binary(
+    name = "libmesh.dylib",
+    copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = COMMON_LINKOPTS,
+    linkshared = True,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":mesh-core",
+        ":mesh-lib",
+    ],
+    # only valid for cc_library
+    # alwayslink = 1,
+)
+
 cc_test(
     name = "unit-tests",
     srcs = glob([
