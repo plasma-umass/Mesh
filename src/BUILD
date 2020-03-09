@@ -186,8 +186,23 @@ cc_test(
     copts = [
         "-Isrc",
     ] + MESH_DEFAULT_COPTS,
+    linkopts = COMMON_LINKOPTS,
     deps = [
         ":mesh-core",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "local-refill-benchmark",
+    srcs = ["testing/benchmark/local_refill.cc"],
+    copts = [
+        "-Isrc",
+    ] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    linkopts = COMMON_LINKOPTS,
+    deps = [
+        ":mesh-core",
+        "@com_google_benchmark//:benchmark",
         "@com_google_googletest//:gtest_main",
     ],
 )

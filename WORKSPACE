@@ -10,6 +10,7 @@ commit = {
     "llvm_toolchain": "e088aaf6cda37ded9768aec85adc2be31725a7af",
     "rules_cc": "d545fa4f798f2a0b82f556b8b0ec59a93c100df7",
     "googletest": "703bd9caab50b139428cea1aaff9974ebee5742e",
+    "benchmark": "8e0b1913d4ea803dfeb2e55567208fcab6b1b6c7",
     "heap_layers": "a80041cc15174ab82a39bae1cd750b52955c7eef",
 }
 
@@ -48,6 +49,15 @@ http_archive(
     strip_prefix = "googletest-{}".format(commit["googletest"]),
     urls = [
         "https://github.com/google/googletest/archive/{}.zip".format(commit["googletest"]),
+    ],
+)
+
+http_archive(
+    name = "com_google_benchmark",
+    sha256 = "7eca6b8b82849b3d22b14aae583d327bb13519ea440ddb995c89b8ea468e26b0",
+    strip_prefix = "benchmark-{}".format(commit["benchmark"]),
+    urls = [
+        "https://github.com/google/benchmark/archive/{}.zip".format(commit["benchmark"]),
     ],
 )
 
