@@ -8,6 +8,7 @@ package(default_visibility = ["//visibility:private"])
 
 licenses(["notice"])  # Apache 2.0
 
+# used in copts.bzl to set llvm/gcc-only flags
 config_setting(
     name = "llvm",
     flag_values = {
@@ -64,29 +65,7 @@ COMMON_DEFINES = [] + select({
     "//conditions:default": [],
 })
 
-# common_copts = [
-#     # this doesn't seem to work -- both this and -std=c++11 end up on the commandline
-#     # TODO: have config option to disable this
-#     "-march=westmere",
-#     "-mavx",
-#     # TODO: should we specify this or should a toolchain opt take care of it?
-#     # "-fPIC",
-#     # "-ffunction-sections",
-#     # "-fdata-sections",
-#     #
-#     # default to hidden visibility for symbols; we will explicitly export what we want
-#     # "-fvisibility=hidden", # TODO: I'm pretty sure toolchain takes care of this
-#     # "-Wa,--noexecstack", # TODO: only for gcc
-# ] + select({
-#     "@bazel_tools//src/conditions:linux_x86_64": [
-#         # "-flto",
-#     ],
-#     "//conditions:default": [],
-# })
-
 COMMON_LINKOPTS = [
-    # TODO: only in release/opt build
-    "-O3",
     "-lm",
     "-lpthread",
     "-ldl",
