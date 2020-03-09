@@ -53,7 +53,7 @@ clang-coverage: $(UNIT_BIN) $(LIB) $(CONFIG)
 
 benchmark:
 	./bazel build --config=disable-meshing --config=debugsymbols -c opt //src:local-refill-benchmark
-	/bin/time ./bazel-bin/src/local-refill-benchmark
+	./bazel-bin/src/local-refill-benchmark
 
 format:
 	clang-format -i src/*.cc src/*.c src/*.h  src/plasma/*.h src/rng/*.h src/static/*.h src/test/*.cc src/test/*.cc src/unit/*.cc src/testing/*.cc src/testing/benchmark/*.cc
