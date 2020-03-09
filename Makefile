@@ -51,8 +51,12 @@ clang-coverage: $(UNIT_BIN) $(LIB) $(CONFIG)
 	cd "$(COV_DIR)" && llvm-cov report -instr-profile=unit.test.profdata ../unit.test -ignore-filename-regex='.*(vendor|unit)/.*' -use-color
 	rm -f default.profraw
 
+benchmark:
+	./bazel build --config=disable-meshing --config=debugsymbols -c opt //src:local-refill-benchmark
+	/bin/time ./bazel-bin/src/local-refill-benchmark
+
 format:
-	clang-format -i src/*.cc src/*.c src/*.h  src/plasma/*.h src/rng/*.h src/static/*.h src/test/*.cc src/test/*.cc src/unit/*.cc
+	clang-format -i src/*.cc src/*.c src/*.h  src/plasma/*.h src/rng/*.h src/static/*.h src/test/*.cc src/test/*.cc src/unit/*.cc src/testing/*.cc src/testing/benchmark/*.cc
 
 clean:
 	find . -name '*~' -print0 | xargs -0 rm -f
@@ -68,4 +72,4 @@ TAGS:
 	@echo "  TAGS"
 	find . -type f | egrep '\.(cpp|h|cc|hh)$$' | grep -v google | xargs etags -l c++
 
-.PHONY: all clean distclean format test test_frag check build install TAGS
+.PHONY: all clean distclean format test test_frag check build benchmark install TAGS
