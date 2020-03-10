@@ -8,9 +8,13 @@ LIB_SUFFIX   =
 
 UNAME_S = $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-LIB_EXT = dylib
+LIB_EXT      = dylib
+BAZEL_PREFIX = darwin
+LDCONFIG     =
 else
-LIB_EXT = so
+LIB_EXT      = so
+BAZEL_PREFIX = k8
+LDCONFIG     = ldconfig
 endif
 
 LIB         = libmesh.$(LIB_EXT)
@@ -38,8 +42,8 @@ test check:
 	./bazel test //src:unit-tests
 
 install:
-	install -c -m 0755 bazel-out/k8-opt/bin/src/$(LIB) $(PREFIX)/lib/$(INSTALL_LIB)
-	ldconfig
+	install -c -m 0755 bazel-out/$(BAZEL_PREFIX)-opt/bin/src/$(LIB) $(PREFIX)/lib/$(INSTALL_LIB)
+	$(LDCONFIG)
 	mkdir -p $(PREFIX)/include/plasma
 	install -c -m 0755 src/plasma/mesh.h $(PREFIX)/include/plasma/mesh.h
 
