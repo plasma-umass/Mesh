@@ -175,7 +175,7 @@ cc_binary(
 cc_test(
     name = "unit-tests",
     srcs = glob([
-        "unit/*.cc",
+        "testing/unit/*.cc",
     ]),
     copts = [
         "-Isrc",
