@@ -314,10 +314,10 @@
 #define VA_COPY(dest, src) __va_copy(dest, src)
 #define VA_END_COPY(ap) va_end(ap)
 #else
-#define VA_COPY(dest, src) (void)mymemcpy(&dest, &src, sizeof(va_list))
+#define VA_COPY(dest, src) (void)memcpy(&dest, &src, sizeof(va_list))
 #define VA_END_COPY(ap) /* No-op. */
-#define NEED_MYMEMCPY 1
-static void *mymemcpy(void *, void *, size_t);
+#define NEED_MYMEMCPY 0
+// static void *mymemcpy(void *, void *, size_t);
 #endif /* HAVE_VA_COPY */
 #endif /* !HAVE_VASPRINTF */
 
@@ -826,7 +826,7 @@ int rpl_vsnprintf(char *str, size_t size, const char *format, va_list args) {
          * characters, in an implementation-defined
          * manner." (C99: 7.19.6.1, 8)
          */
-        if ((strvalue = va_arg(args, void *)) == NULL)
+        if ((strvalue = va_arg(args, char *)) == NULL)
           /*
            * We use the glibc format.  BSD prints
            * "0x0", SysV "0".

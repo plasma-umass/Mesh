@@ -104,6 +104,7 @@ cc_library(
         "plasma/*.h",
         "rng/*.h",
         "gnu_wrapper.cc",
+        "rpl_printf.c",
         "static/*.h",
         "size_classes.def",
     ]),
@@ -161,7 +162,14 @@ cc_binary(
     name = "libmesh.dylib",
     copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     defines = COMMON_DEFINES,
-    linkopts = COMMON_LINKOPTS,
+    linkopts = COMMON_LINKOPTS + select({
+        "@bazel_tools//src/conditions:darwin": [
+            "-install_name /usr/local/lib/libmesh.dylib",
+            "-compatibility_version 1",
+            "-current_version 1",
+        ],
+        "//conditions:default": [],
+    }),
     linkshared = True,
     visibility = ["//visibility:public"],
     deps = [
