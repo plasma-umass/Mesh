@@ -160,8 +160,28 @@ cc_binary(
     # alwayslink = 1,
 )
 
-cc_binary(
-    name = "libmesh.dylib",
+cc_library(
+    name = "mesh",
+    srcs = [
+        "libmesh.cc",
+        "d_assert.cc",
+        "global_heap.cc",
+        "measure_rss.cc",
+        "meshable_arena.cc",
+        "real.cc",
+        "runtime.cc",
+        "thread_local_heap.cc",
+    ],
+    hdrs = glob([
+        "*.h",
+        "plasma/*.h",
+        "rng/*.h",
+        "gnu_wrapper.cc",
+        "mac_wrapper.cc",
+        "rpl_printf.c",
+        "static/*.h",
+        "size_classes.def",
+    ]),
     copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     defines = COMMON_DEFINES,
     linkopts = COMMON_LINKOPTS + select({
@@ -169,17 +189,18 @@ cc_binary(
             "-install_name /usr/local/lib/libmesh.dylib",
             "-compatibility_version 1",
             "-current_version 1",
+            "-ldl",
         ],
         "//conditions:default": [],
     }),
-    linkshared = True,
+    linkstatic = False,
     visibility = ["//visibility:public"],
     deps = [
         ":mesh-core",
         ":mesh-lib",
     ],
     # only valid for cc_library
-    # alwayslink = 1,
+    alwayslink = 1,
 )
 
 cc_test(

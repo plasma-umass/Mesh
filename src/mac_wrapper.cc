@@ -53,24 +53,6 @@ using namespace std;
 
 #include <assert.h>
 
-extern "C" {
-
-void *xxmalloc(size_t);
-void xxfree(void *);
-
-/// Pending widespread support for sized deallocation.
-/// void   xxfree_sized (void *, size_t);
-
-// Takes a pointer and returns how much space it holds.
-size_t xxmalloc_usable_size(void *);
-
-// Locks the heap(s), used prior to any invocation of fork().
-void xxmalloc_lock();
-
-// Unlocks the heap(s), after fork().
-void xxmalloc_unlock();
-}
-
 #include "wrappers/macinterpose.h"
 
 //////////
