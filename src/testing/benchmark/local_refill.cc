@@ -33,14 +33,14 @@ static void ATTRIBUTE_NEVER_INLINE initializeMiniHeaps(FixedArray<MiniHeap, kMin
       bits[j] = rng();
     }
   }
-
 }
 
-static void ATTRIBUTE_NEVER_INLINE initAndRefill(FixedArray<MiniHeap, kMiniHeapCount> &array, size_t &n, ShuffleVector &sv) {
+static void ATTRIBUTE_NEVER_INLINE initAndRefill(FixedArray<MiniHeap, kMiniHeapCount> &array, size_t &n,
+                                                 ShuffleVector &sv) {
   {
     FixedArray<MiniHeap, kMaxMiniheapsPerShuffleVector> &miniheaps = sv.miniheaps();
     miniheaps.clear();
-    for (size_t i = 0;  i < kMaxMiniheapsPerShuffleVector; i++) {
+    for (size_t i = 0; i < kMaxMiniheapsPerShuffleVector; i++) {
       miniheaps.append(array[n++]);
       hard_assert(n < kMiniHeapCount);
     }
@@ -60,7 +60,7 @@ static void ATTRIBUTE_NEVER_INLINE initAndRefill(FixedArray<MiniHeap, kMiniHeapC
   }
 }
 
-static void BM_LocalRefill1(benchmark::State& state) {
+static void BM_LocalRefill1(benchmark::State &state) {
   mesh::debug("local refill test!\n");
   const auto tid = gettid();
   GlobalHeap &gheap = runtime().heap();
