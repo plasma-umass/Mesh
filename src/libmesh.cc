@@ -229,8 +229,10 @@ int MESH_EXPORT epoll_pwait(int __epfd, struct epoll_event *__events, int __maxe
 #endif
 }
 
-#ifdef __linux__
+#if defined(__linux__)
 #include "gnu_wrapper.cc"
+#elif defined(__APPLE__)
+#include "mac_wrapper.cc"
 #else
-#include "wrappers/macwrapper.cpp"
+#error "only linux and macOS support for now"
 #endif
