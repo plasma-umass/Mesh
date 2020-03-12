@@ -341,7 +341,7 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
       oneEmpty = true;
     }
 
-    if (!oneEmpty) {
+    if (!oneEmpty && !aboveMeshThreshold()) {
       meshLocked(dst, src);
       meshCount++;
     }
