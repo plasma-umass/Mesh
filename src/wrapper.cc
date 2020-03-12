@@ -6,7 +6,13 @@
 #include <stdint.h>
 #include <stdlib.h>  // size_t
 #include <string.h>  // for memcpy and memset
+
 #include <new>
+
+#include "common.h"
+#include "thread_local_heap.h"
+
+using namespace mesh;
 
 extern "C" {
 
@@ -160,13 +166,18 @@ extern "C" MESH_EXPORT char *MYCDECL CUSTOM_STRNDUP(const char *s, size_t sz) {
 }
 #endif
 
-extern "C" MESH_EXPORT char *MYCDECL CUSTOM_STRDUP(const char *s) {
-  char *newString = NULL;
-  if (s != NULL) {
-    if ((newString = (char *)xxmalloc(strlen(s) + 1))) {
-      strcpy(newString, s);
-    }
+extern "C" MESH_EXPORT char *MYCDECL CUSTOM_STRDUP(const char *src) {
+  if (src == nullptr) {
+    return nullptr;
   }
+
+  // grab the string length once, use it for both malloc and strncpy calls
+  const auto len = strlen(src) + 1;
+  char *newString = reinterpret_cast<char *>(xxmalloc(len));
+  if (newString != nullptr) {
+    strncpy(newString, src, len);
+  }
+
   return newString;
 }
 
