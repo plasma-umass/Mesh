@@ -43,9 +43,10 @@ private:
 public:
   enum { Alignment = 16 };
 
-  ThreadLocalHeap(GlobalHeap *global)
-      : _global(global),
-        _current(gettid()),
+  ThreadLocalHeap(GlobalHeap *global, pthread_t pthreadCurrent)
+      : _current(gettid()),
+        _global(global),
+        _pthreadCurrent(pthreadCurrent),
         _prng(internal::seed(), internal::seed()),
         _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)) {
     const auto arenaBegin = _global->arenaBegin();
@@ -60,6 +61,11 @@ public:
   ~ThreadLocalHeap() {
     releaseAll();
   }
+
+  // pthread_set_sepcific destructor
+  static void DestroyThreadLocalHeap(void *ptr);
+
+  static void InitTLH();
 
   void releaseAll();
 
@@ -214,37 +220,49 @@ public:
     return _global->getSize(ptr);
   }
 
-  static inline ThreadLocalHeap *GetFastPathHeap() {
-    return _threadLocalData.fastpathHeap;
+  static ThreadLocalHeap *NewHeap(pthread_t current);
+  static ThreadLocalHeap *GetHeapIfPresent() {
+#ifdef MESH_HAVE_TLS
+    return _threadLocalHeap;
+#else
+    return _tlhInitialized ? reinterpret_cast<ThreadLocalHeap *>(pthread_getspecific(_heapKey)) : nullptr;
+#endif
   }
 
-  static inline void FreeHeap() {
-    auto heap = GetFastPathHeap();
-    if (heap != nullptr) {
-      heap->ThreadLocalHeap::~ThreadLocalHeap();
-      mesh::internal::Heap().free(reinterpret_cast<void *>(heap));
+  static void DeleteHeap(ThreadLocalHeap *heap);
+
+  static ThreadLocalHeap *GetHeap() {
+    auto heap = GetHeapIfPresent();
+    if (unlikely(heap == nullptr)) {
+      return CreateHeapIfNecessary();
     }
-
-    _threadLocalData.fastpathHeap = nullptr;
+    return heap;
   }
 
-  static ATTRIBUTE_NEVER_INLINE ThreadLocalHeap *GetHeap();
-
-  static ThreadLocalHeap *CreateThreadLocalHeap();
+  static ThreadLocalHeap *ATTRIBUTE_NEVER_INLINE CreateHeapIfNecessary();
 
 protected:
   ShuffleVector _shuffleVector[kNumBins] CACHELINE_ALIGNED;
+  // this cacheline is read-mostly (only changed when creating + destroying threads)
+  const pid_t _current CACHELINE_ALIGNED{0};
   GlobalHeap *_global;
-  pid_t _current{0};
-  MWC _prng;
+  ThreadLocalHeap *_next{};  // protected by global heap lock
+  ThreadLocalHeap *_prev{};
+  const pthread_t _pthreadCurrent;
+  MWC _prng CACHELINE_ALIGNED;
   const size_t _maxObjectSize;
   LocalHeapStats _stats{};
+  bool _inSetSpecific;
 
-  struct ThreadLocalData {
-    ThreadLocalHeap *fastpathHeap;
-  };
-  static __thread ThreadLocalData _threadLocalData CACHELINE_ALIGNED ATTR_INITIAL_EXEC;
+#ifdef MESH_HAVE_TLS
+  static __thread ThreadLocalHeap *_threadLocalHeap CACHELINE_ALIGNED ATTR_INITIAL_EXEC;
+#endif
+
+  static ThreadLocalHeap *_threadLocalHeaps;
+  static bool _tlhInitialized;
+  static pthread_key_t _heapKey;
 };
+
 }  // namespace mesh
 
 #endif  // MESH_THREAD_LOCAL_HEAP_H

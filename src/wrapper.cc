@@ -249,7 +249,7 @@ operator new(size_t sz)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     return mesh::cxxNewSlowpath(sz);
   }
@@ -262,7 +262,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr)
     throw()
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     mesh::freeSlowpath(ptr);
     return;
@@ -273,7 +273,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr)
 
 #if !defined(__SUNPRO_CC) || __SUNPRO_CC > 0x420
 MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz, const std::nothrow_t &) throw() {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     return mesh::allocSlowpath(sz);
   }
@@ -286,7 +286,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     return mesh::cxxNewSlowpath(sz);
   }
@@ -295,7 +295,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz)
 }
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz, const std::nothrow_t &) throw() {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     return mesh::allocSlowpath(sz);
   }
@@ -313,7 +313,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr)
 #endif
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     mesh::freeSlowpath(ptr);
     return;
@@ -329,7 +329,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr, size_t sz)
     throw()
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     mesh::freeSlowpath(ptr);
     return;
@@ -343,7 +343,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr, size_t)
     _GLIBCXX_USE_NOEXCEPT
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     mesh::freeSlowpath(ptr);
     return;

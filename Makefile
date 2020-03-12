@@ -10,19 +10,18 @@ UNAME_S = $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 LIB_EXT      = dylib
 LIB          = mesh
-FS_LIB       = libmesh.dylib
 BAZEL_PREFIX = darwin
 LDCONFIG     =
 PREFIX       = /usr/local
 else
 LIB_EXT      = so
 LIB          = libmesh.$(LIB_EXT)
-FS_LIB       = libmesh.so
 BAZEL_PREFIX = k8
 LDCONFIG     = ldconfig
 endif
 
-INSTALL_LIB = libmesh$(LIB_SUFFIX).$(LIB_EXT)
+FS_LIB       = libmesh.so
+INSTALL_LIB  = libmesh$(LIB_SUFFIX).$(LIB_EXT)
 
 COV_DIR = coverage
 CONFIG  = Makefile

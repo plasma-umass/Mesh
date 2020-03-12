@@ -152,7 +152,7 @@ void Runtime::exitThread(void *retval) {
     mesh::real::init();
   }
 
-  auto heap = ThreadLocalHeap::GetFastPathHeap();
+  auto heap = ThreadLocalHeap::GetHeapIfPresent();
   if (heap != nullptr) {
     heap->releaseAll();
   }

@@ -31,8 +31,9 @@ static __attribute__((constructor)) void libmesh_init() {
     return;
 
   int shouldThread = atoi(bgThread);
-  if (shouldThread)
+  if (shouldThread) {
     runtime().startBgThread();
+  }
 }
 
 static __attribute__((destructor)) void libmesh_fini() {
@@ -95,7 +96,7 @@ static void *memalignSlowpath(size_t alignment, size_t size) {
 }  // namespace mesh
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz) {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     return mesh::allocSlowpath(sz);
   }
@@ -105,7 +106,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz) {
 #define xxmalloc mesh_malloc
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     mesh::freeSlowpath(ptr);
     return;
@@ -116,7 +117,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
 #define xxfree mesh_free
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size_t sz) {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     mesh::freeSlowpath(ptr);
     return;
@@ -126,7 +127,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size
 }
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize) {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     return mesh::reallocSlowpath(oldPtr, newSize);
   }
@@ -135,7 +136,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, siz
 }
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr) {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     return mesh::usableSizeSlowpath(ptr);
   }
@@ -149,7 +150,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
     throw()
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     return mesh::memalignSlowpath(alignment, size);
   }
@@ -158,7 +159,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
 }
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_calloc(size_t count, size_t size) {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetFastPathHeap();
+  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     return mesh::callocSlowpath(count, size);
   }
