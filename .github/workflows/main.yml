@@ -38,7 +38,7 @@ jobs:
           ./bazel test -c dbg //src:unit-tests
       - name: build tests and binary
         run: |
-          make
+          make -j1
 
   macOS_bazel:
     runs-on: macos-latest
@@ -46,10 +46,10 @@ jobs:
     - uses: actions/checkout@v1
     - name: build in debug mode
       run: |
-        ./bazel test -c dbg //src:unit-tests
+        ./bazel test -c dbg //src:unit-tests --test_output=all --cache_test_results=no --runs_per_test=5
     - name: build tests and binary
       run: |
-        make
+        make -j1
 
   #Windows_MinGW:   
   #
