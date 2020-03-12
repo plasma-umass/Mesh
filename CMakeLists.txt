@@ -20,19 +20,6 @@ ExternalProject_Add(googletest
         GIT_TAG           703bd9caab50b139428cea1aaff9974ebee5742e
         SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-src"
         BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-build"
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND     ""
-        INSTALL_COMMAND   ""
-        TEST_COMMAND      ""
-)
-
-ExternalProject_Add(benchmark
-        GIT_REPOSITORY    https://github.com/google/benchmark.git
-        GIT_TAG           8e0b1913d4ea803dfeb2e55567208fcab6b1b6c7
-        SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/benchmark-src"
-        BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/benchmark-build"
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND     ""
         INSTALL_COMMAND   ""
         TEST_COMMAND      ""
 )

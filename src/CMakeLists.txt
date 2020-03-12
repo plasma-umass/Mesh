@@ -23,57 +23,6 @@ set(mesh_src
 add_library(mesh SHARED ${mesh_src})
 target_link_libraries(mesh PRIVATE -pthread -ldl)
 
-
-#Create a set of source files from the google test suite for the unit tests
-set(google_src
-#        ${CMAKE_CURRENT_BINARY_DIR}/googletest-src/src/gtest-all.cc
-#        ${CMAKE_CURRENT_BINARY_DIR}/googletest-src/src/gtest_main.cc
-        )
-
-#Add definition required by the Google tests (to make it stop complaining)
-if (WIN32)
-    set(win_def -DGTEST_OS_MAC=0
-                -DGTEST_OS_LINUX=0
-                -DGTEST_OS_WINDOWS
-            )
-elseif(APPLE)
-    set(apple_def -DGTEST_OS_MAC
-                  -DGTEST_OS_LINUX=0
-                  -DGTEST_OS_WINDOWS=0
-            )
-elseif(UNIX AND NOT APPLE)
-    set(linux_def -DGTEST_OS_MAC=0
-                  -DGTEST_OS_LINUX
-                  -DGTEST_OS_WINDOWS=0
-            )
-else()
-    message(FATAL_ERROR Unsupported platform)
-endif()
-set(google_tests_definitions
-        -DGTEST_FOR_GOOGLE_=0
-        -DGTEST_HAS_ABSL=0
-        -DGTEST_IS_THREADSAFE=1
-        -DGTEST_OS_AIX=0
-        -DGTEST_OS_FUCHSIA=0
-        -DGTEST_OS_IOS=0
-        ${linux_def}
-        -DGTEST_OS_LINUX_ANDROID=0
-        ${apple_def}
-        -DGTEST_OS_NACL=0
-        -DGTEST_OS_OS2=0
-        -DGTEST_OS_QNX=0
-        -DGTEST_OS_SYMBIAN=0
-        -DGTEST_OS_USES_PCRE=0
-        ${win_def}
-        -DGTEST_OS_WINDOWS_MOBILE=0
-        -DGTEST_OS_WINDOWS_PHONE=0
-        -DGTEST_OS_WINDOWS_RT=0
-        -DGTEST_OS_ZOS=0
-        -DGTEST_USES_PCRE=0
-        -DGTEST_USES_SIMPLE_RE=0
-)
-
-
 #Create a set of source files for the unit tests
 set(unit_src
         ${common_src}
@@ -90,29 +39,21 @@ set(unit_src
 add_executable(unit.test ${unit_src})
 target_link_libraries(unit.test PRIVATE -ldl -pthread )
 
+set(GTEST_DIR ${CMAKE_CURRENT_BINARY_DIR}/../googletest-src/googletest)
+
+ExternalProject_Get_Property(googletest binary_dir)
+set(GTEST_LIBRARY_PATH ${binary_dir}/lib/${CMAKE_FIND_LIBRARY_PREFIXES}gtest.a)
+target_link_libraries(unit.test PRIVATE ${GTEST_LIBRARY_PATH})
+
+set(GTEST_MAIN_LIBRARY_PATH ${binary_dir}/lib/${CMAKE_FIND_LIBRARY_PREFIXES}gtest_main.a)
+target_link_libraries(unit.test PRIVATE ${GTEST_MAIN_LIBRARY_PATH})
+
 #Include header file paths to the unit tests
-target_include_directories(unit.test SYSTEM PRIVATE vendor/googletest/googletest/include)
-target_include_directories(unit.test PRIVATE vendor/googletest/googletest)
+target_include_directories(unit.test SYSTEM PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/../googletest-src/googletest/include)
 
 #Set specific compiler flags for the unit tests
-target_compile_definitions(unit.test PRIVATE -DGTEST_HAS_PTHREAD=1 ${google_tests_definitions})
-target_compile_options(unit.test PRIVATE -Wno-unused-const-variable)
-
-#Create targets for each test
-function (add_mesh_test testname testfilename libraries_to_link)
-    add_executable(${testname} test/${testfilename} ${aligned_malloc_src})
-    list(LENGTH libraries_to_link length)
-    if (length GREATER 0)
-        target_link_libraries(${testname} "${libraries_to_link}")
-    endif()
-    target_compile_options(${testname} PRIVATE -pipe -fno-builtin-malloc -fno-omit-frame-pointer)
-
-    #Include target to run the executable
-    add_custom_target(run_${testname}
-            COMMAND ${testname}
-            WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-            DEPENDS ${testname})
-endfunction(add_mesh_test)
+target_compile_definitions(unit.test PRIVATE -DGTEST_HAS_PTHREAD=1)
+target_compile_options(unit.test PRIVATE -Wno-unused-const-variable -Wno-unused-variable)
 
 #Deal with coverage
 if(${GCOV})
