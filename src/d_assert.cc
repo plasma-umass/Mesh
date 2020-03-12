@@ -4,16 +4,13 @@
 // Version 2.0, that can be found in the LICENSE file.
 
 #include <cstdarg>
-#include <cstdio>   // for sprintf
 #include <cstdlib>  // for abort
 
 #include <unistd.h>
 
 #include "common.h"
 
-#ifdef __APPLE__
 #include "rpl_printf.c"
-#endif
 
 // mutex protecting debug and __mesh_assert_fail to avoid concurrent
 // use of static buffers by multiple threads
@@ -35,11 +32,7 @@ void mesh::debug(const char *fmt, ...) {
   va_list args;
 
   va_start(args, fmt);
-#ifdef __APPLE__
   int len = rpl_vsnprintf(buf, buf_len - 1, fmt, args);
-#else
-  int len = vsnprintf(buf, buf_len - 1, fmt, args);
-#endif
   va_end(args);
 
   buf[buf_len - 1] = 0;
@@ -64,12 +57,12 @@ void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file,
   va_list args;
 
   va_start(args, fmt);
-  (void)vsnprintf(usr, usr_len - 1, fmt, args);
+  (void)rpl_vsnprintf(usr, usr_len - 1, fmt, args);
   va_end(args);
 
   usr[usr_len - 1] = 0;
 
-  int len = snprintf(buf, buf_len - 1, "%s:%d:%s: ASSERTION '%s' FAILED: %s\n", file, line, func, assertion, usr);
+  int len = rpl_snprintf(buf, buf_len - 1, "%s:%d:%s: ASSERTION '%s' FAILED: %s\n", file, line, func, assertion, usr);
   if (len > 0) {
     auto _ __attribute__((unused)) = write(STDERR_FILENO, buf, len);
   }
