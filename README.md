@@ -28,6 +28,34 @@ $ LD_PRELOAD=libmesh.so git status
 Please open an issue if you have questions (or issues)!
 
 
+But will it blend?
+------------------
+
+If you run a program linked against mesh (or with Mesh `LD_PRELOAD`ed), setting the variable `MALLOCSTATS=1` will instruct mesh to print a summary at exit:
+
+```
+$ MALLOCSTATS=1 ./bin/redis-server-mesh ./redis.conf
+25216:C 11 Mar 20:27:12.050 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+25216:C 11 Mar 20:27:12.050 # Redis version=4.0.2, bits=64, commit=dfe0d212, modified=0, pid=25216, just started
+25216:C 11 Mar 20:27:12.050 # Configuration loaded
+[...]
+^C25216:signal-handler (1583983641) Received SIGINT scheduling shutdown...
+25216:M 11 Mar 20:27:21.945 # User requested shutdown...
+25216:M 11 Mar 20:27:21.945 * Removing the pid file.
+25216:M 11 Mar 20:27:21.945 * Removing the unix socket file.
+25216:M 11 Mar 20:27:21.945 # Redis is now ready to exit, bye bye...
+MESH COUNT:         25918
+Meshed MB (total):  101.2
+Meshed pages HWM:   25918
+Meshed MB HWM:      101.2
+MH Alloc Count:     56775
+MH Free  Count:     17
+MH High Water Mark: 82687
+```
+
+Not all workloads experience fragmentation, so its possible that Mesh will have a small 'Meshed MB (total' number!
+
+
 Implementation Overview
 -----------------------
 
