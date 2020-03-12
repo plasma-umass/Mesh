@@ -9,17 +9,16 @@ LIB_SUFFIX   =
 UNAME_S = $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 LIB_EXT      = dylib
-LIB          = mesh
 BAZEL_PREFIX = darwin
 LDCONFIG     =
 PREFIX       = /usr/local
 else
 LIB_EXT      = so
-LIB          = libmesh.$(LIB_EXT)
 BAZEL_PREFIX = k8
 LDCONFIG     = ldconfig
 endif
 
+LIB          = mesh
 FS_LIB       = libmesh.so
 INSTALL_LIB  = libmesh$(LIB_SUFFIX).$(LIB_EXT)
 
@@ -42,7 +41,7 @@ build lib:
 	./bazel build $(BAZEL_CONFIG) -c opt //src:$(LIB)
 
 test check:
-	./bazel test //src:unit-tests --test_output=all --cache_test_results=no --action_env="GTEST_COLOR=1"
+	./bazel test //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
 
 install:
 	install -c -m 0755 bazel-out/$(BAZEL_PREFIX)-opt/bin/src/$(FS_LIB) $(PREFIX)/lib/$(INSTALL_LIB)

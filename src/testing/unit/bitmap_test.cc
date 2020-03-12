@@ -9,7 +9,7 @@
 
 #include "bitmap.h"
 
-#include <heaplayers.h>
+#include "heaplayers.h"
 
 TEST(BitmapTest, RepresentationSize) {
   ASSERT_EQ(0UL, mesh::bitmap::representationSize(0));

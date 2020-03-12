@@ -3,15 +3,9 @@
 # Version 2.0, that can be found in the LICENSE file.
 
 COMMON_FLAGS = [
-    # TODO: why doesn't this come from Heap-Layers?
-    "-Iexternal/org_heaplayers",
-
     # TODO: have config option to disable this
     "-march=westmere",
     "-mavx",
-
-    # default to hidden visibility for symbols; we will explicitly export what we want
-    "-fvisibility=hidden",
 
     # warn on lots of stuff; this is cargo-culted from the old Make build system
     "-Wall",

@@ -144,21 +144,6 @@ cc_library(
     ],
 )
 
-cc_binary(
-    name = "libmesh.so",
-    copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
-    defines = COMMON_DEFINES,
-    linkopts = COMMON_LINKOPTS,
-    linkshared = True,
-    visibility = ["//visibility:public"],
-    deps = [
-        ":mesh-core",
-        ":mesh-lib",
-    ],
-    # only valid for cc_library
-    # alwayslink = 1,
-)
-
 cc_library(
     name = "mesh",
     srcs = [
@@ -177,6 +162,7 @@ cc_library(
         "rng/*.h",
         "gnu_wrapper.cc",
         "mac_wrapper.cc",
+        "wrapper.cc",
         "rpl_printf.c",
         "static/*.h",
         "size_classes.def",
@@ -194,9 +180,15 @@ cc_library(
     }),
     linkstatic = False,
     visibility = ["//visibility:public"],
+    # disabled, as we directly specify the source files above.
+    # this is to work around a bazel bug on macOS where if we
+    # specify only deps, it produces an empty dylib
+    # deps = [
+    #     ":mesh-core",
+    #     ":mesh-lib",
+    # ],
     deps = [
-        ":mesh-core",
-        ":mesh-lib",
+        "@org_heaplayers",
     ],
     # only valid for cc_library
     alwayslink = 1,
