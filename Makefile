@@ -42,7 +42,7 @@ build lib:
 	./bazel build $(BAZEL_CONFIG) -c opt //src:$(LIB)
 
 test check:
-	./bazel test //src:unit-tests --test_output=all --cache_test_results=no --runs_per_test=5 --action_env="GTEST_COLOR=1"
+	./bazel test //src:unit-tests --test_output=all --cache_test_results=no --action_env="GTEST_COLOR=1"
 
 install:
 	install -c -m 0755 bazel-out/$(BAZEL_PREFIX)-opt/bin/src/$(FS_LIB) $(PREFIX)/lib/$(INSTALL_LIB)
