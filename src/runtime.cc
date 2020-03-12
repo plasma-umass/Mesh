@@ -88,6 +88,10 @@ Runtime::Runtime() {
 }
 
 void Runtime::initMaxMapCount() {
+#ifndef __linux__
+  return;
+#endif
+
   auto fd = open("/proc/sys/vm/max_map_count", O_RDONLY | O_CLOEXEC);
   if (unlikely(fd < 0)) {
     mesh::debug("initMaxMapCount: no proc file");
