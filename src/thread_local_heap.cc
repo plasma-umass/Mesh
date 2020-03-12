@@ -62,7 +62,7 @@ ThreadLocalHeap *ThreadLocalHeap::NewHeap(pthread_t current) {
 
 ThreadLocalHeap *ThreadLocalHeap::CreateHeapIfNecessary() {
 #ifdef MESH_HAVE_TLS
-  const bool maybeReentrant = !_tlhInited;
+  const bool maybeReentrant = !_tlhInitialized;
   // check to see if we really need to create the heap
   if (_tlhInitialized && _threadLocalHeap != nullptr) {
     return _threadLocalHeap;
