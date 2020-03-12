@@ -13,38 +13,40 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib)
 set(CMAKE_HEADER_OUTPUT_DIRECTORY  ${CMAKE_OUTPUT_DIRECTORY}/include)
 
 
-#Fetch submodules
-find_package(Git QUIET)
-if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
-    # Update submodules as needed
-    option(GIT_SUBMODULE "Check submodules during build" ON)
-    if(GIT_SUBMODULE)
-        message(STATUS "Submodule update")
-        execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                RESULT_VARIABLE GIT_SUBMOD_RESULT)
-        if(NOT GIT_SUBMOD_RESULT EQUAL "0")
-            message(FATAL_ERROR "git submodule update --init failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
-        endif()
-    endif()
-endif()
+include(ExternalProject)
 
-
-#Check if submodules were downloaded
-set(submodules
-    src/vendor/googletest
-    src/vendor/benchmark
-    src/vendor/Heap-Layers
+ExternalProject_Add(googletest
+        GIT_REPOSITORY    https://github.com/google/googletest.git
+        GIT_TAG           703bd9caab50b139428cea1aaff9974ebee5742e
+        SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-src"
+        BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-build"
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND     ""
+        INSTALL_COMMAND   ""
+        TEST_COMMAND      ""
 )
-foreach (submodule ${submodules})
-    if(NOT EXISTS "${PROJECT_SOURCE_DIR}/${submodule}/.git")
-        #Split path to submodule folders to get their name
-        string(REPLACE "/" ";" submodule_name_list ${submodule})
-        list(GET submodule_name_list -1 submodule_name)
-        message(FATAL_ERROR "The ${submodule_name} submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodule and try again.")
-    endif()
-endforeach()
 
+ExternalProject_Add(benchmark
+        GIT_REPOSITORY    https://github.com/google/benchmark.git
+        GIT_TAG           8e0b1913d4ea803dfeb2e55567208fcab6b1b6c7
+        SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/benchmark-src"
+        BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/benchmark-build"
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND     ""
+        INSTALL_COMMAND   ""
+        TEST_COMMAND      ""
+)
+
+ExternalProject_Add(heap_layers
+        GIT_REPOSITORY    https://github.com/emeryberger/Heap-Layers.git
+        GIT_TAG           a80041cc15174ab82a39bae1cd750b52955c7eef
+        SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/heap_layers-src"
+        BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/heap_layers-build"
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND     ""
+        INSTALL_COMMAND   ""
+        TEST_COMMAND      ""
+)
 
 #Create configure options
 option(DEBUG "Build with debugging symbols" OFF) #replace with CMAKE_BUILD_TYPE?
@@ -139,66 +141,47 @@ endif()
 
 
 if (NOT ${DISABLE_MESHING})
-    set(MESHING_ENABLED 1)
+    add_definitions(-DMESHING_ENABLED=1)
 else()
-    set(MESHING_ENABLED 0)
+    add_definitions(-DMESHING_ENABLED=0)
 endif()
 
 if (${RANDOMIZATION} EQUAL 0)
-    set(SHUFFLE_ON_INIT 0)
-    set(SHUFFLE_ON_FREE 0)
+    add_definitions(-DSHUFFLE_ON_INIT=0)
+    add_definitions(-DSHUFFLE_ON_FREE=0)
 elseif(${RANDOMIZATION} EQUAL 1)
-    set(SHUFFLE_ON_INIT 1)
-    set(SHUFFLE_ON_FREE 0)
+    add_definitions(-DSHUFFLE_ON_INIT=1)
+    add_definitions(-DSHUFFLE_ON_FREE=0)
 elseif(${RANDOMIZATION} EQUAL 2)
-    set(SHUFFLE_ON_INIT 1)
-    set(SHUFFLE_ON_FREE 1)
+    add_definitions(-DSHUFFLE_ON_INIT=1)
+    add_definitions(-DSHUFFLE_ON_FREE=1)
 else()
     message(FATAL_ERROR "Unknown option for Randomization parameter")
 endif()
 
-#Create config.h
-configure_file(support/config_template.h ${PROJECT_SOURCE_DIR}/src/config.h)
-
 #Additional compile and linking configuration
-add_definitions(-fPIC
-                -pipe
-                -fno-builtin-malloc
-                -fno-omit-frame-pointer
-                -ffunction-sections
-                -fdata-sections
-                -Werror=pointer-arith
-                -Wall -Wextra -pedantic
-                -Werror=return-type
-                -Wtype-limits
-                -Wempty-body
-                -Wvariadic-macros
-                -Wcast-align
-                -fvisibility=hidden
-        )
-# c.append('cflags', '-Wno-gnu-statement-expression
-# c.append('cflags', '-Wno-c99-extensions
-
-#Language specific definitions
-#Quotes for string and backslashes to escape newline.
-set(custom_c_flags
-     "-Werror=implicit-function-declaration \
-      -Werror=implicit-int \
-      -Werror=pointer-sign \
-     ")
-set(custom_cxx_flags
-    "-Wno-unused-parameter \
-     -Wno-unused-variable \
-     -Woverloaded-virtual \
-     -Wno-ctor-dtor-privacy \
-     -Winvalid-offsetof \
-    ")
+add_definitions(
+        -fPIC
+        -pipe
+        -fno-builtin-malloc
+        -fno-omit-frame-pointer
+        -ffunction-sections
+        -fdata-sections
+        -Werror=pointer-arith
+        -Wall -Wextra -pedantic
+        -Werror=return-type
+        -Wtype-limits
+        -Wempty-body
+        -Wvariadic-macros
+        -Wcast-align
+)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${custom_c_flags}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${custom_cxx_flags}")
 
 if (NOT APPLE AND GCC)
     add_definitions(
+            -Wno-unused-parameter
             -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700
             -Wundef
         )

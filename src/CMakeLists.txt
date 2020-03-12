@@ -1,11 +1,7 @@
 #Include current folder to guarantee headers are found by files
 include_directories(./)
-include_directories(./vendor/Heap-Layers)
-
-#Add a target to fragmenter executable
-add_executable(fragmenter fragmenter.cc measure_rss.cc)
-target_link_libraries(fragmenter PRIVATE -pthread)
-
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/../heap_layers-src)
+# include_directories(./vendor/Heap-Layers)
 
 #Create a common set of source files
 set(common_src
@@ -17,10 +13,6 @@ set(common_src
         measure_rss.cc
         thread_local_heap.cc
         )
-#Add a target to the meshing benchmark executable
-add_executable(meshing-benchmark meshing_benchmark.cc ${common_src})
-target_link_libraries(meshing-benchmark PRIVATE -ldl -pthread)
-
 
 #Create the set of source files for the mesh library
 set(mesh_src
@@ -34,8 +26,8 @@ target_link_libraries(mesh PRIVATE -pthread -ldl)
 
 #Create a set of source files from the google test suite for the unit tests
 set(google_src
-        vendor/googletest/googletest/src/gtest-all.cc
-        vendor/googletest/googletest/src/gtest_main.cc
+#        ${CMAKE_CURRENT_BINARY_DIR}/googletest-src/src/gtest-all.cc
+#        ${CMAKE_CURRENT_BINARY_DIR}/googletest-src/src/gtest_main.cc
         )
 
 #Add definition required by the Google tests (to make it stop complaining)
@@ -86,14 +78,14 @@ set(google_tests_definitions
 set(unit_src
         ${common_src}
         ${google_src}
-        unit/alignment.cc
-        unit/bitmap_test.cc
-        unit/concurrent_mesh_test.cc
-        unit/mesh_test.cc
-        unit/rng_test.cc
-        unit/size_class_test.cc
-        unit/triple_mesh_test.cc
-        )
+        testing/unit/alignment.cc
+        testing/unit/bitmap_test.cc
+        testing/unit/concurrent_mesh_test.cc
+        testing/unit/mesh_test.cc
+        testing/unit/rng_test.cc
+        testing/unit/size_class_test.cc
+        testing/unit/triple_mesh_test.cc
+)
 #Add a target to the unit tests executable
 add_executable(unit.test ${unit_src})
 target_link_libraries(unit.test PRIVATE -ldl -pthread )
@@ -121,30 +113,6 @@ function (add_mesh_test testname testfilename libraries_to_link)
             WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
             DEPENDS ${testname})
 endfunction(add_mesh_test)
-
-set(test_filenames
-        big-alloc.c
-        fork-example.c
-        global-large-stress.cc
-        larson.cc
-        local-alloc.c
-        thread.cc
-        # userfaultfd-kernel-copy.cc
-    )
-
-set (libraries_to_link
-        -pthread
-        )
-
-foreach(testfile ${test_filenames})
-    string(REPLACE "." ";" filename_list ${testfile})
-    list(GET filename_list 0 testname)
-    add_mesh_test(${testname} ${testfile} "${libraries_to_link}")
-endforeach()
-
-#Create additional larson that relies on GCC allocator
-add_mesh_test(larson-glibc larson.cc "")
-target_link_libraries(larson-glibc PRIVATE -pthread)
 
 #Deal with coverage
 if(${GCOV})
