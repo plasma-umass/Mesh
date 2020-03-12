@@ -1,0 +1,17 @@
+# Copyright 2020 The Mesh Authors. All rights reserved.
+# Use of this source code is governed by the Apache License,
+# Version 2.0, that can be found in the LICENSE file.
+
+build --cxxopt='-std=c++17'
+build --crosstool_top=@llvm_toolchain//:toolchain --copt=-D_LIBCPP_ENABLE_NODISCARD
+build --strip=never
+
+# largely from sorbet
+build:debugsymbols --copt=-g3 --copt=-fstandalone-debug --copt=-fno-limit-debug-info
+build:debugsymbols --linkopt=-g3 --linkopt=-fstandalone-debug --linkopt=-fno-limit-debug-info
+build:debugsymbols --spawn_strategy=standalone
+build:debugsymbols --genrule_strategy=standalone
+
+build:disable-meshing --define disable_meshing=true
+build:disable-randomization --define disable_randomization=true
+build:shuffle-on-free --define shuffle_on_free=true

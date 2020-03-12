@@ -2,25 +2,25 @@ Mesh: Compacting Memory Management for C/C++
 ============================================
 
 Mesh is a drop in replacement for
-[malloc(3)](http://man7.org/linux/man-pages/man3/malloc.3.html) that
-compacts the heap without rewriting application pointers.
+[malloc(3)](http://man7.org/linux/man-pages/man3/malloc.3.html)
+that can transparently recover from memory fragmentation without any changes
+to application code.
 
-Mesh is described in an [academic paper (PDF)](https://github.com/plasma-umass/Mesh/raw/master/mesh-pldi19-powers.pdf) that appeared at PLDI 2019.
+Mesh is described in detail in a [paper (PDF)](https://github.com/plasma-umass/Mesh/raw/master/mesh-pldi19-powers.pdf) that appeared at PLDI 2019.
 
 Or watch this talk by Bobby Powers at Strange Loop:
 
 [![Compacting the Uncompactable](https://img.youtube.com/vi/c1UBJbfR-H0/0.jpg)](https://www.youtube.com/watch?v=c1UBJbfR-H0)
 
-Mesh runs on Linux; macOS support should be considered alpha-quality,
-and Windows is a work in progress.
+Mesh runs on Linux and macOS.  Windows is a work in progress.
 
-Mesh has a standard C++ build process, and has no runtime dependencies
-other than libc-related libs:
+Mesh uses [bazel](https://bazel.build/) as a build system, but wraps it in a Makefile, and has no runtime dependencies
+other than libc:
 
 ```
-$ git clone --recurse-submodules https://github.com/plasma-umass/mesh
+$ git clone https://github.com/plasma-umass/mesh
 $ cd mesh
-$ ./configure; make; sudo make install
+$ make; sudo make install
 # example: run git with mesh as its allocator:
 $ LD_PRELOAD=libmesh.so git status
 ```
@@ -33,7 +33,7 @@ Implementation Overview
 
 Mesh is built on [Heap Layers](http://heaplayers.org/), an
 infrastructure for building high performance memory allocators in C++
-(see
+(see the
 [paper](https://people.cs.umass.edu/~emery/pubs/berger-pldi2001.pdf)
 for details.)
 

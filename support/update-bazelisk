@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euxo pipefail
+
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+target="${script_dir}/../bazel"
+
+curl https://raw.githubusercontent.com/bazelbuild/bazelisk/master/bazelisk.py >"$target"
+chmod 755 "$target"

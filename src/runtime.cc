@@ -41,7 +41,6 @@ const int32_t SizeMap::class_to_size_[kClassSizesMax] = {
 STLAllocator<char, internal::Heap> internal::allocator{};
 
 size_t internal::measurePssKiB() {
-  size_t sz = 0;
   auto fd = open("/proc/self/smaps_rollup", O_RDONLY | O_CLOEXEC);
   if (unlikely(fd < 0)) {
     mesh::debug("measurePssKiB: no smaps_rollup");
@@ -88,6 +87,10 @@ Runtime::Runtime() {
 }
 
 void Runtime::initMaxMapCount() {
+#ifndef __linux__
+  return;
+#endif
+
   auto fd = open("/proc/sys/vm/max_map_count", O_RDONLY | O_CLOEXEC);
   if (unlikely(fd < 0)) {
     mesh::debug("initMaxMapCount: no proc file");
@@ -152,7 +155,7 @@ void Runtime::exitThread(void *retval) {
     mesh::real::init();
   }
 
-  auto heap = ThreadLocalHeap::GetFastPathHeap();
+  auto heap = ThreadLocalHeap::GetHeapIfPresent();
   if (heap != nullptr) {
     heap->releaseAll();
   }

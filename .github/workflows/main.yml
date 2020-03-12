@@ -1,14 +1,8 @@
 name: CI
-
 on: [push]
-  #schedule:
-  #  - cron:  '0 5 * * *'  #daily build at 5AM
 jobs:
-
-  Ubuntu: 
-  
+  Ubuntu_cmake:
     runs-on: ubuntu-latest
-  
     steps:
     - uses: actions/checkout@v1
     - name: Install required packages
@@ -19,9 +13,9 @@ jobs:
       run: |
         mkdir cmake
         cd cmake
-        wget https://github.com/Kitware/CMake/releases/download/v3.16.0-rc1/cmake-3.16.0-rc1-Linux-x86_64.sh
-        chmod +x cmake-3.16.0-rc1-Linux-x86_64.sh
-        ./cmake-3.16.0-rc1-Linux-x86_64.sh --skip-license
+        wget https://github.com/Kitware/CMake/releases/download/v3.16.5/cmake-3.16.5-Linux-x86_64.sh
+        chmod +x cmake-3.16.5-Linux-x86_64.sh
+        ./cmake-3.16.5-Linux-x86_64.sh --skip-license
         cd ../
         mkdir cmake-cache
         cd cmake-cache
@@ -34,92 +28,28 @@ jobs:
       run: |
        cd cmake-cache
        make coverage_gcc
-    - name: Run big alloc
-      run: cd cmake-cache && make run_big-alloc
-    - name: Run fork example
-      run: cd cmake-cache && make run_fork-example
-    #- name: Run global-large-stress
-    #  run: cd cmake-cache && make run_global-large-stress
-    - name: Run local alloc
-      run: cd cmake-cache && make run_local-alloc
-    - name: Run thread
-      run: cd cmake-cache && make run_thread
 
- 
-#  Mac_OS_X_GCC:
-#
-#    runs-on: macos-latest
-#
-#    steps:
-#    - uses: actions/checkout@v1
-#    - name: Install required packages
-#      run: |
-#        brew install cmake gcc@9 lcov make
-#    - name: Configure CMake in debug mode
-#      run: |
-#        export PATH=/usr/local/bin:$PATH
-#        export CXX=g++-9
-#        export CC=gcc-9
-#        mkdir cmake-cache
-#        cd cmake-cache
-#        cmake -DGCOV=ON ..
-#    - name: Build
-#      run: |
-#        export PATH="/usr/local/bin:$PATH"
-#        cd cmake-cache
-#        make all
-#    - name: Run tests
-#      run: |
-#        export PATH="/usr/local/bin:$PATH"
-#        cd cmake-cache
-#        make coverage_gcc
-#    - name: Run big alloc
-#      run: cd cmake-cache && make run_big-alloc
-#    - name: Run fork example
-#      run: cd cmake-cache && make run_fork-example
-#    #- name: Run global-large-stress
-#    #  run: cd cmake-cache && make run_global-large-stress
-#    - name: Run local alloc
-#      run: cd cmake-cache && make run_local-alloc
-#    - name: Run thread
-#      run: cd cmake-cache && make run_thread
+  Ubuntu_bazel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: build in debug mode
+        run: |
+          ./bazel test -c dbg //src:unit-tests
+      - name: build tests and binary
+        run: |
+          make -j1
 
-
- 
-#  Mac_OS_X_Xcode:
-#
-#    runs-on: macos-latest
-#
-#    steps:
-#    - uses: actions/checkout@v1
-#    - name: Install required packages
-#      run: |
-#        brew install cmake lcov make
-#    - name: Configure CMake in debug mode
-#      run: |
-#        mkdir cmake-cache
-#        cd cmake-cache
-#        cmake -DCLANG=ON -DCLANGCOV=ON ..
-#    - name: Build
-#      run: |
-#        cd cmake-cache
-#        make all
-#    - name: Run tests
-#      run: |
-#        cd cmake-cache
-#        make coverage_clang
-#    - name: Run big alloc
-#      run: cd cmake-cache && make run_big-alloc
-#    - name: Run fork example
-#      run: cd cmake-cache && make run_fork-example
-#    #- name: Run global-large-stress
-#    #  run: cd cmake-cache && make run_global-large-stress
-#    - name: Run local alloc
-#      run: cd cmake-cache && make run_local-alloc
-#    - name: Run thread
-#      run: cd cmake-cache && make run_thread
-  
-
+  macOS_bazel:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: build in debug mode
+      run: |
+        ./bazel test -c dbg //src:unit-tests --test_output=all --cache_test_results=no --runs_per_test=5
+    - name: build tests and binary
+      run: |
+        make -j1
 
   #Windows_MinGW:   
   #

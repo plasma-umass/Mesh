@@ -11,6 +11,10 @@
 
 #include "common.h"
 
+#ifdef __APPLE__
+#include "rpl_printf.c"
+#endif
+
 // mutex protecting debug and __mesh_assert_fail to avoid concurrent
 // use of static buffers by multiple threads
 inline static mutex *getAssertMutex(void) {
@@ -31,7 +35,11 @@ void mesh::debug(const char *fmt, ...) {
   va_list args;
 
   va_start(args, fmt);
+#ifdef __APPLE__
+  int len = rpl_vsnprintf(buf, buf_len - 1, fmt, args);
+#else
   int len = vsnprintf(buf, buf_len - 1, fmt, args);
+#endif
   va_end(args);
 
   buf[buf_len - 1] = 0;

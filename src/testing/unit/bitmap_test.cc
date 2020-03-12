@@ -102,10 +102,10 @@ TEST(BitmapTest, SetGet) {
 
   for (int n = 2; n <= mesh::internal::Bitmap::MaxBitCount; n *= 2) {
     mesh::internal::Bitmap b{static_cast<size_t>(n)};
+    int *rnd = reinterpret_cast<int *>(calloc(n, sizeof(int)));
 
     for (int k = 0; k < NTRIALS; k++) {
       // Generate a random stream of bits.
-      int *rnd = reinterpret_cast<int *>(calloc(n, sizeof(int)));
       ASSERT_NE(rnd, nullptr);
 
       for (int i = 0; i < n; i++) {
@@ -129,8 +129,8 @@ TEST(BitmapTest, SetGet) {
           ASSERT_FALSE(b.isSet(i));
         }
       }
-      free(rnd);
     }
+    free(rnd);
   }
 }
 
@@ -139,10 +139,10 @@ TEST(BitmapTest, SetGetRelaxed) {
 
   for (int n = 10; n < 10000; n *= 2) {
     mesh::internal::RelaxedBitmap b{static_cast<size_t>(n)};
+    int *rnd = reinterpret_cast<int *>(calloc(n, sizeof(int)));
 
     for (int k = 0; k < NTRIALS; k++) {
       // Generate a random stream of bits.
-      int *rnd = reinterpret_cast<int *>(calloc(n, sizeof(int)));
       ASSERT_NE(rnd, nullptr);
 
       for (int i = 0; i < n; i++) {
@@ -166,9 +166,10 @@ TEST(BitmapTest, SetGetRelaxed) {
           ASSERT_FALSE(b.isSet(i));
         }
       }
-      free(rnd);
     }
+    free(rnd);
   }
+
 }
 
 TEST(BitmapTest, Builtins) {

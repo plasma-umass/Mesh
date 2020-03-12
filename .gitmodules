@@ -1,9 +1,0 @@
-[submodule "Heap-Layers"]
-	path = src/vendor/Heap-Layers
-	url = https://github.com/emeryberger/Heap-Layers
-[submodule "src/vendor/googletest"]
-	path = src/vendor/googletest
-	url = https://github.com/google/googletest.git
-[submodule "src/vendor/benchmark"]
-	path = src/vendor/benchmark
-	url = https://github.com/google/benchmark
