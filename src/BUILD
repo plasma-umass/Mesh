@@ -71,7 +71,6 @@ COMMON_LINKOPTS = [
     "-ldl",
     "-march=westmere",
     "-mavx",
-    "-ftls-model=initial-exec",
 ] + select({
     "@bazel_tools//src/conditions:linux_x86_64": [
         "-Wl,--no-as-needed",
@@ -163,9 +162,9 @@ cc_binary(
 cc_library(
     name = "mesh",
     srcs = [
-        "libmesh.cc",
         "d_assert.cc",
         "global_heap.cc",
+        "libmesh.cc",
         "measure_rss.cc",
         "meshable_arena.cc",
         "real.cc",
