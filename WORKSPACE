@@ -7,7 +7,7 @@ workspace(name = "org_libmesh")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 commit = {
-    "llvm_toolchain": "e088aaf6cda37ded9768aec85adc2be31725a7af",
+    "llvm_toolchain": "1eb0a56b27bc38489fe9257e7d2010dd64ff3cf9",
     "rules_cc": "d545fa4f798f2a0b82f556b8b0ec59a93c100df7",
     "googletest": "703bd9caab50b139428cea1aaff9974ebee5742e",
     "benchmark": "8e0b1913d4ea803dfeb2e55567208fcab6b1b6c7",
@@ -25,18 +25,18 @@ http_archive(
 
 http_archive(
     name = "com_grail_bazel_toolchain",
-    sha256 = "09f02a9ab682e505b058712611fef78681d4d6c5ca0792e342fd95897d958b19",
+    sha256 = "1bb403ef994f23d6200c8469d1d2bec51ff0556f297b6045c9d75c5b86a7ee5c",
     strip_prefix = "bazel-toolchain-{}".format(commit["llvm_toolchain"]),
     urls = [
-        "https://github.com/bpowers/bazel-toolchain/archive/{}.zip".format(commit["llvm_toolchain"]),
+        "https://github.com/grailbio/bazel-toolchain/archive/{}.zip".format(commit["llvm_toolchain"]),
     ],
 )
 
-load('@com_grail_bazel_toolchain//toolchain:rules.bzl', 'llvm_toolchain')
+load("@com_grail_bazel_toolchain//toolchain:rules.bzl", "llvm_toolchain")
 
 llvm_toolchain(
-    name = 'llvm_toolchain',
-    llvm_version = '9.0.0',
+    name = "llvm_toolchain",
+    llvm_version = "9.0.0",
 )
 
 load("@llvm_toolchain//:toolchains.bzl", "llvm_register_toolchains")
