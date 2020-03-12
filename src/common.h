@@ -44,10 +44,13 @@
 #define MESH_THROW
 #endif
 
-#ifdef __linux__
-#define MESH_THROW throw()
-#else
-#define MESH_THROW
+// MESH_HAVE_TLS is defined to 1 when __thread should be supported.
+// We assume __thread is supported on Linux when compiled with Clang or compiled
+// against libstdc++ with _GLIBCXX_HAVE_TLS defined. (this check is from Abseil)
+#ifdef MESH_HAVE_TLS
+#error MESH_HAVE_TLS cannot be directly set
+#elif defined(__linux__) && (defined(__clang__) || defined(_GLIBCXX_HAVE_TLS))
+#define MESH_HAVE_TLS 1
 #endif
 
 namespace mesh {
