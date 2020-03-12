@@ -41,7 +41,6 @@ const int32_t SizeMap::class_to_size_[kClassSizesMax] = {
 STLAllocator<char, internal::Heap> internal::allocator{};
 
 size_t internal::measurePssKiB() {
-  size_t sz = 0;
   auto fd = open("/proc/self/smaps_rollup", O_RDONLY | O_CLOEXEC);
   if (unlikely(fd < 0)) {
     mesh::debug("measurePssKiB: no smaps_rollup");

@@ -74,7 +74,7 @@ ThreadLocalHeap *ThreadLocalHeap::CreateHeapIfNecessary() {
   ThreadLocalHeap *heap = nullptr;
 
   {
-    std::lock_guard lock{mesh::runtime().heap()};
+    std::lock_guard<GlobalHeap> lock(mesh::runtime().heap());
 
     const pthread_t current = pthread_self();
 

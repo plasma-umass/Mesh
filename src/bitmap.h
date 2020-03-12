@@ -197,7 +197,6 @@ public:
   }
 
   inline void setAll(uint64_t bitCount) {
-    const size_t numWords = wordCount(representationSize(bitCount));
     for (size_t i = 0; bitCount > 0; i++) {
       if (bitCount >= 64) {
         _bits[i] = (unsigned long)-1;
