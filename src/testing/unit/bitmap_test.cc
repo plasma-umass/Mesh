@@ -169,7 +169,6 @@ TEST(BitmapTest, SetGetRelaxed) {
     }
     free(rnd);
   }
-
 }
 
 TEST(BitmapTest, Builtins) {

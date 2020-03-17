@@ -303,7 +303,8 @@ MESH_EXPORT void replace_malloc_destroy_zone(malloc_zone_t *) {
   // Do nothing.
 }
 
-MESH_EXPORT kern_return_t replace_malloc_get_all_zones(task_t, memory_reader_t, vm_address_t **addresses, unsigned *count) {
+MESH_EXPORT kern_return_t replace_malloc_get_all_zones(task_t, memory_reader_t, vm_address_t **addresses,
+                                                       unsigned *count) {
   *addresses = 0;
   count = 0;
   return KERN_SUCCESS;
@@ -328,7 +329,8 @@ MESH_EXPORT void replace_malloc_set_zone_name(malloc_zone_t *, const char *) {
   // do nothing.
 }
 
-MESH_EXPORT unsigned replace_malloc_zone_batch_malloc(malloc_zone_t *, size_t sz, void **results, unsigned num_requested) {
+MESH_EXPORT unsigned replace_malloc_zone_batch_malloc(malloc_zone_t *, size_t sz, void **results,
+                                                      unsigned num_requested) {
   for (auto i = 0U; i < num_requested; i++) {
     results[i] = replace_malloc(sz);
     if (results[i] == nullptr) {

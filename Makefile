@@ -62,7 +62,7 @@ benchmark:
 	./bazel-bin/src/local-refill-benchmark
 
 format:
-	clang-format -i src/*.cc src/*.c src/*.h  src/plasma/*.h src/rng/*.h src/static/*.h src/test/*.cc src/test/*.cc src/unit/*.cc src/testing/*.cc src/testing/benchmark/*.cc
+	clang-format -i src/*.cc src/*.c src/*.h  src/plasma/*.h src/rng/*.h src/static/*.h src/testing/unit/*.cc src/testing/*.cc src/testing/benchmark/*.cc
 
 clean:
 	find . -name '*~' -print0 | xargs -0 rm -f

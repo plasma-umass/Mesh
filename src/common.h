@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
 
 #include <fcntl.h>
 
@@ -19,7 +20,6 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 #endif
 
@@ -163,11 +163,9 @@ using std::unique_lock;
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
 #define ATTRIBUTE_UNUSED __attribute__((unused))
-#define ATTRIBUTE_PACKED __attribute__((packed))
 #define ATTRIBUTE_NEVER_INLINE __attribute__((noinline))
 #define ATTRIBUTE_ALWAYS_INLINE __attribute__((always_inline))
 #define ATTRIBUTE_NORETURN __attribute__((noreturn))
-#define ATTRIBUTE_HIDDEN __attribute__((visibility("hidden")))
 #define ATTRIBUTE_ALIGNED(s) __attribute__((aligned(s)))
 #define CACHELINE_SIZE 64
 #define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
