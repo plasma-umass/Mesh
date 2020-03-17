@@ -11,7 +11,7 @@ commit = {
     "rules_cc": "d545fa4f798f2a0b82f556b8b0ec59a93c100df7",
     "googletest": "703bd9caab50b139428cea1aaff9974ebee5742e",
     "benchmark": "8e0b1913d4ea803dfeb2e55567208fcab6b1b6c7",
-    "heap_layers": "7e496bf063b38347ca22eb1d8b141cb72cb9297d",
+    "heap_layers": "18966daad7a3f2ef30e9a2ac3750b590bb688ba3",
 }
 
 http_archive(
@@ -63,9 +63,9 @@ http_archive(
 
 http_archive(
     name = "org_heaplayers",
-    sha256 = "89c223cbe2bf0cd3b0d1930e17299a44f72c1bb8e3218dafc55b24d515b62f12",
+    sha256 = "c9058ce705a05ce950744ab161dfd1b8ace598b34c1230820dd9404764886e94",
     strip_prefix = "Heap-Layers-{}".format(commit["heap_layers"]),
     urls = [
-        "https://github.com/bpowers/Heap-Layers/archive/{}.zip".format(commit["heap_layers"]),
+        "https://github.com/emeryberger/Heap-Layers/archive/{}.zip".format(commit["heap_layers"]),
     ],
 )
