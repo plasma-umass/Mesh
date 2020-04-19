@@ -69,8 +69,6 @@ COMMON_LINKOPTS = [
     "-lm",
     "-lpthread",
     "-ldl",
-    "-march=westmere",
-    "-mavx",
 ] + select({
     "@bazel_tools//src/conditions:linux_x86_64": [
         "-Wl,--no-as-needed",

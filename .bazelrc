@@ -15,3 +15,6 @@ build:debugsymbols --genrule_strategy=standalone
 build:disable-meshing --define disable_meshing=true
 build:disable-randomization --define disable_randomization=true
 build:shuffle-on-free --define shuffle_on_free=true
+
+build:modern-amd64 --copt=-mavx --copt=-march=westmere
+build:modern-amd64 --linkopt=-mavx --linkopt=-march=westmere

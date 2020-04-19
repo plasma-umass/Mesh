@@ -3,7 +3,7 @@
 # Version 2.0, that can be found in the LICENSE file.
 
 PREFIX       = /usr
-BAZEL_CONFIG =
+BAZEL_CONFIG = --config=modern-amd64
 LIB_SUFFIX   =
 
 UNAME_S = $(shell uname -s)
@@ -41,7 +41,7 @@ build lib:
 	./bazel build $(BAZEL_CONFIG) -c opt //src:$(LIB)
 
 test check:
-	./bazel test //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
+	./bazel test $(BAZEL_CONFIG) //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
 
 install:
 	install -c -m 0755 bazel-out/$(BAZEL_PREFIX)-opt/bin/src/$(FS_LIB) $(PREFIX)/lib/$(INSTALL_LIB)

@@ -3,10 +3,6 @@
 # Version 2.0, that can be found in the LICENSE file.
 
 COMMON_FLAGS = [
-    # TODO: have config option to disable this
-    "-march=westmere",
-    "-mavx",
-
     # warn on lots of stuff; this is cargo-culted from the old Make build system
     "-Wall",
     "-Wextra",
