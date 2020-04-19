@@ -58,7 +58,7 @@ clang-coverage: $(UNIT_BIN) $(LIB) $(CONFIG)
 	rm -f default.profraw
 
 benchmark:
-	./bazel build --config=disable-meshing --config=debugsymbols -c opt //src:local-refill-benchmark
+	./bazel build $(BAZEL_CONFIG) --config=disable-meshing --config=debugsymbols -c opt //src:local-refill-benchmark
 	./bazel-bin/src/local-refill-benchmark
 
 format:
