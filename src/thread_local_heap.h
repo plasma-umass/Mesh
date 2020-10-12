@@ -252,7 +252,7 @@ protected:
   MWC _prng CACHELINE_ALIGNED;
   const size_t _maxObjectSize;
   LocalHeapStats _stats{};
-  bool _inSetSpecific;
+  bool _inSetSpecific{false};
 
 #ifdef MESH_HAVE_TLS
   static __thread ThreadLocalHeap *_threadLocalHeap CACHELINE_ALIGNED ATTR_INITIAL_EXEC;
