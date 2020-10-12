@@ -320,7 +320,7 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
     // swapping the order of the pair
     const auto dstCount = src->meshCount();
     const auto srcCount = src->meshCount();
-    if (srcCount + srcCount > kMaxMeshes) {
+    if (dstCount + srcCount > kMaxMeshes) {
       continue;
     }
     if (dstCount < srcCount) {
