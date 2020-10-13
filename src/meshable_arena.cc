@@ -750,7 +750,7 @@ void MeshableArena::afterForkChild() {
         }
 #endif
 
-        void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * kPageSize);
+        void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff * kPageSize);
 
         hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
 
