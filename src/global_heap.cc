@@ -171,6 +171,15 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
         }
       }
 
+      if (unlikely(mh->sizeClass() != sizeClass)) {
+        // TODO: This papers over a bug where the miniheap was freed
+        //  + reused out from under us while we were waiting for the mh lock.
+        //  It doesn't eliminate the problem (which should be solved
+        //  by storing the 'created epoch' on the MiniHeap), but it should
+        //  further reduce its probability
+        return;
+      }
+
       // a lot could have happened between when we read this without
       // the lock held and now; just recalculate it.
       remaining = mh->inUseCount();
