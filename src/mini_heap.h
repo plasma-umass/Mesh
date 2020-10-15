@@ -191,6 +191,14 @@ public:
     freeOff(off);
   }
 
+  inline bool clearIfNotFree(void *arenaBegin, void *ptr) {
+    d_assert(isMeshed());
+    const ssize_t off = getOff(arenaBegin, ptr);
+    const auto notWasSet = _bitmap.unset(off);
+    const auto wasSet = !notWasSet;
+    return wasSet;
+  }
+
   inline void ATTRIBUTE_ALWAYS_INLINE freeOff(size_t off) {
     d_assert_msg(_bitmap.isSet(off), "MiniHeap(%p) expected bit %zu to be set (svOff:%zu)", this, off, svOffset());
     _bitmap.unset(off);
@@ -206,21 +214,25 @@ public:
     const auto srcSpan = src->getSpanStart(arenaBegin);
     const auto objectSize = this->objectSize();
 
+    // this both avoids the need to call `freeOff` in the loop
+    // below, but it ensures we will be able to check for bitmap
+    // setting races in GlobalHeap::freeFor
+    const auto srcBitmap = src->takeBitmap();
+
     // for each object in src, copy it to our backing span + update
     // our bitmap and in-use count
-    for (auto const &off : src->bitmap()) {
+    for (auto const &off : srcBitmap) {
       d_assert(off < maxCount());
       d_assert(!_bitmap.isSet(off));
 
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize);
       // need to ensure we update the bitmap and in-use count
       void *dstObject = mallocAt(arenaBegin, off);
-      // debug("meshing: %zu (%p <- %p, %zu)\n", off, dstObject, srcObject, objectSize());
+      // debug("meshing: %zu (%p <- %p)\n", off, dstObject, srcObject);
       d_assert(dstObject != nullptr);
       memcpy(dstObject, srcObject, objectSize);
       // debug("\t'%s'\n", dstObject);
       // debug("\t'%s'\n", srcObject);
-      src->freeOff(off);
     }
 
     trackMeshedSpan(GetMiniHeapID(src));
@@ -333,6 +345,14 @@ public:
     return static_cast<double>(inUseCount()) / static_cast<double>(maxCount());
   }
 
+  internal::RelaxedFixedBitmap takeBitmap() {
+    const auto capacity = this->maxCount();
+    internal::RelaxedFixedBitmap zero{capacity};
+    internal::RelaxedFixedBitmap result{capacity};
+    _bitmap.setAndExchangeAll(result.mut_bits(), zero.bits());
+    return result;
+  }
+
   const internal::Bitmap &bitmap() const {
     return _bitmap;
   }
@@ -372,6 +392,16 @@ public:
       auto mh = GetMiniHeap(_nextMeshed);
       mh->forEachMeshed(cb);
     }
+  }
+
+  bool isRelated(MiniHeap *other) const {
+    auto otherFound = false;
+    this->forEachMeshed([&](const MiniHeap *eachMh) {
+      const auto found = eachMh == other;
+      otherFound = found;
+      return found;
+    });
+    return otherFound;
   }
 
   size_t meshCount() const {

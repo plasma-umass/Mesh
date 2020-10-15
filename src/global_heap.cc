@@ -103,7 +103,23 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
 
     if (unlikely(mh != origMh)) {
       hard_assert(!mh->isMeshed());
-      mh->free(arenaBegin(), ptr);
+      if (mh->isRelated(origMh) && origMh->clearIfNotFree(arenaBegin(), ptr)) {
+        // we have confirmation that we raced with meshing, so free the pointer
+        // on the new miniheap
+        mh->free(arenaBegin(), ptr);
+      } else {
+        // our MiniHeap is unrelated to whatever is here in memory now - get out of here.
+        return;
+      }
+    }
+
+    if (unlikely(mh->sizeClass() != sizeClass)) {
+      // TODO: This papers over a bug where the miniheap was freed
+      //  + reused out from under us while we were waiting for the mh lock.
+      //  It doesn't eliminate the problem (which should be solved
+      //  by storing the 'created epoch' on the MiniHeap), but it should
+      //  further reduce its probability
+      return;
     }
 
     remaining = mh->inUseCount();
@@ -160,14 +176,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
         // check to make sure the new MiniHeap is related (via a
         // meshing relationship) to the one we had before grabbing the
         // lock.
-        auto origFound = false;
-        mh->forEachMeshed([&](const MiniHeap *eachMh) {
-          const auto found = eachMh == origMh;
-          origFound = found;
-          return found;
-        });
-
-        if (!origFound) {
+        if (!mh->isRelated(origMh)) {
           // the original miniheap was freed and a new (unrelated)
           // Miniheap allocated for the address space.  nothing else
           // for us to do.
@@ -176,6 +185,15 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
           // TODO: we should really store 'created epoch' on mh and
           // check those are the same here, too.
         }
+      }
+
+      if (unlikely(mh->sizeClass() != sizeClass)) {
+        // TODO: This papers over a bug where the miniheap was freed
+        //  + reused out from under us while we were waiting for the mh lock.
+        //  It doesn't eliminate the problem (which should be solved
+        //  by storing the 'created epoch' on the MiniHeap), but it should
+        //  further reduce its probability
+        return;
       }
 
       // a lot could have happened between when we read this without

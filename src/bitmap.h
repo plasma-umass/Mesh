@@ -157,7 +157,8 @@ protected:
 
 class RelaxedBitmapBase {
 private:
-  DISALLOW_COPY_AND_ASSIGN(RelaxedBitmapBase);
+  // we explicitly want this
+  // DISALLOW_COPY_AND_ASSIGN(RelaxedBitmapBase);
 
 public:
   typedef size_t word_t;
@@ -257,7 +258,8 @@ protected:
 template <size_t maxBits>
 class RelaxedFixedBitmapBase {
 private:
-  DISALLOW_COPY_AND_ASSIGN(RelaxedFixedBitmapBase);
+  // we explicitly want to be able to copy these around
+  // DISALLOW_COPY_AND_ASSIGN(RelaxedFixedBitmapBase);
 
 public:
   typedef size_t word_t;
@@ -326,6 +328,9 @@ public:
   }
 
 protected:
+  inline void nullBits() {
+  }
+
   void ATTRIBUTE_ALWAYS_INLINE clear() {
     _bits[0] = 0;
     _bits[1] = 0;
@@ -385,7 +390,7 @@ public:
     }
   }
 
-  BitmapBase(Bitmap &&rhs) : Super(rhs.bitCount()) {
+  BitmapBase(Bitmap &&rhs) : Super(rhs) {
     rhs.Super::nullBits();
   }
 
