@@ -191,6 +191,14 @@ public:
     freeOff(off);
   }
 
+  inline bool clearIfNotFree(void *arenaBegin, void *ptr) {
+    d_assert(isMeshed());
+    const ssize_t off = getOff(arenaBegin, ptr);
+    const auto notWasSet = _bitmap.unset(off);
+    const auto wasSet = !notWasSet;
+    return wasSet;
+  }
+
   inline void ATTRIBUTE_ALWAYS_INLINE freeOff(size_t off) {
     d_assert_msg(_bitmap.isSet(off), "MiniHeap(%p) expected bit %zu to be set (svOff:%zu)", this, off, svOffset());
     _bitmap.unset(off);

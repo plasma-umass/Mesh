@@ -103,7 +103,23 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
 
     if (unlikely(mh != origMh)) {
       hard_assert(!mh->isMeshed());
-      mh->free(arenaBegin(), ptr);
+      if (mh->isRelated(origMh) && origMh->clearIfNotFree(arenaBegin(), ptr)) {
+        // we have confirmation that we raced with meshing, so free the pointer
+        // on the new miniheap
+        mh->free(arenaBegin(), ptr);
+      } else {
+        // our MiniHeap is unrelated to whatever is here in memory now - get out of here.
+        return;
+      }
+    }
+
+    if (unlikely(mh->sizeClass() != sizeClass)) {
+      // TODO: This papers over a bug where the miniheap was freed
+      //  + reused out from under us while we were waiting for the mh lock.
+      //  It doesn't eliminate the problem (which should be solved
+      //  by storing the 'created epoch' on the MiniHeap), but it should
+      //  further reduce its probability
+      return;
     }
 
     remaining = mh->inUseCount();
