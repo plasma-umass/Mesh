@@ -113,7 +113,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
       }
     }
 
-    if (unlikely(mh->sizeClass() != sizeClass)) {
+    if (unlikely(mh->sizeClass() != sizeClass || mh->isLargeAlloc())) {
       // TODO: This papers over a bug where the miniheap was freed
       //  + reused out from under us while we were waiting for the mh lock.
       //  It doesn't eliminate the problem (which should be solved
@@ -187,7 +187,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
         }
       }
 
-      if (unlikely(mh->sizeClass() != sizeClass)) {
+      if (unlikely(mh->sizeClass() != sizeClass || mh->isLargeAlloc())) {
         // TODO: This papers over a bug where the miniheap was freed
         //  + reused out from under us while we were waiting for the mh lock.
         //  It doesn't eliminate the problem (which should be solved
