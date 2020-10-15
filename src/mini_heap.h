@@ -374,6 +374,16 @@ public:
     }
   }
 
+  bool isRelated(MiniHeap *other) const {
+    auto otherFound = false;
+    this->forEachMeshed([&](const MiniHeap *eachMh) {
+      const auto found = eachMh == other;
+      otherFound = found;
+      return found;
+    });
+    return otherFound;
+  }
+
   size_t meshCount() const {
     size_t count = 0;
 

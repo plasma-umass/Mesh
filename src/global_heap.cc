@@ -160,14 +160,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
         // check to make sure the new MiniHeap is related (via a
         // meshing relationship) to the one we had before grabbing the
         // lock.
-        auto origFound = false;
-        mh->forEachMeshed([&](const MiniHeap *eachMh) {
-          const auto found = eachMh == origMh;
-          origFound = found;
-          return found;
-        });
-
-        if (!origFound) {
+        if (!mh->isRelated(origMh)) {
           // the original miniheap was freed and a new (unrelated)
           // Miniheap allocated for the address space.  nothing else
           // for us to do.
