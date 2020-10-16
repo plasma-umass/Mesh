@@ -80,9 +80,10 @@ static constexpr double kOccupancyCutoff = .8;
 
 // if we have, e.g. a kernel-imposed max_map_count of 2^16 (65k) we
 // can only safely have about 30k meshes before we are at risk of
-// hitting the max_map_count limit.
-static constexpr double kMeshesPerMap = .33;  //   must smaller than 1/3, because when meshing, in the worst case, 1 map would become 3
-                                              //   a high load server can easily trigger the max_map_count
+// hitting the max_map_count limit. Must smaller than 1/3, because
+// when meshing, in the worst case, 1 map would become 3. (A high
+// load server can easily trigger this worst case)
+static constexpr double kMeshesPerMap = .33;
 
 static constexpr size_t kDefaultMaxMeshCount = 30000;
 static constexpr size_t kMaxMeshesPerIteration = 2500;

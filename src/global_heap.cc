@@ -100,8 +100,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
 
     const auto origMh = mh;
     mh = miniheapForWithEpoch(ptr, startEpoch);
-
-    if(mh == nullptr) {
+    if (unlikely(mh == nullptr)) {
       return;
     }
 
