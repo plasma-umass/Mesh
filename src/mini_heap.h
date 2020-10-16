@@ -178,10 +178,10 @@ public:
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *arenaBegin, void *ptr) {
-    // TODO: this should be removed when the logic in globalFree is
+    // the logic in globalFree is
     // updated to allow the 'race' between lock-free freeing and
     // meshing
-    d_assert(!isMeshed());
+    // d_assert(!isMeshed());
     const ssize_t off = getOff(arenaBegin, ptr);
     if (unlikely(off < 0)) {
       d_assert(false);
