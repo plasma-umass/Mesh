@@ -101,11 +101,16 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
     const auto origMh = mh;
     mh = miniheapForWithEpoch(ptr, startEpoch);
 
+    if(mh == nullptr) {
+      return;
+    }
+
     if (unlikely(mh != origMh)) {
       hard_assert(!mh->isMeshed());
       if (mh->isRelated(origMh) && origMh->clearIfNotFree(arenaBegin(), ptr)) {
         // we have confirmation that we raced with meshing, so free the pointer
         // on the new miniheap
+        d_assert(sizeClass == mh->sizeClass());
         mh->free(arenaBegin(), ptr);
       } else {
         // our MiniHeap is unrelated to whatever is here in memory now - get out of here.
