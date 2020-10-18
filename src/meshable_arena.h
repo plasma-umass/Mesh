@@ -184,9 +184,9 @@ private:
     clearIndex(span);
 
     if (flags == internal::PageType::Dirty) {
-      if (kAdviseDump) {
-        madvise(ptrFromOffset(span.offset), span.length * kPageSize, MADV_DONTDUMP);
-      }
+      // if (kAdviseDump) {
+      //   madvise(ptrFromOffset(span.offset), span.length * kPageSize, MADV_DONTDUMP);
+      // }
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
       _dirtyPageCount += span.length;

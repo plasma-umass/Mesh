@@ -90,8 +90,8 @@ static constexpr size_t kMaxMeshesPerIteration = 2500;
 
 // maximum number of dirty pages to hold onto before we flush them
 // back to the OS (via MeshableArena::scavenge()
-static constexpr size_t kMaxDirtyPageThreshold = 1 << 14;  // 64 MB in pages
-static constexpr size_t kMinDirtyPageThreshold = 32;       // 128 KB in pages
+static constexpr size_t kMaxDirtyPageThreshold = 1 << 16;  // 256 MB in pages
+static constexpr size_t kMinDirtyPageThreshold = 1 << 14;  // 32  MB in pages
 
 static constexpr uint32_t kSpanClassCount = 256;
 
@@ -111,7 +111,7 @@ static constexpr bool kEnableShuffleOnInit = SHUFFLE_ON_INIT == 1;
 static constexpr bool kEnableShuffleOnFree = SHUFFLE_ON_FREE == 1;
 
 // madvise(DONTDUMP) the heap to make reasonable coredumps
-static constexpr bool kAdviseDump = false;
+static constexpr bool kAdviseDump = true;
 
 static constexpr std::chrono::milliseconds kZeroMs{0};
 static constexpr std::chrono::milliseconds kMeshPeriodMs{100};  // 100 ms
@@ -121,7 +121,7 @@ static constexpr size_t kMaxMeshes = 256;  // 1 per bit
 #ifdef __APPLE__
 static constexpr size_t kArenaSize = 32ULL * 1024ULL * 1024ULL * 1024ULL;  // 16 GB
 #else
-static constexpr size_t kArenaSize = 64ULL * 1024ULL * 1024ULL * 1024ULL;  // 64 GB
+static constexpr size_t kArenaSize = 128ULL * 1024ULL * 1024ULL * 1024ULL;  // 128 GB
 #endif
 static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)

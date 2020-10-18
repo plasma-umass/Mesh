@@ -416,9 +416,9 @@ void GlobalHeap::meshAllSizeClassesLocked() {
     totalMeshCount += meshSizeClassLocked(sizeClass, MergeSets, Left, Right);
   }
 
-  madvise(&Left, sizeof(Left), MADV_DONTNEED);
-  madvise(&Right, sizeof(Right), MADV_DONTNEED);
-  madvise(&MergeSets, sizeof(MergeSets), MADV_DONTNEED);
+  // madvise(&Left, sizeof(Left), MADV_DONTNEED);
+  // madvise(&Right, sizeof(Right), MADV_DONTNEED);
+  // madvise(&MergeSets, sizeof(MergeSets), MADV_DONTNEED);
 
   _lastMeshEffective = totalMeshCount > 256;
   _stats.meshCount += totalMeshCount;
