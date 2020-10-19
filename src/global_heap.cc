@@ -86,7 +86,11 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
   // read inUseCount before calling free to avoid stalling after the
   // LOCK CMPXCHG in mh->free
   auto remaining = mh->inUseCount() - 1;
-  mh->free(arenaBegin(), ptr);
+
+  // here can't call mh->free(arenaBegin(), ptr), because in consume takeBitmap always clear the bitmap, 
+  // if clearIfNotFree after takeBitmap
+  // it alwasy return false, but in this case, you need to free again.
+  auto wasSet = mh->clearIfNotFree(arenaBegin(), ptr);
 
   bool shouldMesh = false;
 
@@ -106,7 +110,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
 
     if (unlikely(mh != origMh)) {
       hard_assert(!mh->isMeshed());
-      if (mh->isRelated(origMh) && origMh->clearIfNotFree(arenaBegin(), ptr)) {
+      if (mh->isRelated(origMh) && wasSet) {
         // we have confirmation that we raced with meshing, so free the pointer
         // on the new miniheap
         d_assert(sizeClass == mh->sizeClass());
