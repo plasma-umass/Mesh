@@ -110,7 +110,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
 
     if (unlikely(mh != origMh)) {
       hard_assert(!mh->isMeshed());
-      if (mh->isRelated(origMh) && wasSet) {
+      if (mh->isRelated(origMh) && !wasSet) {
         // we have confirmation that we raced with meshing, so free the pointer
         // on the new miniheap
         d_assert(sizeClass == mh->sizeClass());
