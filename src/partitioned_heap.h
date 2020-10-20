@@ -17,7 +17,7 @@
 namespace mesh {
 
 static constexpr int kPartitionedHeapNBins = 16;
-static constexpr int kPartitionedHeapArenaSize = 512 * 1024 * 1024;  // 512 MB
+static constexpr int kPartitionedHeapArenaSize = 2000 * 1024 * 1024; // 2000 MB
 static constexpr int kPartitionedHeapSizePer = kPartitionedHeapArenaSize / kPartitionedHeapNBins;
 
 // Fast allocation for multiple size classes
@@ -56,11 +56,13 @@ public:
     if (unlikely(sizeClass >= kPartitionedHeapNBins)) {
       auto res = _bigHeap.malloc(sz);
       // debug("internalHeap::malloc(%zu): %p (big)\n", sz, res);
+      hard_assert(res);
       return res;
     }
 
     auto res = _smallHeaps[sizeClass].alloc();
     // debug("internalHeap::malloc(%zu): %p\n", sz, res);
+    hard_assert(res);
     return res;
   }
 
