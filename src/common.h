@@ -165,6 +165,39 @@ using std::unique_lock;
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+
+#ifdef __GNUC__
+  #define GNUC_PREREQ(x, y) \
+      (__GNUC__ > x || (__GNUC__ == x && __GNUC_MINOR__ >= y))
+#else
+  #define GNUC_PREREQ(x, y) 0
+#endif
+
+#ifdef __clang__
+  #define CLANG_PREREQ(x, y) \
+      (__clang_major__ > x || (__clang_major__ == x && __clang_minor__ >= y))
+#else
+  #define CLANG_PREREQ(x, y) 0
+#endif
+
+#if GNUC_PREREQ(4, 2) || \
+    CLANG_PREREQ(3, 0)
+  #define HAVE_ASM_POPCNT
+#endif
+
+#if defined(HAVE_ASM_POPCNT) && \
+    defined(__x86_64__)
+
+static inline uint64_t popcnt64(uint64_t x)
+{
+  __asm__ ("popcnt %1, %0" : "=r" (x) : "0" (x));
+  return x;
+}
+#define popcount64(x) popcnt64(x)
+#else
+#define popcount64(x) __builtin_popcountl(x)
+#endif
+
 #define ATTRIBUTE_UNUSED __attribute__((unused))
 #define ATTRIBUTE_NEVER_INLINE __attribute__((noinline))
 #define ATTRIBUTE_ALWAYS_INLINE __attribute__((always_inline))
