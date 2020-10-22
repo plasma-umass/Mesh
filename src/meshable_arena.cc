@@ -388,7 +388,7 @@ void MeshableArena::scavenge(bool force) {
 
   // first, untrack the spans in the meshed bitmap and mark them in
   // the (method-local) unallocated bitmap
-  std::for_each(_toReset.begin(), _toReset.end(), [&](Span span) {
+  std::for_each(_toReset.begin(), _toReset.end(), [&](const Span& span) {
     untrackMeshed(span);
     markPages(span);
     resetSpanMapping(span);
