@@ -525,10 +525,7 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
 
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * kPageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-  freePhys(remove, sz);
 
-  int r = mprotect(remove, sz, PROT_READ | PROT_WRITE);
-  hard_assert(r == 0);
 }
 
 int MeshableArena::openShmSpanFile(size_t sz) {
