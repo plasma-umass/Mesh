@@ -303,6 +303,7 @@ void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
     Super::finalizeMesh(dstSpanStart, srcSpan, dstSpanSize);
     return false;
   });
+  Super::freePhys(reinterpret_cast<void *>(src->getSpanStart(arenaBegin())), dstSpanSize);
 
   // make sure we adjust what bin the destination is in -- it might
   // now be full and not a candidate for meshing
