@@ -370,20 +370,11 @@ void MeshableArena::scavenge(bool force) {
     return;
   }
 
-  // the inverse of the allocated bitmap is all of the spans in _clear
-  // (since we just MADV_DONTNEED'ed everything in dirty)
-  auto bitmap = allocatedBitmap(false);
-  bitmap.invert();
+  internal::vector<Span> spans;
 
   auto markPages = [&](const Span &span) {
-    for (size_t k = 0; k < span.length; k++) {
-#ifndef NDEBUG
-      if (bitmap.isSet(span.offset + k)) {
-        debug("arena: bit %zu already set (%zu/%zu) %zu\n", k, span.offset, span.length, bitmap.bitCount());
-      }
-#endif
-      bitmap.tryToSet(span.offset + k);
-    }
+    // debug("arena:  (%zu/%zu) \n", span.offset, span.length);
+    spans.emplace_back(span);
   };
 
   // first, untrack the spans in the meshed bitmap and mark them in
@@ -397,11 +388,6 @@ void MeshableArena::scavenge(bool force) {
   // now that we've finally reset to identity all delayed-reset
   // mappings, empty the list
   _toReset.clear();
-  {
-    // force freeing our internal allocations
-    internal::vector<Span> empty{};
-    _toReset.swap(empty);
-  }
 
   _meshedPageCount = _meshedBitmap.inUseCount();
   if (_meshedPageCount > _meshedPageCountHWM) {
@@ -419,55 +405,58 @@ void MeshableArena::scavenge(bool force) {
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _dirty[i].clear();
-    internal::vector<Span> empty{};
-    _dirty[i].swap(empty);
   }
 
   _dirtyPageCount = 0;
 
+  forEachFree(_clean, [&](const Span &span) {
+    markPages(span);
+  });
+
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _clean[i].clear();
-    internal::vector<Span> empty{};
-    _clean[i].swap(empty);
   }
 
   // coalesce adjacent spans
-  Span current(0, 0);
-  for (auto const &i : bitmap) {
-    if (i == current.offset + current.length) {
-      current.length++;
-      continue;
-    }
+  struct {
+      bool operator()(const Span& a, const Span& b) const
+      {
+          return a.offset < b.offset;
+      }
+  } customLess;
 
-    // should only be empty the first time/iteration through
-    if (!current.empty()) {
-      _clean[current.spanClass()].push_back(current);
-      // debug("  clean: %4zu/%4zu\n", current.offset, current.length);
-    }
+  std::sort(spans.begin(), spans.end(), customLess);
 
-    current = Span(i, 1);
+  internal::vector<Span> spansMerge;
+
+  if(spans.size() > 1) {
+    auto leftIt = spans.begin();
+    auto rightIt = spans.begin() + 1;
+
+    while(rightIt != spans.end()) {
+      d_assert(leftIt->offset + leftIt->length <= rightIt->offset);
+
+      if(leftIt->offset + leftIt->length == rightIt->offset) {
+        leftIt->length += rightIt->length;
+        ++rightIt;
+        continue;
+      }
+      else {
+        spansMerge.emplace_back(leftIt->offset, leftIt->length);
+        leftIt = rightIt;
+        ++rightIt;
+      }
+    }
+    spansMerge.emplace_back(leftIt->offset, leftIt->length);
+  }
+  else {
+    spansMerge.swap(spans);
   }
 
-  // should only be empty the first time/iteration through
-  if (!current.empty()) {
-    _clean[current.spanClass()].push_back(current);
-    // debug("  clean: %4zu/%4zu\n", current.offset, current.length);
+  for(auto & s: spansMerge) {
+    // debug("  spansMerge: %4zu/%4zu\n", s.offset, s.length);
+    _clean[s.spanClass()].emplace_back(s);
   }
-#ifndef NDEBUG
-  auto newBitmap = allocatedBitmap();
-  newBitmap.invert();
-
-  const size_t *bits1 = bitmap.bits();
-  const size_t *bits2 = newBitmap.bits();
-  for (size_t i = 0; i < bitmap.byteCount() / sizeof(size_t); i++) {
-    if (bits1[i] != bits2[i]) {
-      debug("bitmaps don't match %zu:\n", i);
-      // debug("\t%s\n", bitmap.to_string().c_str());
-      // debug("\t%s\n", newBitmap.to_string().c_str());
-      hard_assert(false);
-    }
-  }
-#endif
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {
