@@ -35,6 +35,11 @@ public:
     auto freelist = reinterpret_cast<char *>(SuperHeap::malloc(kPartitionedHeapArenaSize));
     hard_assert(freelist != nullptr);
 
+    if (kAdviseDump) {
+      madvise(_smallArena, kPartitionedHeapArenaSize, MADV_DONTDUMP);
+      madvise(freelist, kPartitionedHeapArenaSize, MADV_DONTDUMP);
+    }
+
     for (size_t i = 0; i < kPartitionedHeapNBins; ++i) {
       auto arenaStart = _smallArena + i * kPartitionedHeapSizePer;
       auto freelistStart = freelist + i * kPartitionedHeapSizePer;

@@ -121,6 +121,19 @@ public:
 
     const auto off = _arenaOff++;
     const auto ptr = ptrFromOffset(off);
+
+    if (kAdviseDump) {
+      // only call madvise at a new page
+      if((uint64_t)ptr % kPageSize == 0) {
+        madvise(ptr, kPageSize, MADV_DODUMP);
+      }
+
+      void* freelistPage = _freelist + off * sizeof(void*);
+      if((uint64_t)freelistPage % kPageSize == 0) {
+        madvise(freelistPage, kPageSize, MADV_DODUMP);
+      }
+    }
+
     hard_assert(ptr < arenaEnd());
     return ptr;
   }
