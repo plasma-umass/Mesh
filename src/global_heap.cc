@@ -396,13 +396,12 @@ void GlobalHeap::meshAllSizeClassesLocked() {
   // if we have freed but not reset meshed mappings, this will reset
   // them to the identity mapping, ensuring we don't blow past our VMA
   // limit (which is why we set the force flag to true)
-  Super::scavenge(true);
+  if (Super::aboveMeshThreshold()) {
+    Super::scavenge(true);
+    return;
+  } 
 
   if (!_lastMeshEffective.load(std::memory_order::memory_order_acquire)) {
-    return;
-  }
-
-  if (Super::aboveMeshThreshold()) {
     return;
   }
 

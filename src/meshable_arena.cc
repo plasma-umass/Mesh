@@ -387,6 +387,7 @@ void MeshableArena::scavenge(bool force) {
 
   // now that we've finally reset to identity all delayed-reset
   // mappings, empty the list
+  // debug("_toReset size: %d", _toReset.size());
   _toReset.clear();
 
   _meshedPageCount = _meshedBitmap.inUseCount();
@@ -404,6 +405,7 @@ void MeshableArena::scavenge(bool force) {
   });
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
+    // debug("_dirty[%d] size: %d", i, _dirty[i].size());
     _dirty[i].clear();
   }
 
@@ -414,6 +416,7 @@ void MeshableArena::scavenge(bool force) {
   });
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
+    // debug("_clean[%d] size: %d", i, _clean[i].size());
     _clean[i].clear();
   }
 
@@ -423,9 +426,9 @@ void MeshableArena::scavenge(bool force) {
       {
           return a.offset < b.offset;
       }
-  } customLess;
+  } spanLess;
 
-  std::sort(spans.begin(), spans.end(), customLess);
+  std::sort(spans.begin(), spans.end(), spanLess);
 
   internal::vector<Span> spansMerge;
 
@@ -452,6 +455,8 @@ void MeshableArena::scavenge(bool force) {
   else {
     spansMerge.swap(spans);
   }
+
+  // debug("spansMerge size: %d", spansMerge.size());
 
   for(auto & s: spansMerge) {
     // debug("  spansMerge: %4zu/%4zu\n", s.offset, s.length);
