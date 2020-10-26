@@ -370,7 +370,8 @@ void MeshableArena::scavenge(bool force) {
     return;
   }
 
-  internal::vector<Span> spans;
+  static internal::vector<Span> spans;
+  spans.clear();
 
   auto markPages = [&](const Span &span) {
     // debug("arena:  (%zu/%zu) \n", span.offset, span.length);
@@ -430,8 +431,6 @@ void MeshableArena::scavenge(bool force) {
 
   std::sort(spans.begin(), spans.end(), spanLess);
 
-  internal::vector<Span> spansMerge;
-
   if(spans.size() > 1) {
     auto leftIt = spans.begin();
     auto rightIt = spans.begin() + 1;
@@ -445,22 +444,17 @@ void MeshableArena::scavenge(bool force) {
         continue;
       }
       else {
-        spansMerge.emplace_back(leftIt->offset, leftIt->length);
+        _clean[leftIt->spanClass()].emplace_back(leftIt->offset, leftIt->length);
         leftIt = rightIt;
         ++rightIt;
       }
     }
-    spansMerge.emplace_back(leftIt->offset, leftIt->length);
+    _clean[leftIt->spanClass()].emplace_back(leftIt->offset, leftIt->length);
   }
   else {
-    spansMerge.swap(spans);
-  }
-
-  // debug("spansMerge size: %d", spansMerge.size());
-
-  for(auto & s: spansMerge) {
-    // debug("  spansMerge: %4zu/%4zu\n", s.offset, s.length);
-    _clean[s.spanClass()].emplace_back(s);
+    if(spans.size() == 1) {
+      _clean[spans[0].spanClass()].emplace_back(spans[0].offset, spans[0].length);
+    }
   }
 }
 
