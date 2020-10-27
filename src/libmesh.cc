@@ -27,13 +27,21 @@ static __attribute__((constructor)) void libmesh_init() {
   }
 
   char *bgThread = getenv("MESH_BACKGROUND_THREAD");
-  if (!bgThread)
-    return;
-
-  int shouldThread = atoi(bgThread);
-  if (shouldThread) {
-    runtime().startBgThread();
+  if (bgThread) {
+    int shouldThread = atoi(bgThread);
+    if (shouldThread) {
+      runtime().startBgThread();
+    }
   }
+
+  // char *bgFreePhysThread = getenv("MESH_FREEPHYS_THREAD");
+  // if (bgFreePhysThread) {
+  //   int shouldFreeThread = atoi(bgFreePhysThread);
+  //   if (shouldFreeThread) {
+  //     runtime().startFreePhysThread();
+  //   }
+  // }
+  runtime().startFreePhysThread();
 }
 
 static __attribute__((destructor)) void libmesh_fini() {

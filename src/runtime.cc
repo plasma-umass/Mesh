@@ -83,6 +83,20 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 }
 
 Runtime::Runtime() {
+
+  void *buf = mesh::internal::Heap().malloc(sizeof(FreeRingVector));
+  static_assert(sizeof(FreeRingVector) < 4096, "tlh should have a reasonable size");
+  hard_assert(buf != nullptr);
+  hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
+
+  _spansFreeBuffer = new (buf) FreeRingVector(8);
+
+  buf = mesh::internal::Heap().malloc(sizeof(FreeRingVector));
+  hard_assert(buf != nullptr);
+  hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
+
+  _spansReturnBuffer = new (buf) FreeRingVector(16);
+
   updatePid();
 }
 
@@ -241,6 +255,52 @@ void *Runtime::bgThread(void *arg) {
 #endif
   return nullptr;
 }
+
+
+void Runtime::startFreePhysThread() {
+  constexpr int MaxRetries = 20;
+
+  pthread_t bgPthread;
+  int retryCount = 0;
+  int ret = 0;
+
+  while ((ret = pthread_create(&bgPthread, nullptr, Runtime::bgFreePhysThread, nullptr))) {
+    retryCount++;
+    sched_yield();
+
+    if (retryCount % 10)
+      debug("freePhys thread creation failed, retrying.\n");
+
+    if (retryCount >= MaxRetries) {
+      debug("max retries exceded: couldn't create freePhys thread, exiting.\n");
+      abort();
+    }
+  }
+}
+
+void *Runtime::bgFreePhysThread(void *arg) {
+  auto &rt = mesh::runtime();
+  using namespace std::chrono_literals;
+
+  debug("libmesh: freePhys thread started\n");
+
+  while(true) {
+    auto spans = rt._spansFreeBuffer->pop();
+
+    if(spans) {
+      for( auto& span : *spans) {
+        rt.heap().freePhys(span);
+      }
+      rt._spansReturnBuffer->push(spans);
+    }
+    else {
+      std::this_thread::sleep_for(10ms);
+    }
+  }
+
+  return nullptr;
+}
+
 
 void Runtime::lock() {
   _mutex.lock();

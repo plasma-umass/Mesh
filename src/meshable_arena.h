@@ -142,6 +142,18 @@ public:
 
   void doAfterForkChild();
 
+  internal::vector<Span>* newFreeSpans() {
+    void* buf = internal::Heap().malloc(sizeof(internal::vector<Span>));
+    internal::vector<Span>* freeSpans = new (buf) internal::vector<Span>();
+    return freeSpans;
+  }
+
+  void deleteFreeSpans(internal::vector<Span>* spans) {
+    spans->~vector();
+    internal::Heap().free(spans);
+  }
+
+  void freePhys(const Span& span);
   void freePhys(void *ptr, size_t sz);
 private:
   void expandArena(size_t minPagesAdded);
@@ -192,12 +204,7 @@ private:
       _dirtyPageCount += span.length;
 
       if (_dirtyPageCount > kMaxDirtyPageThreshold) {
-        // do a full scavenge with a probability 1/10
-        if (_fastPrng.inRange(0, 9) == 9) {
-          scavenge(true);
-        } else {
-          partialScavenge();
-        }
+        partialScavenge();
       }
     } else if (flags == internal::PageType::Meshed) {
       // delay restoring the identity mapping

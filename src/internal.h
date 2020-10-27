@@ -212,6 +212,10 @@ struct Span {
   explicit Span(Offset _offset, Length _length) : offset(_offset), length(_length) {
   }
 
+  Span() {
+
+  }
+
   Span(const Span &rhs) : offset(rhs.offset), length(rhs.length) {
   }
 
@@ -253,8 +257,8 @@ struct Span {
     return !(*this == rhs);
   }
 
-  Offset offset;
-  Length length;
+  Offset offset{0};
+  Length length{0};
 };
 
 // keep in-sync with the version in plasma/mesh.h

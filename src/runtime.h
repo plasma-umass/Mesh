@@ -8,6 +8,7 @@
 #define MESH_RUNTIME_H
 
 #include <pthread.h>
+#include <thread>
 #include <signal.h>  // for stack_t
 
 #include "internal.h"
@@ -18,11 +19,14 @@
 #include "mmap_heap.h"
 
 #include "heaplayers.h"
+#include "mpsc_buffer.h"
 
 namespace mesh {
 
 // function passed to pthread_create
 typedef void *(*PthreadFn)(void *);
+
+typedef ring_buffer<internal::vector<Span>*> FreeRingVector;
 
 class Runtime {
 private:
@@ -40,6 +44,7 @@ public:
   }
 
   void startBgThread();
+  void startFreePhysThread();
   void initMaxMapCount();
 
   // we need to wrap pthread_create and pthread_exit so that we can
@@ -83,6 +88,14 @@ public:
     return _pid;
   }
 
+  void freeSpansBg(internal::vector<Span>* spans) {
+    _spansFreeBuffer->push(spans);
+  }
+
+  internal::vector<Span>* getSpansFromBg() {
+    return _spansReturnBuffer->pop();
+  }
+
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
   // happens lazily, as the dynamic linker's dlopen calls into malloc
@@ -93,6 +106,7 @@ private:
   static void segfaultHandler(int sig, siginfo_t *siginfo, void *context);
 
   static void *bgThread(void *arg);
+  static void *bgFreePhysThread(void *arg);
 
   friend Runtime &runtime();
 
@@ -100,6 +114,9 @@ private:
   int _signalFd{-2};
   pid_t _pid{};
   GlobalHeap _heap{};
+
+  FreeRingVector* _spansFreeBuffer{nullptr};
+  FreeRingVector* _spansReturnBuffer{nullptr};
 };
 
 // get a reference to the Runtime singleton
@@ -109,6 +126,9 @@ inline Runtime &runtime() {
   static Runtime *runtimePtr = new (buf) Runtime{};
   return *runtimePtr;
 }
+
+
+
 }  // namespace mesh
 
 #endif  // MESH_RUNTIME_H
