@@ -144,6 +144,12 @@ void MeshableArena::expandArena(size_t minPagesAdded) {
     abort();
   }
 
+  if (kAdviseDump) {
+    auto ptr = ptrFromOffset(expansion.offset);
+    auto sz = expansion.byteLength();
+    madvise(ptr, sz, MADV_DODUMP);
+  }
+
   _clean[expansion.spanClass()].push_back(expansion);
 }
 
@@ -323,10 +329,6 @@ char *MeshableArena::pageAlloc(Span &result, size_t pageCount, size_t pageAlignm
 #endif
 
   char *ptr = reinterpret_cast<char *>(ptrFromOffset(span.offset));
-
-  if (kAdviseDump) {
-    madvise(ptr, pageCount * kPageSize, MADV_DODUMP);
-  }
 
   result = span;
   return ptr;
