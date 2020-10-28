@@ -287,10 +287,13 @@ void *Runtime::bgFreePhysThread(void *arg) {
   while(true) {
     auto spans = rt._spansFreeBuffer->pop();
 
+    size_t pageCount = 0;
     if(spans) {
       for( auto& span : *spans) {
         rt.heap().freePhys(span);
+        pageCount += span.length;
       }
+      // debug("bgFreePhysThread free: %d\n", pageCount);
       rt._spansReturnBuffer->push(spans);
     }
     else {

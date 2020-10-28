@@ -349,20 +349,11 @@ void MeshableArena::free(void *ptr, size_t sz, internal::PageType type) {
   freeSpan(span, type);
 }
 
-void MeshableArena::partialScavenge() {
-  // always flush 1/2 pages
-  size_t needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/2;
-
-  internal::vector<Span>* freeSpans = newFreeSpans();
-  hard_assert(freeSpans);
-
-  // debug("partialScavenge  need to free needFreeCount = %d\n", needFreeCount);
-  freeSpans->reserve(needFreeCount);
-
+static size_t flushSpansToVector(internal::vector<Span> freeSpans[kSpanClassCount], internal::vector<Span>& flushSpans, size_t needFreeCount) {
   size_t freeCount = 0;
 
   for (int i = kSpanClassCount - 1; i >= 0; --i) {
-    auto& spans = _dirty[i];
+    auto& spans = freeSpans[i];
 
     if (spans.empty())
       continue;
@@ -370,7 +361,7 @@ void MeshableArena::partialScavenge() {
     bool clear = true;
     for (int j = spans.size() - 1 ; j >= 0; --j) {
       if(freeCount < needFreeCount) {
-        freeSpans->emplace_back(spans[j]);
+        flushSpans.emplace_back(spans[j]);
         freeCount += spans[j].length;
       }
       else {
@@ -384,6 +375,21 @@ void MeshableArena::partialScavenge() {
       spans.clear();
     }
   }
+
+  return freeCount;
+}
+
+void MeshableArena::partialScavenge() {
+  // always flush 1/2 pages
+  size_t needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/2;
+
+  internal::vector<Span>* flushSpans = newFreeSpans();
+  hard_assert(flushSpans);
+
+  // debug("partialScavenge  need to free needFreeCount = %d\n", needFreeCount);
+  flushSpans->reserve(needFreeCount);
+
+  size_t freeCount = flushSpansToVector(_dirty, *flushSpans, needFreeCount);
 
 #if 0
   size_t leavePages = 0;
@@ -399,10 +405,10 @@ void MeshableArena::partialScavenge() {
   d_assert(_dirtyPageCount == leavePages + freeCount);
 #endif
 
-  // debug("partialScavenge _dirtyPageCount = %d  , freeCount = %d , freeSpans->size() =  %d\n", _dirtyPageCount, freeCount, freeSpans->size());
+  // debug("partialScavenge _dirtyPageCount = %d  , freeCount = %d , flushSpans->size() =  %d\n", _dirtyPageCount, freeCount, flushSpans->size());
   _dirtyPageCount -= freeCount;
 
-  runtime().freeSpansBg(freeSpans);
+  runtime().freeSpansBg(flushSpans);
 
   // has chance that partialScavenge already been called, so we can got the clean spans now
   // get spans from Bgthread, may be many
@@ -456,30 +462,21 @@ void MeshableArena::scavenge(bool force) {
     // TODO: find rss at peak
   }
 
+  // always flush 1/2 dirty pages, don't flush all of them, or you would flush the same phy page very soon.
+  size_t needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/2;
+
   internal::vector<Span>* dirtyMarkSpans = newFreeSpans();
   hard_assert(dirtyMarkSpans);
 
-  auto markDirtyPages = [&](const Span &span) {
-    // debug("arena:  (%zu/%zu) \n", span.offset, span.length);
-    dirtyMarkSpans->emplace_back(span);
-  };
+  size_t freeCount = flushSpansToVector(_dirty, *dirtyMarkSpans, needFreeCount);
 
-  forEachFree(_dirty, [&](const Span &span) {
-    markDirtyPages(span);
-  });
+  _dirtyPageCount -= freeCount;
 
   // free it and got the dirty spans pre-scavage
   // debug("freeSpansBg = %d\n", dirtyMarkSpans->size());
 
   runtime().freeSpansBg(dirtyMarkSpans);
   dirtyMarkSpans = nullptr;
-
-  for (size_t i = 0; i < kSpanClassCount; i++) {
-    // debug("_dirty[%d] size: %d", i, _dirty[i].size());
-    _dirty[i].clear();
-  }
-
-  _dirtyPageCount = 0;
 
   // get spans from Bgthread, may be many
   internal::vector<Span>* preDirtySpans = nullptr;
