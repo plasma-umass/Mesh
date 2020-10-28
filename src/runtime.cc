@@ -282,7 +282,7 @@ void *Runtime::bgFreePhysThread(void *arg) {
   auto &rt = mesh::runtime();
   using namespace std::chrono_literals;
 
-  debug("libmesh: freePhys thread started\n");
+  // debug("libmesh: freePhys thread started\n");
 
   while(true) {
     auto spans = rt._spansFreeBuffer->pop();
