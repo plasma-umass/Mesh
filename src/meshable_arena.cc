@@ -463,7 +463,13 @@ void MeshableArena::scavenge(bool force) {
   }
 
   // always flush 1/2 dirty pages, don't flush all of them, or you would flush the same phy page very soon.
-  size_t needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/2;
+  size_t needFreeCount = 0;
+  if(_dirtyPageCount > kMaxDirtyPageThreshold) {
+    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/2;
+  }
+  else if (_dirtyPageCount > kMinDirtyPageThreshold) {
+    needFreeCount = _dirtyPageCount - kMinDirtyPageThreshold;
+  }
 
   internal::vector<Span>* dirtyMarkSpans = newFreeSpans();
   hard_assert(dirtyMarkSpans);

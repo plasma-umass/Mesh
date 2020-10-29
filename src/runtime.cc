@@ -284,6 +284,7 @@ void *Runtime::bgFreePhysThread(void *arg) {
 
   // debug("libmesh: freePhys thread started\n");
 
+  size_t idle = 0;
   while(true) {
     auto spans = rt._spansFreeBuffer->pop();
 
@@ -295,9 +296,16 @@ void *Runtime::bgFreePhysThread(void *arg) {
       }
       // debug("bgFreePhysThread free: %d\n", pageCount);
       rt._spansReturnBuffer->push(spans);
+      idle = 0;
     }
     else {
-      std::this_thread::sleep_for(10ms);
+      if(idle > 10) {
+        std::this_thread::sleep_for(10ms);
+      }
+      else {
+        std::this_thread::sleep_for(1ms);
+        ++idle;       
+      }
     }
   }
 
