@@ -492,59 +492,13 @@ void MeshableArena::scavenge(bool force) {
       // debug("getSpansFromBg = %d\n", preDirtySpans->size());
       // all add to the mark spans
       for(auto& s : *preDirtySpans) {
-        spans.emplace_back(s);
+        _clean[s.spanClass()].emplace_back(s);
       }
       deleteFreeSpans(preDirtySpans);
       preDirtySpans = nullptr;
     }
     else {
       break;
-    }
-  }
-
-
-  forEachFree(_clean, [&](const Span &span) {
-    markPages(span);
-  });
-
-  for (size_t i = 0; i < kSpanClassCount; i++) {
-    // debug("_clean[%d] size: %d", i, _clean[i].size());
-    _clean[i].clear();
-  }
-
-  // coalesce adjacent spans
-  struct {
-      bool operator()(const Span& a, const Span& b) const
-      {
-          return a.offset < b.offset;
-      }
-  } spanLess;
-
-  std::sort(spans.begin(), spans.end(), spanLess);
-
-  if(spans.size() > 1) {
-    auto leftIt = spans.begin();
-    auto rightIt = spans.begin() + 1;
-
-    while(rightIt != spans.end()) {
-      d_assert(leftIt->offset + leftIt->length <= rightIt->offset);
-
-      if(leftIt->offset + leftIt->length == rightIt->offset) {
-        leftIt->length += rightIt->length;
-        ++rightIt;
-        continue;
-      }
-      else {
-        _clean[leftIt->spanClass()].emplace_back(leftIt->offset, leftIt->length);
-        leftIt = rightIt;
-        ++rightIt;
-      }
-    }
-    _clean[leftIt->spanClass()].emplace_back(leftIt->offset, leftIt->length);
-  }
-  else {
-    if(spans.size() == 1) {
-      _clean[spans[0].spanClass()].emplace_back(spans[0].offset, spans[0].length);
     }
   }
 }

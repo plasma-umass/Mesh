@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <sys/prctl.h>
 
 #ifdef __linux__
 #include <sys/signalfd.h>
@@ -63,6 +64,30 @@ size_t internal::measurePssKiB() {
   return atoi(&start[6]);
 }
 
+#if defined(__linux__) || defined(__linux)
+inline void change_thread_name(const std::string& postfix, int index=-1)
+{
+	static char process_name[16];
+	static std::once_flag init_flag;
+	std::call_once(init_flag, prctl, PR_GET_NAME, (unsigned long)process_name, 0, 0, 0);
+	char new_name[16];
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
+	if (index < 0)
+		snprintf(new_name, 16, "%s[%s]", process_name, postfix.c_str());
+	else
+		snprintf(new_name, 16, "%s[%s%d]", process_name, postfix.c_str(), index);
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+	prctl(PR_SET_NAME, (unsigned long)new_name, 0, 0, 0);
+}
+#else
+inline void change_thread_name(const std::string&, int = -1) {}
+#endif
+
 int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
   d_assert(off >= 0);
 
@@ -83,7 +108,6 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 }
 
 Runtime::Runtime() {
-
   void *buf = mesh::internal::Heap().malloc(sizeof(FreeRingVector));
   static_assert(sizeof(FreeRingVector) < 4096, "tlh should have a reasonable size");
   hard_assert(buf != nullptr);
@@ -221,8 +245,9 @@ void Runtime::startBgThread() {
 }
 
 void *Runtime::bgThread(void *arg) {
-  auto &rt = mesh::runtime();
+  change_thread_name("background");
 
+  auto &rt = mesh::runtime();
   // debug("libmesh: background thread started\n");
 
 #ifdef __linux__
@@ -278,34 +303,82 @@ void Runtime::startFreePhysThread() {
   }
 }
 
-void *Runtime::bgFreePhysThread(void *arg) {
+
+bool Runtime::jobFreePhysSpans() {
   auto &rt = mesh::runtime();
   using namespace std::chrono_literals;
 
+  auto spans = rt._spansFreeBuffer->pop();
+
+  size_t mergeCount = 0;
+  size_t pageCount = 0;
+  if(spans) {
+    if(spans->size() > 1) {
+      // sort and merge spans
+      std::sort(spans->begin(), spans->end());
+
+      internal::vector<Span> tmpSpans;
+      tmpSpans.reserve(spans->size());
+
+      auto leftIt = spans->begin();
+      auto rightIt = spans->begin() + 1;
+
+      while(rightIt != spans->end()) {
+        d_assert(leftIt->offset + leftIt->length <= rightIt->offset);
+
+        if(leftIt->offset + leftIt->length == rightIt->offset) {
+          leftIt->length += rightIt->length;
+          ++mergeCount;
+          ++rightIt;
+          continue;
+        }
+        else {
+          tmpSpans.emplace_back(leftIt->offset, leftIt->length);
+          leftIt = rightIt;
+          ++rightIt;
+        }
+      }
+      tmpSpans.emplace_back(leftIt->offset, leftIt->length);
+      spans->swap(tmpSpans);
+    }
+
+    // and free the phys page
+    for( auto& span : *spans) {
+      rt.heap().freePhys(span);
+      pageCount += span.length;
+    }
+    // debug("bgFreePhysThread free: %d,  merge: %d\n", pageCount, mergeCount);
+    rt._spansReturnBuffer->push(spans);
+    return false;
+  }
+  else {
+    return true;
+  }
+}
+
+void *Runtime::bgFreePhysThread(void *arg) {
+  change_thread_name("FreePhys");
+
+  auto &rt = mesh::runtime();
+
   // debug("libmesh: freePhys thread started\n");
 
-  size_t idle = 0;
+  size_t idle_count = 0;
   while(true) {
-    auto spans = rt._spansFreeBuffer->pop();
+    auto idle = rt.jobFreePhysSpans();
 
-    size_t pageCount = 0;
-    if(spans) {
-      for( auto& span : *spans) {
-        rt.heap().freePhys(span);
-        pageCount += span.length;
-      }
-      // debug("bgFreePhysThread free: %d\n", pageCount);
-      rt._spansReturnBuffer->push(spans);
-      idle = 0;
+    if(idle) {
+      ++idle_count;
     }
     else {
-      if(idle > 10) {
-        std::this_thread::sleep_for(10ms);
-      }
-      else {
-        std::this_thread::sleep_for(1ms);
-        ++idle;       
-      }
+      idle_count = 0;
+    }
+
+    if(idle_count > 10) {
+      std::this_thread::sleep_for(10ms);
+    }
+    else {
+      std::this_thread::sleep_for(1ms);
     }
   }
 

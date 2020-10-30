@@ -96,6 +96,9 @@ public:
     return _spansReturnBuffer->pop();
   }
 
+protected:
+  bool jobFreePhysSpans();
+
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
   // happens lazily, as the dynamic linker's dlopen calls into malloc

@@ -225,6 +225,11 @@ struct Span {
     return *this;
   }
 
+  bool operator< (const Span &rhs) const
+  {
+      return offset < rhs.offset;
+  }
+
   Span(Span &&rhs) : offset(rhs.offset), length(rhs.length) {
   }
 
