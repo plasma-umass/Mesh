@@ -108,33 +108,19 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 }
 
 Runtime::Runtime() {
-  static_assert(sizeof(FreeRingVector) < 4096, "tlh should have a reasonable size");
-  
-  void *buf = mesh::internal::Heap().malloc(sizeof(FreeRingVector));
- 
+  static_assert(sizeof(FreeCmdRingVector) < 4096, "tlh should have a reasonable size");
+
+  void* buf = mesh::internal::Heap().malloc(sizeof(FreeCmdRingVector));
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
-  _spansFreeBuffer = new (buf) FreeRingVector(8);
-
-  buf = mesh::internal::Heap().malloc(sizeof(FreeRingVector));
-  hard_assert(buf != nullptr);
-  hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
-
-  _spansReturnBuffer = new (buf) FreeRingVector(16);
-
+  _pagesFreeCmdBuffer = new (buf) FreeCmdRingVector(16);
 
   buf = mesh::internal::Heap().malloc(sizeof(FreeCmdRingVector));
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
-  _pagesFreeCmdBuffer = new (buf) FreeCmdRingVector(8);
-
-  buf = mesh::internal::Heap().malloc(sizeof(FreeCmdRingVector));
-  hard_assert(buf != nullptr);
-  hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
-
-  _pagesReturnCmdBuffer = new (buf) FreeCmdRingVector(16);
+  _pagesReturnCmdBuffer = new (buf) FreeCmdRingVector(64);
 
   updatePid();
 }
@@ -318,14 +304,9 @@ void Runtime::startFreePhysThread() {
   }
 }
 
-
-void Runtime::jobFreePhysSpans(internal::FreeCmd* fComand) {
-  auto &rt = mesh::runtime();
-
-  auto& spans = fComand->spans;
-
+size_t mergeSpans(internal::vector<Span>& spans)
+{
   size_t mergeCount = 0;
-  size_t pageCount = 0;
 
   if(spans.size() > 1) {
     // sort and merge spans
@@ -356,12 +337,26 @@ void Runtime::jobFreePhysSpans(internal::FreeCmd* fComand) {
     spans.swap(tmpSpans);
   }
 
+  return mergeCount;
+  // debug("mergeSpans :  merge: %d\n", mergeCount);
+}
+
+void Runtime::jobFreePhysSpans(internal::FreeCmd* fComand) {
+  auto &rt = mesh::runtime();
+
+  auto& spans = fComand->spans;
+
+  size_t pageCount = 0;
+
+  auto mergeCount = mergeSpans(spans);
+  // debug("jobFreePhysSpans :  merge: %d\n", mergeCount);
+
   // and free the phys page
   for( auto& span : spans) {
     rt.heap().freePhys(span);
     pageCount += span.length;
   }
-  // debug("bgFreePhysThread free: %d,  merge: %d\n", pageCount, mergeCount);
+
   fComand->cmd = internal::FreeCmd::FINISHED_FREE_DIRTY_PAGE;
   rt._pagesReturnCmdBuffer->push(fComand);
 
@@ -391,6 +386,9 @@ bool Runtime::jobFreeCmd() {
     
     case internal::FreeCmd::UNMAP_PAGE:
       {
+        auto mergeCount = mergeSpans(fCommand->spans);
+        // debug("UNMAP_PAGE :  merge: %d\n", mergeCount);
+
         for( auto& span : fCommand->spans) {
           rt.heap().resetSpanMapping(span);
           pageCount += span.length;
@@ -436,11 +434,8 @@ void *Runtime::bgFreePhysThread(void *arg) {
       idle_count = 0;
     }
 
-    if(idle_count > 10) {
+    if(idle_count > 100) {
       std::this_thread::sleep_for(1ms);
-    }
-    else {
-      std::this_thread::yield();
     }
   }
 

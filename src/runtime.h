@@ -120,9 +120,6 @@ private:
   pid_t _pid{};
   GlobalHeap _heap{};
 
-  FreeRingVector* _spansFreeBuffer{nullptr};
-  FreeRingVector* _spansReturnBuffer{nullptr};
-
   FreeCmdRingVector* _pagesFreeCmdBuffer{nullptr};
   FreeCmdRingVector* _pagesReturnCmdBuffer{nullptr};
 };

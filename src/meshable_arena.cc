@@ -354,7 +354,7 @@ static size_t flushSpansToVector(internal::vector<Span> freeSpans[kSpanClassCoun
 
   flushSpans.reserve(needFreeCount);
 
-  for (int i = kSpanClassCount - 1; i >= 0; --i) {
+  for (size_t i = 0; i < kSpanClassCount; ++i) {
     auto& spans = freeSpans[i];
 
     if (spans.empty())
@@ -383,7 +383,11 @@ static size_t flushSpansToVector(internal::vector<Span> freeSpans[kSpanClassCoun
 
 void MeshableArena::partialScavenge() {
   // always flush 1/2 pages
-  size_t needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/2;
+  size_t needFreeCount = 0;
+
+  if(_dirtyPageCount > kMaxDirtyPageThreshold) {
+    needFreeCount = _dirtyPageCount - kMaxDirtyPageThreshold;
+  }
 
   internal::FreeCmd* freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
 
@@ -412,17 +416,21 @@ void MeshableArena::partialScavenge() {
 
   // has chance that partialScavenge already been called, so we can got the clean spans now
   // get spans from Bgthread, may be many
-  
+ 
   while(true) {
     internal::FreeCmd* preCommand = runtime().getReturnCmdFromBg();
     if(preCommand) {
       // debug("getSpansFromBg = %d\n", preDirtySpans->size());
       // all add to the mark spans
-      if(preCommand->cmd == internal::FreeCmd::FINISHED_FREE_DIRTY_PAGE) {
+      if(preCommand->cmd == internal::FreeCmd::FINISHED_FREE_DIRTY_PAGE || preCommand->cmd == internal::FreeCmd::FINISHED_UNMAP_PAGE) {
         for(auto& s : preCommand->spans) {
           _clean[s.spanClass()].emplace_back(s);
         }
       }
+      else {
+        hard_assert(false);
+      }
+
       delete preCommand;
     }
     else {
@@ -437,7 +445,6 @@ void MeshableArena::scavenge(bool force) {
   }
 
   internal::FreeCmd* unmapCommand = new internal::FreeCmd(internal::FreeCmd::UNMAP_PAGE);
-  hard_assert(unmapCommand);
 
   auto markPages = [&](const Span &span) {
     // debug("arena:  (%zu/%zu) \n", span.offset, span.length);
@@ -467,11 +474,8 @@ void MeshableArena::scavenge(bool force) {
 
   // always flush 1/2 dirty pages, don't flush all of them, or you would flush the same phy page very soon.
   size_t needFreeCount = 0;
-  if(_dirtyPageCount > kMaxDirtyPageThreshold) {
-    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/2;
-  }
-  else if (_dirtyPageCount > kMinDirtyPageThreshold) {
-    needFreeCount = _dirtyPageCount - kMinDirtyPageThreshold;
+  if (_dirtyPageCount > kMaxDirtyPageThreshold) {
+    needFreeCount = _dirtyPageCount - kMaxDirtyPageThreshold;
   }
 
   internal::FreeCmd* freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
@@ -492,26 +496,20 @@ void MeshableArena::scavenge(bool force) {
     if(preCommand) {
       // debug("getSpansFromBg = %d\n", preDirtySpans->size());
       // all add to the mark spans
-      if(preCommand->cmd == internal::FreeCmd::FINISHED_FREE_DIRTY_PAGE) {
+      if(preCommand->cmd == internal::FreeCmd::FINISHED_FREE_DIRTY_PAGE || preCommand->cmd == internal::FreeCmd::FINISHED_UNMAP_PAGE) {
         for(auto& s : preCommand->spans) {
           _clean[s.spanClass()].emplace_back(s);
         }
       }
+      else {
+        hard_assert(false);
+      }
+
       delete preCommand;
     }
     else {
       break;
     }
-  }
-
-  internal::FreeCmd* rtCommand = runtime().getReturnCmdFromBg();
-  if(rtCommand) {
-    if(rtCommand->cmd == internal::FreeCmd::FINISHED_UNMAP_PAGE) {
-      for(auto & s : rtCommand->spans) {
-        _clean[s.spanClass()].emplace_back(s);
-      }
-    }
-    delete rtCommand;
   }
 }
 
