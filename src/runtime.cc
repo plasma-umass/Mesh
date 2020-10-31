@@ -65,7 +65,7 @@ size_t internal::measurePssKiB() {
 }
 
 #if defined(__linux__) || defined(__linux)
-inline void change_thread_name(const std::string& postfix, int index=-1)
+inline void change_thread_name(const char* postfix, int index=-1)
 {
 	static char process_name[16];
 	static std::once_flag init_flag;
@@ -76,16 +76,16 @@ inline void change_thread_name(const std::string& postfix, int index=-1)
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #endif
 	if (index < 0)
-		snprintf(new_name, 16, "%s[%s]", process_name, postfix.c_str());
+		snprintf(new_name, 16, "%s[%s]", process_name, postfix);
 	else
-		snprintf(new_name, 16, "%s[%s%d]", process_name, postfix.c_str(), index);
+		snprintf(new_name, 16, "%s[%s%d]", process_name, postfix, index);
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
 	prctl(PR_SET_NAME, (unsigned long)new_name, 0, 0, 0);
 }
 #else
-inline void change_thread_name(const std::string&, int = -1) {}
+inline void change_thread_name(const char*, int = -1) {}
 #endif
 
 int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
@@ -108,8 +108,10 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 }
 
 Runtime::Runtime() {
-  void *buf = mesh::internal::Heap().malloc(sizeof(FreeRingVector));
   static_assert(sizeof(FreeRingVector) < 4096, "tlh should have a reasonable size");
+  
+  void *buf = mesh::internal::Heap().malloc(sizeof(FreeRingVector));
+ 
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
@@ -120,6 +122,19 @@ Runtime::Runtime() {
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
   _spansReturnBuffer = new (buf) FreeRingVector(16);
+
+
+  buf = mesh::internal::Heap().malloc(sizeof(FreeCmdRingVector));
+  hard_assert(buf != nullptr);
+  hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
+
+  _pagesFreeCmdBuffer = new (buf) FreeCmdRingVector(8);
+
+  buf = mesh::internal::Heap().malloc(sizeof(FreeCmdRingVector));
+  hard_assert(buf != nullptr);
+  hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
+
+  _pagesReturnCmdBuffer = new (buf) FreeCmdRingVector(16);
 
   updatePid();
 }
@@ -306,7 +321,6 @@ void Runtime::startFreePhysThread() {
 
 bool Runtime::jobFreePhysSpans() {
   auto &rt = mesh::runtime();
-  using namespace std::chrono_literals;
 
   auto spans = rt._spansFreeBuffer->pop();
 
@@ -356,6 +370,39 @@ bool Runtime::jobFreePhysSpans() {
   }
 }
 
+bool Runtime::jobFreeCmd() {
+  auto &rt = mesh::runtime();
+  internal::FreeCmd* fCommand = rt._pagesFreeCmdBuffer->pop();
+
+  if(fCommand)
+  {
+    size_t pageCount = 0;
+    if(fCommand->cmd == internal::FreeCmd::FREE_PAGE) {
+      
+      for( auto& span : fCommand->spans) {
+        rt.heap().freePhys(span);
+        pageCount += span.length;
+      }
+      debug("FreeCmd::FREE_PAGE : %d\n", pageCount);
+      delete fCommand;
+    } else if(fCommand->cmd == internal::FreeCmd::UNMAP_PAGE) {
+
+      for( auto& span : fCommand->spans) {
+        rt.heap().resetSpanMapping(span);
+        pageCount += span.length;
+      }
+      debug("FreeCmd::UNMAP_PAGE : %d\n", pageCount);
+      fCommand->cmd = internal::FreeCmd::FINISHED_UNMAP_PAGE;
+      rt._pagesReturnCmdBuffer->push(fCommand);
+    }
+
+    return false;
+  }
+  else {
+    return true;
+  }
+}
+
 void *Runtime::bgFreePhysThread(void *arg) {
   change_thread_name("FreePhys");
 
@@ -365,7 +412,9 @@ void *Runtime::bgFreePhysThread(void *arg) {
 
   size_t idle_count = 0;
   while(true) {
-    auto idle = rt.jobFreePhysSpans();
+    auto idle1 = rt.jobFreePhysSpans();
+    auto idle2 = rt.jobFreeCmd();
+    auto idle = idle1 && idle2;
 
     if(idle) {
       ++idle_count;
@@ -375,10 +424,10 @@ void *Runtime::bgFreePhysThread(void *arg) {
     }
 
     if(idle_count > 10) {
-      std::this_thread::sleep_for(10ms);
+      std::this_thread::sleep_for(1ms);
     }
     else {
-      std::this_thread::sleep_for(1ms);
+      std::this_thread::yield();
     }
   }
 

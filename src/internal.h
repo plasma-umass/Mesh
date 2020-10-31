@@ -359,6 +359,33 @@ inline void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __la
     }
   }
 }
+
+
+class FreeCmd {
+public:
+  enum CmdType {
+    FREE_PAGE,
+    UNMAP_PAGE,
+    FINISHED_UNMAP_PAGE,
+  };
+
+  FreeCmd(CmdType command):cmd(command) {
+
+  }
+
+  void* operator new  ( std::size_t count ) {
+    return mesh::internal::Heap().malloc(count);;
+  }
+
+  void operator delete  ( void* ptr ) throw() {
+    mesh::internal::Heap().free(ptr);
+    return;
+  }
+
+  internal::vector<Span>  spans;
+  CmdType                 cmd{};
+};
+
 }  // namespace internal
 }  // namespace mesh
 

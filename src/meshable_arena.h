@@ -155,6 +155,13 @@ public:
 
   void freePhys(const Span& span);
   void freePhys(void *ptr, size_t sz);
+
+  inline void resetSpanMapping(const Span &span) {
+    auto ptr = ptrFromOffset(span.offset);
+    auto sz = span.byteLength();
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset * kPageSize);
+  }
+
 private:
   void expandArena(size_t minPagesAdded);
   bool findPages(size_t pageCount, Span &result, internal::PageType &type);
@@ -266,12 +273,6 @@ private:
       d_assert(_meshedBitmap.isSet(span.offset + i));
       _meshedBitmap.unset(span.offset + i);
     }
-  }
-
-  inline void resetSpanMapping(const Span &span) {
-    auto ptr = ptrFromOffset(span.offset);
-    auto sz = span.byteLength();
-    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset * kPageSize);
   }
 
   void prepareForFork();

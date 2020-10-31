@@ -168,7 +168,7 @@ public:
     // dumpDebug();
   }
 
-  inline Span span() const {
+  inline const Span& span() const {
     return _span;
   }
 

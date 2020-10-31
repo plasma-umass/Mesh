@@ -26,7 +26,8 @@ namespace mesh {
 // function passed to pthread_create
 typedef void *(*PthreadFn)(void *);
 
-typedef ring_buffer<internal::vector<Span>*> FreeRingVector;
+typedef ring_buffer<internal::vector<Span>*>  FreeRingVector;
+typedef ring_buffer<internal::FreeCmd*>       FreeCmdRingVector;
 
 class Runtime {
 private:
@@ -96,8 +97,17 @@ public:
     return _spansReturnBuffer->pop();
   }
 
+  void sendFreeCmd(internal::FreeCmd* fComand) {
+    _pagesFreeCmdBuffer->push(fComand);
+  }
+
+  internal::FreeCmd* getReturnCmdFromBg() {
+    return _pagesReturnCmdBuffer->pop();
+  }
+
 protected:
   bool jobFreePhysSpans();
+  bool jobFreeCmd();
 
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
@@ -120,6 +130,9 @@ private:
 
   FreeRingVector* _spansFreeBuffer{nullptr};
   FreeRingVector* _spansReturnBuffer{nullptr};
+
+  FreeCmdRingVector* _pagesFreeCmdBuffer{nullptr};
+  FreeCmdRingVector* _pagesReturnCmdBuffer{nullptr};
 };
 
 // get a reference to the Runtime singleton

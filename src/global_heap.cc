@@ -278,7 +278,7 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
   return 0;
 }
 
-void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
+void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src, internal::vector<Span>& fCmdSpans) {
   // mesh::debug("mesh dst:%p <- src:%p\n", dst, src);
   // dst->dumpDebug();
   // src->dumpDebug();
@@ -303,7 +303,8 @@ void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src) {
     Super::finalizeMesh(dstSpanStart, srcSpan, dstSpanSize);
     return false;
   });
-  Super::freePhys(reinterpret_cast<void *>(src->getSpanStart(arenaBegin())), dstSpanSize);
+  // Super::freePhys(reinterpret_cast<void *>(src->getSpanStart(arenaBegin())), dstSpanSize);
+  fCmdSpans.emplace_back(src->span());
 
   // make sure we adjust what bin the destination is in -- it might
   // now be full and not a candidate for meshing
@@ -335,6 +336,8 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
   }
 
   size_t meshCount = 0;
+
+  internal::FreeCmd* fCommand = new internal::FreeCmd(internal::FreeCmd::FREE_PAGE);
 
   for (size_t i = 0; i < mergeSetCount; i++) {
     std::pair<MiniHeap *, MiniHeap *> &mergeSet = mergeSets[i];
@@ -369,10 +372,12 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
     }
 
     if (!oneEmpty && !aboveMeshThreshold()) {
-      meshLocked(dst, src);
+      meshLocked(dst, src, fCommand->spans);
       meshCount++;
     }
   }
+
+  runtime().sendFreeCmd(fCommand);
 
   // flush things once more (since we may have called postFree instead
   // of mesh above)
@@ -419,10 +424,6 @@ void GlobalHeap::meshAllSizeClassesLocked() {
   for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
     totalMeshCount += meshSizeClassLocked(sizeClass, MergeSets, Left, Right);
   }
-
-  // madvise(&Left, sizeof(Left), MADV_DONTNEED);
-  // madvise(&Right, sizeof(Right), MADV_DONTNEED);
-  // madvise(&MergeSets, sizeof(MergeSets), MADV_DONTNEED);
 
   _lastMeshEffective = totalMeshCount > 256;
   _stats.meshCount += totalMeshCount;

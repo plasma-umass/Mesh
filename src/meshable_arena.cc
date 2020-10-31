@@ -435,12 +435,12 @@ void MeshableArena::scavenge(bool force) {
     return;
   }
 
-  static internal::vector<Span> spans;
-  spans.clear();
+  internal::FreeCmd* fCommand = new internal::FreeCmd(internal::FreeCmd::UNMAP_PAGE);
+  hard_assert(fCommand);
 
   auto markPages = [&](const Span &span) {
     // debug("arena:  (%zu/%zu) \n", span.offset, span.length);
-    spans.emplace_back(span);
+    fCommand->spans.emplace_back(span);
   };
 
   // first, untrack the spans in the meshed bitmap and mark them in
@@ -448,13 +448,15 @@ void MeshableArena::scavenge(bool force) {
   std::for_each(_toReset.begin(), _toReset.end(), [&](const Span& span) {
     untrackMeshed(span);
     markPages(span);
-    resetSpanMapping(span);
+    // resetSpanMapping(span);
   });
 
   // now that we've finally reset to identity all delayed-reset
   // mappings, empty the list
   // debug("_toReset size: %d", _toReset.size());
   _toReset.clear();
+
+  runtime().sendFreeCmd(fCommand);
 
   _meshedPageCount = _meshedBitmap.inUseCount();
   if (_meshedPageCount > _meshedPageCountHWM) {
@@ -500,6 +502,16 @@ void MeshableArena::scavenge(bool force) {
     else {
       break;
     }
+  }
+
+  internal::FreeCmd* rtCommand = runtime().getReturnCmdFromBg();
+  if(rtCommand) {
+    if(rtCommand->cmd == internal::FreeCmd::FINISHED_UNMAP_PAGE) {
+      for(auto & s : rtCommand->spans) {
+        _clean[s.spanClass()].emplace_back(s);
+      }
+    }
+    delete rtCommand;
   }
 }
 
