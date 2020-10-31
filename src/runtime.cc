@@ -338,29 +338,6 @@ size_t mergeSpans(internal::vector<Span>& spans)
   }
 
   return mergeCount;
-  // debug("mergeSpans :  merge: %d\n", mergeCount);
-}
-
-void Runtime::jobFreePhysSpans(internal::FreeCmd* fComand) {
-  auto &rt = mesh::runtime();
-
-  auto& spans = fComand->spans;
-
-  size_t pageCount = 0;
-
-  auto mergeCount = mergeSpans(spans);
-  // debug("jobFreePhysSpans :  merge: %d\n", mergeCount);
-
-  // and free the phys page
-  for( auto& span : spans) {
-    rt.heap().freePhys(span);
-    pageCount += span.length;
-  }
-
-  fComand->cmd = internal::FreeCmd::FINISHED_FREE_DIRTY_PAGE;
-  rt._pagesReturnCmdBuffer->push(fComand);
-
-  return;
 }
 
 bool Runtime::jobFreeCmd() {
@@ -369,7 +346,6 @@ bool Runtime::jobFreeCmd() {
 
   if(fCommand)
   {
-    size_t pageCount = 0;
 
     switch (fCommand->cmd)
     {
@@ -377,31 +353,46 @@ bool Runtime::jobFreeCmd() {
       {
         for( auto& span : fCommand->spans) {
           rt.heap().freePhys(span);
-          pageCount += span.length;
         }
-        // debug("FreeCmd::FREE_PAGE : %d\n", pageCount);
         delete fCommand;
         break;
       }
     
     case internal::FreeCmd::UNMAP_PAGE:
       {
-        auto mergeCount = mergeSpans(fCommand->spans);
-        // debug("UNMAP_PAGE :  merge: %d\n", mergeCount);
-
         for( auto& span : fCommand->spans) {
           rt.heap().resetSpanMapping(span);
-          pageCount += span.length;
+
         }
-        // debug("FreeCmd::UNMAP_PAGE : %d\n", pageCount);
-        fCommand->cmd = internal::FreeCmd::FINISHED_UNMAP_PAGE;
-        rt._pagesReturnCmdBuffer->push(fCommand);
+        rt.expandFlushSpans(fCommand->spans);
+        delete fCommand;
         break;
       }
 
     case internal::FreeCmd::FREE_DIRTY_PAGE:
       {
-        rt.jobFreePhysSpans(fCommand);
+        for( auto& span : fCommand->spans) {
+          rt.heap().freePhys(span);
+        }
+
+        rt.expandFlushSpans(fCommand->spans);
+        delete fCommand;
+        break;
+      }
+    case internal::FreeCmd::CLEAN_PAGE:
+      {
+        rt.expandFlushSpans(fCommand->spans);
+        delete fCommand;
+        break;
+      }
+
+    case internal::FreeCmd::FLUSH:
+      {
+        auto& spans = rt.getFlushSpans();
+        auto mergeCount = mergeSpans(spans);
+        debug("mergeSpans:  merge: %d -> %d\n", mergeCount, spans.size());
+        fCommand->spans.swap(spans);
+        rt._pagesReturnCmdBuffer->push(fCommand);
         break;
       }
 

@@ -142,17 +142,6 @@ public:
 
   void doAfterForkChild();
 
-  internal::vector<Span>* newFreeSpans() {
-    void* buf = internal::Heap().malloc(sizeof(internal::vector<Span>));
-    internal::vector<Span>* freeSpans = new (buf) internal::vector<Span>();
-    return freeSpans;
-  }
-
-  void deleteFreeSpans(internal::vector<Span>* spans) {
-    spans->~vector();
-    internal::Heap().free(spans);
-  }
-
   void freePhys(const Span& span);
   void freePhys(void *ptr, size_t sz);
 

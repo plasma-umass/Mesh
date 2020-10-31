@@ -97,8 +97,18 @@ public:
     return _pagesReturnCmdBuffer->pop();
   }
 
+  void expandFlushSpans(internal::vector<Span>& spans) {
+    _flushSpans.reserve(_flushSpans.size() + spans.size());
+    for( auto& s : spans) {
+      _flushSpans.emplace_back(s);
+    }
+  }
+
+  internal::vector<Span>& getFlushSpans() {
+    return _flushSpans;
+  }
+
 protected:
-  void jobFreePhysSpans(internal::FreeCmd* fComand);
   bool jobFreeCmd();
 
 private:
@@ -122,6 +132,7 @@ private:
 
   FreeCmdRingVector* _pagesFreeCmdBuffer{nullptr};
   FreeCmdRingVector* _pagesReturnCmdBuffer{nullptr};
+  internal::vector<Span>  _flushSpans;
 };
 
 // get a reference to the Runtime singleton

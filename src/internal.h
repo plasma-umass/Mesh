@@ -365,10 +365,10 @@ class FreeCmd {
 public:
   enum CmdType {
     FREE_DIRTY_PAGE,
-    FINISHED_FREE_DIRTY_PAGE,
     FREE_PAGE,
     UNMAP_PAGE,
-    FINISHED_UNMAP_PAGE,
+    CLEAN_PAGE,
+    FLUSH,
   };
 
   FreeCmd(CmdType command):cmd(command) {

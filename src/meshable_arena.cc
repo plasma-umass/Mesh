@@ -151,6 +151,7 @@ void MeshableArena::expandArena(size_t minPagesAdded) {
   }
 
   _clean[expansion.spanClass()].push_back(expansion);
+  debug("expandArena %d, %d\n", expansion.offset, expansion.length);
 }
 
 bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], const size_t i,
@@ -165,7 +166,7 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
     // the final span class contains (and is the only class to
     // contain) variable-size spans, so we need to make sure we
     // search through all candidates in this case.
-    for (size_t j = 0; j < spanList.size() - 1; j++) {
+    for (int64_t j = spanList.size() - 1; j > 0; --j) {
       if (spanList[j].length >= pageCount) {
         std::swap(spanList[j], spanList.back());
         break;
@@ -386,7 +387,7 @@ void MeshableArena::partialScavenge() {
   size_t needFreeCount = 0;
 
   if(_dirtyPageCount > kMaxDirtyPageThreshold) {
-    needFreeCount = _dirtyPageCount - kMaxDirtyPageThreshold;
+    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/2;
   }
 
   internal::FreeCmd* freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
@@ -395,25 +396,11 @@ void MeshableArena::partialScavenge() {
 
   size_t freeCount = flushSpansToVector(_dirty, freeCommand->spans, needFreeCount);
 
-#if 0
-  size_t leavePages = 0;
-  for (size_t i = 0; i < kSpanClassCount; ++i) {
-    auto& spans = _dirty[i];
-
-    for (size_t j = 0; j < spans.size() ; ++j) {
-      leavePages += spans[j].length;
-    }
-  }
-
-  debug("_dirtyPageCount = %d, leavePages = %d, freeCount = %d\n", _dirtyPageCount, leavePages, freeCount);
-  d_assert(_dirtyPageCount == leavePages + freeCount);
-#endif
-
   // debug("partialScavenge _dirtyPageCount = %d  , freeCount = %d , flushSpans->size() =  %d\n", _dirtyPageCount, freeCount, flushSpans->size());
   _dirtyPageCount -= freeCount;
 
   runtime().sendFreeCmd(freeCommand);
-
+  runtime().sendFreeCmd(new internal::FreeCmd(internal::FreeCmd::FLUSH));
   // has chance that partialScavenge already been called, so we can got the clean spans now
   // get spans from Bgthread, may be many
  
@@ -422,7 +409,7 @@ void MeshableArena::partialScavenge() {
     if(preCommand) {
       // debug("getSpansFromBg = %d\n", preDirtySpans->size());
       // all add to the mark spans
-      if(preCommand->cmd == internal::FreeCmd::FINISHED_FREE_DIRTY_PAGE || preCommand->cmd == internal::FreeCmd::FINISHED_UNMAP_PAGE) {
+      if(preCommand->cmd == internal::FreeCmd::FLUSH) {
         for(auto& s : preCommand->spans) {
           _clean[s.spanClass()].emplace_back(s);
         }
@@ -472,23 +459,23 @@ void MeshableArena::scavenge(bool force) {
     // TODO: find rss at peak
   }
 
-  // always flush 1/2 dirty pages, don't flush all of them, or you would flush the same phy page very soon.
-  size_t needFreeCount = 0;
-  if (_dirtyPageCount > kMaxDirtyPageThreshold) {
-    needFreeCount = _dirtyPageCount - kMaxDirtyPageThreshold;
-  }
+  // always all.
 
   internal::FreeCmd* freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
+
+  size_t needFreeCount = 0;
+
+  if(_dirtyPageCount > kMaxDirtyPageThreshold) {
+    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/2;
+  }
 
   size_t freeCount = flushSpansToVector(_dirty, freeCommand->spans, needFreeCount);
 
   _dirtyPageCount -= freeCount;
 
-  // free it and got the dirty spans pre-scavage
-  // debug("freeSpansBg = %d\n", dirtyMarkSpans.size());
-
   runtime().sendFreeCmd(freeCommand);
 
+  runtime().sendFreeCmd(new internal::FreeCmd(internal::FreeCmd::FLUSH));
   // get spans from Bgthread, may be many
   
   while(true) {
@@ -496,7 +483,7 @@ void MeshableArena::scavenge(bool force) {
     if(preCommand) {
       // debug("getSpansFromBg = %d\n", preDirtySpans->size());
       // all add to the mark spans
-      if(preCommand->cmd == internal::FreeCmd::FINISHED_FREE_DIRTY_PAGE || preCommand->cmd == internal::FreeCmd::FINISHED_UNMAP_PAGE) {
+      if(preCommand->cmd == internal::FreeCmd::FLUSH) {
         for(auto& s : preCommand->spans) {
           _clean[s.spanClass()].emplace_back(s);
         }
