@@ -89,14 +89,6 @@ public:
     return _pid;
   }
 
-  void freeSpansBg(internal::vector<Span>* spans) {
-    _spansFreeBuffer->push(spans);
-  }
-
-  internal::vector<Span>* getSpansFromBg() {
-    return _spansReturnBuffer->pop();
-  }
-
   void sendFreeCmd(internal::FreeCmd* fComand) {
     _pagesFreeCmdBuffer->push(fComand);
   }
@@ -106,7 +98,7 @@ public:
   }
 
 protected:
-  bool jobFreePhysSpans();
+  void jobFreePhysSpans(internal::FreeCmd* fComand);
   bool jobFreeCmd();
 
 private:

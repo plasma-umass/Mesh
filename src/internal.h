@@ -364,6 +364,8 @@ inline void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __la
 class FreeCmd {
 public:
   enum CmdType {
+    FREE_DIRTY_PAGE,
+    FINISHED_FREE_DIRTY_PAGE,
     FREE_PAGE,
     UNMAP_PAGE,
     FINISHED_UNMAP_PAGE,

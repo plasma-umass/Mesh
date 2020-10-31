@@ -319,55 +319,53 @@ void Runtime::startFreePhysThread() {
 }
 
 
-bool Runtime::jobFreePhysSpans() {
+void Runtime::jobFreePhysSpans(internal::FreeCmd* fComand) {
   auto &rt = mesh::runtime();
 
-  auto spans = rt._spansFreeBuffer->pop();
+  auto& spans = fComand->spans;
 
   size_t mergeCount = 0;
   size_t pageCount = 0;
-  if(spans) {
-    if(spans->size() > 1) {
-      // sort and merge spans
-      std::sort(spans->begin(), spans->end());
 
-      internal::vector<Span> tmpSpans;
-      tmpSpans.reserve(spans->size());
+  if(spans.size() > 1) {
+    // sort and merge spans
+    std::sort(spans.begin(), spans.end());
 
-      auto leftIt = spans->begin();
-      auto rightIt = spans->begin() + 1;
+    internal::vector<Span> tmpSpans;
+    tmpSpans.reserve(spans.size());
 
-      while(rightIt != spans->end()) {
-        d_assert(leftIt->offset + leftIt->length <= rightIt->offset);
+    auto leftIt = spans.begin();
+    auto rightIt = spans.begin() + 1;
 
-        if(leftIt->offset + leftIt->length == rightIt->offset) {
-          leftIt->length += rightIt->length;
-          ++mergeCount;
-          ++rightIt;
-          continue;
-        }
-        else {
-          tmpSpans.emplace_back(leftIt->offset, leftIt->length);
-          leftIt = rightIt;
-          ++rightIt;
-        }
+    while(rightIt != spans.end()) {
+      d_assert(leftIt->offset + leftIt->length <= rightIt->offset);
+
+      if(leftIt->offset + leftIt->length == rightIt->offset) {
+        leftIt->length += rightIt->length;
+        ++mergeCount;
+        ++rightIt;
+        continue;
       }
-      tmpSpans.emplace_back(leftIt->offset, leftIt->length);
-      spans->swap(tmpSpans);
+      else {
+        tmpSpans.emplace_back(leftIt->offset, leftIt->length);
+        leftIt = rightIt;
+        ++rightIt;
+      }
     }
+    tmpSpans.emplace_back(leftIt->offset, leftIt->length);
+    spans.swap(tmpSpans);
+  }
 
-    // and free the phys page
-    for( auto& span : *spans) {
-      rt.heap().freePhys(span);
-      pageCount += span.length;
-    }
-    // debug("bgFreePhysThread free: %d,  merge: %d\n", pageCount, mergeCount);
-    rt._spansReturnBuffer->push(spans);
-    return false;
+  // and free the phys page
+  for( auto& span : spans) {
+    rt.heap().freePhys(span);
+    pageCount += span.length;
   }
-  else {
-    return true;
-  }
+  // debug("bgFreePhysThread free: %d,  merge: %d\n", pageCount, mergeCount);
+  fComand->cmd = internal::FreeCmd::FINISHED_FREE_DIRTY_PAGE;
+  rt._pagesReturnCmdBuffer->push(fComand);
+
+  return;
 }
 
 bool Runtime::jobFreeCmd() {
@@ -377,23 +375,40 @@ bool Runtime::jobFreeCmd() {
   if(fCommand)
   {
     size_t pageCount = 0;
-    if(fCommand->cmd == internal::FreeCmd::FREE_PAGE) {
-      
-      for( auto& span : fCommand->spans) {
-        rt.heap().freePhys(span);
-        pageCount += span.length;
-      }
-      debug("FreeCmd::FREE_PAGE : %d\n", pageCount);
-      delete fCommand;
-    } else if(fCommand->cmd == internal::FreeCmd::UNMAP_PAGE) {
 
-      for( auto& span : fCommand->spans) {
-        rt.heap().resetSpanMapping(span);
-        pageCount += span.length;
+    switch (fCommand->cmd)
+    {
+    case internal::FreeCmd::FREE_PAGE:
+      {
+        for( auto& span : fCommand->spans) {
+          rt.heap().freePhys(span);
+          pageCount += span.length;
+        }
+        // debug("FreeCmd::FREE_PAGE : %d\n", pageCount);
+        delete fCommand;
+        break;
       }
-      debug("FreeCmd::UNMAP_PAGE : %d\n", pageCount);
-      fCommand->cmd = internal::FreeCmd::FINISHED_UNMAP_PAGE;
-      rt._pagesReturnCmdBuffer->push(fCommand);
+    
+    case internal::FreeCmd::UNMAP_PAGE:
+      {
+        for( auto& span : fCommand->spans) {
+          rt.heap().resetSpanMapping(span);
+          pageCount += span.length;
+        }
+        // debug("FreeCmd::UNMAP_PAGE : %d\n", pageCount);
+        fCommand->cmd = internal::FreeCmd::FINISHED_UNMAP_PAGE;
+        rt._pagesReturnCmdBuffer->push(fCommand);
+        break;
+      }
+
+    case internal::FreeCmd::FREE_DIRTY_PAGE:
+      {
+        rt.jobFreePhysSpans(fCommand);
+        break;
+      }
+
+    default:
+      break;
     }
 
     return false;
@@ -412,9 +427,7 @@ void *Runtime::bgFreePhysThread(void *arg) {
 
   size_t idle_count = 0;
   while(true) {
-    auto idle1 = rt.jobFreePhysSpans();
-    auto idle2 = rt.jobFreeCmd();
-    auto idle = idle1 && idle2;
+    auto idle = rt.jobFreeCmd();
 
     if(idle) {
       ++idle_count;
