@@ -9,6 +9,7 @@
 
 #include <pthread.h>
 #include <thread>
+#include <algorithm>
 #include <signal.h>  // for stack_t
 
 #include "internal.h"
@@ -99,9 +100,17 @@ public:
 
   void expandFlushSpans(internal::vector<Span>& spans) {
     _flushSpans.reserve(_flushSpans.size() + spans.size());
+
+    std::sort(spans.begin(), spans.end());
+    auto first = _flushSpans.begin();
+    auto middle = _flushSpans.end();
+    
     for( auto& s : spans) {
       _flushSpans.emplace_back(s);
     }
+
+    auto last = _flushSpans.end();
+    std::inplace_merge(first, middle, last);
   }
 
   internal::vector<Span>& getFlushSpans() {

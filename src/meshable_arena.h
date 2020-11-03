@@ -154,6 +154,8 @@ public:
 private:
   void expandArena(size_t minPagesAdded);
   bool findPages(size_t pageCount, Span &result, internal::PageType &type);
+  bool findPagesInnerFast(internal::vector<Span> freeSpans[kSpanClassCount], size_t i,
+                                             size_t pageCount, Span &result);
   bool ATTRIBUTE_NEVER_INLINE findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i,
                                              size_t pageCount, Span &result);
   Span reservePages(size_t pageCount, size_t pageAlignment);
@@ -177,6 +179,16 @@ private:
     }
   }
 
+  void moveBiggerTofirst(internal::vector<Span>& spans) {
+    if(spans.size() > 1) {
+      if(spans[0].length > spans[spans.size()-1].length) {
+        std::swap(spans[0], spans[spans.size()-1]);
+      }
+    }
+  }
+
+  void getSpansFromBg(bool flush = false);
+
   inline void freeSpan(const Span &span, const internal::PageType flags) {
     if (span.length == 0) {
       return;
@@ -186,6 +198,7 @@ private:
     // and returning excess back to the arena
     if (flags == internal::PageType::Clean) {
       _clean[span.spanClass()].push_back(span);
+      // moveBiggerTofirst(_clean[span.spanClass()]);
       return;
     }
 
@@ -197,6 +210,7 @@ private:
       // }
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
+      // moveBiggerTofirst(_dirty[span.spanClass()]);
       _dirtyPageCount += span.length;
 
       if (_dirtyPageCount > kMaxDirtyPageThreshold) {

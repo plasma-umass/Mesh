@@ -90,8 +90,8 @@ static constexpr size_t kMaxMeshesPerIteration = 2500;
 
 // maximum number of dirty pages to hold onto before we flush them
 // back to the OS (via MeshableArena::scavenge()
-static constexpr size_t kMaxDirtyPageThreshold = 1 << 16;  // 256 MB in pages
-static constexpr size_t kMinDirtyPageThreshold = 1 << 14;  // 32  MB in pages
+static constexpr size_t kMaxDirtyPageThreshold = 1 << 15;  // 64 MB in pages
+static constexpr size_t kMinDirtyPageThreshold = 1 << 13;  // 16  MB in pages
 
 static constexpr uint32_t kSpanClassCount = 256;
 

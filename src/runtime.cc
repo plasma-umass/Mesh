@@ -114,13 +114,13 @@ Runtime::Runtime() {
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
-  _pagesFreeCmdBuffer = new (buf) FreeCmdRingVector(16);
+  _pagesFreeCmdBuffer = new (buf) FreeCmdRingVector(128);
 
   buf = mesh::internal::Heap().malloc(sizeof(FreeCmdRingVector));
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
-  _pagesReturnCmdBuffer = new (buf) FreeCmdRingVector(64);
+  _pagesReturnCmdBuffer = new (buf) FreeCmdRingVector(128);
 
   updatePid();
 }
@@ -310,7 +310,7 @@ size_t mergeSpans(internal::vector<Span>& spans)
 
   if(spans.size() > 1) {
     // sort and merge spans
-    std::sort(spans.begin(), spans.end());
+    // std::sort(spans.begin(), spans.end());
 
     internal::vector<Span> tmpSpans;
     tmpSpans.reserve(spans.size());
@@ -346,6 +346,7 @@ bool Runtime::jobFreeCmd() {
 
   if(fCommand)
   {
+    size_t pageCount = 0;
 
     switch (fCommand->cmd)
     {
@@ -353,7 +354,11 @@ bool Runtime::jobFreeCmd() {
       {
         for( auto& span : fCommand->spans) {
           rt.heap().freePhys(span);
+          #ifndef NDEBUG
+          pageCount += span.length;
+          #endif
         }
+        debug("FREE_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
       }
@@ -362,9 +367,12 @@ bool Runtime::jobFreeCmd() {
       {
         for( auto& span : fCommand->spans) {
           rt.heap().resetSpanMapping(span);
-
+          #ifndef NDEBUG
+          pageCount += span.length;
+          #endif
         }
         rt.expandFlushSpans(fCommand->spans);
+        debug("UNMAP_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
       }
@@ -373,15 +381,26 @@ bool Runtime::jobFreeCmd() {
       {
         for( auto& span : fCommand->spans) {
           rt.heap().freePhys(span);
+          #ifndef NDEBUG
+          pageCount += span.length;
+          #endif
         }
 
         rt.expandFlushSpans(fCommand->spans);
+        debug("FREE_DIRTY_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
       }
     case internal::FreeCmd::CLEAN_PAGE:
       {
+        #ifndef NDEBUG
+        for( auto& span : fCommand->spans) {
+          pageCount += span.length;
+        }
+        #endif
+
         rt.expandFlushSpans(fCommand->spans);
+        debug("CLEAN_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
       }
@@ -397,6 +416,7 @@ bool Runtime::jobFreeCmd() {
       }
 
     default:
+      hard_assert(false);
       break;
     }
 
