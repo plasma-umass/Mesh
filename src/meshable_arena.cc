@@ -867,7 +867,7 @@ void MeshableArena::afterForkChild() {
 
     for (auto const &i : _meshedBitmap) {
       MiniHeap *mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(i));
-      if (seenMiniheaps.find(mh) != seenMiniheaps.end()) {
+      if (!mh || seenMiniheaps.find(mh) != seenMiniheaps.end()) {
         continue;
       }
       seenMiniheaps.insert(mh);
