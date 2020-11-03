@@ -69,7 +69,7 @@ public:
   }
 
   // post: list has the index of all bits set to 1 in it, in a random order
-  inline uint32_t ATTRIBUTE_ALWAYS_INLINE refillFrom(uint8_t mhOffset, internal::Bitmap &bitmap) {
+  inline uint32_t ATTRIBUTE_ALWAYS_INLINE refillFrom(uint8_t mhOffset, internal::Bitmap &bitmap, internal::Bitmap *meshedBitmap) {
     d_assert(_maxCount > 0);
     d_assert_msg(_maxCount <= kMaxShuffleVectorLength, "objCount? %zu <= %zu", _maxCount, kMaxShuffleVectorLength);
 
@@ -96,6 +96,10 @@ public:
       // should fix that.
       if (i >= maxCount) {
         break;
+      }
+
+      if (unlikely(meshedBitmap)) {
+        meshedBitmap->tryToSet(i);
       }
 
       if (unlikely(isFull())) {
@@ -155,8 +159,12 @@ public:
       if (mh->isFull()) {
         continue;
       }
+      internal::Bitmap *meshed = nullptr;
+      if (unlikely(mh->hasMeshed())) {
+        meshed = &(mh->NextMeshedMiniHeap()->writableBitmap());
+      }
 
-      const auto allocCount = refillFrom(_attachedOff, mh->writableBitmap());
+      const auto allocCount = refillFrom(_attachedOff, mh->writableBitmap(), meshed);
       addedCapacity |= allocCount;
     }
 

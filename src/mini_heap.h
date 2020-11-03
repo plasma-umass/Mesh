@@ -216,7 +216,7 @@ public:
     // this both avoids the need to call `freeOff` in the loop
     // below, but it ensures we will be able to check for bitmap
     // setting races in GlobalHeap::freeFor
-    const auto srcBitmap = src->takeBitmap();
+    auto srcBitmap = src->takeBitmap();
 
     // for each object in src, copy it to our backing span + update
     // our bitmap and in-use count
@@ -232,6 +232,22 @@ public:
       memcpy(dstObject, srcObject, objectSize);
       // debug("\t'%s'\n", dstObject);
       // debug("\t'%s'\n", srcObject);
+    }
+
+    auto mh = NextMeshedMiniHeap();
+    if (mh) {
+      mh->takeBitmap(); // rewrite it with clear?
+    } else {
+      srcBitmap.invert();
+      uint32_t max = maxCount();
+      // use exchange?
+      for (auto const &off : srcBitmap) {
+        if (off < max) {
+          src->_bitmap.tryToSet(off);
+        } else {
+          break;
+        }
+      }
     }
 
     trackMeshedSpan(GetMiniHeapID(src));
@@ -335,6 +351,11 @@ public:
     return _nextMeshed.hasValue();
   }
 
+  inline void ATTRIBUTE_ALWAYS_INLINE clearNextMeshed() {
+    d_assert(_nextMeshed.hasValue());
+    _nextMeshed = MiniHeapID{};
+  }
+
   inline bool isMeshingCandidate() const {
     return !isAttached() && objectSize() < kPageSize;
   }
@@ -371,6 +392,13 @@ public:
   }
 
 public:
+  inline MiniHeap* NextMeshedMiniHeap() const {
+    if (_nextMeshed.hasValue()) {
+      return GetMiniHeap(_nextMeshed);
+    }
+    return nullptr;
+  }
+
   template <class Callback>
   inline void forEachMeshed(Callback cb) const {
     if (cb(this))

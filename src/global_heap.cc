@@ -353,25 +353,27 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
     if (dstCount + srcCount > kMaxMeshes) {
       continue;
     }
-    if (dstCount < srcCount) {
-      std::swap(dst, src);
-    }
 
     // final check: if one of these miniheaps is now empty
     // (e.g. because a parallel thread is freeing a bunch of objects
     // in a row) save ourselves some work by just tracking this as a
     // regular postFree
     auto oneEmpty = false;
-    if (dst->inUseCount() == 0) {
+    auto dstUseCount = dst->inUseCount();
+    if (dstUseCount == 0) {
       postFreeLocked(dst, sizeClass, 0);
       oneEmpty = true;
     }
-    if (src->inUseCount() == 0) {
+    auto srcUseCount = src->inUseCount();
+    if (srcUseCount == 0) {
       postFreeLocked(src, sizeClass, 0);
       oneEmpty = true;
     }
 
     if (!oneEmpty && !aboveMeshThreshold()) {
+      if (dstCount < srcCount || (dstCount == srcCount && dstUseCount > srcUseCount)) {
+        std::swap(dst, src);
+      }
       meshLocked(dst, src, fCommand->spans);
       meshCount++;
     }
@@ -404,7 +406,7 @@ void GlobalHeap::meshAllSizeClassesLocked() {
   if (Super::aboveMeshThreshold()) {
     Super::scavenge(true);
     return;
-  } 
+  }
 
   if (!_lastMeshEffective.load(std::memory_order::memory_order_acquire)) {
     return;

@@ -209,6 +209,14 @@ public:
   inline void releaseMiniheapLocked(MiniHeap *mh, int sizeClass) {
     // ensure this flag is always set with the miniheap lock held
     mh->unsetAttached();
+
+    auto meshed = mh->NextMeshedMiniHeap();
+    if (unlikely(meshed && meshed->inUseCount() == meshed->maxCount())) {
+      // debug("release meshed miniheap earily!");
+      freeMiniheapLocked(meshed, false);
+      mh->clearNextMeshed();
+    }
+
     const auto inUse = mh->inUseCount();
     postFreeLocked(mh, sizeClass, inUse);
   }
@@ -247,7 +255,7 @@ public:
       // thread-local cache, things perform better!
       // bytesFree += mh->bytesFree();
       d_assert(!mh->isAttached());
-      mh->setAttached(current, freelistFor(mh->freelistId(), mh->sizeClass()));
+      mh->setAttached(current, &freelist.first);
       d_assert(mh->isAttached() && mh->current() == current);
       hard_assert(!miniheaps.full());
       miniheaps.append(mh);
@@ -312,7 +320,7 @@ public:
     while (bytesFree < kMiniheapRefillGoalSize && !miniheaps.full()) {
       auto mh = allocMiniheapLocked(sizeClass, pageCount, objectCount, objectSize);
       d_assert(!mh->isAttached());
-      mh->setAttached(current, freelistFor(mh->freelistId(), sizeClass));
+      mh->setAttached(current, nullptr);
       d_assert(mh->isAttached() && mh->current() == current);
       miniheaps.append(mh);
       bytesFree += mh->bytesFree();
