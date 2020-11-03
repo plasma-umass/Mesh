@@ -857,6 +857,10 @@ void MeshableArena::afterForkChild() {
   void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, 0);
   hard_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
+  if(kAdviseDump) {
+    madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
+  }
+
   // re-do the meshed mappings
   {
     internal::unordered_set<MiniHeap *> seenMiniheaps{};
