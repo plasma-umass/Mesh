@@ -625,6 +625,7 @@ void MeshableArena::prepareForFork() {
   // debug("%d: prepare fork", getpid());
   runtime().heap().lock();
   runtime().lock();
+  internal::Heap().lock();
 
   int r = mprotect(_arenaBegin, kArenaSize, PROT_READ);
   hard_assert(r == 0);
@@ -639,6 +640,8 @@ void MeshableArena::afterForkParent() {
   if (!kMeshingEnabled) {
     return;
   }
+
+  internal::Heap().unlock();
 
   close(_forkPipe[1]);
 
@@ -684,6 +687,7 @@ void MeshableArena::afterForkChild() {
   }
 
   // debug("%d: after fork child", getpid());
+  internal::Heap().unlock();
   runtime().unlock();
   runtime().heap().unlock();
 
