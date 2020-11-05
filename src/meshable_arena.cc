@@ -177,8 +177,7 @@ void MeshableArena::expandArena(size_t minPagesAdded) {
   // for(auto& s : _clean[kSpanClassCount-1]) {
   //   debug("clean(%d, %d)", s.offset, s.length);
   // }
-
-  debug("expandArena (minPagesAdded=%d) %d, %d,  dirty : %d\n", minPagesAdded, expansion.offset, expansion.length, _dirtyPageCount);
+  // debug("expandArena (minPagesAdded=%d) %d, %d,  dirty : %d\n", minPagesAdded, expansion.offset, expansion.length, _dirtyPageCount);
 
   _clean[expansion.spanClass()].push_back(expansion);
 
@@ -500,8 +499,7 @@ void MeshableArena::getSpansFromBg(bool flush) {
       else {
         hard_assert(false);
       }
-
-      debug("getSpansFromBg got %d spans -  %d page from backgroud.\n", preCommand->spans.size(), pageCount);
+      // debug("getSpansFromBg got %d spans -  %d page from backgroud.\n", preCommand->spans.size(), pageCount);
       delete preCommand;
     } else {
       break;
@@ -510,23 +508,23 @@ void MeshableArena::getSpansFromBg(bool flush) {
 
   std::sort(_clean[kSpanClassCount-1].begin(), _clean[kSpanClassCount-1].end(), customLess);
 
-  debug("getSpansFromBg after sort last");
-  for(size_t i = 0; i < kSpanClassCount; ++i) {
-    if(!_dirty[i].empty()) {
-      debug("_dirty[%d]  size = %d", i, _dirty[i].size());   
-    }
-  }
+  // debug("getSpansFromBg after sort last");
+  // for(size_t i = 0; i < kSpanClassCount; ++i) {
+  //   if(!_dirty[i].empty()) {
+  //     debug("_dirty[%d]  size = %d", i, _dirty[i].size());
+  //   }
+  // }
 
-  for(size_t i = 0; i < kSpanClassCount; ++i) {
-    if(!_clean[i].empty()) {
-      debug("_clean[%d]  size = %d", i, _clean[i].size());     
-    }
-  }
+  // for(size_t i = 0; i < kSpanClassCount; ++i) {
+  //   if(!_clean[i].empty()) {
+  //     debug("_clean[%d]  size = %d", i, _clean[i].size());
+  //   }
+  // }
 
-  for(auto& s : _clean[kSpanClassCount-1]) {
-    debug("clean(%d, %d)", s.offset, s.length);
-  }
-  debug("getSpansFromBg end");
+  // for(auto& s : _clean[kSpanClassCount-1]) {
+  //   debug("clean(%d, %d)", s.offset, s.length);
+  // }
+  // debug("getSpansFromBg end");
 }
 
 void MeshableArena::partialScavenge() {
@@ -549,7 +547,7 @@ void MeshableArena::partialScavenge() {
 
   runtime().sendFreeCmd(freeCommand);
   runtime().sendFreeCmd(new internal::FreeCmd(internal::FreeCmd::FLUSH));
-  debug("partial FreeCmd::FLUSH");
+  // debug("partial FreeCmd::FLUSH");
   getSpansFromBg();
 }
 
@@ -600,11 +598,11 @@ void MeshableArena::scavenge(bool force) {
     freeCount = flushAllSpansToVector(_clean, cleanCommand->spans, 0);
 
     runtime().sendFreeCmd(cleanCommand);
-    debug("FreeCmd::CLEAN_PAGE");   
+    // debug("FreeCmd::CLEAN_PAGE");
   }
 
   runtime().sendFreeCmd(new internal::FreeCmd(internal::FreeCmd::FLUSH));
-  debug("FreeCmd::FLUSH");
+  // debug("FreeCmd::FLUSH");
 }
 
 void MeshableArena::freePhys(const Span& span) {

@@ -114,7 +114,7 @@ Runtime::Runtime() {
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
-  _pagesFreeCmdBuffer = new (buf) FreeCmdRingVector(128);
+  _pagesFreeCmdBuffer = new (buf) FreeCmdRingVector(64);
 
   buf = mesh::internal::Heap().malloc(sizeof(FreeCmdRingVector));
   hard_assert(buf != nullptr);
@@ -346,7 +346,9 @@ bool Runtime::jobFreeCmd() {
 
   if(fCommand)
   {
+    #ifndef NDEBUG
     size_t pageCount = 0;
+    #endif
 
     switch (fCommand->cmd)
     {
@@ -358,7 +360,7 @@ bool Runtime::jobFreeCmd() {
           pageCount += span.length;
           #endif
         }
-        debug("FREE_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
+        // debug("FREE_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
       }
@@ -372,7 +374,7 @@ bool Runtime::jobFreeCmd() {
           #endif
         }
         rt.expandFlushSpans(fCommand->spans);
-        debug("UNMAP_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
+        // debug("UNMAP_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
       }
@@ -387,7 +389,7 @@ bool Runtime::jobFreeCmd() {
         }
 
         rt.expandFlushSpans(fCommand->spans);
-        debug("FREE_DIRTY_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
+        // debug("FREE_DIRTY_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
       }
@@ -400,7 +402,7 @@ bool Runtime::jobFreeCmd() {
         #endif
 
         rt.expandFlushSpans(fCommand->spans);
-        debug("CLEAN_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
+        // debug("CLEAN_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
       }
@@ -408,8 +410,8 @@ bool Runtime::jobFreeCmd() {
     case internal::FreeCmd::FLUSH:
       {
         auto& spans = rt.getFlushSpans();
-        auto mergeCount = mergeSpans(spans);
-        debug("mergeSpans:  merge: %d -> %d\n", mergeCount, spans.size());
+        mergeSpans(spans);
+        // debug("FLUSH mergeSpans:  merge: %d -> %d\n", mergeCount, spans.size());
         fCommand->spans.swap(spans);
         rt._pagesReturnCmdBuffer->push(fCommand);
         break;

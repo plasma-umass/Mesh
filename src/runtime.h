@@ -99,18 +99,14 @@ public:
   }
 
   void expandFlushSpans(internal::vector<Span>& spans) {
-    _flushSpans.reserve(_flushSpans.size() + spans.size());
+    internal::vector<Span> tmp;
+    tmp.reserve(_flushSpans.size() + spans.size());
 
     std::sort(spans.begin(), spans.end());
-    auto first = _flushSpans.begin();
-    auto middle = _flushSpans.end();
-    
-    for( auto& s : spans) {
-      _flushSpans.emplace_back(s);
-    }
 
-    auto last = _flushSpans.end();
-    std::inplace_merge(first, middle, last);
+    std::merge(_flushSpans.begin(), _flushSpans.end(), spans.begin(), spans.end(), std::back_inserter(tmp));
+
+    _flushSpans.swap(tmp);
   }
 
   internal::vector<Span>& getFlushSpans() {
