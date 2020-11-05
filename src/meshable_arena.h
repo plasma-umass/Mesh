@@ -187,7 +187,7 @@ private:
     }
   }
 
-  void getSpansFromBg(bool flush = false);
+  void getSpansFromBg();
 
   inline void freeSpan(const Span &span, const internal::PageType flags) {
     if (span.length == 0) {

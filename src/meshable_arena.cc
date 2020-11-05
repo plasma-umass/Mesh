@@ -307,7 +307,7 @@ Span MeshableArena::reservePages(const size_t pageCount, const size_t pageAlignm
   Span result(0, 0);
   auto ok = findPages(pageCount, result, flags);
   if (!ok) {
-    getSpansFromBg(true);
+    getSpansFromBg();
     ok = findPages(pageCount, result, flags);
     if (!ok) {
       expandArena(pageCount);
@@ -482,7 +482,7 @@ static size_t flushSpansToVector(internal::vector<Span> freeSpans[kSpanClassCoun
     }   
   } customLess;
 
-void MeshableArena::getSpansFromBg(bool flush) {
+void MeshableArena::getSpansFromBg() {
 
   while(true){
     size_t pageCount = 0;
@@ -528,6 +528,7 @@ void MeshableArena::getSpansFromBg(bool flush) {
 }
 
 void MeshableArena::partialScavenge() {
+   getSpansFromBg();
   // always flush 1/2 pages
   size_t needFreeCount = 0;
 
@@ -548,13 +549,13 @@ void MeshableArena::partialScavenge() {
   runtime().sendFreeCmd(freeCommand);
   runtime().sendFreeCmd(new internal::FreeCmd(internal::FreeCmd::FLUSH));
   // debug("partial FreeCmd::FLUSH");
-  getSpansFromBg();
 }
 
 void MeshableArena::scavenge(bool force) {
   if (!force && _dirtyPageCount < kMinDirtyPageThreshold) {
     return;
   }
+  getSpansFromBg();
 
   internal::FreeCmd* unmapCommand = new internal::FreeCmd(internal::FreeCmd::UNMAP_PAGE);
 

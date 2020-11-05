@@ -65,11 +65,10 @@ size_t internal::measurePssKiB() {
 }
 
 #if defined(__linux__) || defined(__linux)
-inline void change_thread_name(const char* postfix, int index=-1)
+inline static void change_thread_name(const char* postfix, int index=-1)
 {
-	static char process_name[16];
-	static std::once_flag init_flag;
-	std::call_once(init_flag, prctl, PR_GET_NAME, (unsigned long)process_name, 0, 0, 0);
+	char process_name[16];
+	prctl(PR_GET_NAME, (unsigned long)process_name, 0, 0, 0);
 	char new_name[16];
 #ifdef __GNUC__
 #pragma GCC diagnostic push
@@ -246,7 +245,7 @@ void Runtime::startBgThread() {
 }
 
 void *Runtime::bgThread(void *arg) {
-  change_thread_name("background");
+  change_thread_name("bg");
 
   auto &rt = mesh::runtime();
   // debug("libmesh: background thread started\n");
@@ -430,7 +429,7 @@ bool Runtime::jobFreeCmd() {
 }
 
 void *Runtime::bgFreePhysThread(void *arg) {
-  change_thread_name("FreePhys");
+  change_thread_name("mesh");
 
   auto &rt = mesh::runtime();
 
