@@ -187,8 +187,6 @@ private:
     }
   }
 
-  void getSpansFromBg();
-
   inline void freeSpan(const Span &span, const internal::PageType flags) {
     if (span.length == 0) {
       return;
@@ -287,6 +285,8 @@ private:
   atomic<MiniHeapID> *_mhIndex{nullptr};
 
 protected:
+  void getSpansFromBg(bool wait = false);
+  void tryAndSendToFree(internal::FreeCmd* fCommand);
   CheapHeap<64, kArenaSize / kPageSize> _mhAllocator{};
   MWC _fastPrng;
 

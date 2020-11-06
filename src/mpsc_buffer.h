@@ -46,10 +46,11 @@ public:
 	}
 	inline bool try_push(Ptr p)
 	{
-			index_type inx = m_pptr.fetch_add(1);
-			if((inx - m_arity) >= m_gptr.load(std::memory_order_acquire))
+			index_type ginx = m_gptr.load(std::memory_order_acquire);
+			index_type pinx = m_pptr.load(std::memory_order_acquire);
+			if((pinx - ginx) >= m_arity)
 					return false;
-			get(inx).store(p, std::memory_order_release);
+			push(p);
 			return true;
 	}
 	inline Ptr pop()

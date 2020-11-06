@@ -90,8 +90,12 @@ public:
     return _pid;
   }
 
-  void sendFreeCmd(internal::FreeCmd* fComand) {
-    _pagesFreeCmdBuffer->push(fComand);
+  bool sendFreeCmd(internal::FreeCmd* fComand) {
+    return _pagesFreeCmdBuffer->try_push(fComand);
+  }
+
+  void selfFlush() {
+
   }
 
   internal::FreeCmd* getReturnCmdFromBg() {
@@ -113,8 +117,11 @@ public:
     return _flushSpans;
   }
 
+  bool freeThreadRunning() const { return _freeThreadRunning; }
+
 protected:
   bool jobFreeCmd();
+  void autoFlush();
 
 private:
   // initialize our pointer to libc's pthread_create, etc.  This
@@ -138,6 +145,7 @@ private:
   FreeCmdRingVector* _pagesFreeCmdBuffer{nullptr};
   FreeCmdRingVector* _pagesReturnCmdBuffer{nullptr};
   internal::vector<Span>  _flushSpans;
+  bool _freeThreadRunning{false};
 };
 
 // get a reference to the Runtime singleton

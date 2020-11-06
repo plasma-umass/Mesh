@@ -307,7 +307,8 @@ Span MeshableArena::reservePages(const size_t pageCount, const size_t pageAlignm
   Span result(0, 0);
   auto ok = findPages(pageCount, result, flags);
   if (!ok) {
-    getSpansFromBg();
+    tryAndSendToFree(new internal::FreeCmd(internal::FreeCmd::FLUSH));
+    getSpansFromBg(true);
     ok = findPages(pageCount, result, flags);
     if (!ok) {
       expandArena(pageCount);
@@ -482,7 +483,10 @@ static size_t flushSpansToVector(internal::vector<Span> freeSpans[kSpanClassCoun
     }   
   } customLess;
 
-void MeshableArena::getSpansFromBg() {
+void MeshableArena::getSpansFromBg(bool wait) {
+
+  bool needSort = false;
+  bool gotOne = false;
 
   while(true){
     size_t pageCount = 0;
@@ -495,6 +499,11 @@ void MeshableArena::getSpansFromBg() {
           _clean[s.spanClass()].emplace_back(s);
           pageCount += s.length;
         }
+        
+        if(preCommand->spans.size() > 0){
+          needSort = true;      
+        }
+        gotOne = true;
       }
       else {
         hard_assert(false);
@@ -502,12 +511,18 @@ void MeshableArena::getSpansFromBg() {
       // debug("getSpansFromBg got %d spans -  %d page from backgroud.\n", preCommand->spans.size(), pageCount);
       delete preCommand;
     } else {
-      break;
+      if(wait && !gotOne && runtime().freeThreadRunning()) {
+        continue;
+      }
+      else {
+        break;
+      }
     }
   }
 
-  std::sort(_clean[kSpanClassCount-1].begin(), _clean[kSpanClassCount-1].end(), customLess);
-
+  if(needSort) {
+   std::sort(_clean[kSpanClassCount-1].begin(), _clean[kSpanClassCount-1].end(), customLess);
+  }
   // debug("getSpansFromBg after sort last");
   // for(size_t i = 0; i < kSpanClassCount; ++i) {
   //   if(!_dirty[i].empty()) {
@@ -527,8 +542,17 @@ void MeshableArena::getSpansFromBg() {
   // debug("getSpansFromBg end");
 }
 
+void MeshableArena::tryAndSendToFree(internal::FreeCmd* fCommand) {
+  auto & rt = runtime();
+  bool ok = rt.sendFreeCmd(fCommand);
+  while(!ok) {
+    getSpansFromBg();
+    ok = rt.sendFreeCmd(fCommand);
+  }
+}
+
 void MeshableArena::partialScavenge() {
-   getSpansFromBg();
+  //  getSpansFromBg();
   // always flush 1/2 pages
   size_t needFreeCount = 0;
 
@@ -546,8 +570,8 @@ void MeshableArena::partialScavenge() {
   // debug("partialScavenge _dirtyPageCount = %d  , freeCount = %d , flushSpans->size() =  %d\n", _dirtyPageCount, freeCount, flushSpans->size());
   _dirtyPageCount -= freeCount;
 
-  runtime().sendFreeCmd(freeCommand);
-  runtime().sendFreeCmd(new internal::FreeCmd(internal::FreeCmd::FLUSH));
+  tryAndSendToFree(freeCommand);
+  // tryAndSendToFree(new internal::FreeCmd(internal::FreeCmd::FLUSH));
   // debug("partial FreeCmd::FLUSH");
 }
 
@@ -555,7 +579,6 @@ void MeshableArena::scavenge(bool force) {
   if (!force && _dirtyPageCount < kMinDirtyPageThreshold) {
     return;
   }
-  getSpansFromBg();
 
   internal::FreeCmd* unmapCommand = new internal::FreeCmd(internal::FreeCmd::UNMAP_PAGE);
 
@@ -577,7 +600,7 @@ void MeshableArena::scavenge(bool force) {
   // debug("_toReset size: %d", _toReset.size());
   _toReset.clear();
 
-  runtime().sendFreeCmd(unmapCommand);
+  tryAndSendToFree(unmapCommand);
 
   _meshedPageCount = _meshedBitmap.inUseCount();
   if (_meshedPageCount > _meshedPageCountHWM) {
@@ -592,18 +615,19 @@ void MeshableArena::scavenge(bool force) {
   // size_t freeCount = flushSpansToVector(_dirty, freeCommand->spans, needFreeCount);
   _dirtyPageCount -= freeCount;
 
-  runtime().sendFreeCmd(freeCommand);
+  tryAndSendToFree(freeCommand);
 
   if(freeCount < kMinDirtyPageThreshold) {
     internal::FreeCmd* cleanCommand = new internal::FreeCmd(internal::FreeCmd::CLEAN_PAGE);
     freeCount = flushAllSpansToVector(_clean, cleanCommand->spans, 0);
 
-    runtime().sendFreeCmd(cleanCommand);
+    tryAndSendToFree(cleanCommand);
     // debug("FreeCmd::CLEAN_PAGE");
   }
 
-  runtime().sendFreeCmd(new internal::FreeCmd(internal::FreeCmd::FLUSH));
-  // debug("FreeCmd::FLUSH");
+  tryAndSendToFree(new internal::FreeCmd(internal::FreeCmd::FLUSH));
+
+  getSpansFromBg();
 }
 
 void MeshableArena::freePhys(const Span& span) {

@@ -379,7 +379,7 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
     }
   }
 
-  runtime().sendFreeCmd(fCommand);
+  tryAndSendToFree(fCommand);
 
   // flush things once more (since we may have called postFree instead
   // of mesh above)

@@ -113,13 +113,13 @@ Runtime::Runtime() {
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
-  _pagesFreeCmdBuffer = new (buf) FreeCmdRingVector(64);
+  _pagesFreeCmdBuffer = new (buf) FreeCmdRingVector(32);
 
   buf = mesh::internal::Heap().malloc(sizeof(FreeCmdRingVector));
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
-  _pagesReturnCmdBuffer = new (buf) FreeCmdRingVector(128);
+  _pagesReturnCmdBuffer = new (buf) FreeCmdRingVector(32);
 
   updatePid();
 }
@@ -428,26 +428,52 @@ bool Runtime::jobFreeCmd() {
   }
 }
 
+void Runtime::autoFlush() {
+  auto &rt = mesh::runtime();
+  auto& spans = rt.getFlushSpans();
+  mergeSpans(spans);
+  // debug("AUTO FLUSH mergeSpans:  merge: page:%d, vsize:%d\n", mergeCount, spans.size());
+  internal::FreeCmd* fCommand = new internal::FreeCmd(internal::FreeCmd::FLUSH);
+  fCommand->spans.swap(spans);
+  
+  bool ok = rt._pagesReturnCmdBuffer->try_push(fCommand);
+  if(!ok) {
+    // debug("AUTO FLUSH failed");
+    fCommand->spans.swap(spans);
+    delete fCommand;
+  }
+}
+
 void *Runtime::bgFreePhysThread(void *arg) {
   change_thread_name("mesh");
 
   auto &rt = mesh::runtime();
-
+  rt._freeThreadRunning = true;
   // debug("libmesh: freePhys thread started\n");
 
   size_t idle_count = 0;
+  size_t processCount = 0;
   while(true) {
     auto idle = rt.jobFreeCmd();
 
     if(idle) {
       ++idle_count;
+      ++processCount;
     }
     else {
       idle_count = 0;
     }
 
+    if(processCount > 16) {
+      auto& spans = rt.getFlushSpans();
+      if(spans.size()>1) {
+        rt.autoFlush();
+        processCount = 0;
+      }
+    }
+
     if(idle_count > 100) {
-      std::this_thread::sleep_for(1ms);
+      std::this_thread::sleep_for(1ms);     
     }
   }
 
