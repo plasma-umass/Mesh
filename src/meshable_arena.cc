@@ -602,12 +602,6 @@ void MeshableArena::scavenge(bool force) {
 
   tryAndSendToFree(unmapCommand);
 
-  _meshedPageCount = _meshedBitmap.inUseCount();
-  if (_meshedPageCount > _meshedPageCountHWM) {
-    _meshedPageCountHWM = _meshedPageCount;
-    // TODO: find rss at peak
-  }
-
   internal::FreeCmd* freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
   // dirty page is small, then we don't send the clean page to merge.
 
@@ -900,7 +894,9 @@ void MeshableArena::afterForkChild() {
       seenMiniheaps.insert(mh);
 
       const auto meshCount = mh->meshCount();
-      d_assert(meshCount > 1);
+      if (meshCount == 1) {
+        continue;
+      }
 
       const auto sz = mh->spanSize();
       const auto keep = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));

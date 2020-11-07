@@ -105,7 +105,7 @@ public:
   void finalizeMesh(void *keep, void *remove, size_t sz);
 
   inline bool aboveMeshThreshold() const {
-    return _meshedPageCount > _maxMeshCount;
+    return _meshedSpanCount > _maxMeshCount;
   }
 
   inline void setMaxMeshCount(size_t maxMeshCount) {
@@ -149,6 +149,18 @@ public:
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
     mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset * kPageSize);
+  }
+
+  inline void incMeshedSpanCount(size_t pageCount) {
+    ++_meshedSpanCount;
+    _meshedPageCount += pageCount;
+    if (unlikely(_meshedPageCount > _meshedPageCountHWM)) {
+      _meshedPageCountHWM = _meshedPageCount;
+    }
+  }
+  inline void decMeshedSpanCount(size_t pageCount) {
+    --_meshedSpanCount;
+    _meshedPageCount -= pageCount;
   }
 
 private:
@@ -216,6 +228,7 @@ private:
       }
     } else if (flags == internal::PageType::Meshed) {
       // delay restoring the identity mapping
+      decMeshedSpanCount(span.length);
       _toReset.push_back(span);
     }
   }
@@ -305,6 +318,8 @@ private:
   internal::RelaxedBitmap _meshedBitmap{
       kArenaSize / kPageSize,
       reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSize))), false};
+
+  size_t _meshedSpanCount{0};
   size_t _meshedPageCount{0};
   size_t _meshedPageCountHWM{0};
   size_t _rssKbAtHWM{0};
