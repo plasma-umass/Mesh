@@ -557,7 +557,7 @@ void MeshableArena::partialScavenge() {
   size_t needFreeCount = 0;
 
   if(_dirtyPageCount > kMaxDirtyPageThreshold) {
-    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/2;
+    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/5;
   }
 
   internal::FreeCmd* freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
@@ -604,9 +604,13 @@ void MeshableArena::scavenge(bool force) {
 
   internal::FreeCmd* freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
   // dirty page is small, then we don't send the clean page to merge.
+  size_t needFreeCount = 0;
 
-  size_t freeCount = flushAllSpansToVector(_dirty, freeCommand->spans, _dirtyPageCount);
-  // size_t freeCount = flushSpansToVector(_dirty, freeCommand->spans, needFreeCount);
+  if(_dirtyPageCount > kMaxDirtyPageThreshold) {
+    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/5;
+  }
+  // size_t freeCount = flushAllSpansToVector(_dirty, freeCommand->spans, _dirtyPageCount);
+  size_t freeCount = flushSpansToVector(_dirty, freeCommand->spans, needFreeCount);
   _dirtyPageCount -= freeCount;
 
   tryAndSendToFree(freeCommand);
