@@ -153,14 +153,14 @@ public:
     return ptr;
   }
 
-  inline MiniHeapListEntry *freelistFor(uint8_t freelistId, int sizeClass) {
+  inline std::pair<MiniHeapListEntry, size_t> *freelistFor(uint8_t freelistId, int sizeClass) {
     switch (freelistId) {
     case list::Empty:
-      return &_emptyFreelist[sizeClass].first;
+      return &_emptyFreelist[sizeClass];
     case list::Partial:
-      return &_partialFreelist[sizeClass].first;
+      return &_partialFreelist[sizeClass];
     case list::Full:
-      return &_fullList[sizeClass].first;
+      return &_fullList[sizeClass];
     }
     // remaining case is 'attached', for which there is no freelist
     return nullptr;
@@ -200,11 +200,19 @@ public:
       list = &_partialFreelist[sizeClass];
     }
 
-    list->first.add(currFreelist, newListId, list::Head, mh);
+    MiniHeapListEntry *currListHead = nullptr;
+    if (mh->getFreelist()->next().hasValue()) {
+      currListHead = &currFreelist->first;
+      d_assert(currFreelist->second > 0);
+      currFreelist->second--;
+    }
+    // more chance to reuse
+    list->first.add(currListHead, newListId, list::Head, mh);
     list->second++;
 
     return _emptyFreelist[sizeClass].second > kBinnedTrackerMaxEmpty;
   }
+
 
   inline void releaseMiniheapLocked(MiniHeap *mh, int sizeClass) {
     // ensure this flag is always set with the miniheap lock held
@@ -355,7 +363,10 @@ public:
   void untrackMiniheapLocked(MiniHeap *mh) {
     // mesh::debug("%p (%u) untracked!\n", mh, GetMiniHeapID(mh));
     _stats.mhAllocCount -= 1;
-    mh->getFreelist()->remove(freelistFor(mh->freelistId(), mh->sizeClass()));
+    auto currFreelist = freelistFor(mh->freelistId(), mh->sizeClass());
+    d_assert(currFreelist && currFreelist->second > 0);
+    mh->getFreelist()->remove(&currFreelist->first);
+    currFreelist->second--;
   }
 
   void freeFor(MiniHeap *mh, void *ptr, size_t startEpoch);
@@ -419,9 +430,9 @@ public:
       auto mh = GetMiniHeap(nextId);
       nextId = mh->getFreelist()->next();
       freeMiniheapLocked(mh, true);
-      empty.second--;
     }
 
+    d_assert(empty.second == 0);
     d_assert(empty.first.next() == list::Head);
     d_assert(empty.first.prev() == list::Head);
   }
@@ -535,6 +546,7 @@ public:
 private:
   // check for meshes in all size classes -- must be called LOCKED
   void meshAllSizeClassesLocked();
+  bool unboundMeshSlowly(MiniHeap *mh);
   // meshSizeClassLocked returns the number of merged sets found
   size_t meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSets, SplitArray &left, SplitArray &right);
 

@@ -251,7 +251,7 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
 
   // we need to attach the miniheap, otherwise
   ASSERT_TRUE(!mh1->isAttached());
-  mh1->setAttached(gettid(), gheap.freelistFor(mh1->freelistId(), sizeClass));
+  mh1->setAttached(gettid(), &gheap.freelistFor(mh1->freelistId(), sizeClass)->first);
   ASSERT_TRUE(mh1->isAttached());
 
   // now free the objects by going through the global heap -- it

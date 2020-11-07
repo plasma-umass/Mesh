@@ -313,12 +313,35 @@ void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src, internal::vector<Span
   untrackMiniheapLocked(src);
 }
 
+bool GlobalHeap::unboundMeshSlowly(MiniHeap *mh) {
+  MiniHeap *meshed = mh->NextMeshedMiniHeap();
+  d_assert(meshed);
+
+  const auto bitmap1 = mh->bitmap().bits();
+  const auto bitmap2 = meshed->bitmap().bits();
+
+  constexpr size_t nBits = 4;
+  for (size_t i = 0; i < nBits; ++i) {
+    if (~((~bitmap1[i]) | bitmap2[i])) {
+      return false;
+    }
+  }
+  freeMiniheapLocked(meshed, false);
+  mh->clearNextMeshed();
+  return true;
+}
+
 size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSets, SplitArray &left,
                                        SplitArray &right) {
   size_t mergeSetCount = 0;
   // memset(reinterpret_cast<void *>(&mergeSets), 0, sizeof(mergeSets));
   // memset(&left, 0, sizeof(left));
   // memset(&right, 0, sizeof(right));
+
+  // more change to reuse, other than meshed
+  if (_partialFreelist[sizeClass].second < _fullList[sizeClass].second / 15) {
+    return mergeSetCount;
+  }
 
   auto meshFound =
       function<bool(std::pair<MiniHeap *, MiniHeap *> &&)>([&](std::pair<MiniHeap *, MiniHeap *> &&miniheaps) {
@@ -347,14 +370,6 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
     d_assert(dst != nullptr);
     d_assert(src != nullptr);
 
-    // merge _into_ the one with a larger mesh count, potentially
-    // swapping the order of the pair
-    const auto dstCount = dst->meshCount();
-    const auto srcCount = src->meshCount();
-    if (dstCount + srcCount > kMaxMeshes) {
-      continue;
-    }
-
     // final check: if one of these miniheaps is now empty
     // (e.g. because a parallel thread is freeing a bunch of objects
     // in a row) save ourselves some work by just tracking this as a
@@ -369,6 +384,21 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
     if (srcUseCount == 0) {
       postFreeLocked(src, sizeClass, 0);
       oneEmpty = true;
+    }
+    // merge _into_ the one with a larger mesh count, potentially
+    // swapping the order of the pair
+    auto dstCount = dst->meshCount();
+    if (dstCount > 1 && unboundMeshSlowly(dst)) {
+      dstCount = 1;
+    }
+
+    auto srcCount = src->meshCount();
+    if (srcCount > 1 && unboundMeshSlowly(src)) {
+      srcCount = 1;
+    }
+
+    if (dstCount + srcCount > kMaxMeshes) {
+      continue;
     }
 
     if (!oneEmpty && !aboveMeshThreshold()) {
