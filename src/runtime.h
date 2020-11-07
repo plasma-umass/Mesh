@@ -102,11 +102,13 @@ public:
     return _pagesReturnCmdBuffer->pop();
   }
 
-  void expandFlushSpans(internal::vector<Span>& spans) {
+  void expandFlushSpans(internal::vector<Span>& spans, bool sorted) {
     internal::vector<Span> tmp;
     tmp.reserve(_flushSpans.size() + spans.size());
 
-    std::sort(spans.begin(), spans.end());
+    if(!sorted) {
+      std::sort(spans.begin(), spans.end());
+    }
 
     std::merge(_flushSpans.begin(), _flushSpans.end(), spans.begin(), spans.end(), std::back_inserter(tmp));
 

@@ -372,7 +372,7 @@ bool Runtime::jobFreeCmd() {
           pageCount += span.length;
           #endif
         }
-        rt.expandFlushSpans(fCommand->spans);
+        rt.expandFlushSpans(fCommand->spans, false);
         // debug("UNMAP_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
@@ -380,6 +380,8 @@ bool Runtime::jobFreeCmd() {
 
     case internal::FreeCmd::FREE_DIRTY_PAGE:
       {
+        std::sort(fCommand->spans.begin(), fCommand->spans.end());
+        mergeSpans(fCommand->spans);
         for( auto& span : fCommand->spans) {
           rt.heap().freePhys(span);
           #ifndef NDEBUG
@@ -387,7 +389,7 @@ bool Runtime::jobFreeCmd() {
           #endif
         }
 
-        rt.expandFlushSpans(fCommand->spans);
+        rt.expandFlushSpans(fCommand->spans, true);
         // debug("FREE_DIRTY_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
@@ -400,7 +402,7 @@ bool Runtime::jobFreeCmd() {
         }
         #endif
 
-        rt.expandFlushSpans(fCommand->spans);
+        rt.expandFlushSpans(fCommand->spans, false);
         // debug("CLEAN_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
         delete fCommand;
         break;
