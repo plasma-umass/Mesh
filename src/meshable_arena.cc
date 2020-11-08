@@ -240,7 +240,7 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
 bool MeshableArena::findPagesInnerFast(internal::vector<Span> freeSpans[kSpanClassCount], const size_t i,
                                    const size_t pageCount, Span &result) {
   internal::vector<Span> &spanList = freeSpans[i];
-  if (spanList.empty())
+  if (unlikely(spanList.empty()))
     return false;
 
   Span span = spanList.back();
@@ -488,9 +488,14 @@ void MeshableArena::getSpansFromBg(bool wait) {
   bool needSort = false;
   bool gotOne = false;
 
+  constexpr unsigned int spin_loops = 16u, spins = 16u;
+  unsigned int loop_count = 0;
+
   while(true){
     size_t pageCount = 0;
     internal::FreeCmd* preCommand = runtime().getReturnCmdFromBg();
+    ++loop_count;
+
     if(preCommand) {
       // debug("getSpansFromBg = %d\n", preDirtySpans->size());
       // all add to the mark spans
@@ -512,6 +517,14 @@ void MeshableArena::getSpansFromBg(bool wait) {
       delete preCommand;
     } else {
       if(wait && !gotOne && runtime().freeThreadRunning()) {
+        if(loop_count < spin_loops){
+          for (unsigned int j = 0; j < spins; ++j) {
+              cpupause();
+          }
+        }
+        else {
+          std::this_thread::yield();
+        }
         continue;
       }
       else {

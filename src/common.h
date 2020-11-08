@@ -240,6 +240,24 @@ static inline uint64_t popcnt64(uint64_t x)
   ((likely(expr)) ? static_cast<void>(0) \
                   : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, __LINE__, ""))
 
+
+ATTRIBUTE_ALWAYS_INLINE inline void cpupause()
+{
+#if defined(_MSC_VER)
+#if defined(_M_AMD64) || defined(_M_IX86)
+    _mm_pause();
+#elif defined(_M_ARM64) || defined(_M_ARM)
+    __yield();
+#endif
+#elif defined(__GNUC__)
+#if defined(__i386__) || defined(__x86_64__)
+    __asm__ __volatile__("pause;" : : : "memory");
+#elif (defined(__ARM_ARCH) && __ARM_ARCH >= 8) || defined(__ARM_ARCH_8A__) || defined(__aarch64__)
+    __asm__ __volatile__("yield;" : : : "memory");
+#endif
+#endif
+}
+
 namespace mesh {
 
 // logging
