@@ -213,7 +213,6 @@ struct Span {
   }
 
   Span() {
-
   }
 
   Span(const Span &rhs) : offset(rhs.offset), length(rhs.length) {
@@ -225,9 +224,8 @@ struct Span {
     return *this;
   }
 
-  bool operator< (const Span &rhs) const
-  {
-      return offset < rhs.offset;
+  bool operator<(const Span &rhs) const {
+    return offset < rhs.offset;
   }
 
   Span(Span &&rhs) : offset(rhs.offset), length(rhs.length) {
@@ -360,7 +358,6 @@ inline void mwcShuffle(_RandomAccessIterator __first, _RandomAccessIterator __la
   }
 }
 
-
 class FreeCmd {
 public:
   enum CmdType {
@@ -371,21 +368,21 @@ public:
     FLUSH,
   };
 
-  FreeCmd(CmdType command):cmd(command) {
-
+  FreeCmd(CmdType command) : cmd(command) {
   }
 
-  void* operator new  ( std::size_t count ) {
-    return mesh::internal::Heap().malloc(count);;
+  void *operator new(std::size_t count) {
+    return mesh::internal::Heap().malloc(count);
+    ;
   }
 
-  void operator delete  ( void* ptr ) throw() {
+  void operator delete(void *ptr) throw() {
     mesh::internal::Heap().free(ptr);
     return;
   }
 
-  internal::vector<Span>  spans;
-  CmdType                 cmd{};
+  internal::vector<Span> spans;
+  CmdType cmd{};
 };
 
 }  // namespace internal

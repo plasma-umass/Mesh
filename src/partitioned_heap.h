@@ -17,7 +17,7 @@
 namespace mesh {
 
 static constexpr int kPartitionedHeapNBins = 16;
-static constexpr int kPartitionedHeapArenaSize = 2000 * 1024 * 1024; // 2000 MB
+static constexpr int kPartitionedHeapArenaSize = 2000 * 1024 * 1024;  // 2000 MB
 static constexpr int kPartitionedHeapSizePer = kPartitionedHeapArenaSize / kPartitionedHeapNBins;
 
 // Fast allocation for multiple size classes

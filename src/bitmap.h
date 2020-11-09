@@ -140,8 +140,7 @@ public:
   }
 
   inline uint32_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
-    return popcount64(_bits[0]) + popcount64(_bits[1]) + popcount64(_bits[2]) +
-           popcount64(_bits[3]);
+    return popcount64(_bits[0]) + popcount64(_bits[1]) + popcount64(_bits[2]) + popcount64(_bits[3]);
   }
 
 protected:

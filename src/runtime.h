@@ -27,8 +27,8 @@ namespace mesh {
 // function passed to pthread_create
 typedef void *(*PthreadFn)(void *);
 
-typedef ring_buffer<internal::vector<Span>*>  FreeRingVector;
-typedef ring_buffer<internal::FreeCmd*>       FreeCmdRingVector;
+typedef ring_buffer<internal::vector<Span> *> FreeRingVector;
+typedef ring_buffer<internal::FreeCmd *> FreeCmdRingVector;
 
 class Runtime {
 private:
@@ -90,23 +90,22 @@ public:
     return _pid;
   }
 
-  bool sendFreeCmd(internal::FreeCmd* fComand) {
+  bool sendFreeCmd(internal::FreeCmd *fComand) {
     return _pagesFreeCmdBuffer->try_push(fComand);
   }
 
   void selfFlush() {
-
   }
 
-  internal::FreeCmd* getReturnCmdFromBg() {
+  internal::FreeCmd *getReturnCmdFromBg() {
     return _pagesReturnCmdBuffer->pop();
   }
 
-  void expandFlushSpans(internal::vector<Span>& spans, bool sorted) {
+  void expandFlushSpans(internal::vector<Span> &spans, bool sorted) {
     internal::vector<Span> tmp;
     tmp.reserve(_flushSpans.size() + spans.size());
 
-    if(!sorted) {
+    if (!sorted) {
       std::sort(spans.begin(), spans.end());
     }
 
@@ -115,11 +114,13 @@ public:
     _flushSpans.swap(tmp);
   }
 
-  internal::vector<Span>& getFlushSpans() {
+  internal::vector<Span> &getFlushSpans() {
     return _flushSpans;
   }
 
-  bool freeThreadRunning() const { return _freeThreadRunning; }
+  bool freeThreadRunning() const {
+    return _freeThreadRunning;
+  }
 
 protected:
   bool jobFreeCmd();
@@ -144,9 +145,9 @@ private:
   pid_t _pid{};
   GlobalHeap _heap{};
 
-  FreeCmdRingVector* _pagesFreeCmdBuffer{nullptr};
-  FreeCmdRingVector* _pagesReturnCmdBuffer{nullptr};
-  internal::vector<Span>  _flushSpans;
+  FreeCmdRingVector *_pagesFreeCmdBuffer{nullptr};
+  FreeCmdRingVector *_pagesReturnCmdBuffer{nullptr};
+  internal::vector<Span> _flushSpans;
   bool _freeThreadRunning{false};
 };
 
@@ -157,8 +158,6 @@ inline Runtime &runtime() {
   static Runtime *runtimePtr = new (buf) Runtime{};
   return *runtimePtr;
 }
-
-
 
 }  // namespace mesh
 

@@ -142,7 +142,7 @@ public:
 
   void doAfterForkChild();
 
-  void freePhys(const Span& span);
+  void freePhys(const Span &span);
   void freePhys(void *ptr, size_t sz);
 
   inline void resetSpanMapping(const Span &span) {
@@ -166,8 +166,7 @@ public:
 private:
   void expandArena(size_t minPagesAdded);
   bool findPages(size_t pageCount, Span &result, internal::PageType &type);
-  bool findPagesInnerFast(internal::vector<Span> freeSpans[kSpanClassCount], size_t i,
-                                             size_t pageCount, Span &result);
+  bool findPagesInnerFast(internal::vector<Span> freeSpans[kSpanClassCount], size_t i, size_t pageCount, Span &result);
   bool ATTRIBUTE_NEVER_INLINE findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i,
                                              size_t pageCount, Span &result);
   Span reservePages(size_t pageCount, size_t pageAlignment);
@@ -191,10 +190,10 @@ private:
     }
   }
 
-  void moveBiggerTofirst(internal::vector<Span>& spans) {
-    if(spans.size() > 1) {
-      if(spans[0].length > spans[spans.size()-1].length) {
-        std::swap(spans[0], spans[spans.size()-1]);
+  void moveBiggerTofirst(internal::vector<Span> &spans) {
+    if (spans.size() > 1) {
+      if (spans[0].length > spans[spans.size() - 1].length) {
+        std::swap(spans[0], spans[spans.size() - 1]);
       }
     }
   }
@@ -299,7 +298,7 @@ private:
 
 protected:
   void getSpansFromBg(bool wait = false);
-  void tryAndSendToFree(internal::FreeCmd* fCommand);
+  void tryAndSendToFree(internal::FreeCmd *fCommand);
   CheapHeap<64, kArenaSize / kPageSize> _mhAllocator{};
   MWC _fastPrng;
 

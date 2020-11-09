@@ -152,35 +152,35 @@ void MeshableArena::expandArena(size_t minPagesAdded) {
 
   // for(size_t i = 0; i < kSpanClassCount; ++i) {
   //   if(!_dirty[i].empty()) {
-  //    debug("_dirty class[%d] = %d\n", i, _dirty[i].size());     
+  //    debug("_dirty class[%d] = %d\n", i, _dirty[i].size());
   //   }
   // }
 
   // for(size_t i = 0; i < kSpanClassCount; ++i) {
   //   if(!_clean[i].empty()) {
-  //    debug("_clean class[%d] = %d\n", i, _clean[i].size());     
+  //    debug("_clean class[%d] = %d\n", i, _clean[i].size());
   //   }
   // }
 
   // for(size_t i = 0; i < kSpanClassCount; ++i) {
   //   if(!_dirty[i].empty()) {
-  //     debug("_dirty[%d]  size = %d", i, _dirty[i].size());   
+  //     debug("_dirty[%d]  size = %d", i, _dirty[i].size());
   //   }
   // }
 
   // for(size_t i = 0; i < kSpanClassCount; ++i) {
   //   if(!_clean[i].empty()) {
-  //     debug("_clean[%d]  size = %d", i, _clean[i].size());     
+  //     debug("_clean[%d]  size = %d", i, _clean[i].size());
   //   }
   // }
 
   // for(auto& s : _clean[kSpanClassCount-1]) {
   //   debug("clean(%d, %d)", s.offset, s.length);
   // }
-  // debug("expandArena (minPagesAdded=%d) %d, %d,  dirty : %d\n", minPagesAdded, expansion.offset, expansion.length, _dirtyPageCount);
+  // debug("expandArena (minPagesAdded=%d) %d, %d,  dirty : %d\n", minPagesAdded, expansion.offset, expansion.length,
+  // _dirtyPageCount);
 
   _clean[expansion.spanClass()].push_back(expansion);
-
 }
 
 bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], const size_t i,
@@ -238,7 +238,7 @@ bool MeshableArena::findPagesInner(internal::vector<Span> freeSpans[kSpanClassCo
 }
 
 bool MeshableArena::findPagesInnerFast(internal::vector<Span> freeSpans[kSpanClassCount], const size_t i,
-                                   const size_t pageCount, Span &result) {
+                                       const size_t pageCount, Span &result) {
   internal::vector<Span> &spanList = freeSpans[i];
   if (unlikely(spanList.empty()))
     return false;
@@ -263,12 +263,10 @@ bool MeshableArena::findPagesInnerFast(internal::vector<Span> freeSpans[kSpanCla
 }
 
 bool MeshableArena::findPages(const size_t pageCount, Span &result, internal::PageType &type) {
-
   auto targetClass = Span(0, pageCount).spanClass();
 
   // search the fix length class first
-  for (size_t i = targetClass; i < kSpanClassCount-1; ++i) {
-
+  for (size_t i = targetClass; i < kSpanClassCount - 1; ++i) {
     if (findPagesInnerFast(_dirty, i, pageCount, result)) {
       type = internal::PageType::Dirty;
       _dirtyPageCount -= result.length;
@@ -284,7 +282,7 @@ bool MeshableArena::findPages(const size_t pageCount, Span &result, internal::Pa
   // Search through all dirty spans first.  We don't worry about
   // fragmenting dirty pages, as being able to reuse dirty pages means
   // we don't increase RSS.
-  if (findPagesInner(_dirty, kSpanClassCount-1, pageCount, result)) {
+  if (findPagesInner(_dirty, kSpanClassCount - 1, pageCount, result)) {
     type = internal::PageType::Dirty;
     _dirtyPageCount -= result.length;
     return true;
@@ -292,7 +290,7 @@ bool MeshableArena::findPages(const size_t pageCount, Span &result, internal::Pa
 
   // if no dirty pages are available, search clean pages.  An allocated
   // clean page (once it is written to) means an increased RSS.
-  if (findPagesInner(_clean, kSpanClassCount-1, pageCount, result)) {
+  if (findPagesInner(_clean, kSpanClassCount - 1, pageCount, result)) {
     type = internal::PageType::Clean;
     return true;
   }
@@ -426,14 +424,15 @@ void MeshableArena::free(void *ptr, size_t sz, internal::PageType type) {
   freeSpan(span, type);
 }
 
-static size_t flushAllSpansToVector(internal::vector<Span> freeSpans[kSpanClassCount], internal::vector<Span>& flushSpans, size_t needFreeCount) {
+static size_t flushAllSpansToVector(internal::vector<Span> freeSpans[kSpanClassCount],
+                                    internal::vector<Span> &flushSpans, size_t needFreeCount) {
   size_t freeCount = 0;
 
   flushSpans.reserve(needFreeCount);
 
   for (size_t i = 0; i < kSpanClassCount; ++i) {
-    auto& spans = freeSpans[i];
-    for(auto& s : spans) {
+    auto &spans = freeSpans[i];
+    for (auto &s : spans) {
       flushSpans.emplace_back(s);
       freeCount += s.length;
     }
@@ -444,31 +443,31 @@ static size_t flushAllSpansToVector(internal::vector<Span> freeSpans[kSpanClassC
   return freeCount;
 }
 
-static size_t flushSpansToVector(internal::vector<Span> freeSpans[kSpanClassCount], internal::vector<Span>& flushSpans, size_t needFreeCount) {
+static size_t flushSpansToVector(internal::vector<Span> freeSpans[kSpanClassCount], internal::vector<Span> &flushSpans,
+                                 size_t needFreeCount) {
   size_t freeCount = 0;
 
   flushSpans.reserve(needFreeCount);
 
   for (size_t i = 0; i < kSpanClassCount; ++i) {
-    auto& spans = freeSpans[i];
+    auto &spans = freeSpans[i];
 
     if (spans.empty())
       continue;
 
     bool clear = true;
-    for (int j = spans.size() - 1 ; j >= 0; --j) {
-      if(freeCount < needFreeCount) {
+    for (int j = spans.size() - 1; j >= 0; --j) {
+      if (freeCount < needFreeCount) {
         flushSpans.emplace_back(spans[j]);
         freeCount += spans[j].length;
-      }
-      else {
-        spans.resize(j+1);
+      } else {
+        spans.resize(j + 1);
         clear = false;
         break;
       }
     }
 
-    if(clear) {
+    if (clear) {
       spans.clear();
     }
   }
@@ -476,65 +475,60 @@ static size_t flushSpansToVector(internal::vector<Span> freeSpans[kSpanClassCoun
   return freeCount;
 }
 
-  struct {
-    bool operator()(const Span& a, const Span& b) const
-    {   
-        return a.length > b.length;
-    }   
-  } customLess;
+struct {
+  bool operator()(const Span &a, const Span &b) const {
+    return a.length > b.length;
+  }
+} customLess;
 
 void MeshableArena::getSpansFromBg(bool wait) {
-
   bool needSort = false;
   bool gotOne = false;
 
   constexpr unsigned int spin_loops = 16u, spins = 16u;
   unsigned int loop_count = 0;
 
-  while(true){
+  while (true) {
     size_t pageCount = 0;
-    internal::FreeCmd* preCommand = runtime().getReturnCmdFromBg();
+    internal::FreeCmd *preCommand = runtime().getReturnCmdFromBg();
     ++loop_count;
 
-    if(preCommand) {
+    if (preCommand) {
       // debug("getSpansFromBg = %d\n", preDirtySpans->size());
       // all add to the mark spans
-      if(preCommand->cmd == internal::FreeCmd::FLUSH) {
-        for(auto& s : preCommand->spans) {
+      if (preCommand->cmd == internal::FreeCmd::FLUSH) {
+        for (auto &s : preCommand->spans) {
           _clean[s.spanClass()].emplace_back(s);
           pageCount += s.length;
         }
-        
-        if(preCommand->spans.size() > 0){
-          needSort = true;      
+
+        if (preCommand->spans.size() > 0) {
+          needSort = true;
         }
         gotOne = true;
-      }
-      else {
+      } else {
         hard_assert(false);
       }
       // debug("getSpansFromBg got %d spans -  %d page from backgroud.\n", preCommand->spans.size(), pageCount);
       delete preCommand;
     } else {
-      if(wait && !gotOne && runtime().freeThreadRunning()) {
-        if(loop_count < spin_loops){
+      if (wait && !gotOne && runtime().freeThreadRunning()) {
+        if (loop_count < spin_loops) {
           for (unsigned int j = 0; j < spins; ++j) {
-              cpupause();
+            cpupause();
           }
-        }
-        else {
+        } else {
           std::this_thread::yield();
         }
         continue;
-      }
-      else {
+      } else {
         break;
       }
     }
   }
 
-  if(needSort) {
-   std::sort(_clean[kSpanClassCount-1].begin(), _clean[kSpanClassCount-1].end(), customLess);
+  if (needSort) {
+    std::sort(_clean[kSpanClassCount - 1].begin(), _clean[kSpanClassCount - 1].end(), customLess);
   }
   // debug("getSpansFromBg after sort last");
   // for(size_t i = 0; i < kSpanClassCount; ++i) {
@@ -555,10 +549,10 @@ void MeshableArena::getSpansFromBg(bool wait) {
   // debug("getSpansFromBg end");
 }
 
-void MeshableArena::tryAndSendToFree(internal::FreeCmd* fCommand) {
-  auto & rt = runtime();
+void MeshableArena::tryAndSendToFree(internal::FreeCmd *fCommand) {
+  auto &rt = runtime();
   bool ok = rt.sendFreeCmd(fCommand);
-  while(!ok) {
+  while (!ok) {
     getSpansFromBg();
     ok = rt.sendFreeCmd(fCommand);
   }
@@ -569,18 +563,19 @@ void MeshableArena::partialScavenge() {
   // always flush 1/2 pages
   size_t needFreeCount = 0;
 
-  if(_dirtyPageCount > kMaxDirtyPageThreshold) {
-    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/5;
+  if (_dirtyPageCount > kMaxDirtyPageThreshold) {
+    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold) / 5;
   }
 
-  internal::FreeCmd* freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
+  internal::FreeCmd *freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
 
   // debug("partialScavenge  need to free needFreeCount = %d\n", needFreeCount);
 
   // size_t freeCount = flushAllSpansToVector(_dirty, freeCommand->spans, _dirtyPageCount);
   size_t freeCount = flushSpansToVector(_dirty, freeCommand->spans, needFreeCount);
 
-  // debug("partialScavenge _dirtyPageCount = %d  , freeCount = %d , flushSpans->size() =  %d\n", _dirtyPageCount, freeCount, flushSpans->size());
+  // debug("partialScavenge _dirtyPageCount = %d  , freeCount = %d , flushSpans->size() =  %d\n", _dirtyPageCount,
+  // freeCount, flushSpans->size());
   _dirtyPageCount -= freeCount;
 
   tryAndSendToFree(freeCommand);
@@ -593,7 +588,7 @@ void MeshableArena::scavenge(bool force) {
     return;
   }
 
-  internal::FreeCmd* unmapCommand = new internal::FreeCmd(internal::FreeCmd::UNMAP_PAGE);
+  internal::FreeCmd *unmapCommand = new internal::FreeCmd(internal::FreeCmd::UNMAP_PAGE);
 
   auto markPages = [&](const Span &span) {
     // debug("arena:  (%zu/%zu) \n", span.offset, span.length);
@@ -602,7 +597,7 @@ void MeshableArena::scavenge(bool force) {
 
   // first, untrack the spans in the meshed bitmap and mark them in
   // the (method-local) unallocated bitmap
-  std::for_each(_toReset.begin(), _toReset.end(), [&](const Span& span) {
+  std::for_each(_toReset.begin(), _toReset.end(), [&](const Span &span) {
     untrackMeshed(span);
     markPages(span);
     // resetSpanMapping(span);
@@ -615,12 +610,12 @@ void MeshableArena::scavenge(bool force) {
 
   tryAndSendToFree(unmapCommand);
 
-  internal::FreeCmd* freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
+  internal::FreeCmd *freeCommand = new internal::FreeCmd(internal::FreeCmd::FREE_DIRTY_PAGE);
   // dirty page is small, then we don't send the clean page to merge.
   size_t needFreeCount = 0;
 
-  if(_dirtyPageCount > kMaxDirtyPageThreshold) {
-    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold)/5;
+  if (_dirtyPageCount > kMaxDirtyPageThreshold) {
+    needFreeCount = (kMaxDirtyPageThreshold - kMinDirtyPageThreshold) / 5;
   }
   // size_t freeCount = flushAllSpansToVector(_dirty, freeCommand->spans, _dirtyPageCount);
   size_t freeCount = flushSpansToVector(_dirty, freeCommand->spans, needFreeCount);
@@ -628,8 +623,8 @@ void MeshableArena::scavenge(bool force) {
 
   tryAndSendToFree(freeCommand);
 
-  if(freeCount < kMinDirtyPageThreshold) {
-    internal::FreeCmd* cleanCommand = new internal::FreeCmd(internal::FreeCmd::CLEAN_PAGE);
+  if (freeCount < kMinDirtyPageThreshold) {
+    internal::FreeCmd *cleanCommand = new internal::FreeCmd(internal::FreeCmd::CLEAN_PAGE);
     freeCount = flushAllSpansToVector(_clean, cleanCommand->spans, 0);
 
     tryAndSendToFree(cleanCommand);
@@ -641,10 +636,10 @@ void MeshableArena::scavenge(bool force) {
   getSpansFromBg();
 }
 
-void MeshableArena::freePhys(const Span& span) {
-        auto ptr = ptrFromOffset(span.offset);
-        auto sz = span.byteLength();
-        freePhys(ptr, sz);
+void MeshableArena::freePhys(const Span &span) {
+  auto ptr = ptrFromOffset(span.offset);
+  auto sz = span.byteLength();
+  freePhys(ptr, sz);
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {
@@ -702,7 +697,6 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
 
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * kPageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-
 }
 
 int MeshableArena::openShmSpanFile(size_t sz) {
@@ -895,7 +889,7 @@ void MeshableArena::afterForkChild() {
   void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, 0);
   hard_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
-  if(kAdviseDump) {
+  if (kAdviseDump) {
     madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
   }
 

@@ -165,32 +165,26 @@ using std::unique_lock;
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-
 #ifdef __GNUC__
-  #define GNUC_PREREQ(x, y) \
-      (__GNUC__ > x || (__GNUC__ == x && __GNUC_MINOR__ >= y))
+#define GNUC_PREREQ(x, y) (__GNUC__ > x || (__GNUC__ == x && __GNUC_MINOR__ >= y))
 #else
-  #define GNUC_PREREQ(x, y) 0
+#define GNUC_PREREQ(x, y) 0
 #endif
 
 #ifdef __clang__
-  #define CLANG_PREREQ(x, y) \
-      (__clang_major__ > x || (__clang_major__ == x && __clang_minor__ >= y))
+#define CLANG_PREREQ(x, y) (__clang_major__ > x || (__clang_major__ == x && __clang_minor__ >= y))
 #else
-  #define CLANG_PREREQ(x, y) 0
+#define CLANG_PREREQ(x, y) 0
 #endif
 
-#if GNUC_PREREQ(4, 2) || \
-    CLANG_PREREQ(3, 0)
-  #define HAVE_ASM_POPCNT
+#if GNUC_PREREQ(4, 2) || CLANG_PREREQ(3, 0)
+#define HAVE_ASM_POPCNT
 #endif
 
-#if defined(HAVE_ASM_POPCNT) && \
-    defined(__x86_64__)
+#if defined(HAVE_ASM_POPCNT) && defined(__x86_64__)
 
-static inline uint64_t popcnt64(uint64_t x)
-{
-  __asm__ ("popcnt %1, %0" : "=r" (x) : "0" (x));
+static inline uint64_t popcnt64(uint64_t x) {
+  __asm__("popcnt %1, %0" : "=r"(x) : "0"(x));
   return x;
 }
 #define popcount64(x) popcnt64(x)
@@ -240,20 +234,18 @@ static inline uint64_t popcnt64(uint64_t x)
   ((likely(expr)) ? static_cast<void>(0) \
                   : mesh::internal::__mesh_assert_fail(#expr, __FILE__, __PRETTY_FUNCTION__, __LINE__, ""))
 
-
-ATTRIBUTE_ALWAYS_INLINE inline void cpupause()
-{
+ATTRIBUTE_ALWAYS_INLINE inline void cpupause() {
 #if defined(_MSC_VER)
 #if defined(_M_AMD64) || defined(_M_IX86)
-    _mm_pause();
+  _mm_pause();
 #elif defined(_M_ARM64) || defined(_M_ARM)
-    __yield();
+  __yield();
 #endif
 #elif defined(__GNUC__)
 #if defined(__i386__) || defined(__x86_64__)
-    __asm__ __volatile__("pause;" : : : "memory");
+  __asm__ __volatile__("pause;" : : : "memory");
 #elif (defined(__ARM_ARCH) && __ARM_ARCH >= 8) || defined(__ARM_ARCH_8A__) || defined(__aarch64__)
-    __asm__ __volatile__("yield;" : : : "memory");
+  __asm__ __volatile__("yield;" : : : "memory");
 #endif
 #endif
 }

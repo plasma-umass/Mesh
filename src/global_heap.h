@@ -213,7 +213,6 @@ public:
     return _emptyFreelist[sizeClass].second > kBinnedTrackerMaxEmpty;
   }
 
-
   inline void releaseMiniheapLocked(MiniHeap *mh, int sizeClass) {
     // ensure this flag is always set with the miniheap lock held
     mh->unsetAttached();
@@ -475,8 +474,8 @@ public:
 
   // PUBLIC ONLY FOR TESTING
   // after call to meshLocked() completes src is a nullptr
-  void ATTRIBUTE_NEVER_INLINE meshLocked(MiniHeap *dst, MiniHeap *&src) {};
-  void ATTRIBUTE_NEVER_INLINE meshLocked(MiniHeap *dst, MiniHeap *&src, internal::vector<Span>& fCmdSpans);
+  void ATTRIBUTE_NEVER_INLINE meshLocked(MiniHeap *dst, MiniHeap *&src){};
+  void ATTRIBUTE_NEVER_INLINE meshLocked(MiniHeap *dst, MiniHeap *&src, internal::vector<Span> &fCmdSpans);
 
   inline void ATTRIBUTE_ALWAYS_INLINE maybeMesh() {
     if (!kMeshingEnabled) {

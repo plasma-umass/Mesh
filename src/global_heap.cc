@@ -87,7 +87,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
   // LOCK CMPXCHG in mh->free
   auto remaining = mh->inUseCount() - 1;
 
-  // here can't call mh->free(arenaBegin(), ptr), because in consume takeBitmap always clear the bitmap, 
+  // here can't call mh->free(arenaBegin(), ptr), because in consume takeBitmap always clear the bitmap,
   // if clearIfNotFree after takeBitmap
   // it alwasy return false, but in this case, you need to free again.
   auto wasSet = mh->clearIfNotFree(arenaBegin(), ptr);
@@ -278,7 +278,7 @@ int GlobalHeap::mallctl(const char *name, void *oldp, size_t *oldlenp, void *new
   return 0;
 }
 
-void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src, internal::vector<Span>& fCmdSpans) {
+void GlobalHeap::meshLocked(MiniHeap *dst, MiniHeap *&src, internal::vector<Span> &fCmdSpans) {
   // mesh::debug("mesh dst:%p <- src:%p\n", dst, src);
   // dst->dumpDebug();
   // src->dumpDebug();
@@ -361,7 +361,7 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
 
   size_t meshCount = 0;
 
-  internal::FreeCmd* fCommand = new internal::FreeCmd(internal::FreeCmd::FREE_PAGE);
+  internal::FreeCmd *fCommand = new internal::FreeCmd(internal::FreeCmd::FREE_PAGE);
 
   for (size_t i = 0; i < mergeSetCount; i++) {
     std::pair<MiniHeap *, MiniHeap *> &mergeSet = mergeSets[i];

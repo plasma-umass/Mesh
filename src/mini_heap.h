@@ -168,7 +168,7 @@ public:
     // dumpDebug();
   }
 
-  inline const Span& span() const {
+  inline const Span &span() const {
     return _span;
   }
 
@@ -236,7 +236,7 @@ public:
 
     auto mh = NextMeshedMiniHeap();
     if (mh) {
-      mh->takeBitmap(); // rewrite it with clear?
+      mh->takeBitmap();  // rewrite it with clear?
     } else {
       srcBitmap.invert();
       uint32_t max = maxCount();
@@ -392,7 +392,7 @@ public:
   }
 
 public:
-  inline MiniHeap* NextMeshedMiniHeap() const {
+  inline MiniHeap *NextMeshedMiniHeap() const {
     if (_nextMeshed.hasValue()) {
       return GetMiniHeap(_nextMeshed);
     }

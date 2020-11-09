@@ -65,26 +65,26 @@ size_t internal::measurePssKiB() {
 }
 
 #if defined(__linux__) || defined(__linux)
-inline static void change_thread_name(const char* postfix, int index=-1)
-{
-	char process_name[16];
-	prctl(PR_GET_NAME, (unsigned long)process_name, 0, 0, 0);
-	char new_name[16];
+inline static void change_thread_name(const char *postfix, int index = -1) {
+  char process_name[16];
+  prctl(PR_GET_NAME, (unsigned long)process_name, 0, 0, 0);
+  char new_name[16];
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #endif
-	if (index < 0)
-		snprintf(new_name, 16, "%s[%s]", process_name, postfix);
-	else
-		snprintf(new_name, 16, "%s[%s%d]", process_name, postfix, index);
+  if (index < 0)
+    snprintf(new_name, 16, "%s[%s]", process_name, postfix);
+  else
+    snprintf(new_name, 16, "%s[%s%d]", process_name, postfix, index);
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
-	prctl(PR_SET_NAME, (unsigned long)new_name, 0, 0, 0);
+  prctl(PR_SET_NAME, (unsigned long)new_name, 0, 0, 0);
 }
 #else
-inline void change_thread_name(const char*, int = -1) {}
+inline void change_thread_name(const char *, int = -1) {
+}
 #endif
 
 int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
@@ -109,7 +109,7 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
 Runtime::Runtime() {
   static_assert(sizeof(FreeCmdRingVector) < 4096, "tlh should have a reasonable size");
 
-  void* buf = mesh::internal::Heap().malloc(sizeof(FreeCmdRingVector));
+  void *buf = mesh::internal::Heap().malloc(sizeof(FreeCmdRingVector));
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 
@@ -281,7 +281,6 @@ void *Runtime::bgThread(void *arg) {
   return nullptr;
 }
 
-
 void Runtime::startFreePhysThread() {
   constexpr int MaxRetries = 20;
 
@@ -303,11 +302,10 @@ void Runtime::startFreePhysThread() {
   }
 }
 
-size_t mergeSpans(internal::vector<Span>& spans)
-{
+size_t mergeSpans(internal::vector<Span> &spans) {
   size_t mergeCount = 0;
 
-  if(spans.size() > 1) {
+  if (spans.size() > 1) {
     // sort and merge spans
     // std::sort(spans.begin(), spans.end());
 
@@ -317,16 +315,15 @@ size_t mergeSpans(internal::vector<Span>& spans)
     auto leftIt = spans.begin();
     auto rightIt = spans.begin() + 1;
 
-    while(rightIt != spans.end()) {
+    while (rightIt != spans.end()) {
       d_assert(leftIt->offset + leftIt->length <= rightIt->offset);
 
-      if(leftIt->offset + leftIt->length == rightIt->offset) {
+      if (leftIt->offset + leftIt->length == rightIt->offset) {
         leftIt->length += rightIt->length;
         ++mergeCount;
         ++rightIt;
         continue;
-      }
-      else {
+      } else {
         tmpSpans.emplace_back(leftIt->offset, leftIt->length);
         leftIt = rightIt;
         ++rightIt;
@@ -341,82 +338,75 @@ size_t mergeSpans(internal::vector<Span>& spans)
 
 bool Runtime::jobFreeCmd() {
   auto &rt = mesh::runtime();
-  internal::FreeCmd* fCommand = rt._pagesFreeCmdBuffer->pop();
+  internal::FreeCmd *fCommand = rt._pagesFreeCmdBuffer->pop();
 
-  if(fCommand)
-  {
-    #ifndef NDEBUG
+  if (fCommand) {
+#ifndef NDEBUG
     size_t pageCount = 0;
-    #endif
+#endif
 
-    switch (fCommand->cmd)
-    {
-    case internal::FreeCmd::FREE_PAGE:
-      {
-        for( auto& span : fCommand->spans) {
-          rt.heap().freePhys(span);
-          #ifndef NDEBUG
-          pageCount += span.length;
-          #endif
-        }
-        // debug("FREE_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
-        delete fCommand;
-        break;
+    switch (fCommand->cmd) {
+    case internal::FreeCmd::FREE_PAGE: {
+      for (auto &span : fCommand->spans) {
+        rt.heap().freePhys(span);
+#ifndef NDEBUG
+        pageCount += span.length;
+#endif
       }
-    
-    case internal::FreeCmd::UNMAP_PAGE:
-      {
-        for( auto& span : fCommand->spans) {
-          rt.heap().resetSpanMapping(span);
-          #ifndef NDEBUG
-          pageCount += span.length;
-          #endif
-        }
-        rt.expandFlushSpans(fCommand->spans, false);
-        // debug("UNMAP_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
-        delete fCommand;
-        break;
+      // debug("FREE_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
+      delete fCommand;
+      break;
+    }
+
+    case internal::FreeCmd::UNMAP_PAGE: {
+      for (auto &span : fCommand->spans) {
+        rt.heap().resetSpanMapping(span);
+#ifndef NDEBUG
+        pageCount += span.length;
+#endif
       }
+      rt.expandFlushSpans(fCommand->spans, false);
+      // debug("UNMAP_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
+      delete fCommand;
+      break;
+    }
 
-    case internal::FreeCmd::FREE_DIRTY_PAGE:
-      {
-        std::sort(fCommand->spans.begin(), fCommand->spans.end());
-        mergeSpans(fCommand->spans);
-        for( auto& span : fCommand->spans) {
-          rt.heap().freePhys(span);
-          #ifndef NDEBUG
-          pageCount += span.length;
-          #endif
-        }
-
-        rt.expandFlushSpans(fCommand->spans, true);
-        // debug("FREE_DIRTY_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
-        delete fCommand;
-        break;
-      }
-    case internal::FreeCmd::CLEAN_PAGE:
-      {
-        #ifndef NDEBUG
-        for( auto& span : fCommand->spans) {
-          pageCount += span.length;
-        }
-        #endif
-
-        rt.expandFlushSpans(fCommand->spans, false);
-        // debug("CLEAN_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
-        delete fCommand;
-        break;
+    case internal::FreeCmd::FREE_DIRTY_PAGE: {
+      std::sort(fCommand->spans.begin(), fCommand->spans.end());
+      mergeSpans(fCommand->spans);
+      for (auto &span : fCommand->spans) {
+        rt.heap().freePhys(span);
+#ifndef NDEBUG
+        pageCount += span.length;
+#endif
       }
 
-    case internal::FreeCmd::FLUSH:
-      {
-        auto& spans = rt.getFlushSpans();
-        mergeSpans(spans);
-        // debug("FLUSH mergeSpans:  merge: %d -> %d\n", mergeCount, spans.size());
-        fCommand->spans.swap(spans);
-        rt._pagesReturnCmdBuffer->push(fCommand);
-        break;
+      rt.expandFlushSpans(fCommand->spans, true);
+      // debug("FREE_DIRTY_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
+      delete fCommand;
+      break;
+    }
+    case internal::FreeCmd::CLEAN_PAGE: {
+#ifndef NDEBUG
+      for (auto &span : fCommand->spans) {
+        pageCount += span.length;
       }
+#endif
+
+      rt.expandFlushSpans(fCommand->spans, false);
+      // debug("CLEAN_PAGE: %d spans,  pageCount = %d\n", fCommand->spans.size(), pageCount);
+      delete fCommand;
+      break;
+    }
+
+    case internal::FreeCmd::FLUSH: {
+      auto &spans = rt.getFlushSpans();
+      mergeSpans(spans);
+      // debug("FLUSH mergeSpans:  merge: %d -> %d\n", mergeCount, spans.size());
+      fCommand->spans.swap(spans);
+      rt._pagesReturnCmdBuffer->push(fCommand);
+      break;
+    }
 
     default:
       hard_assert(false);
@@ -424,22 +414,21 @@ bool Runtime::jobFreeCmd() {
     }
 
     return false;
-  }
-  else {
+  } else {
     return true;
   }
 }
 
 void Runtime::autoFlush() {
   auto &rt = mesh::runtime();
-  auto& spans = rt.getFlushSpans();
+  auto &spans = rt.getFlushSpans();
   mergeSpans(spans);
   // debug("AUTO FLUSH mergeSpans:  merge: page:%d, vsize:%d\n", mergeCount, spans.size());
-  internal::FreeCmd* fCommand = new internal::FreeCmd(internal::FreeCmd::FLUSH);
+  internal::FreeCmd *fCommand = new internal::FreeCmd(internal::FreeCmd::FLUSH);
   fCommand->spans.swap(spans);
-  
+
   bool ok = rt._pagesReturnCmdBuffer->try_push(fCommand);
-  if(!ok) {
+  if (!ok) {
     // debug("AUTO FLUSH failed");
     fCommand->spans.swap(spans);
     delete fCommand;
@@ -455,33 +444,31 @@ void *Runtime::bgFreePhysThread(void *arg) {
 
   size_t idle_count = 0;
   size_t processCount = 0;
-  while(true) {
+  while (true) {
     auto idle = rt.jobFreeCmd();
 
-    if(idle) {
+    if (idle) {
       ++idle_count;
       ++processCount;
-    }
-    else {
+    } else {
       idle_count = 0;
     }
 
-    if(processCount > 16) {
-      auto& spans = rt.getFlushSpans();
-      if(spans.size()>1) {
+    if (processCount > 16) {
+      auto &spans = rt.getFlushSpans();
+      if (spans.size() > 1) {
         rt.autoFlush();
         processCount = 0;
       }
     }
 
-    if(idle_count > 100) {
-      std::this_thread::sleep_for(1ms);     
+    if (idle_count > 100) {
+      std::this_thread::sleep_for(1ms);
     }
   }
 
   return nullptr;
 }
-
 
 void Runtime::lock() {
   _mutex.lock();
