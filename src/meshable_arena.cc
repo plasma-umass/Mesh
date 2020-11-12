@@ -525,10 +525,7 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
 
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * kPageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-  freePhys(remove, sz);
 
-  int r = mprotect(remove, sz, PROT_READ | PROT_WRITE);
-  hard_assert(r == 0);
 }
 
 int MeshableArena::openShmSpanFile(size_t sz) {
@@ -628,6 +625,7 @@ void MeshableArena::prepareForFork() {
   // debug("%d: prepare fork", getpid());
   runtime().heap().lock();
   runtime().lock();
+  internal::Heap().lock();
 
   int r = mprotect(_arenaBegin, kArenaSize, PROT_READ);
   hard_assert(r == 0);
@@ -642,6 +640,8 @@ void MeshableArena::afterForkParent() {
   if (!kMeshingEnabled) {
     return;
   }
+
+  internal::Heap().unlock();
 
   close(_forkPipe[1]);
 
@@ -687,6 +687,7 @@ void MeshableArena::afterForkChild() {
   }
 
   // debug("%d: after fork child", getpid());
+  internal::Heap().unlock();
   runtime().unlock();
   runtime().heap().unlock();
 

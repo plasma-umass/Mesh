@@ -192,7 +192,6 @@ public:
   }
 
   inline bool clearIfNotFree(void *arenaBegin, void *ptr) {
-    d_assert(isMeshed());
     const ssize_t off = getOff(arenaBegin, ptr);
     const auto notWasSet = _bitmap.unset(off);
     const auto wasSet = !notWasSet;
