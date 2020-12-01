@@ -235,6 +235,7 @@ inline mt19937_64 *initSeed() {
   unsigned long buf;
   auto sz = read(fd, (void *)&buf, sizeof(unsigned long));
   hard_assert(sz == sizeof(unsigned long));
+  close(fd);
   //  std::random_device rd;
   // return new (mtBuf) std::mt19937_64(rd());
   return new (mtBuf) std::mt19937_64(buf);
