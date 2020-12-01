@@ -228,6 +228,16 @@ int MESH_EXPORT epoll_pwait(int __epfd, struct epoll_event *__events, int __maxe
 }
 
 #endif
+#if __linux__
+
+ssize_t MESH_EXPORT recv(int sockfd, void *buf, size_t len, int flags) {
+  return mesh::runtime().recv(sockfd, buf, len, flags);
+}
+
+ssize_t MESH_EXPORT recvmsg(int sockfd, struct msghdr *msg, int flags) {
+  return mesh::runtime().recvmsg(sockfd, msg, flags);
+}
+#endif
 }
 
 #if defined(__linux__)

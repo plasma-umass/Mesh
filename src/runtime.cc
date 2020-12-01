@@ -269,6 +269,35 @@ int Runtime::epollPwait(int __epfd, struct epoll_event *__events, int __maxevent
 
   return mesh::real::epoll_pwait(__epfd, __events, __maxevents, __timeout, __ss);
 }
+
+ssize_t Runtime::recv(int sockfd, void *buf, size_t len, int flags) {
+  if (unlikely(mesh::real::recv == nullptr)) {
+    mesh::real::init();
+  }
+  ssize_t ret = mesh::real::recv(sockfd, buf, len, flags);
+  while (ret < 0 && errno == EFAULT && heap().okToProceed(buf)) {
+    ret = mesh::real::recv(sockfd, buf, len, flags);
+  }
+  return ret;
+}
+
+ssize_t Runtime::recvmsg(int sockfd, struct msghdr *msg, int flags) {
+  if (unlikely(mesh::real::recvmsg == nullptr))
+    mesh::real::init();
+
+  ssize_t ret = mesh::real::recvmsg(sockfd, msg, flags);
+  while (ret < 0 && errno == EFAULT && msg) {
+    for (size_t i = 0; i < msg->msg_iovlen; ++i) {
+      auto ptr = msg->msg_iov[i].iov_base;
+      if (ptr) {
+        heap().okToProceed(ptr);
+      }
+    }
+    ret = mesh::real::recvmsg(sockfd, msg, flags);
+  }
+  return ret;
+}
+
 #endif
 
 static struct sigaction sigbusAction;
