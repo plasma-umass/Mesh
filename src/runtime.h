@@ -54,6 +54,8 @@ public:
 #ifdef __linux__
   int epollWait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout);
   int epollPwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout, const __sigset_t *__ss);
+  ssize_t recv(int sockfd, void *buf, size_t len, int flags);
+  ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
 #endif
 
   int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
