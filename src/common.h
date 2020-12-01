@@ -127,6 +127,8 @@ static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 #define SIGDUMP (SIGRTMIN + 8)
 
+static constexpr size_t kForkCopyFileSize = 32 * 1024 * 1024ul;
+
 // BinnedTracker
 static constexpr size_t kBinnedTrackerBinCount = 1;
 static constexpr size_t kBinnedTrackerMaxEmpty = 128;
