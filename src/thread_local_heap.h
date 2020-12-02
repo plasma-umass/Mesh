@@ -195,14 +195,9 @@ public:
     size_t startEpoch{0};
     auto mh = _global->miniheapForWithEpoch(ptr, startEpoch);
     if (likely(mh && mh->current() == _current && !mh->hasMeshed())) {
-      if (!mh->hasMeshed()) {
-        ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
-        shuffleVector.free(mh, ptr);
-        return;
-      } else {
-        mh->free(_global->arenaBegin(), ptr);
-        return;
-      }
+      ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
+      shuffleVector.free(mh, ptr);
+      return;
     }
 
     _global->freeFor(mh, ptr, startEpoch);
