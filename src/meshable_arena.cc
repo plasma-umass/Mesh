@@ -14,7 +14,8 @@
 #include <unistd.h>
 
 //#include <sys/memfd.h>
-#include <asm/unistd_64.h>
+//#include <asm/unistd_64.h>
+#include <sys/syscall.h>
 #include <linux/memfd.h>
 #endif
 
