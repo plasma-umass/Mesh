@@ -3,7 +3,7 @@
 # Version 2.0, that can be found in the LICENSE file.
 
 build --cxxopt='-std=c++17'
-build --crosstool_top=@llvm_toolchain//:toolchain --copt=-D_LIBCPP_ENABLE_NODISCARD
+#build --crosstool_top=@llvm_toolchain//:toolchain --copt=-D_LIBCPP_ENABLE_NODISCARD
 build --strip=never
 
 # largely from sorbet
