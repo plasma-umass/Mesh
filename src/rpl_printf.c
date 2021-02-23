@@ -1309,7 +1309,7 @@ again:
     if (lc->decimal_point != NULL && *lc->decimal_point != '\0')
       OUTCHAR(str, *len, size, *lc->decimal_point);
     else /* We'll always print some decimal point character. */
-#endif   /* HAVE_LOCALECONV && HAVE_LCONV_DECIMAL_POINT */
+#endif /* HAVE_LOCALECONV && HAVE_LCONV_DECIMAL_POINT */
       OUTCHAR(str, *len, size, '.');
   }
   while (leadfraczeros > 0) { /* Leading fractional part zeros. */
@@ -1513,7 +1513,7 @@ int rpl_asprintf(va_alist) va_dcl
   return len;
 }
 #endif /* !HAVE_ASPRINTF */
-#else  /* Dummy declaration to avoid empty translation unit warnings. */
+#else /* Dummy declaration to avoid empty translation unit warnings. */
 int main(int argc, char **argv);
 #endif /* !HAVE_SNPRINTF || !HAVE_VSNPRINTF || !HAVE_ASPRINTF || [...] */
 

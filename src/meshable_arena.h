@@ -143,6 +143,7 @@ public:
   void doAfterForkChild();
 
   void freePhys(void *ptr, size_t sz);
+
 private:
   void expandArena(size_t minPagesAdded);
   bool findPages(size_t pageCount, Span &result, internal::PageType &type);

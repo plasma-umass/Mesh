@@ -87,7 +87,7 @@ void GlobalHeap::freeFor(MiniHeap *mh, void *ptr, size_t startEpoch) {
   // LOCK CMPXCHG in mh->free
   auto remaining = mh->inUseCount() - 1;
 
-  // here can't call mh->free(arenaBegin(), ptr), because in consume takeBitmap always clear the bitmap, 
+  // here can't call mh->free(arenaBegin(), ptr), because in consume takeBitmap always clear the bitmap,
   // if clearIfNotFree after takeBitmap
   // it alwasy return false, but in this case, you need to free again.
   auto wasSet = mh->clearIfNotFree(arenaBegin(), ptr);

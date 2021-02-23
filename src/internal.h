@@ -294,7 +294,7 @@ public:
 // also free to the internal heap when all references have been
 // dropped.
 template <typename T, class... Args>
-inline std::shared_ptr<T> make_shared(Args &&... args) {
+inline std::shared_ptr<T> make_shared(Args &&...args) {
   // FIXME: somehow centralize this static.
   static STLAllocator<T, Heap> heap;
   return std::allocate_shared<T, STLAllocator<T, Heap>, Args...>(heap, std::forward<Args>(args)...);
