@@ -7,15 +7,15 @@ workspace(name = "org_libmesh")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 commit = {
-    "rules_cc": "5cbd3dfbd1613f71ef29bbb7b10310b81e272975",
-    "googletest": "c6e309b268d4fb9138bed7d0f56b7709c29f102f",
-    "benchmark": "15e6dfd7182b74b4fb6860f52fe314d0654307fb",
+    "rules_cc": "daf6ace7cfeacd6a83e9ff2ed659f416537b6c74",
+    "googletest": "aa533abfd4232b01f9e57041d70114d5a77e6de0",
+    "benchmark": "bc5651e54a7e178ca6b1e27e469a9be19cfa62c4", # 1.5.4
     "heap_layers": "08ca96cfe11b1dd1c504fb7be613ad00756d568f",
 }
 
 http_archive(
     name = "rules_cc",
-    sha256 = "d6775fe03da086dfe47c668f54e77e220aa6e601a66a4517eaf19fa1d9fda309",
+    sha256 = "b295cad8c5899e371dde175079c0a2cdc0151f5127acc92366a8c986beb95c76",
     strip_prefix = "rules_cc-{}".format(commit["rules_cc"]),
     urls = [
         "https://github.com/bazelbuild/rules_cc/archive/{}.zip".format(commit["rules_cc"]),
@@ -24,7 +24,7 @@ http_archive(
 
 http_archive(
     name = "com_google_googletest",
-    sha256 = "ac0b859e4c28af555657c7702523465756eb56f8606bf53e62fd934c86b5fa5f",
+    sha256 = "ab7d3be1f3781984102d7c12d7dc27ae2695a817c439f24db8ffc593840c1b17",
     strip_prefix = "googletest-{}".format(commit["googletest"]),
     urls = [
         "https://github.com/google/googletest/archive/{}.zip".format(commit["googletest"]),
@@ -33,7 +33,7 @@ http_archive(
 
 http_archive(
     name = "com_google_benchmark",
-    # sha256 = "",
+    sha256 = "",
     strip_prefix = "benchmark-{}".format(commit["benchmark"]),
     urls = [
         "https://github.com/google/benchmark/archive/{}.zip".format(commit["benchmark"]),
