@@ -8,6 +8,8 @@
 
 #ifdef __linux__
 #include <sys/epoll.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #endif
 
 #pragma once
@@ -23,6 +25,8 @@ void init();
 #ifdef __linux__
 DECLARE_REAL(epoll_pwait);
 DECLARE_REAL(epoll_wait);
+DECLARE_REAL(recv);
+DECLARE_REAL(recvmsg);
 #endif
 
 DECLARE_REAL(pthread_create);

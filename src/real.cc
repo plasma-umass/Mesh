@@ -21,6 +21,8 @@ namespace real {
 #ifdef __linux__
 DEFINE_REAL(epoll_pwait);
 DEFINE_REAL(epoll_wait);
+DEFINE_REAL(recv);
+DEFINE_REAL(recvmsg);
 #endif
 
 DEFINE_REAL(pthread_create);
@@ -40,6 +42,8 @@ void init() {
 #ifdef __linux__
   INIT_REAL(epoll_pwait, RTLD_NEXT);
   INIT_REAL(epoll_wait, RTLD_NEXT);
+  INIT_REAL(recv, RTLD_NEXT);
+  INIT_REAL(recvmsg, RTLD_NEXT);
 #endif
 
   INIT_REAL(pthread_create, RTLD_NEXT);

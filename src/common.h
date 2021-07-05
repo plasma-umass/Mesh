@@ -127,6 +127,8 @@ static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 #define SIGDUMP (SIGRTMIN + 8)
 
+static constexpr size_t kForkCopyFileSize = 32 * 1024 * 1024ul;
+
 // BinnedTracker
 static constexpr size_t kBinnedTrackerBinCount = 1;
 static constexpr size_t kBinnedTrackerMaxEmpty = 128;
@@ -235,6 +237,7 @@ inline mt19937_64 *initSeed() {
   unsigned long buf;
   auto sz = read(fd, (void *)&buf, sizeof(unsigned long));
   hard_assert(sz == sizeof(unsigned long));
+  close(fd);
   //  std::random_device rd;
   // return new (mtBuf) std::mt19937_64(rd());
   return new (mtBuf) std::mt19937_64(buf);
