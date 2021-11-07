@@ -7,7 +7,7 @@ workspace(name = "org_libmesh")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 commit = {
-    "rules_cc": "daf6ace7cfeacd6a83e9ff2ed659f416537b6c74",
+    "rules_cc": "aa7ff810cf5ec99ca34f784743b33631b74c2d16",
     "googletest": "aa533abfd4232b01f9e57041d70114d5a77e6de0",
     "benchmark": "bc5651e54a7e178ca6b1e27e469a9be19cfa62c4", # 1.5.4
     "heap_layers": "08ca96cfe11b1dd1c504fb7be613ad00756d568f",
@@ -15,7 +15,7 @@ commit = {
 
 http_archive(
     name = "rules_cc",
-    sha256 = "b295cad8c5899e371dde175079c0a2cdc0151f5127acc92366a8c986beb95c76",
+    sha256 = "21749f1be88e0965a1e70eed1a433d73c0ceaf485dfa50ff2d6e7c6944917673",
     strip_prefix = "rules_cc-{}".format(commit["rules_cc"]),
     urls = [
         "https://github.com/bazelbuild/rules_cc/archive/{}.zip".format(commit["rules_cc"]),
