@@ -69,10 +69,14 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
   off_t newOff = lseek(dstFd, off, SEEK_SET);
   d_assert(newOff == off);
 
-#if defined(__APPLE__) || defined(__FreeBSD__)
+#if defined(__APPLE__)
 #warning test that setting offset on dstFd works as intended
   // fcopyfile works on FreeBSD and OS X 10.5+
   int result = fcopyfile(srcFd, dstFd, 0, COPYFILE_ALL);
+#elif defined(__FreeBSD__)
+  // unlike Linux and Solaris, sendfile works only with sockets here
+  // thus copy_file_range is the only viable solution
+  int result = copy_file_range(srcFd, &off, dstFd, NULL, sz, 0);
 #else
   errno = 0;
   // sendfile will work with non-socket output (i.e. regular file) on Linux 2.6.33+

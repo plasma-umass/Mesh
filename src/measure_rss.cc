@@ -13,6 +13,10 @@
 #elif defined(__APPLE__)
 #include <mach/task.h>
 #include <mach/mach_init.h>
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#include <sys/user.h>
+#include <sys/sysctl.h>
 #endif
 #include <unistd.h>
 
@@ -58,5 +62,15 @@ extern "C" int get_rss_kb() {
     return -1;
 
   return static_cast<int>(info.resident_size);
+#elif defined(__FreeBSD__)
+  struct kinfo_proc info;
+  size_t len = sizeof(info);
+  int pid = getpid();
+  int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, pid};
+
+  if (sysctl(mib, 4, &info, &len, nullptr, 0) != 0)
+    return -1;
+
+  return static_cast<int>(info.ki_rssize);
 #endif
 }
