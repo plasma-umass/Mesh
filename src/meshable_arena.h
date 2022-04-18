@@ -20,9 +20,9 @@
 #include <unistd.h>
 #endif
 
-#if defined(__APPLE__) || defined(__FreeBSD__)
+#if defined(__APPLE__)
 #include <copyfile.h>
-#else
+#elif defined(__linux__)
 #include <sys/sendfile.h>
 #endif
 

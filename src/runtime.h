@@ -10,6 +10,15 @@
 #include <pthread.h>
 #include <signal.h>  // for stack_t
 
+#ifdef __FreeBSD__
+#include <pthread_np.h>
+extern "C" {
+static pid_t gettid(void) {
+  return static_cast<pid_t>(pthread_getthreadid_np());
+}
+}
+#endif
+
 #include "internal.h"
 
 #include "real.h"

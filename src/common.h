@@ -53,6 +53,11 @@
 #define MESH_HAVE_TLS 1
 #endif
 
+#ifdef __FreeBSD__
+// This flag is unsupported since this is the default behavior on FreeBSD
+#define MAP_NORESERVE 0
+#endif
+
 namespace mesh {
 
 static constexpr bool kMeshingEnabled = MESHING_ENABLED == 1;
