@@ -175,6 +175,9 @@ using std::unique_lock;
 #define ATTRIBUTE_ALWAYS_INLINE __attribute__((always_inline))
 #define ATTRIBUTE_NORETURN __attribute__((noreturn))
 #define ATTRIBUTE_ALIGNED(s) __attribute__((aligned(s)))
+#define ATTRIBUTE_MALLOC __attribute__((malloc))
+#define ATTRIBUTE_ALLOC_SIZE(x) __attribute__((alloc_size(x)))
+#define ATTRIBUTE_ALLOC_SIZE2(x,y) __attribute__((alloc_size(x, y)))
 #define CACHELINE_SIZE 64
 #define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 #define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
