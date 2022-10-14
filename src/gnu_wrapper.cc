@@ -69,7 +69,3 @@ WEAK_REDEF1(size_t, malloc_usable_size, void *);
 }
 
 #include "wrapper.cc"
-#ifdef __GLIBC__
-// don't do this under musl
-#include "wrappers/gnuwrapper-hooks.cpp"
-#endif
