@@ -12,32 +12,10 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_OUTPUT_DIRECTORY}/lib)
 set(CMAKE_HEADER_OUTPUT_DIRECTORY  ${CMAKE_OUTPUT_DIRECTORY}/include)
 
-
-include(ExternalProject)
-
-ExternalProject_Add(googletest
-        GIT_REPOSITORY    https://github.com/google/googletest.git
-        GIT_TAG           3e0e32ba300ce8afe695ad3ba7e81b21b7cf237a
-        SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-src"
-        BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-build"
-        INSTALL_COMMAND   ""
-        TEST_COMMAND      ""
-)
-
-ExternalProject_Add(heap_layers
-        GIT_REPOSITORY    https://github.com/emeryberger/Heap-Layers.git
-        GIT_TAG           a80041cc15174ab82a39bae1cd750b52955c7eef
-        SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/heap_layers-src"
-        BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/heap_layers-build"
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND     ""
-        INSTALL_COMMAND   ""
-        TEST_COMMAND      ""
-)
-
 #Create configure options
 option(DEBUG "Build with debugging symbols" OFF) #replace with CMAKE_BUILD_TYPE?
-option(OPTIMIZE " Build with optimizations" ON) #replace with CMAKE_BUILD_TYPE?
+option(OPTIMIZE "Build with optimizations" ON) #replace with CMAKE_BUILD_TYPE?
+option(BUILD_TESTS "Build with tests" OFF)
 option(GCOV "Build with gcov profiling support" OFF)
 option(CLANGCOV "Build with clangcov profiling support" OFF)
 set(RANDOMIZATION "1" CACHE STRING "0: no randomization. 1: freelist init only.  2: freelist init + free fastpath")
@@ -102,6 +80,7 @@ else()
 endif()
 
 if (${GCOV} AND GCC)
+    set(BUILD_TESTS ON)
     find_program(GCOVp gcov)
     if (GCOVp)
         add_definitions(--coverage)

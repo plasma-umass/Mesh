@@ -1,7 +1,6 @@
 #Include current folder to guarantee headers are found by files
 include_directories(./)
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/../heap_layers-src)
-# include_directories(./vendor/Heap-Layers)
+include_directories(${CMAKE_SOURCE_DIR}/external/Heap-Layers)
 
 #Create a common set of source files
 set(common_src
@@ -23,6 +22,9 @@ set(mesh_src
 add_library(mesh SHARED ${mesh_src})
 target_link_libraries(mesh PRIVATE -pthread -ldl)
 
+if(${BUILD_TESTS})
+find_package(GTest 1.0 REQUIRED)
+
 #Create a set of source files for the unit tests
 set(unit_src
         ${common_src}
@@ -39,17 +41,12 @@ set(unit_src
 add_executable(unit.test ${unit_src})
 target_link_libraries(unit.test PRIVATE -ldl -pthread )
 
-set(GTEST_DIR ${CMAKE_CURRENT_BINARY_DIR}/../googletest-src/googletest)
+target_link_libraries(unit.test PRIVATE GTest::GTest)
 
-ExternalProject_Get_Property(googletest binary_dir)
-set(GTEST_LIBRARY_PATH ${binary_dir}/lib/${CMAKE_FIND_LIBRARY_PREFIXES}gtest.a)
-target_link_libraries(unit.test PRIVATE ${GTEST_LIBRARY_PATH})
-
-set(GTEST_MAIN_LIBRARY_PATH ${binary_dir}/lib/${CMAKE_FIND_LIBRARY_PREFIXES}gtest_main.a)
-target_link_libraries(unit.test PRIVATE ${GTEST_MAIN_LIBRARY_PATH})
+target_link_libraries(unit.test PRIVATE GTest::Main)
 
 #Include header file paths to the unit tests
-target_include_directories(unit.test SYSTEM PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/../googletest-src/googletest/include)
+target_include_directories(unit.test SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/external/googletest/include)
 
 #Set specific compiler flags for the unit tests
 target_compile_definitions(unit.test PRIVATE -DGTEST_HAS_PTHREAD=1)
@@ -82,4 +79,5 @@ if(${CLANGCOV})
     #        COMMAND rm -f default.profraw
     #        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
     #        DEPENDS unit.test)
+endif()
 endif()
