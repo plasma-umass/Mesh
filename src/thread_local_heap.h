@@ -108,7 +108,8 @@ public:
     return _global->pageAlignedAlloc(pageAlignment, pageCount);
   }
 
-  inline void *ATTRIBUTE_ALWAYS_INLINE realloc(void *oldPtr, size_t newSize) {
+  inline void *ATTRIBUTE_ALWAYS_INLINE ATTRIBUTE_ALLOC_SIZE(3)
+    realloc(void *oldPtr, size_t newSize) {
     if (oldPtr == nullptr) {
       return this->malloc(newSize);
     }
@@ -146,7 +147,8 @@ public:
     }
   }
 
-  inline void *ATTRIBUTE_ALWAYS_INLINE calloc(size_t count, size_t size) {
+  inline void *ATTRIBUTE_ALWAYS_INLINE ATTRIBUTE_MALLOC ATTRIBUTE_ALLOC_SIZE2(2, 3)
+    calloc(size_t count, size_t size) {
     if (unlikely(size && count > (size_t)-1 / size)) {
       errno = ENOMEM;
       return nullptr;
@@ -172,7 +174,7 @@ public:
   }
 
   // semiansiheap ensures we never see size == 0
-  inline void *ATTRIBUTE_ALWAYS_INLINE malloc(size_t sz) {
+  inline void *ATTRIBUTE_ALWAYS_INLINE ATTRIBUTE_MALLOC malloc(size_t sz) {
     uint32_t sizeClass = 0;
 
     // if the size isn't in our sizemap it is a large alloc
