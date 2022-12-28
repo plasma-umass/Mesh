@@ -22,6 +22,14 @@ set(mesh_src
 #Add a target for the mesh shared library
 add_library(mesh SHARED ${mesh_src})
 target_link_libraries(mesh PRIVATE -pthread -ldl)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT HAS_IPO)
+  if(${HAS_IPO})
+    set_property(TARGET mesh PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  endif()
+  target_compile_definitions(mesh PRIVATE -D_FORTIFY_SOURCE=2)
+endif()
 
 #Create a set of source files for the unit tests
 set(unit_src
