@@ -3,7 +3,8 @@
 # Version 2.0, that can be found in the LICENSE file.
 
 PREFIX       = /usr
-BAZEL_CONFIG = --config=modern-amd64
+# TODO: put the arch flag back for x86
+BAZEL_CONFIG =
 LIB_SUFFIX   =
 
 UNAME_S = $(shell uname -s)
