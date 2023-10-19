@@ -27,7 +27,7 @@ public:
   Entry() noexcept : _mhOffset{0}, _bitOffset{0} {
   }
 
-  explicit Entry(uint8_t mhOff, uint8_t bitOff) : _mhOffset{mhOff}, _bitOffset{bitOff} {
+  explicit Entry(uint16_t mhOff, uint16_t bitOff) : _mhOffset{mhOff}, _bitOffset{bitOff} {
   }
 
   Entry(const Entry &rhs) = default;
@@ -40,17 +40,18 @@ public:
     return _mhOffset == rhs._mhOffset && _bitOffset == rhs._bitOffset;
   }
 
-  inline uint8_t ATTRIBUTE_ALWAYS_INLINE miniheapOffset() const {
+  // FIXME: should this cast to uint8_t?
+  inline uint16_t ATTRIBUTE_ALWAYS_INLINE miniheapOffset() const {
     return _mhOffset;
   }
 
-  inline uint8_t ATTRIBUTE_ALWAYS_INLINE bit() const {
+  inline uint16_t ATTRIBUTE_ALWAYS_INLINE bit() const {
     return _bitOffset;
   }
 
 private:
-  uint8_t _mhOffset;
-  uint8_t _bitOffset;
+  uint16_t _mhOffset : 6;
+  uint16_t _bitOffset : 10;
 };
 static_assert(sizeof(Entry) == 2, "Entry too big!");
 }  // namespace sv
