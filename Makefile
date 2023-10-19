@@ -3,8 +3,9 @@
 # Version 2.0, that can be found in the LICENSE file.
 
 PREFIX       = /usr
-# TODO: put the arch flag back for x86
-BAZEL_CONFIG =
+# FIXME: put the arch flag back for x86
+# FIXME: revert temp flags
+BAZEL_CONFIG = --config=disable-meshing --config=debugsymbols
 LIB_SUFFIX   =
 
 UNAME_S = $(shell uname -s)

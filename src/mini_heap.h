@@ -31,10 +31,16 @@ private:
   static inline constexpr uint32_t ATTRIBUTE_ALWAYS_INLINE getSingleBitMask(uint32_t pos) {
     return 1UL << pos;
   }
+  // FIXME: these need to be updated so offset has enough space (10 bits)
   static constexpr uint32_t SizeClassShift = 0;
   static constexpr uint32_t FreelistIdShift = 6;
+  // max value is (16K / 16 - 1) - 1 = 1022
+  // so needs 10 bits
   static constexpr uint32_t ShuffleVectorOffsetShift = 8;
-  static constexpr uint32_t MaxCountShift = 16;
+  // max value is 16K / 16 = 1024 = 2^10 (for 16K pages)
+  // so needs 11 bits (10 for 0-1023 + 1)
+  // we give it one more in case we need more later
+  static constexpr uint32_t MaxCountShift = 18;
   static constexpr uint32_t MeshedOffset = 30;
 
   inline void ATTRIBUTE_ALWAYS_INLINE setMasked(uint32_t mask, uint32_t newVal) {
@@ -53,9 +59,9 @@ public:
                (freelistId << FreelistIdShift)} {
     d_assert((freelistId & 0x3) == freelistId);
     d_assert((sizeClass & ((1 << FreelistIdShift) - 1)) == sizeClass);
-    d_assert(svOffset < 255);
+    d_assert(svOffset < (kPageSize / kMinObjectSize - 1));
     d_assert_msg(sizeClass < 255, "sizeClass: %u", sizeClass);
-    d_assert(maxCount <= 256);
+    d_assert(maxCount <= (kPageSize / kMinObjectSize));
     d_assert(this->maxCount() == maxCount);
   }
 
