@@ -40,11 +40,16 @@ http_archive(
     ],
 )
 
-http_archive(
+# FIXME: temporary
+local_repository(
     name = "org_heaplayers",
-    sha256 = "c8a9f7589e13112515ba1ac8647b4e80462f18a6773f7f5f132a7d7602fe2aec",
-    strip_prefix = "Heap-Layers-{}".format(commit["heap_layers"]),
-    urls = [
-        "https://github.com/emeryberger/Heap-Layers/archive/{}.zip".format(commit["heap_layers"]),
-    ],
+    path = "../Heap-Layers",
 )
+# http_archive(
+#     name = "org_heaplayers",
+#     sha256 = "c8a9f7589e13112515ba1ac8647b4e80462f18a6773f7f5f132a7d7602fe2aec",
+#     strip_prefix = "Heap-Layers-{}".format(commit["heap_layers"]),
+#     urls = [
+#         "https://github.com/emeryberger/Heap-Layers/archive/{}.zip".format(commit["heap_layers"]),
+#     ],
+# )
