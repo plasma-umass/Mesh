@@ -518,20 +518,21 @@ protected:
     return spanptr;
   }
 
-  internal::Bitmap _bitmap;           // 32 bytes 32
-  const Span _span;                   // 8        40
-  MiniHeapListEntry _freelist{};      // 8        48
-  atomic<pid_t> _current{0};          // 4        52
-  Flags _flags;                       // 4        56
-  const float _objectSizeReciprocal;  // 4        60
-  MiniHeapID _nextMeshed{};           // 4        64
+  // The comment are for the max size, since it is architecture-dependent.
+  internal::Bitmap _bitmap;           // 128      128   bytes
+  const Span _span;                   //   8      136
+  MiniHeapListEntry _freelist{};      //   8      144
+  atomic<pid_t> _current{0};          //   4      148
+  Flags _flags;                       //   4      152
+  const float _objectSizeReciprocal;  //   4      156
+  MiniHeapID _nextMeshed{};           //   4      160
 };
 
 typedef FixedArray<MiniHeap, 63> MiniHeapArray;
 
 static_assert(sizeof(pid_t) == 4, "pid_t not 32-bits!");
-static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
-static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
+static_assert(sizeof(mesh::internal::Bitmap) == kMaxShuffleVectorLength / 8, "Bitmap too big!");
+static_assert(sizeof(MiniHeap) <= 160, "MiniHeap too big!");
 static_assert(sizeof(MiniHeap) == kMiniHeapSize, "MiniHeap size mismatch");
 static_assert(sizeof(MiniHeapArray) == 64 * sizeof(void *), "MiniHeapArray too big!");
 }  // namespace mesh
