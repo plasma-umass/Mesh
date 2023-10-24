@@ -150,7 +150,7 @@ static constexpr std::chrono::milliseconds kZeroMs{0};
 static constexpr std::chrono::milliseconds kMeshPeriodMs{100};  // 100 ms
 
 // controls aspects of miniheaps
-static constexpr size_t kMaxMeshes = 256;  // 1 per bit
+static constexpr size_t kMaxMeshes = kMaxShuffleVectorLength;  // 1 per bit
 #ifdef __APPLE__
 static constexpr size_t kArenaSize = 32ULL * 1024ULL * 1024ULL * 1024ULL;  // 16 GB
 #else
