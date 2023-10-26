@@ -518,7 +518,7 @@ protected:
     return spanptr;
   }
 
-  // The comment are for the max size, since it is architecture-dependent.
+  // The comments are for the max size, since it is architecture-dependent.
   internal::Bitmap _bitmap;           // 128      128   bytes
   const Span _span;                   //   8      136
   MiniHeapListEntry _freelist{};      //   8      144
