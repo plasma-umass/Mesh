@@ -86,14 +86,10 @@ protected:
   AtomicBitmapBase(size_t bitCount) {
     d_assert_msg(bitCount <= maxBits, "max bits (%zu) exceeded: %zu", maxBits, bitCount);
 
-    static_assert(wordCount(representationSize(maxBits)) == 4, "unexpected representation size");
-    // for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
-    //   _bits[i].store(0, std::memory_order_relaxed);
-    // }
-    _bits[0].store(0, std::memory_order_relaxed);
-    _bits[1].store(0, std::memory_order_relaxed);
-    _bits[2].store(0, std::memory_order_relaxed);
-    _bits[3].store(0, std::memory_order_relaxed);
+    // FIXME: this used to be manually unrolled. hopefully clang can unroll it for us?
+    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
+      _bits[i].store(0, std::memory_order_relaxed);
+    }
     std::atomic_thread_fence(std::memory_order_release);
   }
 
@@ -101,13 +97,10 @@ protected:
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE setAndExchangeAll(size_t *oldBits, const size_t *newBits) {
-    // for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
-    //   oldBits[i] = _bits[i].exchange(newBits[i]);
-    // }
-    oldBits[0] = _bits[0].exchange(newBits[0], std::memory_order_acq_rel);
-    oldBits[1] = _bits[1].exchange(newBits[1], std::memory_order_acq_rel);
-    oldBits[2] = _bits[2].exchange(newBits[2], std::memory_order_acq_rel);
-    oldBits[3] = _bits[3].exchange(newBits[3], std::memory_order_acq_rel);
+    // FIXME: this used to be manually unrolled. hopefully clang can unroll it for us?
+    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
+      oldBits[i] = _bits[i].exchange(newBits[i], std::memory_order_acq_rel);
+    }
   }
 
 public:
@@ -140,8 +133,12 @@ public:
   }
 
   inline uint32_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
-    return __builtin_popcountl(_bits[0]) + __builtin_popcountl(_bits[1]) + __builtin_popcountl(_bits[2]) +
-           __builtin_popcountl(_bits[3]);
+    // FIXME: this used to be manually unrolled. hopefully clang can unroll it for us?
+    uint32_t sum = 0;
+    for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
+      sum += __builtin_popcountl(_bits[i]);
+    }
+    return sum;
   }
 
 protected:
@@ -577,12 +574,12 @@ private:
 }  // namespace bitmap
 
 namespace internal {
-typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase<256>> Bitmap;
-typedef bitmap::BitmapBase<bitmap::RelaxedFixedBitmapBase<256>> RelaxedFixedBitmap;
+typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase<kMaxShuffleVectorLength>> Bitmap;
+typedef bitmap::BitmapBase<bitmap::RelaxedFixedBitmapBase<kMaxShuffleVectorLength>> RelaxedFixedBitmap;
 typedef bitmap::BitmapBase<bitmap::RelaxedBitmapBase> RelaxedBitmap;
 
-static_assert(sizeof(Bitmap) == sizeof(size_t) * 4, "Bitmap unexpected size");
-static_assert(sizeof(RelaxedFixedBitmap) == sizeof(size_t) * 4, "Bitmap unexpected size");
+static_assert(sizeof(Bitmap) <= sizeof(size_t) * 16, "Bitmap unexpected size");
+static_assert(sizeof(RelaxedFixedBitmap) <= sizeof(size_t) * 16, "Bitmap unexpected size");
 static_assert(sizeof(RelaxedBitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
 }  // namespace internal
 }  // namespace mesh

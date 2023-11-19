@@ -505,7 +505,7 @@ shiftedSplitting(MWC &prng, MiniHeapListEntry *miniheaps, SplitArray &left, Spli
     return;
   }
 
-  constexpr size_t nBytes = 32;
+  constexpr size_t nBytes = kMaxShuffleVectorLength / 8;
   const size_t limit = rightSize < t ? rightSize : t;
   d_assert(nBytes == left[0]->bitmap().byteCount());
 
