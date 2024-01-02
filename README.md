@@ -53,7 +53,7 @@ MH Free  Count:     17
 MH High Water Mark: 82687
 ```
 
-Not all workloads experience fragmentation, so its possible that Mesh will have a small 'Meshed MB (total' number!
+Not all workloads experience fragmentation, so its possible that Mesh will have a small 'Meshed MB (total)' number!
 
 
 Implementation Overview
