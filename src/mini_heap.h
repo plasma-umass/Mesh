@@ -281,7 +281,7 @@ public:
   }
 
   inline size_t bytesFree() const {
-    return inUseCount() * objectSize();
+    return (maxCount() - inUseCount()) * objectSize();
   }
 
   inline void setMeshed() {
