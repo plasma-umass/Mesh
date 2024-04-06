@@ -69,6 +69,11 @@ static constexpr int kMapShared = 1;
 static constexpr int kMapShared = kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
 #endif
 
+// we have to define this here for use in meshable_arena's CheapHeap we allocate
+// MiniHeaps out of.  We validate (and fail compilation) if this gets out of date
+// with a static_assert at the bottom of mini_heap.h
+static constexpr size_t kMiniHeapSize = 64;
+
 static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;
 static constexpr size_t kClassSizesMax = 25;

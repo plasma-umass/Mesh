@@ -277,7 +277,7 @@ private:
   atomic<MiniHeapID> *_mhIndex{nullptr};
 
 protected:
-  CheapHeap<64, kArenaSize / kPageSize> _mhAllocator{};
+  CheapHeap<kMiniHeapSize, kArenaSize / kPageSize> _mhAllocator{};
   MWC _fastPrng;
 
 private:
