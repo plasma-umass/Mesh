@@ -526,6 +526,7 @@ typedef FixedArray<MiniHeap, 63> MiniHeapArray;
 static_assert(sizeof(pid_t) == 4, "pid_t not 32-bits!");
 static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
 static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap) == kMiniHeapSize, "MiniHeap size mismatch");
 static_assert(sizeof(MiniHeapArray) == 64 * sizeof(void *), "MiniHeapArray too big!");
 }  // namespace mesh
 
