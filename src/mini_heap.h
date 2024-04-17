@@ -62,7 +62,7 @@ public:
     d_assert(svOffset < (kPageSize / kMinObjectSize - 1));
     d_assert_msg(sizeClass < 255, "sizeClass: %u", sizeClass);
     d_assert(maxCount <= (kPageSize / kMinObjectSize));
-    d_assert(this->maxCount() == maxCount);
+    d_assert_msg(this->maxCount() == maxCount, "maxCount() (%u) != maxCount (%u)", this->maxCount(), maxCount);
   }
 
   inline uint32_t freelistId() const {
@@ -79,7 +79,7 @@ public:
 
   inline uint32_t maxCount() const {
     // XXX: does this assume little endian?
-    return (_flags.load(std::memory_order_seq_cst) >> MaxCountShift) & 0x1ff;
+    return (_flags.load(std::memory_order_seq_cst) >> MaxCountShift) & 0x7ff;
   }
 
   inline uint32_t sizeClass() const {
