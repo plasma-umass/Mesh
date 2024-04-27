@@ -36,8 +36,6 @@ ExternalProject_Add(heap_layers
 )
 
 #Create configure options
-option(DEBUG "Build with debugging symbols" OFF) #replace with CMAKE_BUILD_TYPE?
-option(OPTIMIZE " Build with optimizations" ON) #replace with CMAKE_BUILD_TYPE?
 option(GCOV "Build with gcov profiling support" OFF)
 option(CLANGCOV "Build with clangcov profiling support" OFF)
 set(RANDOMIZATION "1" CACHE STRING "0: no randomization. 1: freelist init only.  2: freelist init + free fastpath")
@@ -91,14 +89,8 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
     set(ICC TRUE)
 endif()
 
-if (${DEBUG})
-    add_definitions(-g)
-endif()
-
-if(${OPTIMIZE})
-    add_definitions(-O3 -flto -D_FORTIFY_SOURCE=2)
-else()
-    add_definitions(-O0)
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
 endif()
 
 if (${GCOV} AND GCC)
