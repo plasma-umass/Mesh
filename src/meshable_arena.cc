@@ -486,11 +486,15 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
 
   const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
 #ifdef __FreeBSD__
-  // No viable solution at the moment but FreeBSD 14 (circa 2023)
-  // will have implemented the fallocate codepath just like linux
-  // since it s implemented in the kernel/ZFS side, the performance
-  // should be good enough
-#warning "space deallocation unsupported on this platform"
+#if __FreeBSD_version >= 1400000
+  struct spacectl_range range = {
+	  off, static_cast<off_t>(sz)
+  };
+  int result = fspacectl(_fd, SPACECTL_DEALLOC, &range, 0, NULL);
+  d_assert_msg(result == 0, "fspacectl(fd %d): %d errno %d (%s)\n", _fd, result, errno, strerror(errno));
+#else
+#warning "space deallocation unsupported on FreeBSD < 14"
+#endif
 #else
 #ifndef __APPLE__
   int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
