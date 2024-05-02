@@ -11,6 +11,7 @@
 
 #include "gtest/gtest.h"
 
+#include "common.h"
 #include "internal.h"
 #include "meshing.h"
 #include "runtime.h"
@@ -20,7 +21,11 @@ using namespace std;
 using namespace mesh;
 
 static constexpr uint32_t StrLen = 128;
+#ifdef MESH_APPLE_SILICON
+static constexpr uint32_t ObjCount = 128;
+#else
 static constexpr uint32_t ObjCount = 32;
+#endif
 
 static char *s1;
 static char *s2;

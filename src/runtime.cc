@@ -358,7 +358,7 @@ void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
 
   // okToProceed is a barrier that ensures any in-progress meshing has
   // completed, and the reason for the fault was 'just' a meshing
-  if (siginfo->si_code == SEGV_ACCERR && runtime().heap().okToProceed(siginfo->si_addr)) {
+  if ((siginfo->si_code == SEGV_ACCERR || siginfo->si_code == SEGV_MAPERR)  && runtime().heap().okToProceed(siginfo->si_addr)) {
     // debug("TODO: trapped access violation from meshing, log stat\n");
     return;
   }
