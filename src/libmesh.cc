@@ -135,7 +135,23 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, siz
   return localHeap->realloc(oldPtr, newSize);
 }
 
+#if defined(__FreeBSD__)
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_reallocarray(void *oldPtr, size_t count, size_t size) {
+	size_t total;
+	if (unlikely(__builtin_umull_overflow(count, size, &total))) {
+		return NULL;
+	} else {
+		return mesh_realloc(oldPtr, total);
+	}
+}
+#endif
+
+#ifndef __FreeBSD__
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr) {
+#else
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(const void *cptr) {
+  void *ptr = const_cast<void *>(cptr);
+#endif
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
   if (unlikely(localHeap == nullptr)) {
     return mesh::usableSizeSlowpath(ptr);
@@ -244,6 +260,8 @@ ssize_t MESH_EXPORT recvmsg(int sockfd, struct msghdr *msg, int flags) {
 #include "gnu_wrapper.cc"
 #elif defined(__APPLE__)
 #include "mac_wrapper.cc"
+#elif defined(__FreeBSD__)
+#include "fbsd_wrapper.cc"
 #else
-#error "only linux and macOS support for now"
+#error "only linux, macOS and FreeBSD support for now"
 #endif
