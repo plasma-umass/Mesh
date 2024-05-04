@@ -32,7 +32,7 @@ static atomic<int> ShouldContinueTest;
 // stop-the-world quiescent period for the copy/mremap phase of
 // meshing -- copied from libmesh.cc
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #define PTHREAD_CREATE_THROW
 #else
 #define PTHREAD_CREATE_THROW throw()

@@ -31,7 +31,7 @@ static atomic<int> ShouldContinueTest1;
 static atomic<int> ShouldExit2;
 static atomic<int> ShouldContinueTest2;
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #define PTHREAD_CREATE_THROW
 #else
 #define PTHREAD_CREATE_THROW throw()

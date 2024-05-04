@@ -46,8 +46,8 @@ TEST(Alignment, NaturalAlignment) {
 TEST(Alignment, NonOverlapping) {
   auto heap = ThreadLocalHeap::GetHeap();
 
-  const uintptr_t a = reinterpret_cast<uintptr_t>(heap->malloc(-8));
-  const uintptr_t b = reinterpret_cast<uintptr_t>(heap->malloc(-8));
+  const auto a = heap->malloc(-8);
+  const auto b = heap->malloc(-8);
 
   // we should return nullptr for crazy allocations like this.
   // Fixes #62
