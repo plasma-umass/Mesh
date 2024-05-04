@@ -20,7 +20,11 @@ void *xxmalloc(size_t);
 void xxfree(void *);
 
 // Takes a pointer and returns how much space it holds.
+#ifndef __FreeBSD__
 size_t xxmalloc_usable_size(void *);
+#else
+size_t xxmalloc_usable_size(const void *);
+#endif
 
 // Locks the heap(s), used prior to any invocation of fork().
 void xxmalloc_lock();
