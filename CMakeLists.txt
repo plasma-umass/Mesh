@@ -26,7 +26,7 @@ ExternalProject_Add(googletest
 
 ExternalProject_Add(heap_layers
         GIT_REPOSITORY    https://github.com/emeryberger/Heap-Layers.git
-        GIT_TAG           a80041cc15174ab82a39bae1cd750b52955c7eef
+        GIT_TAG           b0b2c2c7c5553b79c534f55317a5ab3e7d011379
         SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/heap_layers-src"
         BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/heap_layers-build"
         CONFIGURE_COMMAND ""
