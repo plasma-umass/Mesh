@@ -51,6 +51,6 @@ TEST(Alignment, NonOverlapping) {
 
   // we should return nullptr for crazy allocations like this.
   // Fixes #62
-  ASSERT_EQ(a, NULL);
-  ASSERT_EQ(b, NULL);
+  ASSERT_EQ(a, nullptr);
+  ASSERT_EQ(b, nullptr);
 }
