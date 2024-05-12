@@ -26,6 +26,11 @@
 #include <sys/sendfile.h>
 #endif
 
+#if defined(__FreeBSD__)
+#define MADV_DONTDUMP MADV_NOCORE
+#define MADV_DUMP MADV_CORE
+#endif
+
 #include <new>
 
 #include "internal.h"
