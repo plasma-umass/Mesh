@@ -44,7 +44,8 @@ void ThreadLocalHeap::InitTLH() {
 ThreadLocalHeap *ThreadLocalHeap::NewHeap(pthread_t current) {
   // we just allocate out of our internal heap
   void *buf = mesh::internal::Heap().malloc(sizeof(ThreadLocalHeap));
-  static_assert(sizeof(ThreadLocalHeap) < 4096 * 8, "tlh should have a reasonable size");
+  // FIXME: is this size too big?
+  static_assert(sizeof(ThreadLocalHeap) < 4096 * 16, "tlh should have a reasonable size");
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 

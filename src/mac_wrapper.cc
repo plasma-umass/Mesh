@@ -306,6 +306,7 @@ MESH_EXPORT void replace_malloc_destroy_zone(malloc_zone_t *) {
 MESH_EXPORT kern_return_t replace_malloc_get_all_zones(task_t, memory_reader_t, vm_address_t **addresses,
                                                        unsigned *count) {
   *addresses = 0;
+  // FIXME: this produces a warning by clang, so maybe this should have a *?
   count = 0;
   return KERN_SUCCESS;
 }

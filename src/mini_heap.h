@@ -31,10 +31,16 @@ private:
   static inline constexpr uint32_t ATTRIBUTE_ALWAYS_INLINE getSingleBitMask(uint32_t pos) {
     return 1UL << pos;
   }
+  // FIXME: these need to be updated so offset has enough space (10 bits)
   static constexpr uint32_t SizeClassShift = 0;
   static constexpr uint32_t FreelistIdShift = 6;
+  // max value is (16K / 16 - 1) - 1 = 1022
+  // so needs 10 bits
   static constexpr uint32_t ShuffleVectorOffsetShift = 8;
-  static constexpr uint32_t MaxCountShift = 16;
+  // max value is 16K / 16 = 1024 = 2^10 (for 16K pages)
+  // so needs 11 bits (10 for 0-1023 + 1)
+  // we give it one more in case we need more later
+  static constexpr uint32_t MaxCountShift = 18;
   static constexpr uint32_t MeshedOffset = 30;
 
   inline void ATTRIBUTE_ALWAYS_INLINE setMasked(uint32_t mask, uint32_t newVal) {
@@ -53,10 +59,10 @@ public:
                (freelistId << FreelistIdShift)} {
     d_assert((freelistId & 0x3) == freelistId);
     d_assert((sizeClass & ((1 << FreelistIdShift) - 1)) == sizeClass);
-    d_assert(svOffset < 255);
+    d_assert(svOffset < (kPageSize / kMinObjectSize - 1));
     d_assert_msg(sizeClass < 255, "sizeClass: %u", sizeClass);
-    d_assert(maxCount <= 256);
-    d_assert(this->maxCount() == maxCount);
+    d_assert(maxCount <= (kPageSize / kMinObjectSize));
+    d_assert_msg(this->maxCount() == maxCount, "maxCount() (%u) != maxCount (%u)", this->maxCount(), maxCount);
   }
 
   inline uint32_t freelistId() const {
@@ -73,7 +79,7 @@ public:
 
   inline uint32_t maxCount() const {
     // XXX: does this assume little endian?
-    return (_flags.load(std::memory_order_seq_cst) >> MaxCountShift) & 0x1ff;
+    return (_flags.load(std::memory_order_seq_cst) >> MaxCountShift) & 0x7ff;
   }
 
   inline uint32_t sizeClass() const {
@@ -512,20 +518,21 @@ protected:
     return spanptr;
   }
 
-  internal::Bitmap _bitmap;           // 32 bytes 32
-  const Span _span;                   // 8        40
-  MiniHeapListEntry _freelist{};      // 8        48
-  atomic<pid_t> _current{0};          // 4        52
-  Flags _flags;                       // 4        56
-  const float _objectSizeReciprocal;  // 4        60
-  MiniHeapID _nextMeshed{};           // 4        64
+  // The comments are for the max size, since it is architecture-dependent.
+  internal::Bitmap _bitmap;           // 128      128   bytes
+  const Span _span;                   //   8      136
+  MiniHeapListEntry _freelist{};      //   8      144
+  atomic<pid_t> _current{0};          //   4      148
+  Flags _flags;                       //   4      152
+  const float _objectSizeReciprocal;  //   4      156
+  MiniHeapID _nextMeshed{};           //   4      160
 };
 
 typedef FixedArray<MiniHeap, 63> MiniHeapArray;
 
 static_assert(sizeof(pid_t) == 4, "pid_t not 32-bits!");
-static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
-static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
+static_assert(sizeof(mesh::internal::Bitmap) == kMaxShuffleVectorLength / 8, "Bitmap too big!");
+static_assert(sizeof(MiniHeap) <= 160, "MiniHeap too big!");
 static_assert(sizeof(MiniHeap) == kMiniHeapSize, "MiniHeap size mismatch");
 static_assert(sizeof(MiniHeapArray) == 64 * sizeof(void *), "MiniHeapArray too big!");
 }  // namespace mesh

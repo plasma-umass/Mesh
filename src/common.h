@@ -58,6 +58,13 @@
 #define MAP_NORESERVE 0
 #endif
 
+#if __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_CPU_ARM64
+#define MESH_APPLE_SILICON
+#endif
+#endif
+
 namespace mesh {
 
 static constexpr bool kMeshingEnabled = MESHING_ENABLED == 1;
@@ -69,17 +76,28 @@ static constexpr int kMapShared = 1;
 static constexpr int kMapShared = kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
 #endif
 
-// we have to define this here for use in meshable_arena's CheapHeap we allocate
-// MiniHeaps out of.  We validate (and fail compilation) if this gets out of date
-// with a static_assert at the bottom of mini_heap.h
-static constexpr size_t kMiniHeapSize = 64;
-
 static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;
 static constexpr size_t kClassSizesMax = 25;
 static constexpr size_t kAlignment = 8;
 static constexpr int kMinAlign = 16;
+
+#ifdef MESH_APPLE_SILICON
+
+static constexpr uint64_t kPageSize = 16384;
+// we have to define this here for use in meshable_arena's CheapHeap we allocate
+// MiniHeaps out of.  We validate (and fail compilation) if this gets out of date
+// with a static_assert at the bottom of mini_heap.h
+static constexpr size_t kMiniHeapSize = 160;
+
+#else
+
 static constexpr uint64_t kPageSize = 4096;
+// see comment in other branch
+static constexpr size_t kMiniHeapSize = 64;
+
+#endif
+
 static constexpr size_t kMaxFastLargeSize = 256 * 1024;  // 256Kb
 
 static constexpr size_t kMaxSplitListSize = 16384;
@@ -113,10 +131,15 @@ static constexpr size_t kMinArenaExpansion = 4096;  // 16 MB in pages
 // ensures we amortize the cost of going to the global heap enough
 static constexpr uint64_t kMinStringLen = 8;
 static constexpr size_t kMiniheapRefillGoalSize = 4 * 1024;
+// this must be kept below 2^6 because it's used as the max value in a bitfield; see sv::Entry
 static constexpr size_t kMaxMiniheapsPerShuffleVector = 24;
 
 // shuffle vector features
-static constexpr int16_t kMaxShuffleVectorLength = 256;  // sizeof(uint8_t) << 8
+#ifdef MESH_APPLE_SILICON
+static constexpr int16_t kMaxShuffleVectorLength = 1024;
+#else
+static constexpr int16_t kMaxShuffleVectorLength = 256;
+#endif
 static constexpr bool kEnableShuffleOnInit = SHUFFLE_ON_INIT == 1;
 static constexpr bool kEnableShuffleOnFree = SHUFFLE_ON_FREE == 1;
 
@@ -127,7 +150,7 @@ static constexpr std::chrono::milliseconds kZeroMs{0};
 static constexpr std::chrono::milliseconds kMeshPeriodMs{100};  // 100 ms
 
 // controls aspects of miniheaps
-static constexpr size_t kMaxMeshes = 256;  // 1 per bit
+static constexpr size_t kMaxMeshes = kMaxShuffleVectorLength;  // 1 per bit
 #ifdef __APPLE__
 static constexpr size_t kArenaSize = 32ULL * 1024ULL * 1024ULL * 1024ULL;  // 16 GB
 #else
@@ -182,7 +205,7 @@ using std::unique_lock;
 #define ATTRIBUTE_ALIGNED(s) __attribute__((aligned(s)))
 #define ATTRIBUTE_MALLOC __attribute__((malloc))
 #define ATTRIBUTE_ALLOC_SIZE(x) __attribute__((alloc_size(x)))
-#define ATTRIBUTE_ALLOC_SIZE2(x,y) __attribute__((alloc_size(x, y)))
+#define ATTRIBUTE_ALLOC_SIZE2(x, y) __attribute__((alloc_size(x, y)))
 #define CACHELINE_SIZE 64
 #define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 #define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
