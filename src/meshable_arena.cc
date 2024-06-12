@@ -717,10 +717,13 @@ void MeshableArena::afterForkChild() {
 
   const int oldFd = _fd;
 
-  const auto bitmap = allocatedBitmap();
-  for (auto const &i : bitmap) {
-    int result = internal::copyFile(newFd, oldFd, i * kPageSize, kPageSize);
-    d_assert(result == CPUInfo::PageSize);
+  const size_t end = _end * kPageSize;
+  for (size_t i = 0; i < end; i += kForkCopyFileSize) {
+    int result = internal::copyFile(newFd, oldFd, i, std::min(end - i, kForkCopyFileSize));
+    d_assert(result >= 0);
+  }
+
+  while (write(_forkPipe[1], "ok", strlen("ok")) == EAGAIN) {
   }
 
   int r = mprotect(_arenaBegin, kArenaSize, PROT_READ | PROT_WRITE);
@@ -778,10 +781,7 @@ void MeshableArena::afterForkChild() {
 
   close(oldFd);
 
-  while (write(_forkPipe[1], "ok", strlen("ok")) == EAGAIN) {
-  }
   close(_forkPipe[1]);
-
   _forkPipe[0] = -1;
   _forkPipe[1] = -1;
 }
