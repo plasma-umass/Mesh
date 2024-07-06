@@ -42,7 +42,7 @@ http_archive(
 
 http_archive(
     name = "org_heaplayers",
-    sha256 = "c8a9f7589e13112515ba1ac8647b4e80462f18a6773f7f5f132a7d7602fe2aec",
+    sha256 = "835b342930c454e12cf611c3dad15ea31998b8d57d6f7fcce98d51fdfce3f755",
     strip_prefix = "Heap-Layers-{}".format(commit["heap_layers"]),
     urls = [
         "https://github.com/emeryberger/Heap-Layers/archive/{}.zip".format(commit["heap_layers"]),
