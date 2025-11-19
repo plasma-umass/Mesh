@@ -143,18 +143,16 @@ private:
 
 public:
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
-      : _bitmap(nullptr),
-        _span(span),
+      : _span(span),
         _flags(objectCount, objectCount > 1 ? SizeMap::SizeClass(objectSize) : 1, 0, list::Attached),
         _objectSizeReciprocal(1.0 / (float)objectSize) {
-    // Allocate bitmap separately to support larger sizes
-    _bitmap = new internal::Bitmap(objectCount);
+    // Allocate bitmap using internal heap (same pattern as bitmap's own allocations)
+    // This avoids any circular dependencies with Mesh's allocator
+    void *bitmapMem = internal::Heap().malloc(sizeof(internal::Bitmap));
+    d_assert(bitmapMem != nullptr);
+    _bitmap = new (bitmapMem) internal::Bitmap(objectCount);
     d_assert(_bitmap != nullptr);
     d_assert(_bitmap->inUseCount() == 0);
-
-    // Memory fence to ensure bitmap initialization is visible to other threads
-    // before this MiniHeap is published via trackMiniHeap
-    std::atomic_thread_fence(std::memory_order_release);
 
     const auto expectedSpanSize = _span.byteLength();
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
@@ -165,7 +163,10 @@ public:
 
   ~MiniHeap() {
     if (_bitmap != nullptr) {
-      delete _bitmap;
+      // Manually call destructor and free memory (since we used placement new)
+      typedef internal::Bitmap BitmapType;
+      _bitmap->~BitmapType();
+      internal::Heap().free(_bitmap);
       _bitmap = nullptr;
     }
   }
@@ -355,14 +356,12 @@ public:
   }
 
   const internal::Bitmap &bitmap() const {
-    // Acquire fence to synchronize with release fence in constructor
-    std::atomic_thread_fence(std::memory_order_acquire);
+    d_assert(_bitmap != nullptr);
     return *_bitmap;
   }
 
   internal::Bitmap &writableBitmap() {
-    // Acquire fence to synchronize with release fence in constructor
-    std::atomic_thread_fence(std::memory_order_acquire);
+    d_assert(_bitmap != nullptr);
     return *_bitmap;
   }
 
