@@ -13,7 +13,8 @@
 using namespace mesh;
 
 static constexpr uint32_t StrLen = 128;
-static constexpr uint32_t ObjCount = 32;
+// Calculate ObjCount dynamically based on page size (cap at 1024 for bitmap limit)
+static const uint32_t ObjCount = std::min(static_cast<uint32_t>(getPageSize() / StrLen), 1024U);
 
 // shows up in strace logs, but otherwise does nothing
 static inline void note(const char *note) {

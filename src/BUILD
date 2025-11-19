@@ -194,6 +194,7 @@ cc_library(
 
 cc_test(
     name = "unit-tests",
+    size = "small",  # Test runs in ~2.5s
     srcs = glob([
         "testing/unit/*.cc",
     ]),

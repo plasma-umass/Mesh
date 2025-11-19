@@ -19,6 +19,13 @@
 #include <linux/memfd.h>
 #endif
 
+#ifdef __APPLE__
+// macOS Mach VM APIs for memory aliasing/remapping
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#include <mach/vm_map.h>
+#endif
+
 #include <sys/ioctl.h>
 
 #include <algorithm>
@@ -40,6 +47,16 @@ MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), intern
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
+#ifdef __APPLE__
+  // macOS: Use anonymous memory since mach_vm_remap doesn't need file backing
+  _fd = -1;
+  if (kMeshingEnabled) {
+    debug("mesh: using anonymous memory for arena (macOS)");
+  }
+  // Use MAP_ANON | MAP_PRIVATE for anonymous memory
+  _arenaBegin = SuperHeap::map(kArenaSize, MAP_ANON | MAP_PRIVATE, -1);
+#else
+  // Linux: Use file-backed shared memory for mmap aliasing
   int fd = -1;
   if (kMeshingEnabled) {
     fd = openSpanFile(kArenaSize);
@@ -50,6 +67,8 @@ MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), intern
   }
   _fd = fd;
   _arenaBegin = SuperHeap::map(kArenaSize, kMapShared, fd);
+#endif
+
   _mhIndex = reinterpret_cast<atomic<MiniHeapID> *>(SuperHeap::malloc(indexSize()));
 
   hard_assert(_arenaBegin != nullptr);
@@ -59,7 +78,7 @@ MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), intern
     madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
   }
 
-  // debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
+  debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, _fd, _arenaBegin, arenaEnd());
 
   // TODO: move this to runtime
   atexit(staticAtExit);
@@ -139,7 +158,8 @@ void MeshableArena::expandArena(size_t minPagesAdded) {
   Span expansion(_end, pageCount);
   _end += pageCount;
 
-  if (unlikely(_end >= kArenaSize / kPageSize)) {
+  const size_t maxPages = kArenaSize / getPageSize();
+  if (unlikely(_end >= maxPages)) {
     debug("Mesh: arena exhausted: current arena size is %.1f GB; recompile with larger arena size.",
           kArenaSize / 1024.0 / 1024.0 / 1024.0);
     abort();
@@ -237,13 +257,14 @@ Span MeshableArena::reservePages(const size_t pageCount, const size_t pageAlignm
   d_assert(!result.empty());
   d_assert(flags != internal::PageType::Unknown);
 
-  if (unlikely(pageAlignment > 1 && ((ptrvalFromOffset(result.offset) / kPageSize) % pageAlignment != 0))) {
+  const size_t pageSize = getPageSize();
+  if (unlikely(pageAlignment > 1 && ((ptrvalFromOffset(result.offset) / pageSize) % pageAlignment != 0))) {
     freeSpan(result, flags);
     // recurse once, asking for enough extra space that we are sure to
     // be able to find an aligned offset of pageCount pages within.
     result = reservePages(pageCount + 2 * pageAlignment, 1);
 
-    const size_t alignment = pageAlignment * kPageSize;
+    const size_t alignment = pageAlignment * pageSize;
     const uintptr_t alignedPtr = (ptrvalFromOffset(result.offset) + alignment - 1) & ~(alignment - 1);
     const auto alignedOff = offsetFor(reinterpret_cast<void *>(alignedPtr));
     d_assert(alignedOff >= result.offset);
@@ -326,7 +347,7 @@ char *MeshableArena::pageAlloc(Span &result, size_t pageCount, size_t pageAlignm
   char *ptr = reinterpret_cast<char *>(ptrFromOffset(span.offset));
 
   if (kAdviseDump) {
-    madvise(ptr, pageCount * kPageSize, MADV_DODUMP);
+    madvise(ptr, pageCount * getPageSize(), MADV_DODUMP);
   }
 
   result = span;
@@ -340,10 +361,11 @@ void MeshableArena::free(void *ptr, size_t sz, internal::PageType type) {
   }
   d_assert(sz > 0);
 
-  d_assert(sz / kPageSize > 0);
-  d_assert(sz % kPageSize == 0);
+  const size_t pageSize = getPageSize();
+  d_assert(sz / pageSize > 0);
+  d_assert(sz % pageSize == 0);
 
-  const Span span(offsetFor(ptr), sz / kPageSize);
+  const Span span(offsetFor(ptr), sz / pageSize);
   freeSpan(span, type);
 }
 
@@ -484,6 +506,14 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
     return;
   }
 
+#ifdef __APPLE__
+  // macOS uses anonymous memory (MAP_ANON), not file-backed shared memory.
+  // No backing store to deallocate - madvise handles memory elsewhere.
+  if (_fd == -1) {
+    return;
+  }
+#endif
+
   const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
 #ifdef __FreeBSD__
 #if __FreeBSD_version >= 1400000
@@ -500,7 +530,7 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
   int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
   d_assert_msg(result == 0, "result(fd %d): %d errno %d (%s)\n", _fd, result, errno, strerror(errno));
 #else
-#warning macOS version of fallocate goes here
+  // This code path should not be reached on macOS with anonymous memory
   fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0, (long long)sz, 0};
   int result = fcntl(_fd, F_PREALLOCATE, &store);
   if (result == -1) {
@@ -508,9 +538,6 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
     store.fst_flags = F_ALLOCATEALL;
     result = fcntl(_fd, F_PREALLOCATE, &store);
   }
-  // if (result != -1) {
-  //    result = ftruncate(_fd, off+sz);
-  // }
   d_assert(result == 0);
 #endif
 #endif
@@ -522,11 +549,12 @@ void MeshableArena::beginMesh(void *keep, void *remove, size_t sz) {
 }
 
 void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
-  // debug("keep: %p, remove: %p\n", keep, remove);
   const auto keepOff = offsetFor(keep);
   const auto removeOff = offsetFor(remove);
 
-  const size_t pageCount = sz / kPageSize;
+  const size_t pageSize = getPageSize();
+  const size_t pageCount = sz / pageSize;
+
   const MiniHeapID keepID = _mhIndex[keepOff].load(std::memory_order_acquire);
   for (size_t i = 0; i < pageCount; i++) {
     setIndex(removeOff + i, keepID);
@@ -536,8 +564,38 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const Span removedSpan{removeOff, static_cast<Length>(pageCount)};
   trackMeshed(removedSpan);
 
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * kPageSize);
+#ifdef __APPLE__
+  // macOS: Use Mach VM API to create memory alias
+  // vm_remap shares the physical pages from 'keep' to 'remove', creating an alias
+  vm_prot_t cur_protection = VM_PROT_DEFAULT;
+  vm_prot_t max_protection = VM_PROT_DEFAULT;
+
+  mach_vm_address_t target_address = reinterpret_cast<mach_vm_address_t>(remove);
+  mach_vm_address_t source_address = reinterpret_cast<mach_vm_address_t>(keep);
+
+  kern_return_t kr = mach_vm_remap(
+      mach_task_self(),                     // target task
+      &target_address,                      // target address (in/out)
+      sz,                                   // size
+      0,                                    // mask (0 = no specific alignment beyond size)
+      VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,  // flags: fixed address, overwrite existing
+      mach_task_self(),                     // source task
+      source_address,                       // source address
+      FALSE,                                // copy (FALSE = share same physical memory)
+      &cur_protection,                      // current protection (out)
+      &max_protection,                      // max protection (out)
+      VM_INHERIT_SHARE                      // inheritance
+  );
+
+  hard_assert_msg(kr == KERN_SUCCESS, "mach_vm_remap failed: %d", kr);
+  hard_assert_msg(target_address == reinterpret_cast<mach_vm_address_t>(remove),
+                  "vm_remap changed target address: expected %p, got %p",
+                  remove, (void*)target_address);
+#else
+  // Linux: Use mmap to create file-backed alias
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * pageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
+#endif
 }
 
 int MeshableArena::openShmSpanFile(size_t sz) {
@@ -717,9 +775,10 @@ void MeshableArena::afterForkChild() {
 
   const int oldFd = _fd;
 
+  const size_t pageSize = getPageSize();
   const auto bitmap = allocatedBitmap();
   for (auto const &i : bitmap) {
-    int result = internal::copyFile(newFd, oldFd, i * kPageSize, kPageSize);
+    int result = internal::copyFile(newFd, oldFd, i * pageSize, pageSize);
     d_assert(result == CPUInfo::PageSize);
   }
 
@@ -757,13 +816,14 @@ void MeshableArena::afterForkChild() {
         const auto removeOff = offsetFor(remove);
 
 #ifndef NDEBUG
-        const Length pageCount = sz / kPageSize;
+        const size_t pageSz = getPageSize();
+        const Length pageCount = sz / pageSz;
         for (size_t i = 0; i < pageCount; i++) {
           d_assert(_mhIndex[removeOff + i].load().value() == _mhIndex[keepOff].load().value());
         }
 #endif
 
-        void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff * kPageSize);
+        void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff * pageSize);
 
         hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
 

@@ -79,7 +79,29 @@ static constexpr size_t kMaxSize = 16384;
 static constexpr size_t kClassSizesMax = 25;
 static constexpr size_t kAlignment = 8;
 static constexpr int kMinAlign = 16;
-static constexpr uint64_t kPageSize = 4096;
+
+// Runtime page size detection for Apple Silicon (16KB) and x86 (4KB) compatibility
+namespace internal {
+  inline size_t initPageSize() {
+#if defined(_WIN32)
+    SYSTEM_INFO sysInfo;
+    GetSystemInfo(&sysInfo);
+    return sysInfo.dwPageSize;
+#else
+    return static_cast<size_t>(sysconf(_SC_PAGESIZE));
+#endif
+  }
+}
+
+// Runtime page size - initialized on first access
+inline size_t getPageSize() {
+  static const size_t kPageSize = internal::initPageSize();
+  return kPageSize;
+}
+
+// Keep a constexpr version for compile-time calculations (assume minimum 4KB)
+static constexpr uint64_t kPageSizeMin = 4096;
+
 static constexpr size_t kMaxFastLargeSize = 256 * 1024;  // 256Kb
 
 static constexpr size_t kMaxSplitListSize = 16384;
@@ -100,15 +122,17 @@ static constexpr size_t kMaxMeshesPerIteration = 2500;
 
 // maximum number of dirty pages to hold onto before we flush them
 // back to the OS (via MeshableArena::scavenge()
-static constexpr size_t kMaxDirtyPageThreshold = 1 << 14;  // 64 MB in pages
-static constexpr size_t kMinDirtyPageThreshold = 32;       // 128 KB in pages
+// Note: These are in 4KB page units for backward compatibility
+// Actual byte limits are calculated at runtime based on system page size
+static constexpr size_t kMaxDirtyPageThreshold = 1 << 14;  // 64 MB in 4KB pages
+static constexpr size_t kMinDirtyPageThreshold = 32;       // 128 KB in 4KB pages
 
 static constexpr uint32_t kSpanClassCount = 256;
 
 static constexpr int kNumBins = 25;  // 16Kb max object size
 static constexpr int kDefaultMeshPeriod = 10000;
 
-static constexpr size_t kMinArenaExpansion = 4096;  // 16 MB in pages
+static constexpr size_t kMinArenaExpansion = 4096;  // 16 MB in 4KB pages (4096 * 4KB = 16MB)
 
 // ensures we amortize the cost of going to the global heap enough
 static constexpr uint64_t kMinStringLen = 8;
@@ -116,7 +140,7 @@ static constexpr size_t kMiniheapRefillGoalSize = 4 * 1024;
 static constexpr size_t kMaxMiniheapsPerShuffleVector = 24;
 
 // shuffle vector features
-static constexpr int16_t kMaxShuffleVectorLength = 256;  // sizeof(uint8_t) << 8
+static constexpr int16_t kMaxShuffleVectorLength = 1024;  // increased to support 16KB pages with 16-byte objects
 static constexpr bool kEnableShuffleOnInit = SHUFFLE_ON_INIT == 1;
 static constexpr bool kEnableShuffleOnFree = SHUFFLE_ON_FREE == 1;
 
@@ -129,11 +153,11 @@ static constexpr std::chrono::milliseconds kMeshPeriodMs{100};  // 100 ms
 // controls aspects of miniheaps
 static constexpr size_t kMaxMeshes = 256;  // 1 per bit
 #ifdef __APPLE__
-static constexpr size_t kArenaSize = 32ULL * 1024ULL * 1024ULL * 1024ULL;  // 16 GB
+static constexpr size_t kArenaSize = 32ULL * 1024ULL * 1024ULL * 1024ULL;  // 32 GB
 #else
 static constexpr size_t kArenaSize = 64ULL * 1024ULL * 1024ULL * 1024ULL;  // 64 GB
 #endif
-static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
+static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16KB sigaltstacks
 #define SIGQUIESCE (SIGRTMIN + 7)
 #define SIGDUMP (SIGRTMIN + 8)
 
@@ -141,12 +165,24 @@ static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16k sigaltstacks
 static constexpr size_t kBinnedTrackerBinCount = 1;
 static constexpr size_t kBinnedTrackerMaxEmpty = 128;
 
-static inline constexpr size_t PageCount(size_t sz) {
-  return (sz + (kPageSize - 1)) / kPageSize;
+// Runtime page count calculation
+static inline size_t PageCount(size_t sz) {
+  const auto pageSize = getPageSize();
+  return (sz + (pageSize - 1)) / pageSize;
 }
 
-static inline constexpr size_t RoundUpToPage(size_t sz) {
-  return kPageSize * PageCount(sz);
+// Runtime page rounding
+static inline size_t RoundUpToPage(size_t sz) {
+  return getPageSize() * PageCount(sz);
+}
+
+// Constexpr versions for compile-time calculations (use minimum page size)
+static inline constexpr size_t PageCountMin(size_t sz) {
+  return (sz + (kPageSizeMin - 1)) / kPageSizeMin;
+}
+
+static inline constexpr size_t RoundUpToPageMin(size_t sz) {
+  return kPageSizeMin * PageCountMin(sz);
 }
 
 namespace powerOfTwo {
@@ -186,7 +222,8 @@ using std::unique_lock;
 #define CACHELINE_SIZE 64
 #define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 #define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
-#define PAGE_ALIGNED ATTRIBUTE_ALIGNED(kPageSize)
+// Use maximum page size for alignment (16KB for Apple Silicon compatibility)
+#define PAGE_ALIGNED ATTRIBUTE_ALIGNED(16384)
 
 #define MESH_EXPORT __attribute__((visibility("default")))
 

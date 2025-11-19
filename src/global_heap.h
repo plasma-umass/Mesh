@@ -116,7 +116,7 @@ public:
     Span span{0, 0};
     char *spanBegin = Super::pageAlloc(span, pageCount, pageAlignment);
     d_assert(spanBegin != nullptr);
-    d_assert((reinterpret_cast<uintptr_t>(spanBegin) / kPageSize) % pageAlignment == 0);
+    d_assert((reinterpret_cast<uintptr_t>(spanBegin) / getPageSize()) % pageAlignment == 0);
 
     MiniHeap *mh = new (buf) MiniHeap(arenaBegin(), span, objectCount, objectSize);
 
@@ -142,11 +142,12 @@ public:
 
     lock_guard<mutex> lock(_miniheapLock);
 
-    MiniHeap *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * kPageSize, pageAlignment);
+    const size_t pageSize = getPageSize();
+    MiniHeap *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * pageSize, pageAlignment);
 
     d_assert(mh->isLargeAlloc());
-    d_assert(mh->spanSize() == pageCount * kPageSize);
-    // d_assert(mh->objectSize() == pageCount * kPageSize);
+    d_assert(mh->spanSize() == pageCount * pageSize);
+    // d_assert(mh->objectSize() == pageCount * pageSize);
 
     void *ptr = mh->mallocAt(arenaBegin(), 0);
 
@@ -305,8 +306,9 @@ public:
     // if we have objects bigger than the size of a page, allocate
     // multiple pages to amortize the cost of creating a
     // miniheap/globally locking the heap.  For example, asking for
-    // 2048 byte objects would allocate 4 4KB pages.
-    const size_t objectCount = max(kPageSize / objectSize, kMinStringLen);
+    // 2048 byte objects would allocate 4 4KB pages (or 16KB pages on Apple Silicon).
+    // Cap at 1024 to fit within the MiniHeap bitmap size limit (128 bytes = 1024 bits)
+    const size_t objectCount = min(max(getPageSize() / objectSize, static_cast<size_t>(kMinStringLen)), static_cast<size_t>(1024));
     const size_t pageCount = PageCount(objectSize * objectCount);
 
     while (bytesFree < kMiniheapRefillGoalSize && !miniheaps.full()) {

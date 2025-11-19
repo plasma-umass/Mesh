@@ -3,10 +3,21 @@
 # Version 2.0, that can be found in the LICENSE file.
 
 PREFIX       = /usr
-BAZEL_CONFIG = --config=modern-amd64
 LIB_SUFFIX   =
 
 UNAME_S = $(shell uname -s)
+UNAME_M = $(shell uname -m)
+
+# Set BAZEL_CONFIG based on architecture
+ifeq ($(UNAME_M),x86_64)
+BAZEL_CONFIG = --config=modern-amd64
+else ifeq ($(UNAME_M),amd64)
+BAZEL_CONFIG = --config=modern-amd64
+else
+# ARM64 and other architectures - no special flags
+BAZEL_CONFIG =
+endif
+
 ifeq ($(UNAME_S),Darwin)
 LIB_EXT      = dylib
 BAZEL_PREFIX = darwin

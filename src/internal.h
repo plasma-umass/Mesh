@@ -242,7 +242,7 @@ struct Span {
   }
 
   size_t byteLength() const {
-    return length * kPageSize;
+    return length * getPageSize();
   }
 
   inline bool operator==(const Span &rhs) {

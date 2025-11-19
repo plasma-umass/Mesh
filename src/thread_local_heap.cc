@@ -44,7 +44,9 @@ void ThreadLocalHeap::InitTLH() {
 ThreadLocalHeap *ThreadLocalHeap::NewHeap(pthread_t current) {
   // we just allocate out of our internal heap
   void *buf = mesh::internal::Heap().malloc(sizeof(ThreadLocalHeap));
-  static_assert(sizeof(ThreadLocalHeap) < 4096 * 8, "tlh should have a reasonable size");
+  // Increased to 128KB to accommodate larger shuffle vectors with 1024 uint16_t entries
+  // Each sv::Entry is now 4 bytes (2x uint16_t), doubling the _list array size
+  static_assert(sizeof(ThreadLocalHeap) < 4096 * 32, "tlh should have a reasonable size");
   hard_assert(buf != nullptr);
   hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
 

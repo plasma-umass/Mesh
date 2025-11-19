@@ -10,9 +10,13 @@
 #include <cstring>
 #include <thread>
 
-constexpr size_t kPageSize = 4096;
+// Use runtime page size detection for compatibility with different page sizes
+inline size_t getPageSize() {
+  static const size_t pageSize = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+  return pageSize;
+}
+
 constexpr size_t kDataLen = 128;
-constexpr size_t kArenaSize = kPageSize * 2;
 
 void __attribute__((noreturn)) die(const char *fmt, ...) {
   va_list args;
@@ -40,7 +44,7 @@ void kernelCopy(int tmpFd, char *addr, char const *knownGood) {
 }
 
 void setupPageTrap(int faultFd, char *arenaBegin, size_t pageOff, size_t len) {
-  char *mappingBegin = arenaBegin + pageOff * kPageSize;
+  char *mappingBegin = arenaBegin + pageOff * getPageSize();
 
   // step 0: register the range with userfaultfd
   struct uffdio_register ufRegister = {};
@@ -86,6 +90,7 @@ int main() {
   }
 
   // the write-protection patchset doesn't yet support non-anonymous (or hugepage) VMAs
+  const size_t kArenaSize = getPageSize() * 2;
   char *arenaBegin = reinterpret_cast<char *>(
       mmap(nullptr, kArenaSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0));
   if (arenaBegin == MAP_FAILED) {
@@ -95,7 +100,7 @@ int main() {
   // pre-fault things in; the write protection stuff below doesn't seem to work
   // well if the pages aren't already faulted in.  in a real allocator/GC the pages
   // we're dealing with will be faulted in so this seems fine.
-  for (size_t i = 0; i < kArenaSize; i += kPageSize) {
+  for (size_t i = 0; i < kArenaSize; i += getPageSize()) {
     arenaBegin[i] = 0;
   }
 
@@ -118,12 +123,12 @@ int main() {
 
   // prefault in the entire arena to match the fact that the heap will already
   // be faulted in when meshing pages together
-  for (size_t i = 0; i < kArenaSize; i += kPageSize) {
+  for (size_t i = 0; i < kArenaSize; i += getPageSize()) {
     arenaBegin[i] = 0;
   }
 
   // write-protect part of the arena
-  setupPageTrap(faultFd, arenaBegin, 0, kPageSize);
+  setupPageTrap(faultFd, arenaBegin, 0, getPageSize());
 
   printf("part of the arena is read-only now and writes raise an event on our userfaultfd\n");
 
@@ -154,7 +159,7 @@ int main() {
   // turn off write-protection; implicitly wakes the other thread up
   struct uffdio_writeprotect ufWriteProtect = {};
   ufWriteProtect.range.start = msg.arg.pagefault.address;
-  ufWriteProtect.range.len = kPageSize;
+  ufWriteProtect.range.len = getPageSize();
   ufWriteProtect.mode = 0;
   if (ioctl(faultFd, UFFDIO_WRITEPROTECT, &ufWriteProtect) == -1) {
     die("ioctl(UFFDIO_WRITEPROTECT): %s\n", strerror(errno));

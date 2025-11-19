@@ -58,6 +58,7 @@ static void *allocSlowpath(size_t sz) {
 }
 
 ATTRIBUTE_NEVER_INLINE
+__attribute__((unused))
 static void *cxxNewSlowpath(size_t sz) {
   ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeap();
   return localHeap->cxxNew(sz);

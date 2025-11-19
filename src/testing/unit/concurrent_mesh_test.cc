@@ -20,7 +20,8 @@ using namespace std;
 using namespace mesh;
 
 static constexpr uint32_t StrLen = 128;
-static constexpr uint32_t ObjCount = 32;
+// Calculate ObjCount dynamically based on page size (cap at 1024 for bitmap limit)
+static const uint32_t ObjCount = std::min(static_cast<uint32_t>(getPageSize() / StrLen), 1024U);
 
 static char *s1;
 static char *s2;

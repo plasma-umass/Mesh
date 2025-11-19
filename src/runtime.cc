@@ -70,7 +70,7 @@ int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
   d_assert(newOff == off);
 
 #if defined(__APPLE__)
-#warning test that setting offset on dstFd works as intended
+  // TODO: test that setting offset on dstFd works as intended
   // fcopyfile works on FreeBSD and OS X 10.5+
   int result = fcopyfile(srcFd, dstFd, 0, COPYFILE_ALL);
 #elif defined(__FreeBSD__)
@@ -358,7 +358,21 @@ void Runtime::segfaultHandler(int sig, siginfo_t *siginfo, void *context) {
 
   // okToProceed is a barrier that ensures any in-progress meshing has
   // completed, and the reason for the fault was 'just' a meshing
-  if (siginfo->si_code == SEGV_ACCERR && runtime().heap().okToProceed(siginfo->si_addr)) {
+  bool isMeshingFault = false;
+
+#ifdef __APPLE__
+  // On macOS, mprotect violations can trigger SIGBUS with BUS_ADRERR or BUS_ADRALN
+  if (sig == SIGBUS && (siginfo->si_code == BUS_ADRERR || siginfo->si_code == BUS_ADRALN)) {
+    isMeshingFault = true;
+  }
+#endif
+
+  // On Linux and other systems, mprotect violations trigger SIGSEGV with SEGV_ACCERR
+  if (siginfo->si_code == SEGV_ACCERR) {
+    isMeshingFault = true;
+  }
+
+  if (isMeshingFault && runtime().heap().okToProceed(siginfo->si_addr)) {
     // debug("TODO: trapped access violation from meshing, log stat\n");
     return;
   }

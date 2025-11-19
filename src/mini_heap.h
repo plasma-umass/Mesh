@@ -55,7 +55,7 @@ public:
     d_assert((sizeClass & ((1 << FreelistIdShift) - 1)) == sizeClass);
     d_assert(svOffset < 255);
     d_assert_msg(sizeClass < 255, "sizeClass: %u", sizeClass);
-    d_assert(maxCount <= 256);
+    d_assert_msg(maxCount <= 1024, "maxCount: %u (max 1024 for bitmap limit)", maxCount);
     d_assert(this->maxCount() == maxCount);
   }
 
@@ -73,7 +73,8 @@ public:
 
   inline uint32_t maxCount() const {
     // XXX: does this assume little endian?
-    return (_flags.load(std::memory_order_seq_cst) >> MaxCountShift) & 0x1ff;
+    // 0x7ff = 11 bits, supports values up to 2047 (we cap at 1024 for bitmap limit)
+    return (_flags.load(std::memory_order_seq_cst) >> MaxCountShift) & 0x7ff;
   }
 
   inline uint32_t sizeClass() const {
@@ -142,30 +143,31 @@ private:
 
 public:
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
-      : _bitmap(objectCount),
+      : _bitmap(nullptr),
         _span(span),
         _flags(objectCount, objectCount > 1 ? SizeMap::SizeClass(objectSize) : 1, 0, list::Attached),
         _objectSizeReciprocal(1.0 / (float)objectSize) {
-    // debug("sizeof(MiniHeap): %zu", sizeof(MiniHeap));
+    // Allocate bitmap separately to support larger sizes
+    _bitmap = new internal::Bitmap(objectCount);
+    d_assert(_bitmap != nullptr);
+    d_assert(_bitmap->inUseCount() == 0);
 
-    d_assert(_bitmap.inUseCount() == 0);
+    // Memory fence to ensure bitmap initialization is visible to other threads
+    // before this MiniHeap is published via trackMiniHeap
+    std::atomic_thread_fence(std::memory_order_release);
 
     const auto expectedSpanSize = _span.byteLength();
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
                  maxCount(), this->objectSize());
 
-    // d_assert_msg(spanSize == static_cast<size_t>(_spanSize), "%zu != %hu", spanSize, _spanSize);
-    // d_assert_msg(objectSize == static_cast<size_t>(objectSize()), "%zu != %hu", objectSize, _objectSize);
-
     d_assert(!_nextMeshed.hasValue());
-
-    // debug("new:\n");
-    // dumpDebug();
   }
 
   ~MiniHeap() {
-    // debug("destruct:\n");
-    // dumpDebug();
+    if (_bitmap != nullptr) {
+      delete _bitmap;
+      _bitmap = nullptr;
+    }
   }
 
   inline Span span() const {
@@ -174,7 +176,7 @@ public:
 
   void printOccupancy() const {
     mesh::debug("{\"name\": \"%p\", \"object-size\": %d, \"length\": %d, \"mesh-count\": %d, \"bitmap\": \"%s\"}\n",
-                this, objectSize(), maxCount(), meshCount(), _bitmap.to_string(maxCount()).c_str());
+                this, objectSize(), maxCount(), meshCount(), _bitmap->to_string(maxCount()).c_str());
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE free(void *arenaBegin, void *ptr) {
@@ -193,14 +195,14 @@ public:
 
   inline bool clearIfNotFree(void *arenaBegin, void *ptr) {
     const ssize_t off = getOff(arenaBegin, ptr);
-    const auto notWasSet = _bitmap.unset(off);
+    const auto notWasSet = _bitmap->unset(off);
     const auto wasSet = !notWasSet;
     return wasSet;
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE freeOff(size_t off) {
-    d_assert_msg(_bitmap.isSet(off), "MiniHeap(%p) expected bit %zu to be set (svOff:%zu)", this, off, svOffset());
-    _bitmap.unset(off);
+    d_assert_msg(_bitmap->isSet(off), "MiniHeap(%p) expected bit %zu to be set (svOff:%zu)", this, off, svOffset());
+    _bitmap->unset(off);
   }
 
   /// Copies (for meshing) the contents of src into our span.
@@ -222,7 +224,7 @@ public:
     // our bitmap and in-use count
     for (auto const &off : srcBitmap) {
       d_assert(off < maxCount());
-      d_assert(!_bitmap.isSet(off));
+      d_assert(!_bitmap->isSet(off));
 
       void *srcObject = reinterpret_cast<void *>(srcSpan + off * objectSize);
       // need to ensure we update the bitmap and in-use count
@@ -255,7 +257,7 @@ public:
       // but it does work for all of our small object size classes
       return static_cast<size_t>(1 / _objectSizeReciprocal + 0.5);
     } else {
-      return _span.length * kPageSize;
+      return _span.length * getPageSize();
     }
   }
 
@@ -265,19 +267,19 @@ public:
 
   inline uintptr_t getSpanStart(const void *arenaBegin) const {
     const auto beginval = reinterpret_cast<uintptr_t>(arenaBegin);
-    return beginval + _span.offset * kPageSize;
+    return beginval + _span.offset * getPageSize();
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE isEmpty() const {
-    return _bitmap.inUseCount() == 0;
+    return _bitmap->inUseCount() == 0;
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE isFull() const {
-    return _bitmap.inUseCount() == maxCount();
+    return _bitmap->inUseCount() == maxCount();
   }
 
   inline uint32_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
-    return _bitmap.inUseCount();
+    return _bitmap->inUseCount();
   }
 
   inline size_t bytesFree() const {
@@ -336,7 +338,7 @@ public:
   }
 
   inline bool isMeshingCandidate() const {
-    return !isAttached() && objectSize() < kPageSize;
+    return !isAttached() && objectSize() < getPageSize();
   }
 
   /// Returns the fraction full (in the range [0, 1]) that this miniheap is.
@@ -348,16 +350,20 @@ public:
     const auto capacity = this->maxCount();
     internal::RelaxedFixedBitmap zero{capacity};
     internal::RelaxedFixedBitmap result{capacity};
-    _bitmap.setAndExchangeAll(result.mut_bits(), zero.bits());
+    _bitmap->setAndExchangeAll(result.mut_bits(), zero.bits());
     return result;
   }
 
   const internal::Bitmap &bitmap() const {
-    return _bitmap;
+    // Acquire fence to synchronize with release fence in constructor
+    std::atomic_thread_fence(std::memory_order_acquire);
+    return *_bitmap;
   }
 
   internal::Bitmap &writableBitmap() {
-    return _bitmap;
+    // Acquire fence to synchronize with release fence in constructor
+    std::atomic_thread_fence(std::memory_order_acquire);
+    return *_bitmap;
   }
 
   void trackMeshedSpan(MiniHeapID id) {
@@ -423,7 +429,7 @@ public:
 
   /// public for meshTest only
   inline void *mallocAt(const void *arenaBegin, size_t off) {
-    if (!_bitmap.tryToSet(off)) {
+    if (!_bitmap->tryToSet(off)) {
       mesh::debug("%p: MA %u", this, off);
       dumpDebug();
       return nullptr;
@@ -444,18 +450,19 @@ public:
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = this->inUseCount();
     const size_t meshCount = this->meshCount();
+    const size_t pageSize = getPageSize();
     mesh::debug(
         "MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, spans: %zu)\t%p-%p\tFreelist{prev:%u, next:%u}\n",
-        this, objectSize(), maxCount(), heapPages, inUseCount, meshCount, _span.offset * kPageSize,
-        _span.offset * kPageSize + spanSize(), _freelist.prev(), _freelist.next());
-    mesh::debug("\t%s\n", _bitmap.to_string(maxCount()).c_str());
+        this, objectSize(), maxCount(), heapPages, inUseCount, meshCount, _span.offset * pageSize,
+        _span.offset * pageSize + spanSize(), _freelist.prev(), _freelist.next());
+    mesh::debug("\t%s\n", _bitmap->to_string(maxCount()).c_str());
   }
 
   // this only works for unmeshed miniheaps
-  inline uint8_t ATTRIBUTE_ALWAYS_INLINE getUnmeshedOff(const void *arenaBegin, void *ptr) const {
+  inline uint16_t ATTRIBUTE_ALWAYS_INLINE getUnmeshedOff(const void *arenaBegin, void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
-    uintptr_t span = reinterpret_cast<uintptr_t>(arenaBegin) + _span.offset * kPageSize;
+    uintptr_t span = reinterpret_cast<uintptr_t>(arenaBegin) + _span.offset * getPageSize();
     d_assert(span != 0);
 
     const size_t off = (ptrval - span) * _objectSizeReciprocal;
@@ -464,7 +471,7 @@ public:
     return off;
   }
 
-  inline uint8_t ATTRIBUTE_ALWAYS_INLINE getOff(const void *arenaBegin, void *ptr) const {
+  inline uint16_t ATTRIBUTE_ALWAYS_INLINE getOff(const void *arenaBegin, void *ptr) const {
     const auto span = spanStart(reinterpret_cast<uintptr_t>(arenaBegin), ptr);
     d_assert(span != 0);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
@@ -482,7 +489,8 @@ protected:
 
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
-    uintptr_t spanptr = arenaBegin + _span.offset * kPageSize;
+    const size_t pageSize = getPageSize();
+    uintptr_t spanptr = arenaBegin + _span.offset * pageSize;
     if (likely(spanptr <= ptrval && ptrval < spanptr + len)) {
       return spanptr;
     }
@@ -502,7 +510,7 @@ protected:
 
       mh = GetMiniHeap(mh->_nextMeshed);
 
-      const uintptr_t meshedSpanptr = arenaBegin + mh->span().offset * kPageSize;
+      const uintptr_t meshedSpanptr = arenaBegin + mh->span().offset * getPageSize();
       if (meshedSpanptr <= ptrval && ptrval < meshedSpanptr + len) {
         spanptr = meshedSpanptr;
         break;
@@ -512,19 +520,20 @@ protected:
     return spanptr;
   }
 
-  internal::Bitmap _bitmap;           // 32 bytes 32
-  const Span _span;                   // 8        40
-  MiniHeapListEntry _freelist{};      // 8        48
-  atomic<pid_t> _current{0};          // 4        52
-  Flags _flags;                       // 4        56
-  const float _objectSizeReciprocal;  // 4        60
-  MiniHeapID _nextMeshed{};           // 4        64
+  internal::Bitmap *_bitmap;          // 8 bytes  8
+  const Span _span;                   // 8        16
+  MiniHeapListEntry _freelist{};      // 8        24
+  atomic<pid_t> _current{0};          // 4        28
+  Flags _flags;                       // 4        32
+  const float _objectSizeReciprocal;  // 4        36
+  MiniHeapID _nextMeshed{};           // 4        40
+  uint32_t _padding[6];               // 24       64 (padding to maintain 64-byte size)
 };
 
 typedef FixedArray<MiniHeap, 63> MiniHeapArray;
 
 static_assert(sizeof(pid_t) == 4, "pid_t not 32-bits!");
-static_assert(sizeof(mesh::internal::Bitmap) == 32, "Bitmap too big!");
+static_assert(sizeof(mesh::internal::Bitmap) == 128, "Bitmap unexpected size (expected 128 bytes for 1024 bits)!");
 static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
 static_assert(sizeof(MiniHeap) == kMiniHeapSize, "MiniHeap size mismatch");
 static_assert(sizeof(MiniHeapArray) == 64 * sizeof(void *), "MiniHeapArray too big!");

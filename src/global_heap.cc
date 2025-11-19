@@ -384,14 +384,14 @@ size_t GlobalHeap::meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSet
 void GlobalHeap::meshAllSizeClassesLocked() {
   static MergeSetArray PAGE_ALIGNED MergeSets;
   static_assert(sizeof(MergeSets) == sizeof(void *) * 2 * 4096, "array too big");
-  d_assert((reinterpret_cast<uintptr_t>(&MergeSets) & (kPageSize - 1)) == 0);
+  d_assert((reinterpret_cast<uintptr_t>(&MergeSets) & (getPageSize() - 1)) == 0);
 
   static SplitArray PAGE_ALIGNED Left;
   static SplitArray PAGE_ALIGNED Right;
   static_assert(sizeof(Left) == sizeof(void *) * 16384, "array too big");
   static_assert(sizeof(Right) == sizeof(void *) * 16384, "array too big");
-  d_assert((reinterpret_cast<uintptr_t>(&Left) & (kPageSize - 1)) == 0);
-  d_assert((reinterpret_cast<uintptr_t>(&Right) & (kPageSize - 1)) == 0);
+  d_assert((reinterpret_cast<uintptr_t>(&Left) & (getPageSize() - 1)) == 0);
+  d_assert((reinterpret_cast<uintptr_t>(&Right) & (getPageSize() - 1)) == 0);
 
   // if we have freed but not reset meshed mappings, this will reset
   // them to the identity mapping, ensuring we don't blow past our VMA
@@ -505,7 +505,8 @@ shiftedSplitting(MWC &prng, MiniHeapListEntry *miniheaps, SplitArray &left, Spli
     return;
   }
 
-  constexpr size_t nBytes = 32;
+  // Bitmap size increased from 32 bytes (256 bits) to 128 bytes (1024 bits)
+  constexpr size_t nBytes = 128;
   const size_t limit = rightSize < t ? rightSize : t;
   d_assert(nBytes == left[0]->bitmap().byteCount());
 
