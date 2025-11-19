@@ -57,8 +57,12 @@ private:
   typedef OneWayMmapHeap SuperHeap;
 
 public:
-  // Use maximum page size for alignment to support both 4KB and 16KB pages
-  enum { Alignment = 16384 };
+  // Alignment must match the page size for the platform
+#if defined(__APPLE__) && defined(__arm64__)
+  enum { Alignment = 16384 };  // 16KB pages on Apple Silicon
+#else
+  enum { Alignment = 4096 };   // 4KB pages on Intel Mac, Linux, and other platforms
+#endif
 
   explicit MeshableArena();
 

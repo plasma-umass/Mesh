@@ -222,8 +222,12 @@ using std::unique_lock;
 #define CACHELINE_SIZE 64
 #define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 #define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
-// Use maximum page size for alignment (16KB for Apple Silicon compatibility)
+// Page alignment based on platform (16KB on Apple Silicon, 4KB elsewhere)
+#if defined(__APPLE__) && defined(__arm64__)
 #define PAGE_ALIGNED ATTRIBUTE_ALIGNED(16384)
+#else
+#define PAGE_ALIGNED ATTRIBUTE_ALIGNED(4096)
+#endif
 
 #define MESH_EXPORT __attribute__((visibility("default")))
 
