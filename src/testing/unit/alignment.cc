@@ -21,7 +21,7 @@ TEST(Alignment, NaturalAlignment) {
     for (size_t alignment = 2; alignment <= 4096; alignment *= 2) {
       // debug("size: %zu align: %zu\n", size, alignment);
       bool logged = false;
-      for (size_t i = 0; i <= 256; i++) {
+      for (size_t i = 0; i < 256; i++) {
         void *ptr = heap->memalign(alignment, size);
         if (!logged) {
           size_t actual = heap->getSize(ptr);
@@ -32,7 +32,7 @@ TEST(Alignment, NaturalAlignment) {
         ASSERT_EQ(ptrval % alignment, 0UL);
         ptrs[i] = ptr;
       }
-      for (size_t i = 0; i <= 256; i++) {
+      for (size_t i = 0; i < 256; i++) {
         heap->free(ptrs[i]);
       }
     }
