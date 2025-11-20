@@ -143,15 +143,14 @@ private:
 
 public:
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
-      : _span(span),
+      : _bitmap(nullptr),
+        _span(span),
         _flags(objectCount, objectCount > 1 ? SizeMap::SizeClass(objectSize) : 1, 0, list::Attached),
         _objectSizeReciprocal(1.0 / (float)objectSize) {
-    // Allocate bitmap using internal heap (same pattern as bitmap's own allocations)
-    // This avoids any circular dependencies with Mesh's allocator
-    void *bitmapMem = internal::Heap().malloc(sizeof(internal::Bitmap));
-    d_assert(bitmapMem != nullptr);
-    _bitmap = new (bitmapMem) internal::Bitmap(objectCount);
-    d_assert(_bitmap != nullptr);
+    // Use internal heap for bitmap allocation (provides 16-byte alignment, sufficient for atomics)
+    void *mem = internal::Heap().malloc(sizeof(internal::Bitmap));
+    hard_assert(mem != nullptr);
+    _bitmap = new (mem) internal::Bitmap(objectCount);
     d_assert(_bitmap->inUseCount() == 0);
 
     const auto expectedSpanSize = _span.byteLength();
@@ -163,7 +162,6 @@ public:
 
   ~MiniHeap() {
     if (_bitmap != nullptr) {
-      // Manually call destructor and free memory (since we used placement new)
       typedef internal::Bitmap BitmapType;
       _bitmap->~BitmapType();
       internal::Heap().free(_bitmap);
