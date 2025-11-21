@@ -14,6 +14,12 @@
 
 using namespace mesh;
 
+namespace mesh {
+template <size_t PageSize> void *allocSlowpath(size_t sz);
+template <size_t PageSize> void *cxxNewSlowpath(size_t sz);
+template <size_t PageSize> void freeSlowpath(void *ptr);
+}
+
 extern "C" {
 
 void *xxmalloc(size_t);
@@ -264,12 +270,19 @@ operator new(size_t sz)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    return mesh::cxxNewSlowpath(sz);
+  if (likely(getPageSize() == 4096)) {
+    ThreadLocalHeap<4096> *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::cxxNewSlowpath<4096>(sz);
+    }
+    return localHeap->cxxNew(sz);
+  } else {
+    ThreadLocalHeap<16384> *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::cxxNewSlowpath<16384>(sz);
+    }
+    return localHeap->cxxNew(sz);
   }
-
-  return localHeap->cxxNew(sz);
 }
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr)
@@ -277,23 +290,38 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr)
     throw()
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    mesh::freeSlowpath(ptr);
-    return;
+  if (likely(getPageSize() == 4096)) {
+    ThreadLocalHeap<4096> *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<4096>(ptr);
+      return;
+    }
+    localHeap->free(ptr);
+  } else {
+    ThreadLocalHeap<16384> *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<16384>(ptr);
+      return;
+    }
+    localHeap->free(ptr);
   }
-
-  return localHeap->free(ptr);
 }
 
 #if !defined(__SUNPRO_CC) || __SUNPRO_CC > 0x420
 MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz, const std::nothrow_t &) throw() {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    return mesh::allocSlowpath(sz);
+  if (likely(getPageSize() == 4096)) {
+    ThreadLocalHeap<4096> *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::allocSlowpath<4096>(sz);
+    }
+    return localHeap->malloc(sz);
+  } else {
+    ThreadLocalHeap<16384> *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::allocSlowpath<16384>(sz);
+    }
+    return localHeap->malloc(sz);
   }
-
-  return localHeap->malloc(sz);
 }
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz)
@@ -301,21 +329,35 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    return mesh::cxxNewSlowpath(sz);
+  if (likely(getPageSize() == 4096)) {
+    ThreadLocalHeap<4096> *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::cxxNewSlowpath<4096>(sz);
+    }
+    return localHeap->cxxNew(sz);
+  } else {
+    ThreadLocalHeap<16384> *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::cxxNewSlowpath<16384>(sz);
+    }
+    return localHeap->cxxNew(sz);
   }
-
-  return localHeap->cxxNew(sz);
 }
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz, const std::nothrow_t &) throw() {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    return mesh::allocSlowpath(sz);
+  if (likely(getPageSize() == 4096)) {
+    ThreadLocalHeap<4096> *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::allocSlowpath<4096>(sz);
+    }
+    return localHeap->malloc(sz);
+  } else {
+    ThreadLocalHeap<16384> *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::allocSlowpath<16384>(sz);
+    }
+    return localHeap->malloc(sz);
   }
-
-  return localHeap->malloc(sz);
 }
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr)
@@ -328,13 +370,21 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr)
 #endif
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    mesh::freeSlowpath(ptr);
-    return;
+  if (likely(getPageSize() == 4096)) {
+    ThreadLocalHeap<4096> *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<4096>(ptr);
+      return;
+    }
+    localHeap->free(ptr);
+  } else {
+    ThreadLocalHeap<16384> *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<16384>(ptr);
+      return;
+    }
+    localHeap->free(ptr);
   }
-
-  return localHeap->free(ptr);
 }
 
 #if defined(__cpp_sized_deallocation) && __cpp_sized_deallocation >= 201309
@@ -344,27 +394,43 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr, size_t sz)
     throw()
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    mesh::freeSlowpath(ptr);
-    return;
+  if (likely(getPageSize() == 4096)) {
+    ThreadLocalHeap<4096> *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<4096>(ptr);
+      return;
+    }
+    localHeap->sizedFree(ptr, sz);
+  } else {
+    ThreadLocalHeap<16384> *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<16384>(ptr);
+      return;
+    }
+    localHeap->sizedFree(ptr, sz);
   }
-
-  return localHeap->sizedFree(ptr, sz);
 }
 
-MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr, size_t)
+MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr, size_t sz)
 #if defined(__GNUC__)
     _GLIBCXX_USE_NOEXCEPT
 #endif
 {
-  ThreadLocalHeap *localHeap = ThreadLocalHeap::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    mesh::freeSlowpath(ptr);
-    return;
+  if (likely(getPageSize() == 4096)) {
+    ThreadLocalHeap<4096> *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<4096>(ptr);
+      return;
+    }
+    localHeap->free(ptr);
+  } else {
+    ThreadLocalHeap<16384> *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<16384>(ptr);
+      return;
+    }
+    localHeap->free(ptr);
   }
-
-  return localHeap->free(ptr);
 }
 #endif
 

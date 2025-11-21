@@ -20,7 +20,7 @@ namespace mesh {
 
 using internal::Bitmap;
 
-inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bitmap::word_t *__restrict__ bitmap2,
+inline bool bitmapsMeshable(const void *__restrict__ bitmap1, const void *__restrict__ bitmap2,
                             size_t byteLen) noexcept {
   d_assert(reinterpret_cast<uintptr_t>(bitmap1) % 16 == 0);
   d_assert(reinterpret_cast<uintptr_t>(bitmap2) % 16 == 0);
@@ -49,11 +49,13 @@ inline bool bitmapsMeshable(const Bitmap::word_t *__restrict__ bitmap1, const Bi
 namespace method {
 
 // split miniheaps into two lists in a random order
-void halfSplit(MWC &prng, MiniHeapListEntry *miniheaps, SplitArray &left, size_t &leftSize, SplitArray &right,
+template <size_t PageSize>
+void halfSplit(MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, size_t &leftSize, SplitArray<PageSize> &right,
                size_t &rightSize) noexcept;
 
-void shiftedSplitting(MWC &prng, MiniHeapListEntry *miniheaps, SplitArray &left, SplitArray &right,
-                      const function<bool(std::pair<MiniHeap *, MiniHeap *> &&)> &meshFound) noexcept;
+template <size_t PageSize>
+void shiftedSplitting(MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, SplitArray<PageSize> &right,
+                      const function<bool(std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> &&)> &meshFound) noexcept;
 }  // namespace method
 }  // namespace mesh
 

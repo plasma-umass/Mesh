@@ -578,12 +578,18 @@ private:
 }  // namespace bitmap
 
 namespace internal {
-typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase<1024>> Bitmap;
-typedef bitmap::BitmapBase<bitmap::RelaxedFixedBitmapBase<1024>> RelaxedFixedBitmap;
+// typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase<1024>> Bitmap;
+template <size_t PageSize>
+using Bitmap = bitmap::BitmapBase<bitmap::AtomicBitmapBase<PageSize / kMinObjectSize>>;
+
+// typedef bitmap::BitmapBase<bitmap::RelaxedFixedBitmapBase<1024>> RelaxedFixedBitmap;
+template <size_t PageSize>
+using RelaxedFixedBitmap = bitmap::BitmapBase<bitmap::RelaxedFixedBitmapBase<PageSize / kMinObjectSize>>;
+
 typedef bitmap::BitmapBase<bitmap::RelaxedBitmapBase> RelaxedBitmap;
 
-static_assert(sizeof(Bitmap) == sizeof(size_t) * 16, "Bitmap unexpected size (expected 128 bytes for 1024 bits)");
-static_assert(sizeof(RelaxedFixedBitmap) == sizeof(size_t) * 16, "Bitmap unexpected size (expected 128 bytes for 1024 bits)");
+// static_assert(sizeof(Bitmap) == sizeof(size_t) * 16, "Bitmap unexpected size (expected 128 bytes for 1024 bits)");
+// static_assert(sizeof(RelaxedFixedBitmap) == sizeof(size_t) * 16, "Bitmap unexpected size (expected 128 bytes for 1024 bits)");
 static_assert(sizeof(RelaxedBitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
 }  // namespace internal
 }  // namespace mesh

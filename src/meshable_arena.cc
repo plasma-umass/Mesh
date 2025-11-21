@@ -339,8 +339,12 @@ char *MeshableArena::pageAlloc(Span &result, size_t pageCount, size_t pageAlignm
 #ifndef NDEBUG
   if (_mhIndex[span.offset].load().hasValue()) {
     mesh::debug("----\n");
-    auto mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(span.offset));
-    mh->dumpDebug();
+    void *mh_void = miniheapForArenaOffset(span.offset);
+    if (getPageSize() == 4096) {
+       reinterpret_cast<MiniHeap<4096>*>(mh_void)->dumpDebug();
+    } else {
+       reinterpret_cast<MiniHeap<16384>*>(mh_void)->dumpDebug();
+    }
   }
 #endif
 
@@ -380,9 +384,7 @@ void MeshableArena::partialScavenge() {
   });
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
-    _dirty[i].clear();
-    internal::vector<Span> empty{};
-    _dirty[i].swap(empty);
+    _dirty[i] = internal::vector<Span>{};
   }
 
   _dirtyPageCount = 0;
@@ -419,12 +421,7 @@ void MeshableArena::scavenge(bool force) {
 
   // now that we've finally reset to identity all delayed-reset
   // mappings, empty the list
-  _toReset.clear();
-  {
-    // force freeing our internal allocations
-    internal::vector<Span> empty{};
-    _toReset.swap(empty);
-  }
+  _toReset = internal::vector<Span>{};
 
   _meshedPageCount = _meshedBitmap.inUseCount();
   if (_meshedPageCount > _meshedPageCountHWM) {
@@ -441,17 +438,13 @@ void MeshableArena::scavenge(bool force) {
   });
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
-    _dirty[i].clear();
-    internal::vector<Span> empty{};
-    _dirty[i].swap(empty);
+    _dirty[i] = internal::vector<Span>{};
   }
 
   _dirtyPageCount = 0;
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
-    _clean[i].clear();
-    internal::vector<Span> empty{};
-    _clean[i].swap(empty);
+    _clean[i] = internal::vector<Span>{};
   }
 
   // coalesce adjacent spans
@@ -693,8 +686,13 @@ void MeshableArena::prepareForFork() {
   }
 
   // debug("%d: prepare fork", getpid());
-  runtime().heap().lock();
-  runtime().lock();
+  if (getPageSize() == 4096) {
+    runtime<4096>().heap().lock();
+    runtime<4096>().lock();
+  } else {
+    runtime<16384>().heap().lock();
+    runtime<16384>().lock();
+  }
   internal::Heap().lock();
 
   int r = mprotect(_arenaBegin, kArenaSize, PROT_READ);
@@ -736,8 +734,13 @@ void MeshableArena::afterForkParent() {
   hard_assert(r == 0);
 
   // debug("%d: after fork parent", getpid());
-  runtime().unlock();
-  runtime().heap().unlock();
+  if (getPageSize() == 4096) {
+    runtime<4096>().unlock();
+    runtime<4096>().heap().unlock();
+  } else {
+    runtime<16384>().unlock();
+    runtime<16384>().heap().unlock();
+  }
 }
 
 void MeshableArena::doAfterForkChild() {
@@ -745,7 +748,11 @@ void MeshableArena::doAfterForkChild() {
 }
 
 void MeshableArena::afterForkChild() {
-  runtime().updatePid();
+  if (getPageSize() == 4096) {
+    runtime<4096>().updatePid();
+  } else {
+    runtime<16384>().updatePid();
+  }
 
   if (!kMeshingEnabled) {
     return;
@@ -758,8 +765,13 @@ void MeshableArena::afterForkChild() {
 
   // debug("%d: after fork child", getpid());
   internal::Heap().unlock();
-  runtime().unlock();
-  runtime().heap().unlock();
+  if (getPageSize() == 4096) {
+    runtime<4096>().unlock();
+    runtime<4096>().heap().unlock();
+  } else {
+    runtime<16384>().unlock();
+    runtime<16384>().heap().unlock();
+  }
 
   close(_forkPipe[0]);
 
@@ -791,44 +803,54 @@ void MeshableArena::afterForkChild() {
 
   // re-do the meshed mappings
   {
-    internal::unordered_set<MiniHeap *> seenMiniheaps{};
+    // Need to be generic here to store pointers to MiniHeaps
+    internal::unordered_set<void *> seenMiniheaps{};
 
     for (auto const &i : _meshedBitmap) {
-      MiniHeap *mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(i));
-      if (seenMiniheaps.find(mh) != seenMiniheaps.end()) {
+      void *mh_void = miniheapForArenaOffset(i);
+      if (seenMiniheaps.find(mh_void) != seenMiniheaps.end()) {
         continue;
       }
-      seenMiniheaps.insert(mh);
+      seenMiniheaps.insert(mh_void);
 
-      const auto meshCount = mh->meshCount();
-      d_assert(meshCount > 1);
+      // Lambda to handle the logic regardless of page size
+      auto processMiniHeap = [&](auto* mh) {
+        const auto meshCount = mh->meshCount();
+        d_assert(meshCount > 1);
 
-      const auto sz = mh->spanSize();
-      const auto keep = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
-      const auto keepOff = offsetFor(keep);
+        const auto sz = mh->spanSize();
+        const auto keep = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
+        const auto keepOff = offsetFor(keep);
 
-      const auto base = mh;
-      base->forEachMeshed([&](const MiniHeap *mh) {
-        if (!mh->isMeshed())
+        const auto base = mh;
+        base->forEachMeshed([&](const auto *mh) {
+          if (!mh->isMeshed())
+            return false;
+
+          const auto remove = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
+          const auto removeOff = offsetFor(remove);
+
+  #ifndef NDEBUG
+          const size_t pageSz = getPageSize();
+          const Length pageCount = sz / pageSz;
+          for (size_t i = 0; i < pageCount; i++) {
+            d_assert(_mhIndex[removeOff + i].load().value() == _mhIndex[keepOff].load().value());
+          }
+  #endif
+
+          void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff * pageSize);
+
+          hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
+
           return false;
+        });
+      };
 
-        const auto remove = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
-        const auto removeOff = offsetFor(remove);
-
-#ifndef NDEBUG
-        const size_t pageSz = getPageSize();
-        const Length pageCount = sz / pageSz;
-        for (size_t i = 0; i < pageCount; i++) {
-          d_assert(_mhIndex[removeOff + i].load().value() == _mhIndex[keepOff].load().value());
-        }
-#endif
-
-        void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff * pageSize);
-
-        hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-
-        return false;
-      });
+      if (getPageSize() == 4096) {
+        processMiniHeap(reinterpret_cast<MiniHeap<4096>*>(mh_void));
+      } else {
+        processMiniHeap(reinterpret_cast<MiniHeap<16384>*>(mh_void));
+      }
     }
   }
 

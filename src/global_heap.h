@@ -21,8 +21,6 @@ using namespace HL;
 
 namespace mesh {
 
-static constexpr std::pair<MiniHeapListEntry, size_t> Head{MiniHeapListEntry{list::Head, list::Head}, 0};
-
 class EpochLock {
 private:
   DISALLOW_COPY_AND_ASSIGN(EpochLock);
@@ -67,6 +65,7 @@ public:
   size_t mhHighWaterMark;
 };
 
+template <size_t PageSize>
 class GlobalHeap : public MeshableArena {
 private:
   DISALLOW_COPY_AND_ASSIGN(GlobalHeap);
@@ -77,6 +76,8 @@ private:
 
 public:
   enum { Alignment = 16 };
+  using MiniHeapT = MiniHeap<PageSize>;
+  using MiniHeapListEntryT = MiniHeapListEntry<PageSize>;
 
   GlobalHeap() : Super(), _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)), _lastMesh{time::now()} {
   }
@@ -105,7 +106,7 @@ public:
   void dumpStats(int level, bool beDetailed) const;
 
   // must be called with exclusive _mhRWLock held
-  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE allocMiniheapLocked(int sizeClass, size_t pageCount, size_t objectCount,
+  inline MiniHeapT *ATTRIBUTE_ALWAYS_INLINE allocMiniheapLocked(int sizeClass, size_t pageCount, size_t objectCount,
                                                                size_t objectSize, size_t pageAlignment = 1) {
     d_assert(0 < pageCount);
 
@@ -118,7 +119,7 @@ public:
     d_assert(spanBegin != nullptr);
     d_assert((reinterpret_cast<uintptr_t>(spanBegin) / getPageSize()) % pageAlignment == 0);
 
-    MiniHeap *mh = new (buf) MiniHeap(arenaBegin(), span, objectCount, objectSize);
+    MiniHeapT *mh = new (buf) MiniHeapT(arenaBegin(), span, objectCount, objectSize);
 
     const auto miniheapID = MiniHeapID{_mhAllocator.offsetFor(buf)};
     Super::trackMiniHeap(span, miniheapID);
@@ -143,7 +144,7 @@ public:
     lock_guard<mutex> lock(_miniheapLock);
 
     const size_t pageSize = getPageSize();
-    MiniHeap *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * pageSize, pageAlignment);
+    MiniHeapT *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * pageSize, pageAlignment);
 
     d_assert(mh->isLargeAlloc());
     d_assert(mh->spanSize() == pageCount * pageSize);
@@ -154,7 +155,7 @@ public:
     return ptr;
   }
 
-  inline MiniHeapListEntry *freelistFor(uint8_t freelistId, int sizeClass) {
+  inline MiniHeapListEntryT *freelistFor(uint8_t freelistId, int sizeClass) {
     switch (freelistId) {
     case list::Empty:
       return &_emptyFreelist[sizeClass].first;
@@ -167,7 +168,7 @@ public:
     return nullptr;
   }
 
-  inline bool postFreeLocked(MiniHeap *mh, int sizeClass, size_t inUse) {
+  inline bool postFreeLocked(MiniHeapT *mh, int sizeClass, size_t inUse) {
     // its possible we raced between reading isAttached + grabbing a lock.
     // just check here to avoid having to play whack-a-mole at each call site.
     if (mh->isAttached()) {
@@ -177,7 +178,7 @@ public:
     auto currFreelist = freelistFor(currFreelistId, sizeClass);
     const auto max = mh->maxCount();
 
-    std::pair<MiniHeapListEntry, size_t> *list;
+    std::pair<MiniHeapListEntryT, size_t> *list;
     uint8_t newListId;
 
     if (inUse == 0) {
@@ -207,7 +208,7 @@ public:
     return _emptyFreelist[sizeClass].second > kBinnedTrackerMaxEmpty;
   }
 
-  inline void releaseMiniheapLocked(MiniHeap *mh, int sizeClass) {
+  inline void releaseMiniheapLocked(MiniHeapT *mh, int sizeClass) {
     // ensure this flag is always set with the miniheap lock held
     mh->unsetAttached();
     const auto inUse = mh->inUseCount();
@@ -215,7 +216,7 @@ public:
   }
 
   template <uint32_t Size>
-  inline void releaseMiniheaps(FixedArray<MiniHeap, Size> &miniheaps) {
+  inline void releaseMiniheaps(FixedArray<MiniHeapT, Size> &miniheaps) {
     if (miniheaps.size() == 0) {
       return;
     }
@@ -228,15 +229,15 @@ public:
   }
 
   template <uint32_t Size>
-  size_t fillFromList(FixedArray<MiniHeap, Size> &miniheaps, pid_t current,
-                      std::pair<MiniHeapListEntry, size_t> &freelist, size_t bytesFree) {
+  size_t fillFromList(FixedArray<MiniHeapT, Size> &miniheaps, pid_t current,
+                      std::pair<MiniHeapListEntryT, size_t> &freelist, size_t bytesFree) {
     if (freelist.first.empty()) {
       return bytesFree;
     }
 
     auto nextId = freelist.first.next();
     while (nextId != list::Head && bytesFree < kMiniheapRefillGoalSize && !miniheaps.full()) {
-      auto mh = GetMiniHeap(nextId);
+      auto mh = GetMiniHeap<MiniHeapT>(nextId);
       d_assert(mh != nullptr);
       nextId = mh->getFreelist()->next();
 
@@ -260,7 +261,7 @@ public:
   }
 
   template <uint32_t Size>
-  size_t selectForReuse(int sizeClass, FixedArray<MiniHeap, Size> &miniheaps, pid_t current) {
+  size_t selectForReuse(int sizeClass, FixedArray<MiniHeapT, Size> &miniheaps, pid_t current) {
     size_t bytesFree = fillFromList(miniheaps, current, _partialFreelist[sizeClass], 0);
 
     if (bytesFree >= kMiniheapRefillGoalSize || miniheaps.full()) {
@@ -273,13 +274,13 @@ public:
   }
 
   template <uint32_t Size>
-  inline void allocSmallMiniheaps(int sizeClass, uint32_t objectSize, FixedArray<MiniHeap, Size> &miniheaps,
+  inline void allocSmallMiniheaps(int sizeClass, uint32_t objectSize, FixedArray<MiniHeapT, Size> &miniheaps,
                                   pid_t current) {
     lock_guard<mutex> lock(_miniheapLock);
 
     d_assert(sizeClass >= 0);
 
-    for (MiniHeap *oldMH : miniheaps) {
+    for (MiniHeapT *oldMH : miniheaps) {
       releaseMiniheapLocked(oldMH, sizeClass);
     }
     miniheaps.clear();
@@ -308,7 +309,8 @@ public:
     // miniheap/globally locking the heap.  For example, asking for
     // 2048 byte objects would allocate 4 4KB pages (or 16KB pages on Apple Silicon).
     // Cap at 1024 to fit within the MiniHeap bitmap size limit (128 bytes = 1024 bits)
-    const size_t objectCount = min(max(getPageSize() / objectSize, static_cast<size_t>(kMinStringLen)), static_cast<size_t>(1024));
+    const size_t bitmapLimit = PageSize / kMinObjectSize;
+    const size_t objectCount = min(max(getPageSize() / objectSize, static_cast<size_t>(kMinStringLen)), static_cast<size_t>(bitmapLimit));
     const size_t pageCount = PageCount(objectSize * objectCount);
 
     while (bytesFree < kMiniheapRefillGoalSize && !miniheaps.full()) {
@@ -326,36 +328,36 @@ public:
   // large, page-multiple allocations
   void *ATTRIBUTE_NEVER_INLINE malloc(size_t sz);
 
-  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE miniheapForWithEpoch(const void *ptr, size_t &currentEpoch) const {
+  inline MiniHeapT *ATTRIBUTE_ALWAYS_INLINE miniheapForWithEpoch(const void *ptr, size_t &currentEpoch) const {
     currentEpoch = _meshEpoch.current();
     return miniheapFor(ptr);
   }
 
-  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE miniheapFor(const void *ptr) const {
-    auto mh = reinterpret_cast<MiniHeap *>(Super::lookupMiniheap(ptr));
+  inline MiniHeapT *ATTRIBUTE_ALWAYS_INLINE miniheapFor(const void *ptr) const {
+    auto mh = reinterpret_cast<MiniHeapT *>(Super::lookupMiniheap(ptr));
     return mh;
   }
 
-  inline MiniHeap *ATTRIBUTE_ALWAYS_INLINE miniheapForID(const MiniHeapID id) const {
-    auto mh = reinterpret_cast<MiniHeap *>(_mhAllocator.ptrFromOffset(id.value()));
+  inline MiniHeapT *ATTRIBUTE_ALWAYS_INLINE miniheapForID(const MiniHeapID id) const {
+    auto mh = reinterpret_cast<MiniHeapT *>(_mhAllocator.ptrFromOffset(id.value()));
     __builtin_prefetch(mh, 1, 2);
     return mh;
   }
 
-  inline MiniHeapID miniheapIDFor(const MiniHeap *mh) const {
+  inline MiniHeapID miniheapIDFor(const MiniHeapT *mh) const {
     return MiniHeapID{_mhAllocator.offsetFor(mh)};
   }
 
-  void untrackMiniheapLocked(MiniHeap *mh) {
+  void untrackMiniheapLocked(MiniHeapT *mh) {
     // mesh::debug("%p (%u) untracked!\n", mh, GetMiniHeapID(mh));
     _stats.mhAllocCount -= 1;
     mh->getFreelist()->remove(freelistFor(mh->freelistId(), mh->sizeClass()));
   }
 
-  void freeFor(MiniHeap *mh, void *ptr, size_t startEpoch);
+  void freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch);
 
   // called with lock held
-  void freeMiniheapAfterMeshLocked(MiniHeap *mh, bool untrack = true) {
+  void freeMiniheapAfterMeshLocked(MiniHeapT *mh, bool untrack = true) {
     // don't untrack a meshed miniheap -- it has already been untracked
     if (untrack && !mh->isMeshed()) {
       untrackMiniheapLocked(mh);
@@ -363,32 +365,32 @@ public:
 
     d_assert(!mh->getFreelist()->prev().hasValue());
     d_assert(!mh->getFreelist()->next().hasValue());
-    mh->MiniHeap::~MiniHeap();
+    mh->MiniHeapT::~MiniHeap();
     // memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
     _mhAllocator.free(mh);
     _miniheapCount--;
   }
 
-  void freeMiniheap(MiniHeap *&mh, bool untrack = true) {
+  void freeMiniheap(MiniHeapT *&mh, bool untrack = true) {
     lock_guard<mutex> lock(_miniheapLock);
     freeMiniheapLocked(mh, untrack);
   }
 
-  void freeMiniheapLocked(MiniHeap *&mh, bool untrack) {
+  void freeMiniheapLocked(MiniHeapT *&mh, bool untrack) {
     const auto spanSize = mh->spanSize();
-    MiniHeap *toFree[kMaxMeshes];
+    MiniHeapT *toFree[kMaxMeshes];
     size_t last = 0;
 
     memset(toFree, 0, sizeof(*toFree) * kMaxMeshes);
 
     // avoid use after frees while freeing
-    mh->forEachMeshed([&](MiniHeap *mh) {
+    mh->forEachMeshed([&](MiniHeapT *mh) {
       toFree[last++] = mh;
       return false;
     });
 
     for (size_t i = 0; i < last; i++) {
-      MiniHeap *mh = toFree[i];
+      MiniHeapT *mh = toFree[i];
       const bool isMeshed = mh->isMeshed();
       const auto type = isMeshed ? internal::PageType::Meshed : internal::PageType::Dirty;
       Super::free(reinterpret_cast<void *>(mh->getSpanStart(arenaBegin())), spanSize, type);
@@ -407,10 +409,10 @@ public:
       return;
     }
 
-    std::pair<MiniHeapListEntry, size_t> &empty = _emptyFreelist[sizeClass];
+    std::pair<MiniHeapListEntryT, size_t> &empty = _emptyFreelist[sizeClass];
     MiniHeapID nextId = empty.first.next();
     while (nextId != list::Head) {
-      auto mh = GetMiniHeap(nextId);
+      auto mh = GetMiniHeap<MiniHeapT>(nextId);
       nextId = mh->getFreelist()->next();
       freeMiniheapLocked(mh, true);
       empty.second--;
@@ -458,7 +460,7 @@ public:
 
   // PUBLIC ONLY FOR TESTING
   // after call to meshLocked() completes src is a nullptr
-  void ATTRIBUTE_NEVER_INLINE meshLocked(MiniHeap *dst, MiniHeap *&src);
+  void ATTRIBUTE_NEVER_INLINE meshLocked(MiniHeapT *dst, MiniHeapT *&src);
 
   inline void ATTRIBUTE_ALWAYS_INLINE maybeMesh() {
     if (!kMeshingEnabled) {
@@ -509,13 +511,13 @@ public:
     return miniheapFor(ptr) != nullptr;
   }
 
-  inline internal::vector<MiniHeap *> meshingCandidatesLocked(int sizeClass) const {
+  inline internal::vector<MiniHeapT *> meshingCandidatesLocked(int sizeClass) const {
     // FIXME: duplicated with code in halfSplit
-    internal::vector<MiniHeap *> bucket{};
+    internal::vector<MiniHeapT *> bucket {};
 
     auto nextId = _partialFreelist[sizeClass].first.next();
     while (nextId != list::Head) {
-      auto mh = GetMiniHeap(nextId);
+      auto mh = GetMiniHeap<MiniHeapT>(nextId);
       if (mh->isMeshingCandidate() && (mh->fullness() < kOccupancyCutoff)) {
         bucket.push_back(mh);
       }
@@ -529,7 +531,7 @@ private:
   // check for meshes in all size classes -- must be called LOCKED
   void meshAllSizeClassesLocked();
   // meshSizeClassLocked returns the number of merged sets found
-  size_t meshSizeClassLocked(size_t sizeClass, MergeSetArray &mergeSets, SplitArray &left, SplitArray &right);
+  size_t meshSizeClassLocked(size_t sizeClass, MergeSetArray<PageSize> &mergeSets, SplitArray<PageSize> &left, SplitArray<PageSize> &right);
 
   const size_t _maxObjectSize;
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};
@@ -538,34 +540,36 @@ private:
   atomic_size_t ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _lastMeshEffective{0};
 
   // we want this on its own cacheline
-  EpochLock ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _meshEpoch{};
+  EpochLock ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _meshEpoch {};
 
   // always accessed with the mhRWLock exclusively locked.  cachline
   // aligned to avoid sharing cacheline with _meshEpoch
   size_t ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _miniheapCount{0};
 
+  static constexpr std::pair<MiniHeapListEntryT, size_t> Head{MiniHeapListEntryT{list::Head, list::Head}, 0};
+
   // these must only be accessed or modified with the _miniheapLock held
-  std::array<std::pair<MiniHeapListEntry, size_t>, kNumBins> _emptyFreelist{
+  std::array<std::pair<MiniHeapListEntryT, size_t>, kNumBins> _emptyFreelist{
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
-  std::array<std::pair<MiniHeapListEntry, size_t>, kNumBins> _partialFreelist{
+  std::array<std::pair<MiniHeapListEntryT, size_t>, kNumBins> _partialFreelist{
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
-  std::array<std::pair<MiniHeapListEntry, size_t>, kNumBins> _fullList{
+  std::array<std::pair<MiniHeapListEntryT, size_t>, kNumBins> _fullList{
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
 
-  mutable mutex _miniheapLock{};
+  mutable mutex _miniheapLock {};
 
-  GlobalHeapStats _stats{};
+  GlobalHeapStats _stats {};
 
   // XXX: should be atomic, but has exception spec?
   time::time_point _lastMesh;
 };
 
 static_assert(kNumBins == 25, "if this changes, add more 'Head's above");
-static_assert(sizeof(std::array<MiniHeapListEntry, kNumBins>) == kNumBins * 8, "list size is right");
-static_assert(sizeof(GlobalHeap) < (kNumBins * 8 * 3 + 64 * 7 + 100000), "gh small enough");
+static_assert(sizeof(std::array<MiniHeapListEntry<4096>, kNumBins>) == kNumBins * 8, "list size is right");
+static_assert(sizeof(GlobalHeap<4096>) < (kNumBins * 8 * 3 + 64 * 7 + 100000), "gh small enough");
 }  // namespace mesh
 
 #endif  // MESH_GLOBAL_HEAP_H

@@ -20,8 +20,6 @@ using namespace std;
 using namespace mesh;
 
 static constexpr uint32_t StrLen = 128;
-// Calculate ObjCount dynamically based on page size (cap at 1024 for bitmap limit)
-static const uint32_t ObjCount = std::min(static_cast<uint32_t>(getPageSize() / StrLen), 1024U);
 
 static char *s1;
 static char *s2;
@@ -39,9 +37,13 @@ static atomic<int> ShouldContinueTest;
 #define PTHREAD_CREATE_THROW throw()
 #endif
 
-extern "C" int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
+extern "C" int __attribute__((weak)) pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
                               void *arg) PTHREAD_CREATE_THROW {
-  return mesh::runtime().createThread(thread, attr, startRoutine, arg);
+  if (getPageSize() == 4096) {
+    return mesh::runtime<4096>().createThread(thread, attr, startRoutine, arg);
+  } else {
+    return mesh::runtime<16384>().createThread(thread, attr, startRoutine, arg);
+  }
 }
 
 static void writerThread() {
@@ -63,28 +65,31 @@ static inline void note(const char *note) {
   int _ __attribute__((unused)) = write(-1, note, strlen(note));
 }
 
-static void meshTestConcurrentWrite(bool invert) {
+template <size_t PageSize>
+static void meshTestConcurrentWriteImpl(bool invert) {
   if (!kMeshingEnabled) {
     GTEST_SKIP();
   }
 
+  const uint32_t ObjCount = std::min(static_cast<uint32_t>(PageSize / StrLen), 1024U);
+
   const auto tid = gettid();
-  GlobalHeap &gheap = runtime().heap();
+  GlobalHeap<PageSize> &gheap = runtime<PageSize>().heap();
 
   // disable automatic meshing for this test
   gheap.setMeshPeriodMs(kZeroMs);
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
-  FixedArray<MiniHeap, 1> array{};
+  FixedArray<MiniHeap<PageSize>, 1> array{};
 
   // allocate three miniheaps for the same object size from our global heap
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
-  MiniHeap *mh1 = array[0];
+  MiniHeap<PageSize> *mh1 = array[0];
   array.clear();
 
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
-  MiniHeap *mh2 = array[0];
+  MiniHeap<PageSize> *mh2 = array[0];
   array.clear();
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 2UL);
@@ -117,7 +122,7 @@ static void meshTestConcurrentWrite(bool invert) {
   ASSERT_EQ(mh2->inUseCount(), 1UL);
 
   if (invert) {
-    MiniHeap *tmp = mh1;
+    MiniHeap<PageSize> *tmp = mh1;
     mh1 = mh2;
     mh2 = tmp;
   }
@@ -175,6 +180,14 @@ static void meshTestConcurrentWrite(bool invert) {
   note("DONE SCAVENGE");
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
+}
+
+static void meshTestConcurrentWrite(bool invert) {
+  if (getPageSize() == 4096) {
+    meshTestConcurrentWriteImpl<4096>(invert);
+  } else {
+    meshTestConcurrentWriteImpl<16384>(invert);
+  }
 }
 
 TEST(ConcurrentMeshTest, TryMesh) {

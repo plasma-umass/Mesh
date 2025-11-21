@@ -22,8 +22,6 @@
 
 namespace mesh {
 
-class MiniHeap;
-
 class Flags {
 private:
   DISALLOW_COPY_AND_ASSIGN(Flags);
@@ -137,20 +135,24 @@ private:
   std::atomic<uint32_t> _flags;
 };
 
+template <size_t PageSize>
 class MiniHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MiniHeap);
 
 public:
+  using BitmapType = internal::Bitmap<PageSize>;
+  using ListEntryType = MiniHeapListEntry<PageSize>;
+
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
       : _bitmap(nullptr),
         _span(span),
         _flags(objectCount, objectCount > 1 ? SizeMap::SizeClass(objectSize) : 1, 0, list::Attached),
         _objectSizeReciprocal(1.0 / (float)objectSize) {
     // Use internal heap for bitmap allocation (provides 16-byte alignment, sufficient for atomics)
-    void *mem = internal::Heap().malloc(sizeof(internal::Bitmap));
+    void *mem = internal::Heap().malloc(sizeof(BitmapType));
     hard_assert(mem != nullptr);
-    _bitmap = new (mem) internal::Bitmap(objectCount);
+    _bitmap = new (mem) BitmapType(objectCount);
     d_assert(_bitmap->inUseCount() == 0);
 
     const auto expectedSpanSize = _span.byteLength();
@@ -162,7 +164,6 @@ public:
 
   ~MiniHeap() {
     if (_bitmap != nullptr) {
-      typedef internal::Bitmap BitmapType;
       _bitmap->~BitmapType();
       internal::Heap().free(_bitmap);
       _bitmap = nullptr;
@@ -289,7 +290,7 @@ public:
     _flags.setMeshed();
   }
 
-  inline void setAttached(pid_t current, MiniHeapListEntry *listHead) {
+  inline void setAttached(pid_t current, ListEntryType *listHead) {
     // mesh::debug("MiniHeap(%p:%5zu): current <- %u\n", this, objectSize(), current);
     _current.store(current, std::memory_order::memory_order_release);
     if (listHead != nullptr) {
@@ -345,20 +346,21 @@ public:
     return static_cast<double>(inUseCount()) / static_cast<double>(maxCount());
   }
 
-  internal::RelaxedFixedBitmap takeBitmap() {
+  template <size_t MaxBits = PageSize / kMinObjectSize>
+  internal::RelaxedFixedBitmap<PageSize> takeBitmap() {
     const auto capacity = this->maxCount();
-    internal::RelaxedFixedBitmap zero{capacity};
-    internal::RelaxedFixedBitmap result{capacity};
+    internal::RelaxedFixedBitmap<PageSize> zero{capacity};
+    internal::RelaxedFixedBitmap<PageSize> result{capacity};
     _bitmap->setAndExchangeAll(result.mut_bits(), zero.bits());
     return result;
   }
 
-  const internal::Bitmap &bitmap() const {
+  const BitmapType &bitmap() const {
     d_assert(_bitmap != nullptr);
     return *_bitmap;
   }
 
-  internal::Bitmap &writableBitmap() {
+  BitmapType &writableBitmap() {
     d_assert(_bitmap != nullptr);
     return *_bitmap;
   }
@@ -369,7 +371,7 @@ public:
     if (!_nextMeshed.hasValue()) {
       _nextMeshed = id;
     } else {
-      GetMiniHeap(_nextMeshed)->trackMeshedSpan(id);
+      GetMiniHeap<MiniHeap>(_nextMeshed)->trackMeshedSpan(id);
     }
   }
 
@@ -380,7 +382,7 @@ public:
       return;
 
     if (_nextMeshed.hasValue()) {
-      const auto mh = GetMiniHeap(_nextMeshed);
+      const auto mh = GetMiniHeap<MiniHeap>(_nextMeshed);
       mh->forEachMeshed(cb);
     }
   }
@@ -391,7 +393,7 @@ public:
       return;
 
     if (_nextMeshed.hasValue()) {
-      auto mh = GetMiniHeap(_nextMeshed);
+      auto mh = GetMiniHeap<MiniHeap>(_nextMeshed);
       mh->forEachMeshed(cb);
     }
   }
@@ -414,13 +416,13 @@ public:
       count++;
 
       auto next = mh->_nextMeshed;
-      mh = next.hasValue() ? GetMiniHeap(next) : nullptr;
+      mh = next.hasValue() ? GetMiniHeap<MiniHeap>(next) : nullptr;
     }
 
     return count;
   }
 
-  MiniHeapListEntry *getFreelist() {
+  ListEntryType *getFreelist() {
     return &_freelist;
   }
 
@@ -505,7 +507,7 @@ protected:
         abort();
       }
 
-      mh = GetMiniHeap(mh->_nextMeshed);
+      mh = GetMiniHeap<MiniHeap>(mh->_nextMeshed);
 
       const uintptr_t meshedSpanptr = arenaBegin + mh->span().offset * getPageSize();
       if (meshedSpanptr <= ptrval && ptrval < meshedSpanptr + len) {
@@ -517,9 +519,9 @@ protected:
     return spanptr;
   }
 
-  internal::Bitmap *_bitmap;          // 8 bytes  8
+  BitmapType *_bitmap;          // 8 bytes  8
   const Span _span;                   // 8        16
-  MiniHeapListEntry _freelist{};      // 8        24
+  ListEntryType _freelist{};      // 8        24
   atomic<pid_t> _current{0};          // 4        28
   Flags _flags;                       // 4        32
   const float _objectSizeReciprocal;  // 4        36
@@ -527,13 +529,15 @@ protected:
   uint32_t _padding[6];               // 24       64 (padding to maintain 64-byte size)
 };
 
-typedef FixedArray<MiniHeap, 63> MiniHeapArray;
+template <size_t PageSize>
+using MiniHeapArray = FixedArray<MiniHeap<PageSize>, 63>;
 
 static_assert(sizeof(pid_t) == 4, "pid_t not 32-bits!");
-static_assert(sizeof(mesh::internal::Bitmap) == 128, "Bitmap unexpected size (expected 128 bytes for 1024 bits)!");
-static_assert(sizeof(MiniHeap) == 64, "MiniHeap too big!");
-static_assert(sizeof(MiniHeap) == kMiniHeapSize, "MiniHeap size mismatch");
-static_assert(sizeof(MiniHeapArray) == 64 * sizeof(void *), "MiniHeapArray too big!");
+// static_assert(sizeof(mesh::internal::Bitmap) == 128, "Bitmap unexpected size (expected 128 bytes for 1024 bits)!");
+static_assert(sizeof(MiniHeap<4096>) == 64, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap<16384>) == 64, "MiniHeap too big!");
+static_assert(sizeof(MiniHeap<4096>) == kMiniHeapSize, "MiniHeap size mismatch");
+static_assert(sizeof(MiniHeapArray<4096>) == 64 * sizeof(void *), "MiniHeapArray too big!");
 }  // namespace mesh
 
 #endif  // MESH_MINI_HEAP_H

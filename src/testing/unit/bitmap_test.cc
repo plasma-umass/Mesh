@@ -47,15 +47,15 @@ TEST(BitmapTest, HighestSetBitAt) {
 TEST(BitmapTest, SetAndExchangeAll) {
   const auto maxCount = 128;
 
-  mesh::internal::Bitmap bitmap{maxCount};
+  mesh::internal::Bitmap<4096> bitmap{maxCount};
   bitmap.tryToSet(3);
   bitmap.tryToSet(4);
   bitmap.tryToSet(127);
 
-  mesh::internal::RelaxedFixedBitmap newBitmap{maxCount};
+  mesh::internal::RelaxedFixedBitmap<4096> newBitmap{maxCount};
   newBitmap.setAll(maxCount);
 
-  mesh::internal::RelaxedFixedBitmap localBits{maxCount};
+  mesh::internal::RelaxedFixedBitmap<4096> localBits{maxCount};
   bitmap.setAndExchangeAll(localBits.mut_bits(), newBitmap.bits());
   localBits.invert();
 
@@ -100,8 +100,8 @@ TEST(BitmapTest, SetAll) {
 TEST(BitmapTest, SetGet) {
   const int NTRIALS = 1000;
 
-  for (int n = 2; n <= mesh::internal::Bitmap::MaxBitCount; n *= 2) {
-    mesh::internal::Bitmap b{static_cast<size_t>(n)};
+  for (int n = 2; n <= mesh::internal::Bitmap<4096>::MaxBitCount; n *= 2) {
+    mesh::internal::Bitmap<4096> b{static_cast<size_t>(n)};
     int *rnd = reinterpret_cast<int *>(calloc(n, sizeof(int)));
 
     for (int k = 0; k < NTRIALS; k++) {
@@ -172,7 +172,7 @@ TEST(BitmapTest, SetGetRelaxed) {
 }
 
 TEST(BitmapTest, Builtins) {
-  mesh::internal::Bitmap b{256};
+  mesh::internal::Bitmap<4096> b{256};
 
   uint64_t i = b.setFirstEmpty();
   ASSERT_EQ(i, 0ULL);

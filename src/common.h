@@ -101,6 +101,8 @@ inline size_t getPageSize() {
 
 // Keep a constexpr version for compile-time calculations (assume minimum 4KB)
 static constexpr uint64_t kPageSizeMin = 4096;
+static constexpr uint64_t kPageSize4K = 4096;
+static constexpr uint64_t kPageSize16K = 16384;
 
 static constexpr size_t kMaxFastLargeSize = 256 * 1024;  // 256Kb
 
@@ -223,11 +225,8 @@ using std::unique_lock;
 #define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 #define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
 // Page alignment based on platform (16KB on Apple Silicon, 4KB elsewhere)
-#if defined(__APPLE__) && defined(__arm64__)
+// We align to 16KB always to be safe for both 4KB and 16KB pages
 #define PAGE_ALIGNED ATTRIBUTE_ALIGNED(16384)
-#else
-#define PAGE_ALIGNED ATTRIBUTE_ALIGNED(4096)
-#endif
 
 #define MESH_EXPORT __attribute__((visibility("default")))
 
