@@ -49,10 +49,10 @@ endif
 all: test build
 
 build lib:
-	bazelisk build $(BAZEL_CONFIG) -c opt //src:$(LIB)
+	./bazel build $(BAZEL_CONFIG) -c opt //src:$(LIB)
 
 test check:
-	bazelisk test $(BAZEL_CONFIG) //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
+	./bazel test $(BAZEL_CONFIG) //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
 
 install:
 	install -c -m 0755 bazel-out/$(BAZEL_PREFIX)-opt/bin/src/$(FS_LIB) $(PREFIX)/lib/$(INSTALL_LIB)
@@ -69,11 +69,11 @@ clang-coverage: $(UNIT_BIN) $(LIB) $(CONFIG)
 	rm -f default.profraw
 
 benchmark:
-	bazelisk build $(BAZEL_CONFIG) --config=disable-meshing -c opt //src:local-refill-benchmark
+	./bazel build $(BAZEL_CONFIG) --config=disable-meshing -c opt //src:local-refill-benchmark
 	./bazel-bin/src/local-refill-benchmark
 
 benchmark_malloc_free:
-	bazelisk build $(BAZEL_CONFIG) --config=disable-meshing -c opt //src:malloc-free-benchmark
+	./bazel build $(BAZEL_CONFIG) --config=disable-meshing -c opt //src:malloc-free-benchmark
 	./bazel-bin/src/malloc-free-benchmark
 
 format:
@@ -81,12 +81,12 @@ format:
 
 clean:
 	find . -name '*~' -print0 | xargs -0 rm -f
-	bazelisk clean
-	bazelisk shutdown
+	./bazel clean
+	./bazel shutdown
 
 
 distclean: clean
-	bazelisk clean --expunge
+	./bazel clean --expunge
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
