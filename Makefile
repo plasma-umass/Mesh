@@ -72,10 +72,6 @@ benchmark:
 	./bazel build $(BAZEL_CONFIG) --config=disable-meshing -c opt //src:local-refill-benchmark
 	./bazel-bin/src/local-refill-benchmark
 
-benchmark_malloc_free:
-	./bazel build $(BAZEL_CONFIG) --config=disable-meshing -c opt //src:malloc-free-benchmark
-	./bazel-bin/src/malloc-free-benchmark
-
 format:
 	clang-format -i src/*.cc src/*.c src/*.h  src/plasma/*.h src/rng/*.h src/static/*.h src/testing/unit/*.cc src/testing/*.cc src/testing/benchmark/*.cc
 

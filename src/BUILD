@@ -221,17 +221,3 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
-
-cc_test(
-    name = "malloc-free-benchmark",
-    srcs = ["testing/benchmark/malloc_free.cc"],
-    copts = [
-        "-Isrc",
-    ] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
-    linkopts = COMMON_LINKOPTS,
-    deps = [
-        ":mesh",  # Link against the full mesh library to use exported symbols
-        "@com_google_benchmark//:benchmark",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
