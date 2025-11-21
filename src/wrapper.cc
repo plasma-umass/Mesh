@@ -14,12 +14,6 @@
 
 using namespace mesh;
 
-namespace mesh {
-template <size_t PageSize> void *allocSlowpath(size_t sz);
-template <size_t PageSize> void *cxxNewSlowpath(size_t sz);
-template <size_t PageSize> void freeSlowpath(void *ptr);
-}
-
 extern "C" {
 
 void *xxmalloc(size_t);
