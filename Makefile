@@ -49,10 +49,10 @@ endif
 all: test build
 
 build lib:
-	./bazel build $(BAZEL_CONFIG) -c opt //src:$(LIB)
+	bazelisk build $(BAZEL_CONFIG) -c opt //src:$(LIB)
 
 test check:
-	./bazel test $(BAZEL_CONFIG) //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
+	bazelisk test $(BAZEL_CONFIG) //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
 
 install:
 	install -c -m 0755 bazel-out/$(BAZEL_PREFIX)-opt/bin/src/$(FS_LIB) $(PREFIX)/lib/$(INSTALL_LIB)
@@ -69,7 +69,7 @@ clang-coverage: $(UNIT_BIN) $(LIB) $(CONFIG)
 	rm -f default.profraw
 
 benchmark:
-	./bazel build $(BAZEL_CONFIG) --config=disable-meshing --config=debugsymbols -c opt //src:local-refill-benchmark
+	bazelisk build $(BAZEL_CONFIG) --config=disable-meshing --config=debugsymbols -c opt //src:local-refill-benchmark
 	./bazel-bin/src/local-refill-benchmark
 
 format:
@@ -77,12 +77,12 @@ format:
 
 clean:
 	find . -name '*~' -print0 | xargs -0 rm -f
-	./bazel clean
-	./bazel shutdown
+	bazelisk clean
+	bazelisk shutdown
 
 
 distclean: clean
-	./bazel clean --expunge
+	bazelisk clean --expunge
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:
