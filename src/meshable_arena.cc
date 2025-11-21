@@ -391,7 +391,9 @@ void MeshableArena::partialScavenge() {
 }
 
 void MeshableArena::scavenge(bool force) {
-  if (!force && _dirtyPageCount < kMinDirtyPageThreshold) {
+  const size_t minDirtyPageThreshold = (kMinDirtyPageThreshold * kPageSizeMin) / getPageSize();
+
+  if (!force && _dirtyPageCount < minDirtyPageThreshold) {
     return;
   }
 

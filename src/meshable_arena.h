@@ -203,7 +203,9 @@ private:
       _dirty[span.spanClass()].push_back(span);
       _dirtyPageCount += span.length;
 
-      if (_dirtyPageCount > kMaxDirtyPageThreshold) {
+      const size_t maxDirtyPageThreshold = (kMaxDirtyPageThreshold * kPageSizeMin) / getPageSize();
+
+      if (_dirtyPageCount > maxDirtyPageThreshold) {
         // do a full scavenge with a probability 1/10
         if (_fastPrng.inRange(0, 9) == 9) {
           scavenge(true);
