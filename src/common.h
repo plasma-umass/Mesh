@@ -84,6 +84,11 @@ static constexpr size_t kClassSizesMax = 25;
 static constexpr size_t kAlignment = 8;
 static constexpr int kMinAlign = 16;
 
+// Keep a constexpr version for compile-time calculations (assume minimum 4KB)
+static constexpr uint64_t kPageSizeMin = 4096;
+static constexpr uint64_t kPageSize4K = 4096;
+static constexpr uint64_t kPageSize16K = 16384;
+
 // Runtime page size detection for Apple Silicon (16KB) and x86 (4KB) compatibility
 namespace internal {
   inline size_t initPageSize() {
@@ -113,11 +118,6 @@ inline size_t getPageSize() {
   return kPageSize;
 }
 #endif
-
-// Keep a constexpr version for compile-time calculations (assume minimum 4KB)
-static constexpr uint64_t kPageSizeMin = 4096;
-static constexpr uint64_t kPageSize4K = 4096;
-static constexpr uint64_t kPageSize16K = 16384;
 
 static constexpr size_t kMaxFastLargeSize = 256 * 1024;  // 256Kb
 
