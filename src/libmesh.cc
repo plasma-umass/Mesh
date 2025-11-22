@@ -127,160 +127,75 @@ void *memalignSlowpath(size_t alignment, size_t size) {
 }
 }  // namespace mesh
 
-// Implementation templates for IFUNC or dispatch
-template <size_t PageSize>
-static void *mesh_malloc_impl(size_t sz) {
-  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    return mesh::allocSlowpath<PageSize>(sz);
-  }
-  return localHeap->malloc(sz);
-}
-
-template <size_t PageSize>
-static void mesh_free_impl(void *ptr) {
-  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    mesh::freeSlowpath<PageSize>(ptr);
-    return;
-  }
-  localHeap->free(ptr);
-}
-
-template <size_t PageSize>
-static void mesh_sized_free_impl(void *ptr, size_t sz) {
-  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    mesh::freeSlowpath<PageSize>(ptr);
-    return;
-  }
-  localHeap->sizedFree(ptr, sz);
-}
-
-template <size_t PageSize>
-static void *mesh_realloc_impl(void *oldPtr, size_t newSize) {
-  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    return mesh::reallocSlowpath<PageSize>(oldPtr, newSize);
-  }
-  return localHeap->realloc(oldPtr, newSize);
-}
-
-template <size_t PageSize>
-static size_t mesh_malloc_usable_size_impl(void *ptr) {
-  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    return mesh::usableSizeSlowpath<PageSize>(ptr);
-  }
-  return localHeap->getSize(ptr);
-}
-
-template <size_t PageSize>
-static void *mesh_memalign_impl(size_t alignment, size_t size) {
-  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    return mesh::memalignSlowpath<PageSize>(alignment, size);
-  }
-  return localHeap->memalign(alignment, size);
-}
-
-template <size_t PageSize>
-static void *mesh_calloc_impl(size_t count, size_t size) {
-  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
-  if (unlikely(localHeap == nullptr)) {
-    return mesh::callocSlowpath<PageSize>(count, size);
-  }
-  return localHeap->calloc(count, size);
-}
-
-#ifdef __linux__
-// IFUNC Resolvers
-extern "C" {
-typedef void *(*malloc_func)(size_t);
-typedef void (*free_func)(void *);
-typedef void (*sized_free_func)(void *, size_t);
-typedef void *(*realloc_func)(void *, size_t);
-typedef size_t (*usable_size_func)(void *);
-typedef void *(*memalign_func)(size_t, size_t);
-typedef void *(*calloc_func)(size_t, size_t);
-
-static malloc_func resolve_mesh_malloc() {
-  return getPageSize() == 4096 ? mesh_malloc_impl<4096> : mesh_malloc_impl<16384>;
-}
-static free_func resolve_mesh_free() {
-  return getPageSize() == 4096 ? mesh_free_impl<4096> : mesh_free_impl<16384>;
-}
-static sized_free_func resolve_mesh_sized_free() {
-  return getPageSize() == 4096 ? mesh_sized_free_impl<4096> : mesh_sized_free_impl<16384>;
-}
-static realloc_func resolve_mesh_realloc() {
-  return getPageSize() == 4096 ? mesh_realloc_impl<4096> : mesh_realloc_impl<16384>;
-}
-static usable_size_func resolve_mesh_malloc_usable_size() {
-  return getPageSize() == 4096 ? mesh_malloc_usable_size_impl<4096> : mesh_malloc_usable_size_impl<16384>;
-}
-static memalign_func resolve_mesh_memalign() {
-  return getPageSize() == 4096 ? mesh_memalign_impl<4096> : mesh_memalign_impl<16384>;
-}
-static calloc_func resolve_mesh_calloc() {
-  return getPageSize() == 4096 ? mesh_calloc_impl<4096> : mesh_calloc_impl<16384>;
-}
-}
-#endif
-
-extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz)
-#ifdef __linux__
-    __attribute__((ifunc("resolve_mesh_malloc")));
-#else
-{
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz) {
   if (likely(getPageSize() == 4096)) {
-    return mesh_malloc_impl<4096>(sz);
+    auto *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::allocSlowpath<4096>(sz);
+    }
+    return localHeap->malloc(sz);
   } else {
-    return mesh_malloc_impl<16384>(sz);
+    auto *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::allocSlowpath<16384>(sz);
+    }
+    return localHeap->malloc(sz);
   }
 }
-#endif
 #define xxmalloc mesh_malloc
 
-extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr)
-#ifdef __linux__
-    __attribute__((ifunc("resolve_mesh_free")));
-#else
-{
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr) {
   if (likely(getPageSize() == 4096)) {
-    mesh_free_impl<4096>(ptr);
+    auto *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<4096>(ptr);
+      return;
+    }
+    localHeap->free(ptr);
   } else {
-    mesh_free_impl<16384>(ptr);
+    auto *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<16384>(ptr);
+      return;
+    }
+    localHeap->free(ptr);
   }
 }
-#endif
 #define xxfree mesh_free
 
-extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size_t sz)
-#ifdef __linux__
-    __attribute__((ifunc("resolve_mesh_sized_free")));
-#else
-{
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size_t sz) {
   if (likely(getPageSize() == 4096)) {
-    mesh_sized_free_impl<4096>(ptr, sz);
+    auto *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<4096>(ptr);
+      return;
+    }
+    localHeap->sizedFree(ptr, sz);
   } else {
-    mesh_sized_free_impl<16384>(ptr, sz);
+    auto *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      mesh::freeSlowpath<16384>(ptr);
+      return;
+    }
+    localHeap->sizedFree(ptr, sz);
   }
 }
-#endif
 
-extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize)
-#ifdef __linux__
-    __attribute__((ifunc("resolve_mesh_realloc")));
-#else
-{
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize) {
   if (likely(getPageSize() == 4096)) {
-    return mesh_realloc_impl<4096>(oldPtr, newSize);
+    auto *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::reallocSlowpath<4096>(oldPtr, newSize);
+    }
+    return localHeap->realloc(oldPtr, newSize);
   } else {
-    return mesh_realloc_impl<16384>(oldPtr, newSize);
+    auto *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::reallocSlowpath<16384>(oldPtr, newSize);
+    }
+    return localHeap->realloc(oldPtr, newSize);
   }
 }
-#endif
 
 #if defined(__FreeBSD__)
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_reallocarray(void *oldPtr, size_t count, size_t size) {
@@ -294,54 +209,62 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_reallocarray(void *oldPtr
 #endif
 
 #ifndef __FreeBSD__
-extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr)
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void *ptr) {
 #else
-extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(const void *cptr)
-#endif
-#ifdef __linux__
-    __attribute__((ifunc("resolve_mesh_malloc_usable_size")));
-#else
-{
-#ifdef __FreeBSD__
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(const void *cptr) {
   void *ptr = const_cast<void *>(cptr);
 #endif
   if (likely(getPageSize() == 4096)) {
-    return mesh_malloc_usable_size_impl<4096>(ptr);
+    auto *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::usableSizeSlowpath<4096>(ptr);
+    }
+    return localHeap->getSize(ptr);
   } else {
-    return mesh_malloc_usable_size_impl<16384>(ptr);
+    auto *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::usableSizeSlowpath<16384>(ptr);
+    }
+    return localHeap->getSize(ptr);
   }
 }
-#endif
 #define xxmalloc_usable_size mesh_malloc_usable_size
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment, size_t size)
 #if !defined(__FreeBSD__) && !defined(__SVR4)
     throw()
 #endif
-#ifdef __linux__
-    __attribute__((ifunc("resolve_mesh_memalign")));
-#else
 {
   if (likely(getPageSize() == 4096)) {
-    return mesh_memalign_impl<4096>(alignment, size);
+    auto *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::memalignSlowpath<4096>(alignment, size);
+    }
+    return localHeap->memalign(alignment, size);
   } else {
-    return mesh_memalign_impl<16384>(alignment, size);
+    auto *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::memalignSlowpath<16384>(alignment, size);
+    }
+    return localHeap->memalign(alignment, size);
   }
 }
-#endif
 
-extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_calloc(size_t count, size_t size)
-#ifdef __linux__
-    __attribute__((ifunc("resolve_mesh_calloc")));
-#else
-{
+extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_calloc(size_t count, size_t size) {
   if (likely(getPageSize() == 4096)) {
-    return mesh_calloc_impl<4096>(count, size);
+    auto *localHeap = ThreadLocalHeap<4096>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::callocSlowpath<4096>(count, size);
+    }
+    return localHeap->calloc(count, size);
   } else {
-    return mesh_calloc_impl<16384>(count, size);
+    auto *localHeap = ThreadLocalHeap<16384>::GetHeapIfPresent();
+    if (unlikely(localHeap == nullptr)) {
+      return mesh::callocSlowpath<16384>(count, size);
+    }
+    return localHeap->calloc(count, size);
   }
 }
-#endif
 
 extern "C" {
 #ifdef __linux__

@@ -210,13 +210,16 @@ cc_test(
 
 cc_test(
     name = "local-refill-benchmark",
-    srcs = ["testing/benchmark/local_refill.cc"],
+    srcs = [
+        "testing/benchmark/local_refill.cc",
+        "testing/benchmark/malloc_benchmark.cc",
+    ],
     copts = [
         "-Isrc",
     ] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     linkopts = COMMON_LINKOPTS,
     deps = [
-        ":mesh-core",
+        ":mesh",  # Use :mesh to get exported symbols like mesh_malloc
         "@com_google_benchmark//:benchmark",
         "@com_google_googletest//:gtest_main",
     ],

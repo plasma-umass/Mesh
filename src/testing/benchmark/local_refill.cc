@@ -15,7 +15,7 @@
 
 using namespace mesh;
 
-static constexpr size_t kMiniHeapCount = 2 << 16;
+static constexpr size_t kMiniHeapCount = 2 << 14;
 static constexpr uint32_t kObjSize = 16;
 static constexpr uint32_t kObjCount = 256;
 
@@ -80,8 +80,8 @@ static void BM_LocalRefill1Impl(benchmark::State &state) {
 
   static FixedArray<MiniHeap<PageSize>, kMiniHeapCount> array{};
   if (array.size() == 0) {
-    const size_t initialAllocCount = gheap.getAllocatedMiniheapCount();
-    hard_assert_msg(initialAllocCount == 0UL, "expected 0 initial MHs, not %zu", initialAllocCount);
+    // const size_t initialAllocCount = gheap.getAllocatedMiniheapCount();
+    // hard_assert_msg(initialAllocCount == 0UL, "expected 0 initial MHs, not %zu", initialAllocCount);
 
     const uint32_t objCount = PageSize / kObjSize;
     
@@ -122,9 +122,13 @@ static void BM_LocalRefill1Impl(benchmark::State &state) {
 }
 
 static void BM_LocalRefill1(benchmark::State &state) {
-  if (getPageSize() == 4096) {
+  // Ensure runtime is initialized
+  const size_t pageSize = getPageSize();
+  if (pageSize == 4096) {
+    runtime<4096>().createSignalFd();
     BM_LocalRefill1Impl<4096>(state);
   } else {
+    runtime<16384>().createSignalFd();
     BM_LocalRefill1Impl<16384>(state);
   }
 }

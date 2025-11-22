@@ -7,8 +7,8 @@ build --cxxopt='-std=c++17'
 build --strip=never
 
 # largely from sorbet
-build:debugsymbols --copt=-g3 --copt=-fstandalone-debug --copt=-fno-limit-debug-info
-build:debugsymbols --linkopt=-g3 --linkopt=-fstandalone-debug --linkopt=-fno-limit-debug-info
+build:debugsymbols --copt=-g3
+build:debugsymbols --linkopt=-g3
 build:debugsymbols --spawn_strategy=standalone
 build:debugsymbols --genrule_strategy=standalone
 
