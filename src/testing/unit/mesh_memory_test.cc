@@ -75,15 +75,14 @@ void testPrecisePageDeallocation() {
 #ifdef __linux__
   // On Linux, we need RssShmem tracking to work properly for this test.
   // Some CI environments or containers might not support this properly.
-  // Do a quick test to see if RssShmem tracking is working by allocating
-  // a small test page and checking if it shows up in RssShmem.
+  // Check if RssShmem tracking is working by looking at the current process.
   {
-    GlobalHeap<PageSize> test_gheap;
-    pid_t test_tid = getpid();
+    // First, force some mesh memory allocation through the existing global heap
     FixedArray<MiniHeap<PageSize>, 1> test_array{};
-    test_gheap.allocSmallMiniheaps(0, 256, test_array, test_tid);
-    if (test_array[0]) {
-      void* test_ptr = test_array[0]->mallocAt(test_gheap.arenaBegin(), 0);
+    gheap.allocSmallMiniheaps(SizeMap::SizeClass(256), 256, test_array, tid);
+    MiniHeap<PageSize>* test_mh = test_array[0];
+    if (test_mh) {
+      void* test_ptr = test_mh->mallocAt(gheap.arenaBegin(), 0);
       if (test_ptr) {
         memset(test_ptr, 0x42, 256);
         volatile char dummy = *reinterpret_cast<char*>(test_ptr);
@@ -95,13 +94,27 @@ void testPrecisePageDeallocation() {
 
       MemoryStats test_stats;
       if (MemoryStats::get(test_stats)) {
+        // If we allocated memory but mesh_memory_bytes is still 0, RssShmem isn't working
         if (test_stats.mesh_memory_bytes == 0) {
           printf("\n=== SKIPPING TEST: RssShmem tracking not available in this environment ===\n");
           printf("This typically happens in CI containers or systems with restricted shared memory.\n");
           printf("The test passes on systems with proper RssShmem support.\n");
+
+          // Clean up before skipping
+          if (test_ptr) {
+            gheap.free(test_ptr);
+          }
+          gheap.freeMiniheap(test_mh);
+
           GTEST_SKIP() << "RssShmem tracking not available in this environment";
         }
       }
+
+      // Clean up test allocation
+      if (test_ptr) {
+        gheap.free(test_ptr);
+      }
+      gheap.freeMiniheap(test_mh);
     }
   }
 #endif
