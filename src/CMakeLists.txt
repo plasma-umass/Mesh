@@ -14,9 +14,11 @@ set(common_src
         thread_local_heap.cc
         )
 
-# Add macOS-specific files only on Apple platforms
+# Add platform-specific memory stats files
 if(APPLE)
     list(APPEND common_src memory_stats_macos.cc)
+elseif(UNIX)
+    list(APPEND common_src memory_stats_linux.cc)
 endif()
 
 #Create the set of source files for the mesh library
@@ -43,6 +45,7 @@ set(unit_src
         testing/unit/alignment.cc
         testing/unit/bitmap_test.cc
         testing/unit/concurrent_mesh_test.cc
+        testing/unit/mesh_memory_test.cc
         testing/unit/mesh_test.cc
         testing/unit/rng_test.cc
         testing/unit/size_class_test.cc

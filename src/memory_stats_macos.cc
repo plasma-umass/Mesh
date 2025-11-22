@@ -6,6 +6,7 @@
 #ifdef __APPLE__
 
 #include "memory_stats_macos.h"
+#include "memory_stats.h"
 #include <unistd.h>
 #include <stdio.h>
 
@@ -64,6 +65,19 @@ uint64_t get_footprint_bytes() {
 
 int get_footprint_kb() {
   return static_cast<int>(get_footprint_bytes() / 1024);
+}
+
+// Unified interface implementation
+bool MemoryStats::get(MemoryStats& stats) {
+  MacOSMemoryStats macos_stats;
+  if (!MacOSMemoryStats::get(macos_stats)) {
+    return false;
+  }
+  // Use RSS as the primary metric for cross-platform consistency
+  stats.resident_size_bytes = macos_stats.resident_size;
+  // On macOS, MAP_SHARED memory (used by mesh) shows up in RSS
+  stats.mesh_memory_bytes = macos_stats.resident_size;
+  return true;
 }
 
 }  // namespace mesh

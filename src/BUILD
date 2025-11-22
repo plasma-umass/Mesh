@@ -97,6 +97,7 @@ cc_library(
         "thread_local_heap.cc",
     ] + select({
         "@platforms//os:macos": ["memory_stats_macos.cc"],
+        "@platforms//os:linux": ["memory_stats_linux.cc"],
         "//conditions:default": [],
     }),
     hdrs = glob([
