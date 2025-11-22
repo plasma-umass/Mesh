@@ -23,6 +23,10 @@
 #include <unistd.h>
 #endif
 
+#ifdef __linux__
+#include <sys/auxv.h>
+#endif
+
 #include <chrono>
 #include <condition_variable>
 #include <functional>
@@ -87,6 +91,8 @@ namespace internal {
     SYSTEM_INFO sysInfo;
     GetSystemInfo(&sysInfo);
     return sysInfo.dwPageSize;
+#elif defined(__linux__)
+    return getauxval(AT_PAGESZ);
 #else
     return static_cast<size_t>(sysconf(_SC_PAGESIZE));
 #endif
