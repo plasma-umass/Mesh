@@ -67,7 +67,7 @@ target_compile_options(unit.test PRIVATE -Wno-unused-const-variable -Wno-unused-
 if(${GCOV})
     add_custom_target(coverage_gcc
             COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
-            COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/
+            COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ --ignore-errors mismatch --rc geninfo_unexecuted_blocks=1
             COMMAND genhtml app.info
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
             DEPENDS unit.test)
