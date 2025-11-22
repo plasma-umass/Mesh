@@ -167,15 +167,7 @@ cc_library(
     ]),
     copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     defines = COMMON_DEFINES,
-    linkopts = COMMON_LINKOPTS + select({
-        "@bazel_tools//src/conditions:darwin": [
-            "-install_name /usr/local/lib/libmesh.dylib",
-            "-compatibility_version 1",
-            "-current_version 1",
-            "-ldl",
-        ],
-        "//conditions:default": [],
-    }),
+    linkopts = COMMON_LINKOPTS,
     linkstatic = False,
     visibility = ["//visibility:public"],
     # disabled, as we directly specify the source files above.
