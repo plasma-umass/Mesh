@@ -139,17 +139,19 @@ static constexpr size_t kMaxMeshesPerIteration = 2500;
 
 // maximum number of dirty pages to hold onto before we flush them
 // back to the OS (via MeshableArena::scavenge()
-// Note: These are in 4KB page units for backward compatibility
-// Actual byte limits are calculated at runtime based on system page size
-static constexpr size_t kMaxDirtyPageThreshold = 1 << 14;  // 64 MB in 4KB pages
-static constexpr size_t kMinDirtyPageThreshold = 32;       // 128 KB in 4KB pages
+// These are page counts, not byte counts. The actual byte thresholds depend
+// on the system page size:
+// - On 4KB systems: kMaxDirtyPageThreshold = 16384 pages * 4KB = 64 MB
+// - On 16KB systems: kMaxDirtyPageThreshold = 16384 pages * 16KB = 256 MB
+static constexpr size_t kMaxDirtyPageThreshold = 1 << 14;  // 16384 pages
+static constexpr size_t kMinDirtyPageThreshold = 32;       // 32 pages
 
 static constexpr uint32_t kSpanClassCount = 256;
 
 static constexpr int kNumBins = 25;  // 16Kb max object size
 static constexpr int kDefaultMeshPeriod = 10000;
 
-static constexpr size_t kMinArenaExpansion = 4096;  // 16 MB in 4KB pages (4096 * 4KB = 16MB)
+static constexpr size_t kMinArenaExpansion = 4096;  // 4096 pages (16 MB on 4KB systems, 64 MB on 16KB systems)
 
 // ensures we amortize the cost of going to the global heap enough
 static constexpr uint64_t kMinStringLen = 8;

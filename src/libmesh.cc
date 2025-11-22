@@ -15,18 +15,62 @@
 #include "runtime.h"
 #include "thread_local_heap.h"
 #include "runtime_impl.h"
+#include "dispatch_utils.h"
 
 using namespace mesh;
 
 #ifdef __linux__
+// ===================================================================
+// CRITICAL: IFUNC Resolver Constraints and Implementation
+// ===================================================================
+//
+// IFUNC (Indirect Function) resolvers execute during dynamic linking
+// BEFORE any of the following are available:
+//   - glibc initialization (no malloc, no stdio, no getauxval)
+//   - libstdc++ availability (no C++ standard library)
+//   - TLS (Thread-Local Storage) setup
+//   - Most syscall wrappers (syscall() function not available)
+//   - Any library functions whatsoever
+//
+// The resolver runs in an extremely restricted environment where we
+// MUST:
+//   - Parse auxv (auxiliary vector) directly from /proc/self/auxv
+//   - Use ONLY raw syscalls via inline assembly (no libc wrappers)
+//   - Avoid ALL library function calls
+//   - Keep logic minimal and completely self-contained
+//   - Not use any global variables (they may not be initialized)
+//
+// This is why we have what appears to be "complex" code below:
+//   - Raw inline assembly for syscalls (ifunc_syscall_*)
+//   - Manual parsing of auxiliary vector without getauxval()
+//   - Direct file I/O using syscalls instead of open/read/close
+//   - Conservative fallback values for error cases
+//
+// The page size detection is critical for ARM64/Apple Silicon support
+// where pages can be 4KB, 16KB, or even 64KB depending on the system.
+// ===================================================================
+
 // Direct auxiliary vector access for IFUNC resolvers
 // Uses /proc/self/auxv with inline assembly syscalls to avoid libc dependencies
 #include <sys/syscall.h>
 #include <fcntl.h>
 
 #ifdef __aarch64__
-// ARM64 inline assembly for system calls
-// On ARM64: syscall number in x8, args in x0-x5, return in x0
+// ===================================================================
+// ARM64 Syscall Implementation
+// ===================================================================
+// ARM64 inline assembly for system calls - REQUIRED because syscall()
+// wrapper is not available during IFUNC resolution.
+//
+// ARM64 calling convention for syscalls:
+//   - Syscall number goes in x8 register
+//   - Arguments go in x0-x5 registers
+//   - Return value comes back in x0
+//   - SVC #0 instruction triggers the syscall
+//
+// We cannot use the glibc syscall() wrapper because glibc isn't
+// initialized yet when IFUNC resolvers run.
+// ===================================================================
 
 __attribute__((no_stack_protector))
 static long ifunc_syscall_3(long nr, long arg0, long arg1, long arg2) {
@@ -83,8 +127,22 @@ static int ifunc_sys_close(int fd) {
 }
 
 #elif defined(__x86_64__)
-// x86_64 inline assembly for system calls
-// On x86_64: syscall number in rax, args in rdi/rsi/rdx/r10/r8/r9, return in rax
+// ===================================================================
+// x86_64 Syscall Implementation
+// ===================================================================
+// x86_64 inline assembly for system calls - REQUIRED because syscall()
+// wrapper is not available during IFUNC resolution.
+//
+// x86_64 calling convention for syscalls:
+//   - Syscall number goes in rax register
+//   - Arguments go in rdi, rsi, rdx, r10, r8, r9 registers (in order)
+//   - Return value comes back in rax
+//   - SYSCALL instruction triggers the syscall
+//   - rcx and r11 are clobbered by SYSCALL instruction
+//
+// We cannot use the glibc syscall() wrapper because glibc isn't
+// initialized yet when IFUNC resolvers run.
+// ===================================================================
 
 __attribute__((no_stack_protector))
 static long ifunc_syscall_3(long nr, long arg0, long arg1, long arg2) {
@@ -152,23 +210,47 @@ static int ifunc_sys_close(int fd) {
 #else
 // For other architectures, fall back to hardcoded 4k (conservative)
 static size_t getPageSizeFromAuxv() {
-  return 4096;
+  return kPageSize4K;
 }
 #endif
 
 #if defined(__aarch64__) || defined(__x86_64__)
+// ===================================================================
+// Page Size Detection via Auxiliary Vector
+// ===================================================================
+// This function reads the page size from the kernel's auxiliary vector
+// by directly parsing /proc/self/auxv. We CANNOT use getauxval(AT_PAGESZ)
+// because:
+//   1. getauxval() is part of glibc which isn't initialized yet
+//   2. We're running in the IFUNC resolver context before libraries load
+//
+// The auxiliary vector is a set of key-value pairs passed by the kernel
+// to each process at startup, containing information like page size,
+// clock tick rate, etc. AT_PAGESZ (type 6) contains the system page size.
+//
+// We must:
+//   - Open /proc/self/auxv using raw syscalls (no open() function)
+//   - Read it using raw syscalls (no read() function)
+//   - Parse the Elf64_auxv_t structures manually
+//   - Use conservative fallbacks if anything fails
+//
+// Fallback values:
+//   - ARM64: 16KB (common on newer ARM64 systems, safe for 4KB systems)
+//   - x86_64: 4KB (standard and only option on x86_64)
+// ===================================================================
 __attribute__((no_stack_protector))
 static size_t getPageSizeFromAuxv() {
-  // Use stack buffer to avoid any heap allocation
+  // Use stack buffer to avoid any heap allocation (malloc not available)
+  // 512 bytes is enough to hold several auxv entries
   unsigned char buffer[512];
   int fd = ifunc_sys_open("/proc/self/auxv", O_RDONLY);
 
   if (fd < 0) {
     // Can't open /proc/self/auxv, fall back
 #ifdef __aarch64__
-    return 16384;  // ARM64 commonly uses 16k pages
+    return kPageSize16K;  // ARM64 commonly uses 16k pages
 #else
-    return 4096;   // x86_64 uses 4k pages
+    return kPageSize4K;   // x86_64 uses 4k pages
 #endif
   }
 
@@ -178,9 +260,9 @@ static size_t getPageSizeFromAuxv() {
   if (bytes_read < (ssize_t)sizeof(Elf64_auxv_t)) {
     // Not enough data read
 #ifdef __aarch64__
-    return 16384;
+    return kPageSize16K;
 #else
-    return 4096;
+    return kPageSize4K;
 #endif
   }
 
@@ -191,15 +273,18 @@ static size_t getPageSizeFromAuxv() {
   while (auxv < auxv_end && auxv->a_type != AT_NULL) {
     if (auxv->a_type == AT_PAGESZ) {
       size_t pagesize = auxv->a_un.a_val;
-      // Sanity check the value
-      if (pagesize == 4096 || pagesize == 16384 || pagesize == 65536) {
+      // Sanity check the value - we ONLY support 4KB and 16KB page sizes
+      // 4KB: Standard on x86_64 and older ARM64
+      // 16KB: Common on newer ARM64 systems (Apple Silicon, some Linux)
+      // Any other page size (including 64KB) is NOT supported
+      if (pagesize == kPageSize4K || pagesize == kPageSize16K) {
         return pagesize;
       }
       // Invalid page size, fall back
 #ifdef __aarch64__
-      return 16384;
+      return kPageSize16K;
 #else
-      return 4096;
+      return kPageSize4K;
 #endif
     }
     auxv++;
@@ -207,9 +292,9 @@ static size_t getPageSizeFromAuxv() {
 
   // AT_PAGESZ not found (should never happen on Linux)
 #ifdef __aarch64__
-  return 16384;
+  return kPageSize16K;
 #else
-  return 4096;
+  return kPageSize4K;
 #endif
 }
 #endif
@@ -221,15 +306,21 @@ static __attribute__((constructor)) void libmesh_init() {
 
   const size_t pageSize = getPageSize();
 
+  // We ONLY support 4KB and 16KB page sizes. Fail immediately if unsupported.
+  if (pageSize != kPageSize4K && pageSize != kPageSize16K) {
+    mesh::debug("FATAL: Unsupported page size %zu bytes. Mesh only supports 4KB and 16KB pages.\n", pageSize);
+    abort();
+  }
+
+  dispatchByPageSize([](auto& rt) {
+    rt.createSignalFd();
+    rt.installSegfaultHandler();
+    rt.initMaxMapCount();
+  });
+
   if (pageSize == kPageSize4K) {
-    runtime<kPageSize4K>().createSignalFd();
-    runtime<kPageSize4K>().installSegfaultHandler();
-    runtime<kPageSize4K>().initMaxMapCount();
     ThreadLocalHeap<kPageSize4K>::InitTLH();
   } else {
-    runtime<kPageSize16K>().createSignalFd();
-    runtime<kPageSize16K>().installSegfaultHandler();
-    runtime<kPageSize16K>().initMaxMapCount();
     ThreadLocalHeap<kPageSize16K>::InitTLH();
   }
 
@@ -239,11 +330,9 @@ static __attribute__((constructor)) void libmesh_init() {
     if (period < 0) {
       period = 0;
     }
-    if (pageSize == kPageSize4K) {
-      runtime<kPageSize4K>().setMeshPeriodMs(std::chrono::milliseconds{period});
-    } else {
-      runtime<kPageSize16K>().setMeshPeriodMs(std::chrono::milliseconds{period});
-    }
+    dispatchByPageSize([period](auto& rt) {
+      rt.setMeshPeriodMs(std::chrono::milliseconds{period});
+    });
   }
 
   char *bgThread = getenv("MESH_BACKGROUND_THREAD");
@@ -252,11 +341,9 @@ static __attribute__((constructor)) void libmesh_init() {
 
   int shouldThread = atoi(bgThread);
   if (shouldThread) {
-    if (pageSize == kPageSize4K) {
-      runtime<kPageSize4K>().startBgThread();
-    } else {
-      runtime<kPageSize16K>().startBgThread();
-    }
+    dispatchByPageSize([](auto& rt) {
+      rt.startBgThread();
+    });
   }
 }
 
@@ -271,13 +358,9 @@ static __attribute__((destructor)) void libmesh_fini() {
   else if (mlevel > 2)
     mlevel = 2;
 
-  const size_t pageSize = getPageSize();
-
-  if (pageSize == kPageSize4K) {
-    runtime<kPageSize4K>().heap().dumpStats(mlevel, false);
-  } else {
-    runtime<kPageSize16K>().heap().dumpStats(mlevel, false);
-  }
+  dispatchByPageSize([mlevel](auto& rt) {
+    rt.heap().dumpStats(mlevel, false);
+  });
 }
 
 namespace mesh {
@@ -401,7 +484,26 @@ static void *mesh_calloc_impl(size_t count, size_t size) {
 }
 
 #ifdef __linux__
-// IFUNC Resolvers
+// ===================================================================
+// IFUNC Resolver Functions
+// ===================================================================
+// These resolver functions are called by the dynamic linker to determine
+// which implementation to use for each memory allocation function.
+// They run ONCE per function at program startup, before main().
+//
+// The resolver selects between 4KB and 16KB page implementations based
+// on the actual system page size detected from the auxiliary vector.
+//
+// CRITICAL: These functions run in the restricted IFUNC environment:
+//   - No access to global variables (not initialized yet)
+//   - No library functions available
+//   - Must be completely self-contained
+//   - Must use no_stack_protector attribute (stack guard not set up)
+//
+// The dynamic linker replaces calls to mesh_malloc, mesh_free, etc.
+// with direct calls to the selected implementation (mesh_malloc_impl<4096>
+// or mesh_malloc_impl<16384>), eliminating runtime overhead.
+// ===================================================================
 extern "C" {
 typedef void *(*malloc_func)(size_t);
 typedef void (*free_func)(void *);
@@ -414,37 +516,37 @@ typedef void *(*calloc_func)(size_t, size_t);
 __attribute__((no_stack_protector))
 static malloc_func resolve_mesh_malloc() {
   size_t pageSize = getPageSizeFromAuxv();
-  return (pageSize == 4096) ? mesh_malloc_impl<4096> : mesh_malloc_impl<16384>;
+  return (pageSize == kPageSize4K) ? mesh_malloc_impl<kPageSize4K> : mesh_malloc_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector))
 static free_func resolve_mesh_free() {
   size_t pageSize = getPageSizeFromAuxv();
-  return (pageSize == 4096) ? mesh_free_impl<4096> : mesh_free_impl<16384>;
+  return (pageSize == kPageSize4K) ? mesh_free_impl<kPageSize4K> : mesh_free_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector))
 static sized_free_func resolve_mesh_sized_free() {
   size_t pageSize = getPageSizeFromAuxv();
-  return (pageSize == 4096) ? mesh_sized_free_impl<4096> : mesh_sized_free_impl<16384>;
+  return (pageSize == kPageSize4K) ? mesh_sized_free_impl<kPageSize4K> : mesh_sized_free_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector))
 static realloc_func resolve_mesh_realloc() {
   size_t pageSize = getPageSizeFromAuxv();
-  return (pageSize == 4096) ? mesh_realloc_impl<4096> : mesh_realloc_impl<16384>;
+  return (pageSize == kPageSize4K) ? mesh_realloc_impl<kPageSize4K> : mesh_realloc_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector))
 static usable_size_func resolve_mesh_malloc_usable_size() {
   size_t pageSize = getPageSizeFromAuxv();
-  return (pageSize == 4096) ? mesh_malloc_usable_size_impl<4096> : mesh_malloc_usable_size_impl<16384>;
+  return (pageSize == kPageSize4K) ? mesh_malloc_usable_size_impl<kPageSize4K> : mesh_malloc_usable_size_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector))
 static memalign_func resolve_mesh_memalign() {
   size_t pageSize = getPageSizeFromAuxv();
-  return (pageSize == 4096) ? mesh_memalign_impl<4096> : mesh_memalign_impl<16384>;
+  return (pageSize == kPageSize4K) ? mesh_memalign_impl<kPageSize4K> : mesh_memalign_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector))
 static calloc_func resolve_mesh_calloc() {
   size_t pageSize = getPageSizeFromAuxv();
-  return (pageSize == 4096) ? mesh_calloc_impl<4096> : mesh_calloc_impl<16384>;
+  return (pageSize == kPageSize4K) ? mesh_calloc_impl<kPageSize4K> : mesh_calloc_impl<kPageSize16K>;
 }
 }
 #endif
@@ -454,10 +556,10 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz)
     __attribute__((ifunc("resolve_mesh_malloc")));
 #else
 {
-  if (likely(getPageSize() == 4096)) {
-    return mesh_malloc_impl<4096>(sz);
+  if (likely(getPageSize() == kPageSize4K)) {
+    return mesh_malloc_impl<kPageSize4K>(sz);
   } else {
-    return mesh_malloc_impl<16384>(sz);
+    return mesh_malloc_impl<kPageSize16K>(sz);
   }
 }
 #endif
@@ -468,10 +570,10 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr)
     __attribute__((ifunc("resolve_mesh_free")));
 #else
 {
-  if (likely(getPageSize() == 4096)) {
-    mesh_free_impl<4096>(ptr);
+  if (likely(getPageSize() == kPageSize4K)) {
+    mesh_free_impl<kPageSize4K>(ptr);
   } else {
-    mesh_free_impl<16384>(ptr);
+    mesh_free_impl<kPageSize16K>(ptr);
   }
 }
 #endif
@@ -482,10 +584,10 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size
     __attribute__((ifunc("resolve_mesh_sized_free")));
 #else
 {
-  if (likely(getPageSize() == 4096)) {
-    mesh_sized_free_impl<4096>(ptr, sz);
+  if (likely(getPageSize() == kPageSize4K)) {
+    mesh_sized_free_impl<kPageSize4K>(ptr, sz);
   } else {
-    mesh_sized_free_impl<16384>(ptr, sz);
+    mesh_sized_free_impl<kPageSize16K>(ptr, sz);
   }
 }
 #endif
@@ -495,10 +597,10 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, siz
     __attribute__((ifunc("resolve_mesh_realloc")));
 #else
 {
-  if (likely(getPageSize() == 4096)) {
-    return mesh_realloc_impl<4096>(oldPtr, newSize);
+  if (likely(getPageSize() == kPageSize4K)) {
+    return mesh_realloc_impl<kPageSize4K>(oldPtr, newSize);
   } else {
-    return mesh_realloc_impl<16384>(oldPtr, newSize);
+    return mesh_realloc_impl<kPageSize16K>(oldPtr, newSize);
   }
 }
 #endif
@@ -526,10 +628,10 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(const
 #ifdef __FreeBSD__
   void *ptr = const_cast<void *>(cptr);
 #endif
-  if (likely(getPageSize() == 4096)) {
-    return mesh_malloc_usable_size_impl<4096>(ptr);
+  if (likely(getPageSize() == kPageSize4K)) {
+    return mesh_malloc_usable_size_impl<kPageSize4K>(ptr);
   } else {
-    return mesh_malloc_usable_size_impl<16384>(ptr);
+    return mesh_malloc_usable_size_impl<kPageSize16K>(ptr);
   }
 }
 #endif
@@ -543,10 +645,10 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
     __attribute__((ifunc("resolve_mesh_memalign")));
 #else
 {
-  if (likely(getPageSize() == 4096)) {
-    return mesh_memalign_impl<4096>(alignment, size);
+  if (likely(getPageSize() == kPageSize4K)) {
+    return mesh_memalign_impl<kPageSize4K>(alignment, size);
   } else {
-    return mesh_memalign_impl<16384>(alignment, size);
+    return mesh_memalign_impl<kPageSize16K>(alignment, size);
   }
 }
 #endif
@@ -556,10 +658,10 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_calloc(size_t count, size
     __attribute__((ifunc("resolve_mesh_calloc")));
 #else
 {
-  if (likely(getPageSize() == 4096)) {
-    return mesh_calloc_impl<4096>(count, size);
+  if (likely(getPageSize() == kPageSize4K)) {
+    return mesh_calloc_impl<kPageSize4K>(count, size);
   } else {
-    return mesh_calloc_impl<16384>(count, size);
+    return mesh_calloc_impl<kPageSize16K>(count, size);
   }
 }
 #endif
@@ -578,49 +680,39 @@ size_t MESH_EXPORT mesh_usable_size(void *ptr) {
 // structures while forking.  This is not normally invoked when
 // libmesh is dynamically linked or LD_PRELOADed into a binary.
 void MESH_EXPORT xxmalloc_lock(void) {
-  if (likely(getPageSize() == kPageSize4K)) {
-    mesh::runtime<kPageSize4K>().lock();
-  } else {
-    mesh::runtime<kPageSize16K>().lock();
-  }
+  mesh::dispatchByPageSize([](auto& rt) {
+    rt.lock();
+  });
 }
 
 // ensure we don't concurrently allocate/mess with internal heap data
 // structures while forking.  This is not normally invoked when
 // libmesh is dynamically linked or LD_PRELOADed into a binary.
 void MESH_EXPORT xxmalloc_unlock(void) {
-  if (likely(getPageSize() == kPageSize4K)) {
-    mesh::runtime<kPageSize4K>().unlock();
-  } else {
-    mesh::runtime<kPageSize16K>().unlock();
-  }
+  mesh::dispatchByPageSize([](auto& rt) {
+    rt.unlock();
+  });
 }
 
 int MESH_EXPORT sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) MESH_THROW {
-  if (likely(getPageSize() == kPageSize4K)) {
-    return mesh::runtime<kPageSize4K>().sigaction(signum, act, oldact);
-  } else {
-    return mesh::runtime<kPageSize16K>().sigaction(signum, act, oldact);
-  }
+  return mesh::dispatchByPageSize([=](auto& rt) {
+    return rt.sigaction(signum, act, oldact);
+  });
 }
 
 int MESH_EXPORT sigprocmask(int how, const sigset_t *set, sigset_t *oldset) MESH_THROW {
-  if (likely(getPageSize() == kPageSize4K)) {
-    return mesh::runtime<kPageSize4K>().sigprocmask(how, set, oldset);
-  } else {
-    return mesh::runtime<kPageSize16K>().sigprocmask(how, set, oldset);
-  }
+  return mesh::dispatchByPageSize([=](auto& rt) {
+    return rt.sigprocmask(how, set, oldset);
+  });
 }
 
 // we need to wrap pthread_create and pthread_exit so that we can
 // install our segfault handler and cleanup thread-local heaps.
 int MESH_EXPORT pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
                                void *arg) MESH_THROW {
-  if (likely(getPageSize() == kPageSize4K)) {
-    return mesh::runtime<kPageSize4K>().createThread(thread, attr, startRoutine, arg);
-  } else {
-    return mesh::runtime<kPageSize16K>().createThread(thread, attr, startRoutine, arg);
-  }
+  return mesh::dispatchByPageSize([=](auto& rt) {
+    return rt.createThread(thread, attr, startRoutine, arg);
+  });
 }
 
 void MESH_EXPORT ATTRIBUTE_NORETURN pthread_exit(void *retval) {
@@ -634,49 +726,39 @@ void MESH_EXPORT ATTRIBUTE_NORETURN pthread_exit(void *retval) {
 // Same API as je_mallctl, allows a program to query stats and set
 // allocator-related options.
 int MESH_EXPORT mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-  if (likely(getPageSize() == kPageSize4K)) {
-    return mesh::runtime<kPageSize4K>().heap().mallctl(name, oldp, oldlenp, newp, newlen);
-  } else {
-    return mesh::runtime<kPageSize16K>().heap().mallctl(name, oldp, oldlenp, newp, newlen);
-  }
+  return mesh::dispatchByPageSize([=](auto& rt) {
+    return rt.heap().mallctl(name, oldp, oldlenp, newp, newlen);
+  });
 }
 
 #ifdef __linux__
 
 int MESH_EXPORT epoll_wait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {
-  if (likely(getPageSize() == kPageSize4K)) {
-    return mesh::runtime<kPageSize4K>().epollWait(__epfd, __events, __maxevents, __timeout);
-  } else {
-    return mesh::runtime<kPageSize16K>().epollWait(__epfd, __events, __maxevents, __timeout);
-  }
+  return mesh::dispatchByPageSize([=](auto& rt) {
+    return rt.epollWait(__epfd, __events, __maxevents, __timeout);
+  });
 }
 
 int MESH_EXPORT epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
                             const __sigset_t *__ss) {
-  if (likely(getPageSize() == kPageSize4K)) {
-    return mesh::runtime<kPageSize4K>().epollPwait(__epfd, __events, __maxevents, __timeout, __ss);
-  } else {
-    return mesh::runtime<kPageSize16K>().epollPwait(__epfd, __events, __maxevents, __timeout, __ss);
-  }
+  return mesh::dispatchByPageSize([=](auto& rt) {
+    return rt.epollPwait(__epfd, __events, __maxevents, __timeout, __ss);
+  });
 }
 
 #endif
 #if __linux__
 
 ssize_t MESH_EXPORT recv(int sockfd, void *buf, size_t len, int flags) {
-  if (likely(getPageSize() == kPageSize4K)) {
-    return mesh::runtime<kPageSize4K>().recv(sockfd, buf, len, flags);
-  } else {
-    return mesh::runtime<kPageSize16K>().recv(sockfd, buf, len, flags);
-  }
+  return mesh::dispatchByPageSize([=](auto& rt) {
+    return rt.recv(sockfd, buf, len, flags);
+  });
 }
 
 ssize_t MESH_EXPORT recvmsg(int sockfd, struct msghdr *msg, int flags) {
-  if (likely(getPageSize() == kPageSize4K)) {
-    return mesh::runtime<kPageSize4K>().recvmsg(sockfd, msg, flags);
-  } else {
-    return mesh::runtime<kPageSize16K>().recvmsg(sockfd, msg, flags);
-  }
+  return mesh::dispatchByPageSize([=](auto& rt) {
+    return rt.recvmsg(sockfd, msg, flags);
+  });
 }
 #endif
 }

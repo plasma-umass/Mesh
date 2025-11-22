@@ -32,10 +32,10 @@ MiniHeapT *GetMiniHeap(const MiniHeapID id) {
   // But MiniHeap<PageSize> has kPageSize? No.
   
   // Let's dispatch based on runtime page size check
-  if (getPageSize() == 4096) {
-      return reinterpret_cast<MiniHeapT*>(runtime<4096>().heap().miniheapForID(id));
+  if (getPageSize() == kPageSize4K) {
+      return reinterpret_cast<MiniHeapT*>(runtime<kPageSize4K>().heap().miniheapForID(id));
   } else {
-      return reinterpret_cast<MiniHeapT*>(runtime<16384>().heap().miniheapForID(id));
+      return reinterpret_cast<MiniHeapT*>(runtime<kPageSize16K>().heap().miniheapForID(id));
   }
 }
 
@@ -46,13 +46,13 @@ MiniHeapID GetMiniHeapID(const MiniHeapT *mh) {
     return MiniHeapID{0};
   }
 
-  if (getPageSize() == 4096) {
+  if (getPageSize() == kPageSize4K) {
       // Cast to specific type to satisfy type system, though void* would work for miniheapIDFor if it took void*
       // miniheapIDFor takes const MiniHeapT*
-      // GlobalHeap<4096>::miniheapIDFor takes const MiniHeap<4096>*
-      return runtime<4096>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<4096>*>(mh));
+      // GlobalHeap<kPageSize4K>::miniheapIDFor takes const MiniHeap<kPageSize4K>*
+      return runtime<kPageSize4K>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<kPageSize4K>*>(mh));
   } else {
-      return runtime<16384>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<16384>*>(mh));
+      return runtime<kPageSize16K>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<kPageSize16K>*>(mh));
   }
 }
 
@@ -499,9 +499,9 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   const auto meshedPageHWM = meshedPageHighWaterMark();
 
   debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
-  debug("Meshed MB (total):  %.1f\n", (size_t)_stats.meshCount * 4096.0 / 1024.0 / 1024.0);
+  debug("Meshed MB (total):  %.1f\n", (size_t)_stats.meshCount * (double)PageSize / 1024.0 / 1024.0);
   debug("Meshed pages HWM:   %zu\n", meshedPageHWM);
-  debug("Meshed MB HWM:      %.1f\n", meshedPageHWM * 4096.0 / 1024.0 / 1024.0);
+  debug("Meshed MB HWM:      %.1f\n", meshedPageHWM * (double)PageSize / 1024.0 / 1024.0);
   // debug("Peak RSS reduction: %.2f\n", rssSavings);
   debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
   debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);

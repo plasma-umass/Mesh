@@ -340,10 +340,10 @@ char *MeshableArena::pageAlloc(Span &result, size_t pageCount, size_t pageAlignm
   if (_mhIndex[span.offset].load().hasValue()) {
     mesh::debug("----\n");
     void *mh_void = miniheapForArenaOffset(span.offset);
-    if (getPageSize() == 4096) {
-       reinterpret_cast<MiniHeap<4096>*>(mh_void)->dumpDebug();
+    if (getPageSize() == kPageSize4K) {
+       reinterpret_cast<MiniHeap<kPageSize4K>*>(mh_void)->dumpDebug();
     } else {
-       reinterpret_cast<MiniHeap<16384>*>(mh_void)->dumpDebug();
+       reinterpret_cast<MiniHeap<kPageSize16K>*>(mh_void)->dumpDebug();
     }
   }
 #endif
@@ -688,12 +688,12 @@ void MeshableArena::prepareForFork() {
   }
 
   // debug("%d: prepare fork", getpid());
-  if (getPageSize() == 4096) {
-    runtime<4096>().heap().lock();
-    runtime<4096>().lock();
+  if (getPageSize() == kPageSize4K) {
+    runtime<kPageSize4K>().heap().lock();
+    runtime<kPageSize4K>().lock();
   } else {
-    runtime<16384>().heap().lock();
-    runtime<16384>().lock();
+    runtime<kPageSize16K>().heap().lock();
+    runtime<kPageSize16K>().lock();
   }
   internal::Heap().lock();
 
@@ -736,12 +736,12 @@ void MeshableArena::afterForkParent() {
   hard_assert(r == 0);
 
   // debug("%d: after fork parent", getpid());
-  if (getPageSize() == 4096) {
-    runtime<4096>().unlock();
-    runtime<4096>().heap().unlock();
+  if (getPageSize() == kPageSize4K) {
+    runtime<kPageSize4K>().unlock();
+    runtime<kPageSize4K>().heap().unlock();
   } else {
-    runtime<16384>().unlock();
-    runtime<16384>().heap().unlock();
+    runtime<kPageSize16K>().unlock();
+    runtime<kPageSize16K>().heap().unlock();
   }
 }
 
@@ -750,10 +750,10 @@ void MeshableArena::doAfterForkChild() {
 }
 
 void MeshableArena::afterForkChild() {
-  if (getPageSize() == 4096) {
-    runtime<4096>().updatePid();
+  if (getPageSize() == kPageSize4K) {
+    runtime<kPageSize4K>().updatePid();
   } else {
-    runtime<16384>().updatePid();
+    runtime<kPageSize16K>().updatePid();
   }
 
   if (!kMeshingEnabled) {
@@ -767,12 +767,12 @@ void MeshableArena::afterForkChild() {
 
   // debug("%d: after fork child", getpid());
   internal::Heap().unlock();
-  if (getPageSize() == 4096) {
-    runtime<4096>().unlock();
-    runtime<4096>().heap().unlock();
+  if (getPageSize() == kPageSize4K) {
+    runtime<kPageSize4K>().unlock();
+    runtime<kPageSize4K>().heap().unlock();
   } else {
-    runtime<16384>().unlock();
-    runtime<16384>().heap().unlock();
+    runtime<kPageSize16K>().unlock();
+    runtime<kPageSize16K>().heap().unlock();
   }
 
   close(_forkPipe[0]);
@@ -848,10 +848,10 @@ void MeshableArena::afterForkChild() {
         });
       };
 
-      if (getPageSize() == 4096) {
-        processMiniHeap(reinterpret_cast<MiniHeap<4096>*>(mh_void));
+      if (getPageSize() == kPageSize4K) {
+        processMiniHeap(reinterpret_cast<MiniHeap<kPageSize4K>*>(mh_void));
       } else {
-        processMiniHeap(reinterpret_cast<MiniHeap<16384>*>(mh_void));
+        processMiniHeap(reinterpret_cast<MiniHeap<kPageSize16K>*>(mh_void));
       }
     }
   }
