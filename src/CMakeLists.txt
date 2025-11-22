@@ -68,7 +68,7 @@ if(${GCOV})
     add_custom_target(coverage_gcc
             COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
             COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ --ignore-errors mismatch --rc geninfo_unexecuted_blocks=1
-            COMMAND genhtml app.info
+            COMMAND genhtml app.info -o .
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
             DEPENDS unit.test)
 endif()
@@ -78,7 +78,7 @@ if(${CLANGCOV})
     add_custom_target(coverage_clang
             COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
             COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/
-            COMMAND genhtml app.info
+            COMMAND genhtml app.info -o .
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
             DEPENDS unit.test)
     #add_custom_target(coverage_clang
