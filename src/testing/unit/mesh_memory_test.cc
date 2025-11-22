@@ -34,6 +34,25 @@ void testPrecisePageDeallocation() {
   // Disable automatic meshing for controlled test
   gheap.setMeshPeriodMs(kZeroMs);
 
+  // Pre-initialize internal heap and allocatedBitmap to avoid RSS spikes
+  // The allocatedBitmap() function allocates memory via internal::Heap().malloc()
+  // which can grab ~1MB from the OS on first use
+  {
+    // Warm up by doing a dummy allocation and scavenge
+    FixedArray<MiniHeap<PageSize>, 1> dummy_array{};
+    gheap.allocSmallMiniheaps(SizeMap::SizeClass(256), 256, dummy_array, tid);
+    MiniHeap<PageSize>* dummy_mh = dummy_array[0];
+    if (dummy_mh) {
+      void* dummy_ptr = dummy_mh->mallocAt(gheap.arenaBegin(), 0);
+      if (dummy_ptr) {
+        gheap.free(dummy_ptr);
+      }
+      gheap.freeMiniheap(dummy_mh);
+    }
+    // Trigger scavenge to initialize allocatedBitmap's internal heap
+    gheap.scavenge(true);
+  }
+
 
   printf("\n=== Testing Precise Page Deallocation ===\n");
   printf("Page size: %zu bytes\n", pageSize);
@@ -149,14 +168,8 @@ void testPrecisePageDeallocation() {
 
   // Verify we allocated approximately 2 pages worth of memory
   // The mesh_memory_bytes metric should closely match actual physical pages allocated
-#ifdef __APPLE__
-  // On macOS, RSS includes other allocations and metadata, be more lenient
-  EXPECT_GE(mesh_memory_increase, 2 * pageSize);
-  EXPECT_LE(mesh_memory_increase, 8 * pageSize);  // Allow more for macOS metadata
-#else
   EXPECT_GE(mesh_memory_increase, 2 * pageSize);
   EXPECT_LE(mesh_memory_increase, 3 * pageSize);  // Allow one extra page for metadata
-#endif
 
   // Phase 2: Verify the miniheaps are meshable
   printf("\n=== Phase 2: Verifying miniheaps are meshable ===\n");
@@ -191,21 +204,9 @@ void testPrecisePageDeallocation() {
     printf("\nAfter meshing: Mesh memory decreased by %" PRIu64 " bytes (expected ~%zu bytes)\n",
            mesh_memory_freed, pageSize);
   } else if (after_mesh.mesh_memory_bytes > after_alloc.mesh_memory_bytes) {
-    // On macOS, when running in isolation, scavenge() can trigger internal heap allocations
-    // that increase RSS, masking the memory freed by F_PUNCHHOLE.
-    // This happens because allocatedBitmap() allocates via internal::Heap().malloc()
-    // which can cause the internal heap to grab a large chunk from the OS.
-    printf("\nWARNING: After meshing, mesh memory increased by %" PRIu64 " bytes\n",
-           after_mesh.mesh_memory_bytes - after_alloc.mesh_memory_bytes);
-    printf("This happens on macOS when scavenge() triggers internal allocations\n");
-    printf("(Common when test runs in isolation vs. after other tests that pre-initialize the heap)\n");
-#ifdef __APPLE__
-    // On macOS, we can't reliably measure the freed memory due to internal allocations
-    // The test passes when run as part of the full suite (after Alignment test initializes the heap)
-    // but fails when run in isolation (as in CI with test filters)
-    printf("Skipping precise measurement on macOS due to RSS measurement limitations\n");
-    GTEST_SKIP() << "RSS measurements unreliable on macOS when test runs in isolation";
-#endif
+    // This should not happen - meshing should reduce memory
+    printf("\nERROR: After meshing, mesh memory increased by %" PRIu64 " bytes (expected decrease of ~%zu bytes)\n",
+           after_mesh.mesh_memory_bytes - after_alloc.mesh_memory_bytes, pageSize);
   } else {
     printf("\nAfter meshing: Mesh memory unchanged\n");
   }
@@ -251,14 +252,8 @@ void testPrecisePageDeallocation() {
   }
   printf("\nFinal mesh memory overhead: %" PRIu64 " bytes\n", final_mesh_overhead);
 
-#ifdef __APPLE__
-  // On macOS, internal allocations during scavenge mean we can't return to exact baseline
-  // Allow more tolerance for heap metadata that was allocated during the test
-  EXPECT_LT(final_mesh_overhead, 2 * 1024 * 1024) << "Mesh memory should return close to baseline";
-#else
   // Should be back close to baseline (within 1MB tolerance for heap metadata)
   EXPECT_LT(final_mesh_overhead, 1024 * 1024) << "Mesh memory should return close to baseline";
-#endif
 }
 
 template <size_t PageSize>

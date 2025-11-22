@@ -52,7 +52,7 @@ jobs:
     - uses: actions/checkout@v1
     - name: build in debug mode
       run: |
-        ./bazel test -c dbg //src:unit-tests --test_output=all --cache_test_results=no --runs_per_test=5 --cxxopt=-DCI_DEBUG_MESH=1
+        ./bazel test -c dbg //src:unit-tests --test_output=all --cxxopt=-DCI_DEBUG_MESH=1
     - name: build tests and binary
       run: |
         make -j1
