@@ -93,11 +93,20 @@ namespace internal {
   }
 }
 
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+// Apple Silicon always uses 16KB pages; make this a compile-time constant so
+// the compiler can fold away any page-size conditionals.
+inline constexpr size_t getPageSize() {
+  return kPageSize16K;
+}
+static_assert(getPageSize() == kPageSize16K, "Apple Silicon uses 16KB pages");
+#else
 // Runtime page size - initialized on first access
 inline size_t getPageSize() {
   static const size_t kPageSize = internal::initPageSize();
   return kPageSize;
 }
+#endif
 
 // Keep a constexpr version for compile-time calculations (assume minimum 4KB)
 static constexpr uint64_t kPageSizeMin = 4096;
