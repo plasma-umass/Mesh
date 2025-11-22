@@ -47,16 +47,7 @@ MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), intern
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
-#ifdef __APPLE__
-  // macOS: Use anonymous memory since mach_vm_remap doesn't need file backing
-  _fd = -1;
-  if (kMeshingEnabled) {
-    debug("mesh: using anonymous memory for arena (macOS)");
-  }
-  // Use MAP_ANON | MAP_PRIVATE for anonymous memory
-  _arenaBegin = SuperHeap::map(kArenaSize, MAP_ANON | MAP_PRIVATE, -1);
-#else
-  // Linux: Use file-backed shared memory for mmap aliasing
+  // Both macOS and Linux use file-backed shared memory for meshing
   int fd = -1;
   if (kMeshingEnabled) {
     fd = openSpanFile(kArenaSize);
@@ -66,6 +57,15 @@ MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), intern
     }
   }
   _fd = fd;
+
+#ifdef __APPLE__
+  // macOS: Use file-backed memory with MAP_SHARED for F_PUNCHHOLE support
+  if (kMeshingEnabled) {
+    debug("mesh: using file-backed memory for arena (macOS) - enables F_PUNCHHOLE\n");
+  }
+  _arenaBegin = SuperHeap::map(kArenaSize, kMapShared, fd);
+#else
+  // Linux: Use file-backed shared memory for mmap aliasing
   _arenaBegin = SuperHeap::map(kArenaSize, kMapShared, fd);
 #endif
 
@@ -501,15 +501,13 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
     return;
   }
 
-#ifdef __APPLE__
-  // macOS uses anonymous memory (MAP_ANON), not file-backed shared memory.
-  // No backing store to deallocate - madvise handles memory elsewhere.
+  // Early exit if no file backing
   if (_fd == -1) {
     return;
   }
-#endif
 
   const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
+
 #ifdef __FreeBSD__
 #if __FreeBSD_version >= 1400000
   struct spacectl_range range = {
@@ -520,21 +518,24 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
 #else
 #warning "space deallocation unsupported on FreeBSD < 14"
 #endif
-#else
-#ifndef __APPLE__
-  int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
-  d_assert_msg(result == 0, "result(fd %d): %d errno %d (%s)\n", _fd, result, errno, strerror(errno));
-#else
-  // This code path should not be reached on macOS with anonymous memory
-  fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0, (long long)sz, 0};
-  int result = fcntl(_fd, F_PREALLOCATE, &store);
-  if (result == -1) {
-    // try and allocate space with fragments
-    store.fst_flags = F_ALLOCATEALL;
-    result = fcntl(_fd, F_PREALLOCATE, &store);
+#elif defined(__APPLE__)
+  // macOS: Use F_PUNCHHOLE to deallocate physical pages in file-backed memory
+  fpunchhole_t punch;
+  memset(&punch, 0, sizeof(punch));
+  punch.fp_offset = off;
+  punch.fp_length = sz;
+
+  int result = fcntl(_fd, F_PUNCHHOLE, &punch);
+  if (result != 0) {
+    // F_PUNCHHOLE may fail on some file systems or configurations
+    // This is non-fatal - madvise will still help with memory pressure
+    debug("F_PUNCHHOLE failed (fd %d, off %lld, sz %zu): errno %d (%s)\n",
+          _fd, (long long)off, sz, errno, strerror(errno));
   }
-  d_assert(result == 0);
-#endif
+#else
+  // Linux: Use fallocate with FALLOC_FL_PUNCH_HOLE
+  int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
+  d_assert_msg(result == 0, "fallocate(fd %d): %d errno %d (%s)\n", _fd, result, errno, strerror(errno));
 #endif
 }
 
@@ -560,32 +561,38 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   trackMeshed(removedSpan);
 
 #ifdef __APPLE__
-  // macOS: Use Mach VM API to create memory alias
-  // vm_remap shares the physical pages from 'keep' to 'remove', creating an alias
-  vm_prot_t cur_protection = VM_PROT_DEFAULT;
-  vm_prot_t max_protection = VM_PROT_DEFAULT;
+  if (_fd >= 0) {
+    // macOS with file-backed memory: Use mmap to create file-backed alias
+    // This enables F_PUNCHHOLE to work correctly
+    void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * pageSize);
+    hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
+  } else {
+    // Fallback: Use Mach VM API for anonymous memory (legacy path)
+    vm_prot_t cur_protection = VM_PROT_DEFAULT;
+    vm_prot_t max_protection = VM_PROT_DEFAULT;
 
-  mach_vm_address_t target_address = reinterpret_cast<mach_vm_address_t>(remove);
-  mach_vm_address_t source_address = reinterpret_cast<mach_vm_address_t>(keep);
+    mach_vm_address_t target_address = reinterpret_cast<mach_vm_address_t>(remove);
+    mach_vm_address_t source_address = reinterpret_cast<mach_vm_address_t>(keep);
 
-  kern_return_t kr = mach_vm_remap(
-      mach_task_self(),                     // target task
-      &target_address,                      // target address (in/out)
-      sz,                                   // size
-      0,                                    // mask (0 = no specific alignment beyond size)
-      VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,  // flags: fixed address, overwrite existing
-      mach_task_self(),                     // source task
-      source_address,                       // source address
-      FALSE,                                // copy (FALSE = share same physical memory)
-      &cur_protection,                      // current protection (out)
-      &max_protection,                      // max protection (out)
-      VM_INHERIT_SHARE                      // inheritance
-  );
+    kern_return_t kr = mach_vm_remap(
+        mach_task_self(),                     // target task
+        &target_address,                      // target address (in/out)
+        sz,                                   // size
+        0,                                    // mask (0 = no specific alignment beyond size)
+        VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,  // flags: fixed address, overwrite existing
+        mach_task_self(),                     // source task
+        source_address,                       // source address
+        FALSE,                                // copy (FALSE = share same physical memory)
+        &cur_protection,                      // current protection (out)
+        &max_protection,                      // max protection (out)
+        VM_INHERIT_SHARE                      // inheritance
+    );
 
-  hard_assert_msg(kr == KERN_SUCCESS, "mach_vm_remap failed: %d", kr);
-  hard_assert_msg(target_address == reinterpret_cast<mach_vm_address_t>(remove),
-                  "vm_remap changed target address: expected %p, got %p",
-                  remove, (void*)target_address);
+    hard_assert_msg(kr == KERN_SUCCESS, "mach_vm_remap failed: %d", kr);
+    hard_assert_msg(target_address == reinterpret_cast<mach_vm_address_t>(remove),
+                    "vm_remap changed target address: expected %p, got %p",
+                    remove, (void*)target_address);
+  }
 #else
   // Linux: Use mmap to create file-backed alias
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * pageSize);

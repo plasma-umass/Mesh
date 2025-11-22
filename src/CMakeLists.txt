@@ -14,6 +14,11 @@ set(common_src
         thread_local_heap.cc
         )
 
+# Add macOS-specific files only on Apple platforms
+if(APPLE)
+    list(APPEND common_src memory_stats_macos.cc)
+endif()
+
 #Create the set of source files for the mesh library
 set(mesh_src
         ${common_src}
@@ -43,6 +48,11 @@ set(unit_src
         testing/unit/size_class_test.cc
         testing/unit/triple_mesh_test.cc
 )
+
+# Add macOS-specific tests only on Apple platforms
+if(APPLE)
+    list(APPEND unit_src testing/unit/macos_memory_test.cc)
+endif()
 #Add a target to the unit tests executable
 add_executable(unit.test ${unit_src})
 target_link_libraries(unit.test PRIVATE -ldl -pthread )

@@ -95,7 +95,10 @@ cc_library(
         "real.cc",
         "runtime.cc",
         "thread_local_heap.cc",
-    ],
+    ] + select({
+        "@platforms//os:macos": ["memory_stats_macos.cc"],
+        "//conditions:default": [],
+    }),
     hdrs = glob([
         "*.h",
         "plasma/*.h",
@@ -189,7 +192,12 @@ cc_test(
     size = "small",  # Test runs in ~2.5s
     srcs = glob([
         "testing/unit/*.cc",
-    ]),
+    ], exclude = [
+        "testing/unit/macos_memory_test.cc",  # Conditionally included below
+    ]) + select({
+        "@platforms//os:macos": ["testing/unit/macos_memory_test.cc"],
+        "//conditions:default": [],
+    }),
     copts = [
         "-Isrc",
     ] + MESH_DEFAULT_COPTS,
