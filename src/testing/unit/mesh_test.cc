@@ -13,35 +13,37 @@
 using namespace mesh;
 
 static constexpr uint32_t StrLen = 128;
-static constexpr uint32_t ObjCount = 32;
 
 // shows up in strace logs, but otherwise does nothing
 static inline void note(const char *note) {
   int _ __attribute__((unused)) = write(-1, note, strlen(note));
 }
 
-static void meshTest(bool invert) {
+template <size_t PageSize>
+static void meshTestImpl(bool invert) {
   if (!kMeshingEnabled) {
     GTEST_SKIP();
   }
 
+  const uint32_t ObjCount = std::min(static_cast<uint32_t>(PageSize / StrLen), 1024U);
+
   const auto tid = gettid();
-  GlobalHeap &gheap = runtime().heap();
+  GlobalHeap<PageSize> &gheap = runtime<PageSize>().heap();
 
   // disable automatic meshing for this test
   gheap.setMeshPeriodMs(kZeroMs);
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
-  FixedArray<MiniHeap, 1> array{};
+  FixedArray<MiniHeap<PageSize>, 1> array{};
 
   // allocate two miniheaps for the same object size from our global heap
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
-  MiniHeap *mh1 = array[0];
+  MiniHeap<PageSize> *mh1 = array[0];
   array.clear();
 
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
-  MiniHeap *mh2 = array[0];
+  MiniHeap<PageSize> *mh2 = array[0];
   array.clear();
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 2UL);
@@ -80,7 +82,7 @@ static void meshTest(bool invert) {
   ASSERT_EQ(mh2->bitmap().inUseCount(), 1UL);
 
   if (invert) {
-    MiniHeap *tmp = mh1;
+    MiniHeap<PageSize> *tmp = mh1;
     mh1 = mh2;
     mh2 = tmp;
   }
@@ -132,6 +134,14 @@ static void meshTest(bool invert) {
   note("DONE SCAVENGE");
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
+}
+
+static void meshTest(bool invert) {
+  if (getPageSize() == 4096) {
+    meshTestImpl<4096>(invert);
+  } else {
+    meshTestImpl<16384>(invert);
+  }
 }
 
 TEST(MeshTest, TryMesh) {

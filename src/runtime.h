@@ -33,18 +33,24 @@ namespace mesh {
 // function passed to pthread_create
 typedef void *(*PthreadFn)(void *);
 
+template <size_t PageSize>
 class Runtime {
 private:
   DISALLOW_COPY_AND_ASSIGN(Runtime);
 
   // ensure we don't mistakenly create additional runtime instances
-  explicit Runtime();
+  explicit Runtime() {
+      if (internal::getSeedMutex() == nullptr) {
+          // force init
+          internal::seed();
+      }
+  }
 
 public:
   void lock();
   void unlock();
 
-  inline GlobalHeap &heap() {
+  inline GlobalHeap<PageSize> &heap() {
     return _heap;
   }
 
@@ -105,21 +111,25 @@ private:
 
   static void *bgThread(void *arg);
 
-  friend Runtime &runtime();
+  template <size_t P>
+  friend Runtime<P> &runtime();
 
   mutex _mutex{};
   int _signalFd{-2};
   pid_t _pid{};
-  GlobalHeap _heap{};
+  GlobalHeap<PageSize> _heap{};
 };
 
 // get a reference to the Runtime singleton
-inline Runtime &runtime() {
+template <size_t PageSize>
+inline Runtime<PageSize> &runtime() {
   // force alignment by using a buffer of doubles.
-  static double buf[(sizeof(Runtime) + sizeof(double) - 1) / sizeof(double)];
-  static Runtime *runtimePtr = new (buf) Runtime{};
+  static double buf[(sizeof(Runtime<PageSize>) + sizeof(double) - 1) / sizeof(double)];
+  static Runtime<PageSize> *runtimePtr = new (buf) Runtime<PageSize>{};
   return *runtimePtr;
 }
 }  // namespace mesh
+
+#include "global_heap_impl.h"
 
 #endif  // MESH_RUNTIME_H

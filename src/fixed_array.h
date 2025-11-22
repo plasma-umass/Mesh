@@ -13,8 +13,15 @@ namespace mesh {
 
 // enables iteration through the miniheaps in an array
 template <typename FixedArray>
-class FixedArrayIter : public std::iterator<std::forward_iterator_tag, typename FixedArray::value_type> {
+class FixedArrayIter {
 public:
+  // Iterator traits (modern C++17 approach, not inheriting from deprecated std::iterator)
+  using iterator_category = std::forward_iterator_tag;
+  using value_type = typename FixedArray::value_type;
+  using difference_type = std::ptrdiff_t;
+  using pointer = value_type*;
+  using reference = value_type&;
+
   FixedArrayIter(const FixedArray &a, const uint32_t i) : _i(i), _array(a) {
   }
   FixedArrayIter &operator++() {

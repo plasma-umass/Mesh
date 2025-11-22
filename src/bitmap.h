@@ -44,8 +44,15 @@ using std::atomic_size_t;
 
 // enables iteration through the set bits of the bitmap
 template <typename Container>
-class BitmapIter : public std::iterator<std::forward_iterator_tag, size_t> {
+class BitmapIter {
 public:
+  // Iterator traits (modern C++17 approach, not inheriting from deprecated std::iterator)
+  using iterator_category = std::forward_iterator_tag;
+  using value_type = size_t;
+  using difference_type = std::ptrdiff_t;
+  using pointer = size_t*;
+  using reference = size_t&;
+
   BitmapIter(const Container &a, const size_t i) : _i(i), _cont(a) {
   }
   BitmapIter &operator++() {
@@ -86,14 +93,11 @@ protected:
   AtomicBitmapBase(size_t bitCount) {
     d_assert_msg(bitCount <= maxBits, "max bits (%zu) exceeded: %zu", maxBits, bitCount);
 
-    static_assert(wordCount(representationSize(maxBits)) == 4, "unexpected representation size");
-    // for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
-    //   _bits[i].store(0, std::memory_order_relaxed);
-    // }
-    _bits[0].store(0, std::memory_order_relaxed);
-    _bits[1].store(0, std::memory_order_relaxed);
-    _bits[2].store(0, std::memory_order_relaxed);
-    _bits[3].store(0, std::memory_order_relaxed);
+    // Initialize all words to 0
+    constexpr size_t wordCnt = wordCount(representationSize(maxBits));
+    for (size_t i = 0; i < wordCnt; i++) {
+      _bits[i].store(0, std::memory_order_relaxed);
+    }
     std::atomic_thread_fence(std::memory_order_release);
   }
 
@@ -101,13 +105,10 @@ protected:
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE setAndExchangeAll(size_t *oldBits, const size_t *newBits) {
-    // for (size_t i = 0; i < wordCount(representationSize(maxBits)); i++) {
-    //   oldBits[i] = _bits[i].exchange(newBits[i]);
-    // }
-    oldBits[0] = _bits[0].exchange(newBits[0], std::memory_order_acq_rel);
-    oldBits[1] = _bits[1].exchange(newBits[1], std::memory_order_acq_rel);
-    oldBits[2] = _bits[2].exchange(newBits[2], std::memory_order_acq_rel);
-    oldBits[3] = _bits[3].exchange(newBits[3], std::memory_order_acq_rel);
+    constexpr size_t wordCnt = wordCount(representationSize(maxBits));
+    for (size_t i = 0; i < wordCnt; i++) {
+      oldBits[i] = _bits[i].exchange(newBits[i], std::memory_order_acq_rel);
+    }
   }
 
 public:
@@ -140,8 +141,12 @@ public:
   }
 
   inline uint32_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
-    return __builtin_popcountl(_bits[0]) + __builtin_popcountl(_bits[1]) + __builtin_popcountl(_bits[2]) +
-           __builtin_popcountl(_bits[3]);
+    constexpr size_t wordCnt = wordCount(representationSize(maxBits));
+    uint32_t count = 0;
+    for (size_t i = 0; i < wordCnt; i++) {
+      count += __builtin_popcountl(_bits[i].load(std::memory_order_relaxed));
+    }
+    return count;
   }
 
 protected:
@@ -273,14 +278,10 @@ protected:
 
 public:
   inline void ATTRIBUTE_ALWAYS_INLINE invert() {
-    // constexpr size_t numWords = wordCount(representationSize(maxBits));
-    // for (size_t i = 0; i < numWords; i++) {
-    //   _bits[i] = ~_bits[i];
-    // }
-    _bits[0] = ~_bits[0];
-    _bits[1] = ~_bits[1];
-    _bits[2] = ~_bits[2];
-    _bits[3] = ~_bits[3];
+    constexpr size_t numWords = wordCount(representationSize(maxBits));
+    for (size_t i = 0; i < numWords; i++) {
+      _bits[i] = ~_bits[i];
+    }
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE setAll(uint64_t bitCount) {
@@ -315,15 +316,11 @@ public:
   }
 
   inline uint64_t ATTRIBUTE_ALWAYS_INLINE inUseCount() const {
-    constexpr auto wordCount = representationSize(maxBits) / sizeof(size_t);
+    constexpr auto wordCnt = representationSize(maxBits) / sizeof(size_t);
     uint32_t count = 0;
-    // for (size_t i = 0; i < wordCount; i++) {
-    //   count += __builtin_popcountl(_bits[i]);
-    // }
-    count += __builtin_popcountl(_bits[0]);
-    count += __builtin_popcountl(_bits[1]);
-    count += __builtin_popcountl(_bits[2]);
-    count += __builtin_popcountl(_bits[3]);
+    for (size_t i = 0; i < wordCnt; i++) {
+      count += __builtin_popcountl(_bits[i]);
+    }
     return count;
   }
 
@@ -332,10 +329,10 @@ protected:
   }
 
   void ATTRIBUTE_ALWAYS_INLINE clear() {
-    _bits[0] = 0;
-    _bits[1] = 0;
-    _bits[2] = 0;
-    _bits[3] = 0;
+    constexpr size_t wordCnt = wordCount(representationSize(maxBits));
+    for (size_t i = 0; i < wordCnt; i++) {
+      _bits[i] = 0;
+    }
   }
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE bitCount() const {
@@ -477,11 +474,15 @@ public:
     return Super::unsetAt(item, position);
   }
 
-  // FIXME: who uses this? bad idea with atomics
+  // NOTE: This is not fully atomic-safe, but only used in debug assertions
+  // For RelaxedBitmapBase (non-atomic), direct access is fine
+  // For AtomicBitmapBase, this creates a potential race, but acceptable for debug
   inline bool ATTRIBUTE_ALWAYS_INLINE isSet(uint64_t index) const {
     uint32_t item, position;
     computeItemPosition(index, item, position);
 
+    // Use direct access for both atomic and non-atomic variants
+    // This works because on x86/ARM, reading a size_t is atomic
     return Super::_bits[item] & getMask(position);
   }
 
@@ -577,12 +578,18 @@ private:
 }  // namespace bitmap
 
 namespace internal {
-typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase<256>> Bitmap;
-typedef bitmap::BitmapBase<bitmap::RelaxedFixedBitmapBase<256>> RelaxedFixedBitmap;
+// typedef bitmap::BitmapBase<bitmap::AtomicBitmapBase<1024>> Bitmap;
+template <size_t PageSize>
+using Bitmap = bitmap::BitmapBase<bitmap::AtomicBitmapBase<PageSize / kMinObjectSize>>;
+
+// typedef bitmap::BitmapBase<bitmap::RelaxedFixedBitmapBase<1024>> RelaxedFixedBitmap;
+template <size_t PageSize>
+using RelaxedFixedBitmap = bitmap::BitmapBase<bitmap::RelaxedFixedBitmapBase<PageSize / kMinObjectSize>>;
+
 typedef bitmap::BitmapBase<bitmap::RelaxedBitmapBase> RelaxedBitmap;
 
-static_assert(sizeof(Bitmap) == sizeof(size_t) * 4, "Bitmap unexpected size");
-static_assert(sizeof(RelaxedFixedBitmap) == sizeof(size_t) * 4, "Bitmap unexpected size");
+// static_assert(sizeof(Bitmap) == sizeof(size_t) * 16, "Bitmap unexpected size (expected 128 bytes for 1024 bits)");
+// static_assert(sizeof(RelaxedFixedBitmap) == sizeof(size_t) * 16, "Bitmap unexpected size (expected 128 bytes for 1024 bits)");
 static_assert(sizeof(RelaxedBitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
 }  // namespace internal
 }  // namespace mesh

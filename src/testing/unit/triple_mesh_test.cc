@@ -20,7 +20,6 @@ using namespace std;
 using namespace mesh;
 
 static constexpr uint32_t StrLen = 128;
-static constexpr uint32_t ObjCount = 32;
 
 static char *s1;
 static char *s2;
@@ -40,8 +39,14 @@ static atomic<int> ShouldContinueTest2;
 // we need to wrap pthread_create so that we can safely implement a
 // stop-the-world quiescent period for the copy/mremap phase of
 // meshing -- copied from libmesh.cc
-extern "C" int pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
-                              void *arg) PTHREAD_CREATE_THROW;
+extern "C" int __attribute__((weak)) pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
+                              void *arg) PTHREAD_CREATE_THROW {
+  if (getPageSize() == 4096) {
+    return mesh::runtime<4096>().createThread(thread, attr, startRoutine, arg);
+  } else {
+    return mesh::runtime<16384>().createThread(thread, attr, startRoutine, arg);
+  }
+}
 
 static void writerThread1() {
   ShouldContinueTest1 = 1;
@@ -76,28 +81,31 @@ static inline void note(const char *note) {
   int _ __attribute__((unused)) = write(-1, note, strlen(note));
 }
 
-static void meshTestConcurrentWrite(bool invert1, bool invert2) {
+template <size_t PageSize>
+static void meshTestConcurrentWriteImpl(bool invert1, bool invert2) {
+  const uint32_t ObjCount = std::min(static_cast<uint32_t>(PageSize / StrLen), 1024U);
+
   const auto tid = gettid();
-  GlobalHeap &gheap = runtime().heap();
+  GlobalHeap<PageSize> &gheap = runtime<PageSize>().heap();
 
   // disable automatic meshing for this test
   gheap.setMeshPeriodMs(kZeroMs);
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 
-  FixedArray<MiniHeap, 1> array{};
+  FixedArray<MiniHeap<PageSize>, 1> array{};
 
   // allocate three miniheaps for the same object size from our global heap
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
-  MiniHeap *mh1 = array[0];
+  MiniHeap<PageSize> *mh1 = array[0];
   array.clear();
 
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
-  MiniHeap *mh2 = array[0];
+  MiniHeap<PageSize> *mh2 = array[0];
   array.clear();
 
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(StrLen), StrLen, array, tid);
-  MiniHeap *mh3 = array[0];
+  MiniHeap<PageSize> *mh3 = array[0];
   array.clear();
 
   const auto sizeClass = mh1->sizeClass();
@@ -164,7 +172,7 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_EQ(mh3->inUseCount(), 1UL);
 
   if (invert1) {
-    MiniHeap *tmp = mh1;
+    MiniHeap<PageSize> *tmp = mh1;
     mh1 = mh2;
     mh2 = tmp;
   }
@@ -194,7 +202,7 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap3, len));
 
   {
-    const internal::vector<MiniHeap *> candidates = gheap.meshingCandidatesLocked(mh1->sizeClass());
+    const internal::vector<MiniHeap<PageSize> *> candidates = gheap.meshingCandidatesLocked(mh1->sizeClass());
     ASSERT_EQ(candidates.size(), 3ULL);
     ASSERT_TRUE(std::find(candidates.begin(), candidates.end(), mh1) != candidates.end());
     ASSERT_TRUE(std::find(candidates.begin(), candidates.end(), mh2) != candidates.end());
@@ -244,7 +252,7 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   ASSERT_EQ(mh1->getOff(gheap.arenaBegin(), s3), 3);
 
   {
-    const internal::vector<MiniHeap *> candidates = gheap.meshingCandidatesLocked(mh1->sizeClass());
+    const internal::vector<MiniHeap<PageSize> *> candidates = gheap.meshingCandidatesLocked(mh1->sizeClass());
     ASSERT_EQ(candidates.size(), 1ULL);
     ASSERT_EQ(candidates[0], mh1);
   }
@@ -272,6 +280,14 @@ static void meshTestConcurrentWrite(bool invert1, bool invert2) {
   note("DONE SCAVENGE");
 
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
+}
+
+static void meshTestConcurrentWrite(bool invert1, bool invert2) {
+  if (getPageSize() == 4096) {
+    meshTestConcurrentWriteImpl<4096>(invert1, invert2);
+  } else {
+    meshTestConcurrentWriteImpl<16384>(invert1, invert2);
+  }
 }
 
 TEST(TripleMeshTest, MeshAll) {

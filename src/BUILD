@@ -95,7 +95,11 @@ cc_library(
         "real.cc",
         "runtime.cc",
         "thread_local_heap.cc",
-    ],
+    ] + select({
+        "@platforms//os:macos": ["memory_stats_macos.cc"],
+        "@platforms//os:linux": ["memory_stats_linux.cc"],
+        "//conditions:default": [],
+    }),
     hdrs = glob([
         "*.h",
         "plasma/*.h",
@@ -167,15 +171,7 @@ cc_library(
     ]),
     copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     defines = COMMON_DEFINES,
-    linkopts = COMMON_LINKOPTS + select({
-        "@bazel_tools//src/conditions:darwin": [
-            "-install_name /usr/local/lib/libmesh.dylib",
-            "-compatibility_version 1",
-            "-current_version 1",
-            "-ldl",
-        ],
-        "//conditions:default": [],
-    }),
+    linkopts = COMMON_LINKOPTS,
     linkstatic = False,
     visibility = ["//visibility:public"],
     # disabled, as we directly specify the source files above.
@@ -194,9 +190,15 @@ cc_library(
 
 cc_test(
     name = "unit-tests",
+    size = "small",  # Test runs in ~2.5s
     srcs = glob([
         "testing/unit/*.cc",
-    ]),
+    ], exclude = [
+        "testing/unit/macos_memory_test.cc",  # Conditionally included below
+    ]) + select({
+        "@platforms//os:macos": ["testing/unit/macos_memory_test.cc"],
+        "//conditions:default": [],
+    }),
     copts = [
         "-Isrc",
     ] + MESH_DEFAULT_COPTS,
@@ -209,13 +211,16 @@ cc_test(
 
 cc_test(
     name = "local-refill-benchmark",
-    srcs = ["testing/benchmark/local_refill.cc"],
+    srcs = [
+        "testing/benchmark/local_refill.cc",
+        "testing/benchmark/malloc_benchmark.cc",
+    ],
     copts = [
         "-Isrc",
     ] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     linkopts = COMMON_LINKOPTS,
     deps = [
-        ":mesh-core",
+        ":mesh",  # Use :mesh to get exported symbols like mesh_malloc
         "@com_google_benchmark//:benchmark",
         "@com_google_googletest//:gtest_main",
     ],

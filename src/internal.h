@@ -97,12 +97,20 @@ static constexpr uint8_t Attached = 3;
 static constexpr uint8_t Max = 4;
 }  // namespace list
 
+template <size_t PageSize>
 class MiniHeap;
-MiniHeap *GetMiniHeap(const MiniHeapID id);
-MiniHeapID GetMiniHeapID(const MiniHeap *mh);
 
-typedef std::array<MiniHeap *, kMaxSplitListSize> SplitArray;
-typedef std::array<std::pair<MiniHeap *, MiniHeap *>, kMaxMergeSets> MergeSetArray;
+template <typename MiniHeapT>
+MiniHeapT *GetMiniHeap(const MiniHeapID id);
+
+template <typename MiniHeapT>
+MiniHeapID GetMiniHeapID(const MiniHeapT *mh);
+
+template <size_t PageSize>
+using SplitArray = std::array<MiniHeap<PageSize> *, kMaxSplitListSize>;
+
+template <size_t PageSize>
+using MergeSetArray = std::array<std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *>, kMaxMergeSets>;
 
 template <typename Object, typename ID>
 class ListEntry {
@@ -159,7 +167,7 @@ public:
     if (lastId == list::Head) {
       prevList = this;
     } else {
-      Object *last = GetMiniHeap(lastId);
+      Object *last = GetMiniHeap<Object>(lastId);
       prevList = last->getFreelist();
     }
     prevList->setNext(newEntryId);
@@ -178,7 +186,7 @@ public:
     if (prevId == list::Head) {
       prev = listHead;
     } else {
-      Object *mh = GetMiniHeap(prevId);
+      Object *mh = GetMiniHeap<Object>(prevId);
       d_assert(mh != nullptr);
       prev = mh->getFreelist();
     }
@@ -186,7 +194,7 @@ public:
     if (nextId == list::Head) {
       next = listHead;
     } else {
-      Object *mh = GetMiniHeap(nextId);
+      Object *mh = GetMiniHeap<Object>(nextId);
       d_assert(mh != nullptr);
       next = mh->getFreelist();
     }
@@ -202,7 +210,9 @@ private:
   MiniHeapID _next{};
 };
 
-typedef ListEntry<MiniHeap, MiniHeapID> MiniHeapListEntry;
+template <size_t PageSize>
+using MiniHeapListEntry = ListEntry<MiniHeap<PageSize>, MiniHeapID>;
+
 
 typedef uint32_t Offset;
 typedef uint32_t Length;
@@ -242,7 +252,7 @@ struct Span {
   }
 
   size_t byteLength() const {
-    return length * kPageSize;
+    return length * getPageSize();
   }
 
   inline bool operator==(const Span &rhs) {

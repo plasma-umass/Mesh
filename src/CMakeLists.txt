@@ -14,6 +14,13 @@ set(common_src
         thread_local_heap.cc
         )
 
+# Add platform-specific memory stats files
+if(APPLE)
+    list(APPEND common_src memory_stats_macos.cc)
+elseif(UNIX)
+    list(APPEND common_src memory_stats_linux.cc)
+endif()
+
 #Create the set of source files for the mesh library
 set(mesh_src
         ${common_src}
@@ -38,11 +45,17 @@ set(unit_src
         testing/unit/alignment.cc
         testing/unit/bitmap_test.cc
         testing/unit/concurrent_mesh_test.cc
+        testing/unit/mesh_memory_test.cc
         testing/unit/mesh_test.cc
         testing/unit/rng_test.cc
         testing/unit/size_class_test.cc
         testing/unit/triple_mesh_test.cc
 )
+
+# Add macOS-specific tests only on Apple platforms
+if(APPLE)
+    list(APPEND unit_src testing/unit/macos_memory_test.cc)
+endif()
 #Add a target to the unit tests executable
 add_executable(unit.test ${unit_src})
 target_link_libraries(unit.test PRIVATE -ldl -pthread )
@@ -67,8 +80,8 @@ target_compile_options(unit.test PRIVATE -Wno-unused-const-variable -Wno-unused-
 if(${GCOV})
     add_custom_target(coverage_gcc
             COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
-            COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/
-            COMMAND genhtml app.info
+            COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ --ignore-errors mismatch --rc geninfo_unexecuted_blocks=1
+            COMMAND genhtml app.info -o .
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
             DEPENDS unit.test)
 endif()
@@ -78,7 +91,7 @@ if(${CLANGCOV})
     add_custom_target(coverage_clang
             COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
             COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/
-            COMMAND genhtml app.info
+            COMMAND genhtml app.info -o .
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
             DEPENDS unit.test)
     #add_custom_target(coverage_clang

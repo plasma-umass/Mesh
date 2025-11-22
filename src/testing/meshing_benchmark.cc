@@ -19,7 +19,7 @@
 #include "bitmap.h"
 #include "meshing.h"
 
-using mesh::internal::Bitmap;
+using Bitmap = mesh::internal::Bitmap<4096>;
 using std::make_unique;
 using std::stoi;
 using std::string;

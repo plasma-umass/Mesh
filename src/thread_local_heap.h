@@ -36,14 +36,18 @@ public:
   atomic_size_t freeCount{0};
 };
 
+template <size_t PageSize>
 class ThreadLocalHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(ThreadLocalHeap);
 
 public:
   enum { Alignment = 16 };
+  using GlobalHeapT = GlobalHeap<PageSize>;
+  using ShuffleVectorT = ShuffleVector<PageSize>;
+  using MiniHeapT = MiniHeap<PageSize>;
 
-  ThreadLocalHeap(GlobalHeap *global, pthread_t pthreadCurrent)
+  ThreadLocalHeap(GlobalHeapT *global, pthread_t pthreadCurrent)
       : _current(gettid()),
         _global(global),
         _pthreadCurrent(pthreadCurrent),
@@ -70,7 +74,7 @@ public:
   void releaseAll();
 
   void *ATTRIBUTE_NEVER_INLINE CACHELINE_ALIGNED_FN smallAllocSlowpath(size_t sizeClass);
-  void *ATTRIBUTE_NEVER_INLINE CACHELINE_ALIGNED_FN smallAllocGlobalRefill(ShuffleVector &shuffleVector,
+  void *ATTRIBUTE_NEVER_INLINE CACHELINE_ALIGNED_FN smallAllocGlobalRefill(ShuffleVectorT &shuffleVector,
                                                                            size_t sizeClass);
 
   inline void *memalign(size_t alignment, size_t size) {
@@ -95,7 +99,7 @@ public:
       // if the alignment is for a small allocation that is less than
       // the page size, and the size class size in bytes is a multiple
       // of the alignment, just call malloc
-      if (sizeClassBytes <= kPageSize && alignment <= sizeClassBytes && (sizeClassBytes % alignment) == 0) {
+      if (sizeClassBytes <= getPageSize() && alignment <= sizeClassBytes && (sizeClassBytes % alignment) == 0) {
         auto ptr = this->malloc(size);
         d_assert_msg((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0, "%p(%zu) %% %zu != 0", ptr, size, alignment);
         return ptr;
@@ -103,7 +107,7 @@ public:
     }
 
     // fall back to page-aligned allocation
-    const size_t pageAlignment = (alignment + kPageSize - 1) / kPageSize;
+    const size_t pageAlignment = (alignment + getPageSize() - 1) / getPageSize();
     const size_t pageCount = PageCount(size);
     return _global->pageAlignedAlloc(pageAlignment, pageCount);
   }
@@ -182,7 +186,7 @@ public:
       return _global->malloc(sz);
     }
 
-    ShuffleVector &shuffleVector = _shuffleVector[sizeClass];
+    ShuffleVectorT &shuffleVector = _shuffleVector[sizeClass];
     if (unlikely(shuffleVector.isExhausted())) {
       return smallAllocSlowpath(sizeClass);
     }
@@ -197,7 +201,7 @@ public:
     size_t startEpoch{0};
     auto mh = _global->miniheapForWithEpoch(ptr, startEpoch);
     if (likely(mh && mh->current() == _current && !mh->hasMeshed())) {
-      ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
+      ShuffleVectorT &shuffleVector = _shuffleVector[mh->sizeClass()];
       shuffleVector.free(mh, ptr);
       return;
     }
@@ -215,7 +219,7 @@ public:
 
     auto mh = _global->miniheapFor(ptr);
     if (likely(mh && mh->current() == _current)) {
-      ShuffleVector &shuffleVector = _shuffleVector[mh->sizeClass()];
+      ShuffleVectorT &shuffleVector = _shuffleVector[mh->sizeClass()];
       return shuffleVector.getSize();
     }
 
@@ -244,10 +248,10 @@ public:
   static ThreadLocalHeap *ATTRIBUTE_NEVER_INLINE CreateHeapIfNecessary();
 
 protected:
-  ShuffleVector _shuffleVector[kNumBins] CACHELINE_ALIGNED;
+  ShuffleVectorT _shuffleVector[kNumBins] CACHELINE_ALIGNED;
   // this cacheline is read-mostly (only changed when creating + destroying threads)
   const pid_t _current CACHELINE_ALIGNED{0};
-  GlobalHeap *_global;
+  GlobalHeapT *_global;
   ThreadLocalHeap *_next{};  // protected by global heap lock
   ThreadLocalHeap *_prev{};
   const pthread_t _pthreadCurrent;
@@ -264,6 +268,166 @@ protected:
   static bool _tlhInitialized;
   static pthread_key_t _heapKey;
 };
+
+#ifdef MESH_HAVE_TLS
+template <size_t PageSize>
+__thread ThreadLocalHeap<PageSize> *ThreadLocalHeap<PageSize>::_threadLocalHeap CACHELINE_ALIGNED;
+#endif
+template <size_t PageSize>
+ThreadLocalHeap<PageSize> *ThreadLocalHeap<PageSize>::_threadLocalHeaps{nullptr};
+template <size_t PageSize>
+bool ThreadLocalHeap<PageSize>::_tlhInitialized{false};
+template <size_t PageSize>
+pthread_key_t ThreadLocalHeap<PageSize>::_heapKey{0};
+
+template <size_t PageSize>
+void ThreadLocalHeap<PageSize>::DestroyThreadLocalHeap(void *ptr) {
+  if (ptr != nullptr) {
+#ifdef MESH_HAVE_TLS
+    _threadLocalHeap = nullptr;
+#endif
+    DeleteHeap(reinterpret_cast<ThreadLocalHeap *>(ptr));
+  }
+}
+
+template <size_t PageSize>
+void ThreadLocalHeap<PageSize>::InitTLH() {
+  hard_assert(!_tlhInitialized);
+  pthread_key_create(&_heapKey, DestroyThreadLocalHeap);
+  _tlhInitialized = true;
+}
+
+template <size_t PageSize>
+ThreadLocalHeap<PageSize> *ThreadLocalHeap<PageSize>::NewHeap(pthread_t current) {
+  // we just allocate out of our internal heap
+  void *buf = mesh::internal::Heap().malloc(sizeof(ThreadLocalHeap));
+  // Increased to 128KB to accommodate larger shuffle vectors with 1024 uint16_t entries
+  // Each sv::Entry is now 4 bytes (2x uint16_t), doubling the _list array size
+  static_assert(sizeof(ThreadLocalHeap) < 4096 * 32, "tlh should have a reasonable size");
+  hard_assert(buf != nullptr);
+  hard_assert(reinterpret_cast<uintptr_t>(buf) % CACHELINE_SIZE == 0);
+
+  auto heap = new (buf) ThreadLocalHeap(&mesh::runtime<PageSize>().heap(), current);
+
+  heap->_prev = nullptr;
+  heap->_next = _threadLocalHeaps;
+  if (_threadLocalHeaps != nullptr) {
+    _threadLocalHeaps->_prev = heap;
+  }
+  _threadLocalHeaps = heap;
+
+  return heap;
+}
+
+template <size_t PageSize>
+ThreadLocalHeap<PageSize> *ThreadLocalHeap<PageSize>::CreateHeapIfNecessary() {
+#ifdef MESH_HAVE_TLS
+  const bool maybeReentrant = !_tlhInitialized;
+  // check to see if we really need to create the heap
+  if (_tlhInitialized && _threadLocalHeap != nullptr) {
+    return _threadLocalHeap;
+  }
+#else
+  const bool maybeReentrant = true;
+#endif
+
+  ThreadLocalHeap *heap = nullptr;
+
+  {
+    std::lock_guard<GlobalHeapT> lock(mesh::runtime<PageSize>().heap());
+
+    const pthread_t current = pthread_self();
+
+    if (maybeReentrant) {
+      for (ThreadLocalHeap *h = _threadLocalHeaps; h != nullptr; h = h->_next) {
+        if (h->_pthreadCurrent == current) {
+          heap = h;
+          break;
+        }
+      }
+    }
+
+    if (heap == nullptr) {
+      heap = NewHeap(current);
+    }
+  }
+
+  if (!heap->_inSetSpecific && _tlhInitialized) {
+    heap->_inSetSpecific = true;
+#ifdef MESH_HAVE_TLS
+    _threadLocalHeap = heap;
+#endif
+    pthread_setspecific(_heapKey, heap);
+    heap->_inSetSpecific = false;
+  }
+
+  return heap;
+}
+
+template <size_t PageSize>
+void ThreadLocalHeap<PageSize>::DeleteHeap(ThreadLocalHeap *heap) {
+  if (heap == nullptr) {
+    return;
+  }
+
+  // Save pointers before destructor invalidates the object
+  ThreadLocalHeap *next = heap->_next;
+  ThreadLocalHeap *prev = heap->_prev;
+
+  // manually invoke the destructor
+  heap->ThreadLocalHeap::~ThreadLocalHeap();
+
+  if (next != nullptr) {
+    next->_prev = prev;
+  }
+  if (prev != nullptr) {
+    prev->_next = next;
+  }
+  if (_threadLocalHeaps == heap) {
+    _threadLocalHeaps = next;
+  }
+
+  mesh::internal::Heap().free(reinterpret_cast<void *>(heap));
+}
+
+template <size_t PageSize>
+void ThreadLocalHeap<PageSize>::releaseAll() {
+  for (size_t i = 1; i < kNumBins; i++) {
+    _shuffleVector[i].refillMiniheaps();
+    _global->releaseMiniheaps(_shuffleVector[i].miniheaps());
+  }
+}
+
+// we get here if the shuffleVector is exhausted
+template <size_t PageSize>
+void *CACHELINE_ALIGNED_FN ThreadLocalHeap<PageSize>::smallAllocSlowpath(size_t sizeClass) {
+  ShuffleVectorT &shuffleVector = _shuffleVector[sizeClass];
+
+  // we grab multiple MiniHeaps at a time from the global heap.  often
+  // it is possible to refill the freelist from a not-yet-used
+  // MiniHeap we already have, without global cross-thread
+  // synchronization
+  if (likely(shuffleVector.localRefill())) {
+    return shuffleVector.malloc();
+  }
+
+  return smallAllocGlobalRefill(shuffleVector, sizeClass);
+}
+
+template <size_t PageSize>
+void *CACHELINE_ALIGNED_FN ThreadLocalHeap<PageSize>::smallAllocGlobalRefill(ShuffleVectorT &shuffleVector, size_t sizeClass) {
+  const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
+
+  _global->allocSmallMiniheaps(sizeClass, sizeMax, shuffleVector.miniheaps(), _current);
+  shuffleVector.reinit();
+
+  d_assert(!shuffleVector.isExhausted());
+
+  void *ptr = shuffleVector.malloc();
+  d_assert(ptr != nullptr);
+
+  return ptr;
+}
 
 }  // namespace mesh
 

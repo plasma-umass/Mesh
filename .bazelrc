@@ -7,8 +7,8 @@ build --cxxopt='-std=c++17'
 build --strip=never
 
 # largely from sorbet
-build:debugsymbols --copt=-g3 --copt=-fstandalone-debug --copt=-fno-limit-debug-info
-build:debugsymbols --linkopt=-g3 --linkopt=-fstandalone-debug --linkopt=-fno-limit-debug-info
+build:debugsymbols --copt=-g3
+build:debugsymbols --linkopt=-g3
 build:debugsymbols --spawn_strategy=standalone
 build:debugsymbols --genrule_strategy=standalone
 
@@ -16,5 +16,5 @@ build:disable-meshing --define disable_meshing=true
 build:disable-randomization --define disable_randomization=true
 build:shuffle-on-free --define shuffle_on_free=true
 
-build:modern-amd64 --copt=-mavx --copt=-march=westmere
-build:modern-amd64 --linkopt=-mavx --linkopt=-march=westmere
+build:modern-amd64 --copt=-mavx # --copt=-march=westmere
+build:modern-amd64 --linkopt=-mavx # --linkopt=-march=westmere

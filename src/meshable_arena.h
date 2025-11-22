@@ -57,7 +57,12 @@ private:
   typedef OneWayMmapHeap SuperHeap;
 
 public:
-  enum { Alignment = kPageSize };
+  // Alignment must match the page size for the platform
+#if defined(__APPLE__) && defined(__arm64__)
+  enum { Alignment = 16384 };  // 16KB pages on Apple Silicon
+#else
+  enum { Alignment = 4096 };   // 4KB pages on Intel Mac, Linux, and other platforms
+#endif
 
   explicit MeshableArena();
 
@@ -160,12 +165,13 @@ private:
   void *malloc(size_t sz) = delete;
 
   inline bool isAligned(const Span &span, const size_t pageAlignment) const {
-    return ptrvalFromOffset(span.offset) % (pageAlignment * kPageSize) == 0;
+    return ptrvalFromOffset(span.offset) % (pageAlignment * getPageSize()) == 0;
   }
 
   static constexpr size_t indexSize() {
     // one pointer per page in our arena
-    return sizeof(Offset) * (kArenaSize / kPageSize);
+    // Use minimum page size (4KB) to ensure enough space for 16KB pages
+    return sizeof(Offset) * (kArenaSize / kPageSizeMin);
   }
 
   inline void clearIndex(const Span &span) {
@@ -191,13 +197,15 @@ private:
 
     if (flags == internal::PageType::Dirty) {
       if (kAdviseDump) {
-        madvise(ptrFromOffset(span.offset), span.length * kPageSize, MADV_DONTDUMP);
+        madvise(ptrFromOffset(span.offset), span.length * getPageSize(), MADV_DONTDUMP);
       }
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
       _dirtyPageCount += span.length;
 
-      if (_dirtyPageCount > kMaxDirtyPageThreshold) {
+      const size_t maxDirtyPageThreshold = (kMaxDirtyPageThreshold * kPageSizeMin) / getPageSize();
+
+      if (_dirtyPageCount > maxDirtyPageThreshold) {
         // do a full scavenge with a probability 1/10
         if (_fastPrng.inRange(0, 9) == 9) {
           scavenge(true);
@@ -222,11 +230,11 @@ private:
 
     d_assert(ptrval >= arena);
 
-    return (ptrval - arena) / kPageSize;
+    return (ptrval - arena) / getPageSize();
   }
 
   inline uintptr_t ptrvalFromOffset(size_t off) const {
-    return reinterpret_cast<uintptr_t>(_arenaBegin) + off * kPageSize;
+    return reinterpret_cast<uintptr_t>(_arenaBegin) + off * getPageSize();
   }
 
   inline void *ptrFromOffset(size_t off) const {
@@ -270,7 +278,7 @@ private:
   inline void resetSpanMapping(const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
-    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset * kPageSize);
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset * getPageSize());
   }
 
   void prepareForFork();
@@ -282,7 +290,8 @@ private:
   atomic<MiniHeapID> *_mhIndex{nullptr};
 
 protected:
-  CheapHeap<kMiniHeapSize, kArenaSize / kPageSize> _mhAllocator{};
+  // Use minimum page size for sizing to ensure enough space for 16KB pages
+  CheapHeap<kMiniHeapSize, kArenaSize / kPageSizeMin> _mhAllocator{};
   MWC _fastPrng;
 
 private:
@@ -297,9 +306,10 @@ private:
 
   size_t _dirtyPageCount{0};
 
+  // Use minimum page size for sizing to ensure enough space for 16KB pages
   internal::RelaxedBitmap _meshedBitmap{
-      kArenaSize / kPageSize,
-      reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSize))), false};
+      kArenaSize / kPageSizeMin,
+      reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / kPageSizeMin))), false};
   size_t _meshedPageCount{0};
   size_t _meshedPageCountHWM{0};
   size_t _rssKbAtHWM{0};

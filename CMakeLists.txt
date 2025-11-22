@@ -138,6 +138,12 @@ else()
     message(FATAL_ERROR "Unknown option for Randomization parameter")
 endif()
 
+# Add CI_DEBUG_MESH option for debugging in CI environment
+if(DEFINED CI_DEBUG_MESH AND CI_DEBUG_MESH)
+    add_definitions(-DCI_DEBUG_MESH=1)
+    message(STATUS "CI_DEBUG_MESH enabled - verbose logging for debugging")
+endif()
+
 #Additional compile and linking configuration
 add_definitions(
         -fPIC

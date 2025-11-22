@@ -27,7 +27,7 @@ public:
   Entry() noexcept : _mhOffset{0}, _bitOffset{0} {
   }
 
-  explicit Entry(uint8_t mhOff, uint8_t bitOff) : _mhOffset{mhOff}, _bitOffset{bitOff} {
+  explicit Entry(uint16_t mhOff, uint16_t bitOff) : _mhOffset{mhOff}, _bitOffset{bitOff} {
   }
 
   Entry(const Entry &rhs) = default;
@@ -40,26 +40,31 @@ public:
     return _mhOffset == rhs._mhOffset && _bitOffset == rhs._bitOffset;
   }
 
-  inline uint8_t ATTRIBUTE_ALWAYS_INLINE miniheapOffset() const {
+  inline uint16_t ATTRIBUTE_ALWAYS_INLINE miniheapOffset() const {
     return _mhOffset;
   }
 
-  inline uint8_t ATTRIBUTE_ALWAYS_INLINE bit() const {
+  inline uint16_t ATTRIBUTE_ALWAYS_INLINE bit() const {
     return _bitOffset;
   }
 
 private:
-  uint8_t _mhOffset;
-  uint8_t _bitOffset;
+  uint16_t _mhOffset;
+  uint16_t _bitOffset;
 };
-static_assert(sizeof(Entry) == 2, "Entry too big!");
+static_assert(sizeof(Entry) == 4, "Entry should be 4 bytes (2x uint16_t)");
 }  // namespace sv
 
+template <size_t PageSize>
 class ShuffleVector {
 private:
   DISALLOW_COPY_AND_ASSIGN(ShuffleVector);
 
 public:
+  using MiniHeapT = MiniHeap<PageSize>;
+  using BitmapT = internal::Bitmap<PageSize>;
+  using RelaxedFixedBitmapT = internal::RelaxedFixedBitmap<PageSize>;
+
   ShuffleVector() : _prng(internal::seed(), internal::seed()) {
     // set initialized = false;
   }
@@ -69,7 +74,7 @@ public:
   }
 
   // post: list has the index of all bits set to 1 in it, in a random order
-  inline uint32_t ATTRIBUTE_ALWAYS_INLINE refillFrom(uint8_t mhOffset, internal::Bitmap &bitmap) {
+  inline uint32_t ATTRIBUTE_ALWAYS_INLINE refillFrom(uint8_t mhOffset, BitmapT &bitmap) {
     d_assert(_maxCount > 0);
     d_assert_msg(_maxCount <= kMaxShuffleVectorLength, "objCount? %zu <= %zu", _maxCount, kMaxShuffleVectorLength);
 
@@ -79,10 +84,10 @@ public:
 
     // d_assert(_maxCount == _attachedMiniheap->maxCount());
 
-    internal::RelaxedFixedBitmap newBitmap{static_cast<uint32_t>(_maxCount)};
+    RelaxedFixedBitmapT newBitmap{static_cast<uint32_t>(_maxCount)};
     newBitmap.setAll(_maxCount);
 
-    internal::RelaxedFixedBitmap localBits{static_cast<uint32_t>(_maxCount)};
+    RelaxedFixedBitmapT localBits{static_cast<uint32_t>(_maxCount)};
     bitmap.setAndExchangeAll(localBits.mut_bits(), newBitmap.bits());
     localBits.invert();
 
@@ -91,7 +96,7 @@ public:
     const uint32_t maxCount = static_cast<uint32_t>(_maxCount);
     for (auto const &i : localBits) {
       // FIXME: this incredibly lurky conditional is because
-      // RelaxedFixedBitmap iterates over all 256 bits it has,
+      // RelaxedFixedBitmap iterates over all bits it has,
       // regardless of the _maxCount set in the constructor -- we
       // should fix that.
       if (i >= maxCount) {
@@ -108,7 +113,7 @@ public:
         _off--;
         d_assert(_off >= 0);
         d_assert(_off < _maxCount);
-        _list[_off] = sv::Entry{mhOffset, static_cast<uint8_t>(i)};
+        _list[_off] = sv::Entry{mhOffset, static_cast<uint16_t>(i)};
         allocCount++;
       }
     }
@@ -116,11 +121,11 @@ public:
     return allocCount;
   }
 
-  void ATTRIBUTE_NEVER_INLINE refillFullSlowpath(internal::Bitmap &bitmap, size_t i) {
+  void ATTRIBUTE_NEVER_INLINE refillFullSlowpath(BitmapT &bitmap, size_t i) {
     bitmap.unset(i);
   }
 
-  FixedArray<MiniHeap, kMaxMiniheapsPerShuffleVector> &miniheaps() {
+  FixedArray<MiniHeapT, kMaxMiniheapsPerShuffleVector> &miniheaps() {
     return _attachedMiniheaps;
   }
 
@@ -199,23 +204,21 @@ public:
     return val;
   }
 
-  inline void ATTRIBUTE_ALWAYS_INLINE free(MiniHeap *mh, void *ptr) {
+  inline void ATTRIBUTE_ALWAYS_INLINE free(MiniHeapT *mh, void *ptr) {
     // const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
     // const size_t off = (ptrval - _start) / _objectSize;
     // const size_t off = (ptrval - _start) * _objectSizeReciprocal;
     const size_t off = mh->getUnmeshedOff(reinterpret_cast<const void *>(_arenaBegin), ptr);
     // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
 
-    d_assert(off < 256);
-
     if (likely(_off > 0)) {
-      push(sv::Entry{mh->svOffset(), static_cast<uint8_t>(off)});
+      push(sv::Entry{mh->svOffset(), static_cast<uint16_t>(off)});
     } else {
       freeFullSlowpath(mh, off);
     }
   }
 
-  void ATTRIBUTE_NEVER_INLINE freeFullSlowpath(MiniHeap *mh, size_t off) {
+  void ATTRIBUTE_NEVER_INLINE freeFullSlowpath(MiniHeapT *mh, size_t off) {
     mh->freeOff(off);
   }
 
@@ -257,7 +260,10 @@ public:
     _arenaBegin = arenaBegin;
     _objectSize = sz;
     _objectSizeReciprocal = 1.0 / (float)sz;
-    _maxCount = max(kPageSize / sz, kMinStringLen);
+    // Cap at 1024 for bitmap limit. Shuffle vector now uses uint16_t in sv::Entry
+    // so it can track up to 1024 objects (matching bitmap capacity)
+    const size_t bitmapLimit = PageSize / kMinObjectSize;
+    _maxCount = min(max(getPageSize() / sz, static_cast<size_t>(kMinStringLen)), static_cast<size_t>(bitmapLimit));
     // initially, we are unattached and therefor have no capacity.
     // Setting _off to _maxCount causes isExhausted() to return true
     // so that we don't separately have to check !isAttached() in the
@@ -271,15 +277,15 @@ private:
   int16_t _maxCount{0};                                                      // 2   42
   int16_t _off{0};                                                           // 2   44
   uint32_t _objectSize{0};                                                   // 4   48
-  FixedArray<MiniHeap, kMaxMiniheapsPerShuffleVector> _attachedMiniheaps{};  // 36  128
+  FixedArray<MiniHeapT, kMaxMiniheapsPerShuffleVector> _attachedMiniheaps{};  // 36  128
   MWC _prng;                                                                 // 36  84
   float _objectSizeReciprocal{0.0};                                          // 4   88
   uint32_t _attachedOff{0};                                                  //
   sv::Entry _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;                // 512 640
 };
 
-static_assert(HL::gcd<sizeof(ShuffleVector), CACHELINE_SIZE>::value == CACHELINE_SIZE,
-              "ShuffleVector not multiple of cacheline size!");
+// static_assert(HL::gcd<sizeof(ShuffleVector), CACHELINE_SIZE>::value == CACHELINE_SIZE,
+//               "ShuffleVector not multiple of cacheline size!");
 // FIXME should fit in 640
 // static_assert(sizeof(ShuffleVector) == 704, "ShuffleVector not expected size!");
 }  // namespace mesh

@@ -49,7 +49,8 @@ public:
       return nullptr;
 
     // Round up to the size of a page.
-    sz = (sz + kPageSize - 1) & (size_t) ~(kPageSize - 1);
+    const size_t pageSize = getPageSize();
+    sz = (sz + pageSize - 1) & (size_t) ~(pageSize - 1);
 
     void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, flags, fd, 0);
     if (ptr == MAP_FAILED)

@@ -19,9 +19,18 @@
 #include <linux/memfd.h>
 #endif
 
+#ifdef __APPLE__
+// macOS Mach VM APIs for memory aliasing/remapping
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#include <mach/vm_map.h>
+#endif
+
 #include <sys/ioctl.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <cstring>
 
 #include "meshable_arena.h"
 #include "mini_heap.h"
@@ -40,6 +49,7 @@ MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), intern
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
+  // Both macOS and Linux use file-backed shared memory for meshing
   int fd = -1;
   if (kMeshingEnabled) {
     fd = openSpanFile(kArenaSize);
@@ -49,7 +59,22 @@ MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), intern
     }
   }
   _fd = fd;
+
+#ifdef __APPLE__
+  // macOS: Use file-backed memory with MAP_SHARED for F_PUNCHHOLE support
+  if (kMeshingEnabled) {
+#ifdef CI_DEBUG_MESH
+    fprintf(stderr, "[CI_DEBUG_MESH] macOS: Using file-backed memory with MAP_SHARED for F_PUNCHHOLE support\n");
+    fprintf(stderr, "[CI_DEBUG_MESH] macOS: Arena fd=%d, size=%zu\n", _fd, kArenaSize);
+#endif
+    debug("mesh: using file-backed memory for arena (macOS) - enables F_PUNCHHOLE\n");
+  }
   _arenaBegin = SuperHeap::map(kArenaSize, kMapShared, fd);
+#else
+  // Linux: Use file-backed shared memory for mmap aliasing
+  _arenaBegin = SuperHeap::map(kArenaSize, kMapShared, fd);
+#endif
+
   _mhIndex = reinterpret_cast<atomic<MiniHeapID> *>(SuperHeap::malloc(indexSize()));
 
   hard_assert(_arenaBegin != nullptr);
@@ -59,7 +84,7 @@ MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), intern
     madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
   }
 
-  // debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, fd, _arenaBegin, arenaEnd());
+  debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, _fd, _arenaBegin, arenaEnd());
 
   // TODO: move this to runtime
   atexit(staticAtExit);
@@ -139,7 +164,8 @@ void MeshableArena::expandArena(size_t minPagesAdded) {
   Span expansion(_end, pageCount);
   _end += pageCount;
 
-  if (unlikely(_end >= kArenaSize / kPageSize)) {
+  const size_t maxPages = kArenaSize / getPageSize();
+  if (unlikely(_end >= maxPages)) {
     debug("Mesh: arena exhausted: current arena size is %.1f GB; recompile with larger arena size.",
           kArenaSize / 1024.0 / 1024.0 / 1024.0);
     abort();
@@ -237,13 +263,14 @@ Span MeshableArena::reservePages(const size_t pageCount, const size_t pageAlignm
   d_assert(!result.empty());
   d_assert(flags != internal::PageType::Unknown);
 
-  if (unlikely(pageAlignment > 1 && ((ptrvalFromOffset(result.offset) / kPageSize) % pageAlignment != 0))) {
+  const size_t pageSize = getPageSize();
+  if (unlikely(pageAlignment > 1 && ((ptrvalFromOffset(result.offset) / pageSize) % pageAlignment != 0))) {
     freeSpan(result, flags);
     // recurse once, asking for enough extra space that we are sure to
     // be able to find an aligned offset of pageCount pages within.
     result = reservePages(pageCount + 2 * pageAlignment, 1);
 
-    const size_t alignment = pageAlignment * kPageSize;
+    const size_t alignment = pageAlignment * pageSize;
     const uintptr_t alignedPtr = (ptrvalFromOffset(result.offset) + alignment - 1) & ~(alignment - 1);
     const auto alignedOff = offsetFor(reinterpret_cast<void *>(alignedPtr));
     d_assert(alignedOff >= result.offset);
@@ -318,15 +345,19 @@ char *MeshableArena::pageAlloc(Span &result, size_t pageCount, size_t pageAlignm
 #ifndef NDEBUG
   if (_mhIndex[span.offset].load().hasValue()) {
     mesh::debug("----\n");
-    auto mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(span.offset));
-    mh->dumpDebug();
+    void *mh_void = miniheapForArenaOffset(span.offset);
+    if (getPageSize() == kPageSize4K) {
+       reinterpret_cast<MiniHeap<kPageSize4K>*>(mh_void)->dumpDebug();
+    } else {
+       reinterpret_cast<MiniHeap<kPageSize16K>*>(mh_void)->dumpDebug();
+    }
   }
 #endif
 
   char *ptr = reinterpret_cast<char *>(ptrFromOffset(span.offset));
 
   if (kAdviseDump) {
-    madvise(ptr, pageCount * kPageSize, MADV_DODUMP);
+    madvise(ptr, pageCount * getPageSize(), MADV_DODUMP);
   }
 
   result = span;
@@ -340,10 +371,11 @@ void MeshableArena::free(void *ptr, size_t sz, internal::PageType type) {
   }
   d_assert(sz > 0);
 
-  d_assert(sz / kPageSize > 0);
-  d_assert(sz % kPageSize == 0);
+  const size_t pageSize = getPageSize();
+  d_assert(sz / pageSize > 0);
+  d_assert(sz % pageSize == 0);
 
-  const Span span(offsetFor(ptr), sz / kPageSize);
+  const Span span(offsetFor(ptr), sz / pageSize);
   freeSpan(span, type);
 }
 
@@ -358,16 +390,16 @@ void MeshableArena::partialScavenge() {
   });
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
-    _dirty[i].clear();
-    internal::vector<Span> empty{};
-    _dirty[i].swap(empty);
+    _dirty[i] = internal::vector<Span>{};
   }
 
   _dirtyPageCount = 0;
 }
 
 void MeshableArena::scavenge(bool force) {
-  if (!force && _dirtyPageCount < kMinDirtyPageThreshold) {
+  const size_t minDirtyPageThreshold = (kMinDirtyPageThreshold * kPageSizeMin) / getPageSize();
+
+  if (!force && _dirtyPageCount < minDirtyPageThreshold) {
     return;
   }
 
@@ -397,12 +429,7 @@ void MeshableArena::scavenge(bool force) {
 
   // now that we've finally reset to identity all delayed-reset
   // mappings, empty the list
-  _toReset.clear();
-  {
-    // force freeing our internal allocations
-    internal::vector<Span> empty{};
-    _toReset.swap(empty);
-  }
+  _toReset = internal::vector<Span>{};
 
   _meshedPageCount = _meshedBitmap.inUseCount();
   if (_meshedPageCount > _meshedPageCountHWM) {
@@ -419,17 +446,13 @@ void MeshableArena::scavenge(bool force) {
   });
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
-    _dirty[i].clear();
-    internal::vector<Span> empty{};
-    _dirty[i].swap(empty);
+    _dirty[i] = internal::vector<Span>{};
   }
 
   _dirtyPageCount = 0;
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
-    _clean[i].clear();
-    internal::vector<Span> empty{};
-    _clean[i].swap(empty);
+    _clean[i] = internal::vector<Span>{};
   }
 
   // coalesce adjacent spans
@@ -484,7 +507,13 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
     return;
   }
 
+  // Early exit if no file backing
+  if (_fd == -1) {
+    return;
+  }
+
   const off_t off = reinterpret_cast<char *>(ptr) - reinterpret_cast<char *>(_arenaBegin);
+
 #ifdef __FreeBSD__
 #if __FreeBSD_version >= 1400000
   struct spacectl_range range = {
@@ -495,24 +524,24 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
 #else
 #warning "space deallocation unsupported on FreeBSD < 14"
 #endif
-#else
-#ifndef __APPLE__
-  int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
-  d_assert_msg(result == 0, "result(fd %d): %d errno %d (%s)\n", _fd, result, errno, strerror(errno));
-#else
-#warning macOS version of fallocate goes here
-  fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0, (long long)sz, 0};
-  int result = fcntl(_fd, F_PREALLOCATE, &store);
-  if (result == -1) {
-    // try and allocate space with fragments
-    store.fst_flags = F_ALLOCATEALL;
-    result = fcntl(_fd, F_PREALLOCATE, &store);
+#elif defined(__APPLE__)
+  // macOS: Use F_PUNCHHOLE to deallocate physical pages in file-backed memory
+  fpunchhole_t punch;
+  memset(&punch, 0, sizeof(punch));
+  punch.fp_offset = off;
+  punch.fp_length = sz;
+
+  int result = fcntl(_fd, F_PUNCHHOLE, &punch);
+  if (result != 0) {
+    // F_PUNCHHOLE may fail on some file systems or configurations
+    // This is non-fatal - madvise will still help with memory pressure
+    debug("F_PUNCHHOLE failed (fd %d, off %lld, sz %zu): errno %d (%s)\n",
+          _fd, (long long)off, sz, errno, strerror(errno));
   }
-  // if (result != -1) {
-  //    result = ftruncate(_fd, off+sz);
-  // }
-  d_assert(result == 0);
-#endif
+#else
+  // Linux: Use fallocate with FALLOC_FL_PUNCH_HOLE
+  int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
+  d_assert_msg(result == 0, "fallocate(fd %d): %d errno %d (%s)\n", _fd, result, errno, strerror(errno));
 #endif
 }
 
@@ -522,11 +551,12 @@ void MeshableArena::beginMesh(void *keep, void *remove, size_t sz) {
 }
 
 void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
-  // debug("keep: %p, remove: %p\n", keep, remove);
   const auto keepOff = offsetFor(keep);
   const auto removeOff = offsetFor(remove);
 
-  const size_t pageCount = sz / kPageSize;
+  const size_t pageSize = getPageSize();
+  const size_t pageCount = sz / pageSize;
+
   const MiniHeapID keepID = _mhIndex[keepOff].load(std::memory_order_acquire);
   for (size_t i = 0; i < pageCount; i++) {
     setIndex(removeOff + i, keepID);
@@ -536,11 +566,51 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const Span removedSpan{removeOff, static_cast<Length>(pageCount)};
   trackMeshed(removedSpan);
 
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * kPageSize);
+#ifdef __APPLE__
+  if (_fd >= 0) {
+    // macOS with file-backed memory: Use mmap to create file-backed alias
+    // This enables F_PUNCHHOLE to work correctly
+    void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * pageSize);
+    hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
+  } else {
+    // Fallback: Use Mach VM API for anonymous memory (legacy path)
+    vm_prot_t cur_protection = VM_PROT_DEFAULT;
+    vm_prot_t max_protection = VM_PROT_DEFAULT;
+
+    mach_vm_address_t target_address = reinterpret_cast<mach_vm_address_t>(remove);
+    mach_vm_address_t source_address = reinterpret_cast<mach_vm_address_t>(keep);
+
+    kern_return_t kr = mach_vm_remap(
+        mach_task_self(),                     // target task
+        &target_address,                      // target address (in/out)
+        sz,                                   // size
+        0,                                    // mask (0 = no specific alignment beyond size)
+        VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,  // flags: fixed address, overwrite existing
+        mach_task_self(),                     // source task
+        source_address,                       // source address
+        FALSE,                                // copy (FALSE = share same physical memory)
+        &cur_protection,                      // current protection (out)
+        &max_protection,                      // max protection (out)
+        VM_INHERIT_SHARE                      // inheritance
+    );
+
+    hard_assert_msg(kr == KERN_SUCCESS, "mach_vm_remap failed: %d", kr);
+    hard_assert_msg(target_address == reinterpret_cast<mach_vm_address_t>(remove),
+                    "vm_remap changed target address: expected %p, got %p",
+                    remove, (void*)target_address);
+  }
+#else
+  // Linux: Use mmap to create file-backed alias
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * pageSize);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
+#endif
 }
 
 int MeshableArena::openShmSpanFile(size_t sz) {
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: Creating shm file for size %zu bytes\n", sz);
+#endif
+
   constexpr size_t buf_len = 64;
   char buf[buf_len];
   memset(buf, 0, buf_len);
@@ -548,14 +618,25 @@ int MeshableArena::openShmSpanFile(size_t sz) {
   _spanDir = openSpanDir(getpid());
   d_assert(_spanDir != nullptr);
 
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: Using span directory: %s\n", _spanDir);
+#endif
+
   char *next = strcat(buf, _spanDir);
   strcat(next, "/XXXXXX");
 
   int fd = mkstemp(buf);
   if (fd < 0) {
+#ifdef CI_DEBUG_MESH
+    fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: mkstemp FAILED with errno=%d (%s)\n", errno, strerror(errno));
+#endif
     debug("mkstemp: %d (%s)\n", errno, strerror(errno));
     abort();
   }
+
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: Successfully created temp file: %s, fd=%d\n", buf, fd);
+#endif
 
   // we only need the file descriptors, not the path to the file in the FS
   int err = unlink(buf);
@@ -567,6 +648,9 @@ int MeshableArena::openShmSpanFile(size_t sz) {
   // TODO: see if fallocate makes any difference in performance
   err = ftruncate(fd, sz);
   if (err != 0) {
+#ifdef CI_DEBUG_MESH
+    fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: ftruncate FAILED with errno=%d (%s)\n", errno, strerror(errno));
+#endif
     debug("ftruncate: %d\n", errno);
     abort();
   }
@@ -578,6 +662,10 @@ int MeshableArena::openShmSpanFile(size_t sz) {
     abort();
   }
 
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: Successfully created shm file, fd=%d\n", fd);
+#endif
+
   return fd;
 }
 
@@ -587,8 +675,23 @@ static int sys_memfd_create(const char *name, unsigned int flags) {
 }
 
 int MeshableArena::openSpanFile(size_t sz) {
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] openSpanFile: Attempting memfd_create for size %zu bytes\n", sz);
+#endif
+
   errno = 0;
   int fd = sys_memfd_create("mesh_arena", MFD_CLOEXEC);
+
+#ifdef CI_DEBUG_MESH
+  if (fd >= 0) {
+    fprintf(stderr, "[CI_DEBUG_MESH] memfd_create SUCCESS: fd=%d\n", fd);
+  } else {
+    int saved_errno = errno;
+    fprintf(stderr, "[CI_DEBUG_MESH] memfd_create FAILED: errno=%d (%s)\n", saved_errno, strerror(saved_errno));
+    fprintf(stderr, "[CI_DEBUG_MESH] Falling back to shm_open\n");
+  }
+#endif
+
   // the call to memfd failed -- fall back to opening a shm file
   if (fd < 0) {
     return openShmSpanFile(sz);
@@ -635,8 +738,13 @@ void MeshableArena::prepareForFork() {
   }
 
   // debug("%d: prepare fork", getpid());
-  runtime().heap().lock();
-  runtime().lock();
+  if (getPageSize() == kPageSize4K) {
+    runtime<kPageSize4K>().heap().lock();
+    runtime<kPageSize4K>().lock();
+  } else {
+    runtime<kPageSize16K>().heap().lock();
+    runtime<kPageSize16K>().lock();
+  }
   internal::Heap().lock();
 
   int r = mprotect(_arenaBegin, kArenaSize, PROT_READ);
@@ -678,8 +786,13 @@ void MeshableArena::afterForkParent() {
   hard_assert(r == 0);
 
   // debug("%d: after fork parent", getpid());
-  runtime().unlock();
-  runtime().heap().unlock();
+  if (getPageSize() == kPageSize4K) {
+    runtime<kPageSize4K>().unlock();
+    runtime<kPageSize4K>().heap().unlock();
+  } else {
+    runtime<kPageSize16K>().unlock();
+    runtime<kPageSize16K>().heap().unlock();
+  }
 }
 
 void MeshableArena::doAfterForkChild() {
@@ -687,7 +800,11 @@ void MeshableArena::doAfterForkChild() {
 }
 
 void MeshableArena::afterForkChild() {
-  runtime().updatePid();
+  if (getPageSize() == kPageSize4K) {
+    runtime<kPageSize4K>().updatePid();
+  } else {
+    runtime<kPageSize16K>().updatePid();
+  }
 
   if (!kMeshingEnabled) {
     return;
@@ -700,8 +817,13 @@ void MeshableArena::afterForkChild() {
 
   // debug("%d: after fork child", getpid());
   internal::Heap().unlock();
-  runtime().unlock();
-  runtime().heap().unlock();
+  if (getPageSize() == kPageSize4K) {
+    runtime<kPageSize4K>().unlock();
+    runtime<kPageSize4K>().heap().unlock();
+  } else {
+    runtime<kPageSize16K>().unlock();
+    runtime<kPageSize16K>().heap().unlock();
+  }
 
   close(_forkPipe[0]);
 
@@ -717,9 +839,10 @@ void MeshableArena::afterForkChild() {
 
   const int oldFd = _fd;
 
+  const size_t pageSize = getPageSize();
   const auto bitmap = allocatedBitmap();
   for (auto const &i : bitmap) {
-    int result = internal::copyFile(newFd, oldFd, i * kPageSize, kPageSize);
+    int result = internal::copyFile(newFd, oldFd, i * pageSize, pageSize);
     d_assert(result == CPUInfo::PageSize);
   }
 
@@ -732,43 +855,54 @@ void MeshableArena::afterForkChild() {
 
   // re-do the meshed mappings
   {
-    internal::unordered_set<MiniHeap *> seenMiniheaps{};
+    // Need to be generic here to store pointers to MiniHeaps
+    internal::unordered_set<void *> seenMiniheaps{};
 
     for (auto const &i : _meshedBitmap) {
-      MiniHeap *mh = reinterpret_cast<MiniHeap *>(miniheapForArenaOffset(i));
-      if (seenMiniheaps.find(mh) != seenMiniheaps.end()) {
+      void *mh_void = miniheapForArenaOffset(i);
+      if (seenMiniheaps.find(mh_void) != seenMiniheaps.end()) {
         continue;
       }
-      seenMiniheaps.insert(mh);
+      seenMiniheaps.insert(mh_void);
 
-      const auto meshCount = mh->meshCount();
-      d_assert(meshCount > 1);
+      // Lambda to handle the logic regardless of page size
+      auto processMiniHeap = [&](auto* mh) {
+        const auto meshCount = mh->meshCount();
+        d_assert(meshCount > 1);
 
-      const auto sz = mh->spanSize();
-      const auto keep = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
-      const auto keepOff = offsetFor(keep);
+        const auto sz = mh->spanSize();
+        const auto keep = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
+        const auto keepOff = offsetFor(keep);
 
-      const auto base = mh;
-      base->forEachMeshed([&](const MiniHeap *mh) {
-        if (!mh->isMeshed())
+        const auto base = mh;
+        base->forEachMeshed([&](const auto *mh) {
+          if (!mh->isMeshed())
+            return false;
+
+          const auto remove = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
+          const auto removeOff = offsetFor(remove);
+
+  #ifndef NDEBUG
+          const size_t pageSz = getPageSize();
+          const Length pageCount = sz / pageSz;
+          for (size_t i = 0; i < pageCount; i++) {
+            d_assert(_mhIndex[removeOff + i].load().value() == _mhIndex[keepOff].load().value());
+          }
+  #endif
+
+          void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff * pageSize);
+
+          hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
+
           return false;
+        });
+      };
 
-        const auto remove = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
-        const auto removeOff = offsetFor(remove);
-
-#ifndef NDEBUG
-        const Length pageCount = sz / kPageSize;
-        for (size_t i = 0; i < pageCount; i++) {
-          d_assert(_mhIndex[removeOff + i].load().value() == _mhIndex[keepOff].load().value());
-        }
-#endif
-
-        void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff * kPageSize);
-
-        hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-
-        return false;
-      });
+      if (getPageSize() == kPageSize4K) {
+        processMiniHeap(reinterpret_cast<MiniHeap<kPageSize4K>*>(mh_void));
+      } else {
+        processMiniHeap(reinterpret_cast<MiniHeap<kPageSize16K>*>(mh_void));
+      }
     }
   }
 
