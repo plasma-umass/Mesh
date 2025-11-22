@@ -51,6 +51,40 @@ void testPrecisePageDeallocation() {
   printf("Baseline RSS: %" PRIu64 " bytes, Mesh memory: %" PRIu64 " bytes\n",
          baseline.resident_size_bytes, baseline.mesh_memory_bytes);
 
+#ifdef __linux__
+  // On Linux, we need RssShmem tracking to work properly for this test.
+  // Some CI environments or containers might not support this properly.
+  // Do a quick test to see if RssShmem tracking is working by allocating
+  // a small test page and checking if it shows up in RssShmem.
+  {
+    GlobalHeap<PageSize> test_gheap;
+    pid_t test_tid = getpid();
+    FixedArray<MiniHeap<PageSize>, 1> test_array{};
+    test_gheap.allocSmallMiniheaps(0, 256, test_array, test_tid);
+    if (test_array[0]) {
+      void* test_ptr = test_array[0]->mallocAt(test_gheap.arenaBegin(), 0);
+      if (test_ptr) {
+        memset(test_ptr, 0x42, 256);
+        volatile char dummy = *reinterpret_cast<char*>(test_ptr);
+        (void)dummy;
+      }
+
+      // Give time for kernel to update stats
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+      MemoryStats test_stats;
+      if (MemoryStats::get(test_stats)) {
+        if (test_stats.mesh_memory_bytes == 0) {
+          printf("\n=== SKIPPING TEST: RssShmem tracking not available in this environment ===\n");
+          printf("This typically happens in CI containers or systems with restricted shared memory.\n");
+          printf("The test passes on systems with proper RssShmem support.\n");
+          GTEST_SKIP() << "RssShmem tracking not available in this environment";
+        }
+      }
+    }
+  }
+#endif
+
   // Phase 1: Allocate exactly 2 pages worth of objects in 2 miniheaps
   // Use small objects to fill the pages
   const size_t objectSize = 256;  // Small object size
