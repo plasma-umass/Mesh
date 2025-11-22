@@ -3,13 +3,15 @@ on: [push]
 jobs:
   Ubuntu_cmake:
     runs-on: ubuntu-latest
+    env:
+      CI_DEBUG_MESH: 1
     steps:
     - uses: actions/checkout@v1
     - name: Install required packages
       run: |
         sudo apt-get update
         sudo apt-get -y install git gcc g++ make lcov wget libpthread-stubs0-dev
-    - name: Configure CMake 
+    - name: Configure CMake
       run: |
         mkdir cmake
         cd cmake
@@ -19,7 +21,7 @@ jobs:
         cd ../
         mkdir cmake-cache
         cd cmake-cache
-        ../cmake/bin/cmake -DGCOV=ON ..
+        ../cmake/bin/cmake -DGCOV=ON -DCI_DEBUG_MESH=$CI_DEBUG_MESH ..
     - name: Build mesh
       run: |
         cd cmake-cache
@@ -31,22 +33,26 @@ jobs:
 
   Ubuntu_bazel:
     runs-on: ubuntu-latest
+    env:
+      CI_DEBUG_MESH: 1
     steps:
       - uses: actions/checkout@v1
       - name: build in debug mode
         run: |
-          ./bazel test -c dbg //src:unit-tests
+          ./bazel test -c dbg //src:unit-tests --cxxopt=-DCI_DEBUG_MESH=1
       - name: build tests and binary
         run: |
           make -j1
 
   macOS_bazel:
     runs-on: macos-latest
+    env:
+      CI_DEBUG_MESH: 1
     steps:
     - uses: actions/checkout@v1
     - name: build in debug mode
       run: |
-        ./bazel test -c dbg //src:unit-tests --test_output=all --cache_test_results=no --runs_per_test=5
+        ./bazel test -c dbg //src:unit-tests --test_output=all --cache_test_results=no --runs_per_test=5 --cxxopt=-DCI_DEBUG_MESH=1
     - name: build tests and binary
       run: |
         make -j1

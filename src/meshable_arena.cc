@@ -29,6 +29,8 @@
 #include <sys/ioctl.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <cstring>
 
 #include "meshable_arena.h"
 #include "mini_heap.h"
@@ -61,6 +63,10 @@ MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), intern
 #ifdef __APPLE__
   // macOS: Use file-backed memory with MAP_SHARED for F_PUNCHHOLE support
   if (kMeshingEnabled) {
+#ifdef CI_DEBUG_MESH
+    fprintf(stderr, "[CI_DEBUG_MESH] macOS: Using file-backed memory with MAP_SHARED for F_PUNCHHOLE support\n");
+    fprintf(stderr, "[CI_DEBUG_MESH] macOS: Arena fd=%d, size=%zu\n", _fd, kArenaSize);
+#endif
     debug("mesh: using file-backed memory for arena (macOS) - enables F_PUNCHHOLE\n");
   }
   _arenaBegin = SuperHeap::map(kArenaSize, kMapShared, fd);
@@ -601,6 +607,10 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
 }
 
 int MeshableArena::openShmSpanFile(size_t sz) {
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: Creating shm file for size %zu bytes\n", sz);
+#endif
+
   constexpr size_t buf_len = 64;
   char buf[buf_len];
   memset(buf, 0, buf_len);
@@ -608,14 +618,25 @@ int MeshableArena::openShmSpanFile(size_t sz) {
   _spanDir = openSpanDir(getpid());
   d_assert(_spanDir != nullptr);
 
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: Using span directory: %s\n", _spanDir);
+#endif
+
   char *next = strcat(buf, _spanDir);
   strcat(next, "/XXXXXX");
 
   int fd = mkstemp(buf);
   if (fd < 0) {
+#ifdef CI_DEBUG_MESH
+    fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: mkstemp FAILED with errno=%d (%s)\n", errno, strerror(errno));
+#endif
     debug("mkstemp: %d (%s)\n", errno, strerror(errno));
     abort();
   }
+
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: Successfully created temp file: %s, fd=%d\n", buf, fd);
+#endif
 
   // we only need the file descriptors, not the path to the file in the FS
   int err = unlink(buf);
@@ -627,6 +648,9 @@ int MeshableArena::openShmSpanFile(size_t sz) {
   // TODO: see if fallocate makes any difference in performance
   err = ftruncate(fd, sz);
   if (err != 0) {
+#ifdef CI_DEBUG_MESH
+    fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: ftruncate FAILED with errno=%d (%s)\n", errno, strerror(errno));
+#endif
     debug("ftruncate: %d\n", errno);
     abort();
   }
@@ -638,6 +662,10 @@ int MeshableArena::openShmSpanFile(size_t sz) {
     abort();
   }
 
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] openShmSpanFile: Successfully created shm file, fd=%d\n", fd);
+#endif
+
   return fd;
 }
 
@@ -647,8 +675,23 @@ static int sys_memfd_create(const char *name, unsigned int flags) {
 }
 
 int MeshableArena::openSpanFile(size_t sz) {
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] openSpanFile: Attempting memfd_create for size %zu bytes\n", sz);
+#endif
+
   errno = 0;
   int fd = sys_memfd_create("mesh_arena", MFD_CLOEXEC);
+
+#ifdef CI_DEBUG_MESH
+  if (fd >= 0) {
+    fprintf(stderr, "[CI_DEBUG_MESH] memfd_create SUCCESS: fd=%d\n", fd);
+  } else {
+    int saved_errno = errno;
+    fprintf(stderr, "[CI_DEBUG_MESH] memfd_create FAILED: errno=%d (%s)\n", saved_errno, strerror(saved_errno));
+    fprintf(stderr, "[CI_DEBUG_MESH] Falling back to shm_open\n");
+  }
+#endif
+
   // the call to memfd failed -- fall back to opening a shm file
   if (fd < 0) {
     return openShmSpanFile(sz);
