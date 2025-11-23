@@ -17,6 +17,9 @@
 #include "runtime.h"
 #include "memory_stats.h"
 #include "fixed_array.h"
+#ifdef __APPLE__
+#include "memory_stats_macos.h"
+#endif
 #include "internal.h"
 #include "meshing.h"
 
@@ -103,8 +106,30 @@ void testPrecisePageDeallocation() {
   const size_t region_size = (region_end_off - region_start_off) * pageSize;
   const char* region_begin = gheap.arenaBegin() + region_start_off * pageSize;
 
-  uint64_t baseline_region_bytes = 0;
-  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, baseline_region_bytes));
+  auto measure_heap_bytes = [&]() -> uint64_t {
+#ifdef __APPLE__
+    MacOSMemoryStats stats;
+    if (!MacOSMemoryStats::get(stats)) {
+      ADD_FAILURE() << "Failed to read macOS memory stats";
+      return 0;
+    }
+    return stats.resident_size;
+#else
+    MemoryStats stats;
+    if (!MemoryStats::get(stats)) {
+      ADD_FAILURE() << "Failed to read memory stats";
+      return 0;
+    }
+    uint64_t bytes = 0;
+    if (!MemoryStats::regionResidentBytes(region_begin, region_size, bytes)) {
+      ADD_FAILURE() << "Failed to read region resident bytes";
+      return 0;
+    }
+    return bytes;
+#endif
+  };
+
+  const uint64_t baseline_region_bytes = measure_heap_bytes();
 
   // Allocate objects in complementary patterns so they can be meshed
   std::vector<void*> ptrs1, ptrs2;
@@ -140,11 +165,7 @@ void testPrecisePageDeallocation() {
     (void)dummy;
   }
 
-  MemoryStats after_alloc;
-  ASSERT_TRUE(MemoryStats::get(after_alloc));
-
-  uint64_t arena_bytes_after_alloc = 0;
-  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, arena_bytes_after_alloc));
+  const uint64_t arena_bytes_after_alloc = measure_heap_bytes();
   const uint64_t arena_bytes_increase =
       arena_bytes_after_alloc > baseline_region_bytes ? arena_bytes_after_alloc - baseline_region_bytes : 0;
 
@@ -176,11 +197,7 @@ void testPrecisePageDeallocation() {
   // Now scavenge to ensure the page is returned to the OS
   gheap.scavenge(true);
 
-  MemoryStats after_mesh;
-  ASSERT_TRUE(MemoryStats::get(after_mesh));
-
-  uint64_t arena_bytes_after_mesh = 0;
-  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, arena_bytes_after_mesh));
+  const uint64_t arena_bytes_after_mesh = measure_heap_bytes();
   const uint64_t arena_bytes_freed =
       arena_bytes_after_alloc > arena_bytes_after_mesh ? arena_bytes_after_alloc - arena_bytes_after_mesh : 0;
 
@@ -218,11 +235,7 @@ void testPrecisePageDeallocation() {
   // Force a thorough cleanup to ensure memory is returned
   gheap.scavenge(true);
 
-  MemoryStats final_stats;
-  ASSERT_TRUE(MemoryStats::get(final_stats));
-
-  uint64_t final_arena_bytes = 0;
-  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, final_arena_bytes));
+  const uint64_t final_arena_bytes = measure_heap_bytes();
   const uint64_t final_arena_overhead =
       final_arena_bytes > baseline_region_bytes ? final_arena_bytes - baseline_region_bytes : 0;
 

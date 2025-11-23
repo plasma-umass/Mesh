@@ -9,6 +9,9 @@
 #include "memory_stats.h"
 #include <unistd.h>
 #include <stdio.h>
+#include <sys/mman.h>
+#include <vector>
+#include <cstdint>
 
 namespace mesh {
 
@@ -80,14 +83,29 @@ bool MemoryStats::get(MemoryStats& stats) {
   return true;
 }
 
-bool MemoryStats::regionResidentBytes(const void* /*region_begin*/, size_t /*region_size*/, uint64_t& bytes_out) {
-  MemoryStats stats;
-  if (!MemoryStats::get(stats)) {
+bool MemoryStats::regionResidentBytes(const void* region_begin, size_t region_size, uint64_t& bytes_out) {
+  const size_t page_size = static_cast<size_t>(getpagesize());
+  const uintptr_t start = reinterpret_cast<uintptr_t>(region_begin);
+  const uintptr_t page_aligned_start = start & ~(static_cast<uintptr_t>(page_size) - 1);
+  const size_t offset = start - page_aligned_start;
+  const size_t length = region_size + offset;
+  const size_t page_count = (length + page_size - 1) / page_size;
+
+  std::vector<unsigned char> residency(page_count);
+  if (mincore(reinterpret_cast<void*>(page_aligned_start), page_count * page_size,
+              reinterpret_cast<char*>(residency.data())) != 0) {
     return false;
   }
-  // Coarse approximation: use process-level RSS on macOS where the arena is
-  // accounted in RSS.
-  bytes_out = stats.mesh_memory_bytes;
+
+  uint64_t resident_bytes = 0;
+  for (size_t i = 0; i < page_count; i++) {
+    if (residency[i] & 0x1) {
+      // count full pages; test expects full-page allocations
+      resident_bytes += page_size;
+    }
+  }
+
+  bytes_out = resident_bytes;
   return true;
 }
 
