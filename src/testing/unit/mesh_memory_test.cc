@@ -16,6 +16,11 @@
 #include "mini_heap.h"
 #include "runtime.h"
 #include "memory_stats.h"
+#ifdef __APPLE__
+#include "memory_stats_macos.h"
+#include <thread>
+#include <chrono>
+#endif
 #include "fixed_array.h"
 #include "internal.h"
 #include "meshing.h"
@@ -103,16 +108,25 @@ void testPrecisePageDeallocation() {
   const size_t region_size = (region_end_off - region_start_off) * pageSize;
   const char* region_begin = gheap.arenaBegin() + region_start_off * pageSize;
 
-  auto measure_heap_bytes = [&]() -> uint64_t {
-    MemoryStats stats;
-    if (!MemoryStats::get(stats)) {
-      ADD_FAILURE() << "Failed to read memory stats";
+  auto measure_region_bytes = [&]() -> uint64_t {
+#ifdef __APPLE__
+    MacOSMemoryStats stats;
+    if (!MacOSMemoryStats::get(stats)) {
+      ADD_FAILURE() << "Failed to read macOS memory stats";
       return 0;
     }
-    return stats.mesh_memory_bytes;
+    return stats.resident_size;
+#else
+    uint64_t bytes = 0;
+    if (!MemoryStats::regionResidentBytes(region_begin, region_size, bytes)) {
+      ADD_FAILURE() << "Failed to read region resident bytes";
+      return 0;
+    }
+    return bytes;
+#endif
   };
 
-  const uint64_t baseline_region_bytes = measure_heap_bytes();
+  const uint64_t baseline_region_bytes = measure_region_bytes();
 
   // Allocate objects in complementary patterns so they can be meshed
   std::vector<void*> ptrs1, ptrs2;
@@ -148,7 +162,7 @@ void testPrecisePageDeallocation() {
     (void)dummy;
   }
 
-  const uint64_t arena_bytes_after_alloc = measure_heap_bytes();
+  const uint64_t arena_bytes_after_alloc = measure_region_bytes();
   const uint64_t arena_bytes_increase =
       arena_bytes_after_alloc > baseline_region_bytes ? arena_bytes_after_alloc - baseline_region_bytes : 0;
 
@@ -179,8 +193,12 @@ void testPrecisePageDeallocation() {
   // The meshing should have freed one physical page
   // Now scavenge to ensure the page is returned to the OS
   gheap.scavenge(true);
+#ifdef __APPLE__
+  // Allow macOS accounting to reflect reclaimed MAP_SHARED pages
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#endif
 
-  const uint64_t arena_bytes_after_mesh = measure_heap_bytes();
+  const uint64_t arena_bytes_after_mesh = measure_region_bytes();
   const uint64_t arena_bytes_freed =
       arena_bytes_after_alloc > arena_bytes_after_mesh ? arena_bytes_after_alloc - arena_bytes_after_mesh : 0;
 
@@ -217,8 +235,11 @@ void testPrecisePageDeallocation() {
 
   // Force a thorough cleanup to ensure memory is returned
   gheap.scavenge(true);
+#ifdef __APPLE__
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#endif
 
-  const uint64_t final_arena_bytes = measure_heap_bytes();
+  const uint64_t final_arena_bytes = measure_region_bytes();
   const uint64_t final_arena_overhead =
       final_arena_bytes > baseline_region_bytes ? final_arena_bytes - baseline_region_bytes : 0;
 
