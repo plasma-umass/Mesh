@@ -10,9 +10,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdlib>
+#include <cstddef>
 #include <cstring>
 #include <cerrno>
 #include <cstdio>
+#include <sys/types.h>
 
 namespace mesh {
 
@@ -127,6 +129,47 @@ bool MemoryStats::get(MemoryStats& stats) {
           static_cast<unsigned long long>(stats.mesh_memory_bytes),
           rss_anon_kb, rss_file_kb);
 
+  return true;
+}
+
+bool MemoryStats::regionResidentBytes(const void* region_begin, size_t region_size, uint64_t& bytes_out) {
+  FILE *fp = fopen("/proc/self/smaps", "r");
+  if (!fp) {
+    return false;
+  }
+
+  const uintptr_t target_start = reinterpret_cast<uintptr_t>(region_begin);
+  const uintptr_t target_end = target_start + region_size;
+
+  uint64_t rss_bytes = 0;
+  bool in_entry = false;
+  uintptr_t entry_start = 0;
+  uintptr_t entry_end = 0;
+
+  char line[512];
+  while (fgets(line, sizeof(line), fp)) {
+    // Mapping header line: start-end perms ...
+    if (sscanf(line, "%lx-%lx", &entry_start, &entry_end) == 2) {
+      // Start a new entry; determine if it overlaps our region.
+      in_entry = (entry_start < target_end) && (entry_end > target_start);
+      continue;
+    }
+
+    if (!in_entry) {
+      continue;
+    }
+
+    // Rss: <value> kB
+    if (strncmp(line, "Rss:", 4) == 0) {
+      unsigned long rss_kb = 0;
+      if (sscanf(line + 4, "%lu", &rss_kb) == 1) {
+        rss_bytes += static_cast<uint64_t>(rss_kb) * 1024;
+      }
+    }
+  }
+
+  fclose(fp);
+  bytes_out = rss_bytes;
   return true;
 }
 

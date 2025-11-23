@@ -80,6 +80,17 @@ bool MemoryStats::get(MemoryStats& stats) {
   return true;
 }
 
+bool MemoryStats::regionResidentBytes(const void* /*region_begin*/, size_t /*region_size*/, uint64_t& bytes_out) {
+  MemoryStats stats;
+  if (!MemoryStats::get(stats)) {
+    return false;
+  }
+  // Coarse approximation: use process-level RSS on macOS where the arena is
+  // accounted in RSS.
+  bytes_out = stats.mesh_memory_bytes;
+  return true;
+}
+
 }  // namespace mesh
 
 #endif  // __APPLE__

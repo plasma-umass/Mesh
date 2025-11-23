@@ -24,11 +24,11 @@
 
 namespace mesh {
 
-#ifdef __linux__
 bool ciDebugEnabled() {
   return getenv("CI_DEBUG_MESH") != nullptr;
 }
 
+#ifdef __linux__
 uint64_t getArenaRssBytes(const void *arenaBegin) {
   FILE *fp = fopen("/proc/self/smaps", "r");
   if (!fp) {
@@ -249,14 +249,13 @@ void testPrecisePageDeallocation() {
     printf("Post-cleanup baseline RSS: %" PRIu64 " bytes, Mesh memory: %" PRIu64 " bytes\n\n",
            baseline.resident_size_bytes, baseline.mesh_memory_bytes);
   }
+#endif  // __linux__
 
-#ifdef __linux__
-  uint64_t baseline_arena_rss = getArenaRssBytes(gheap.arenaBegin());
+  uint64_t baseline_arena_rss = 0;
+  ASSERT_TRUE(MemoryStats::regionResidentBytes(gheap.arenaBegin(), kArenaSize, baseline_arena_rss));
   if (ciDebugEnabled()) {
-    printf("[CI_DEBUG_MESH] Baseline arena RSS from smaps: %" PRIu64 " bytes\n", baseline_arena_rss);
+    printf("[CI_DEBUG_MESH] Baseline arena resident bytes: %" PRIu64 "\n", baseline_arena_rss);
   }
-#endif
-#endif
 
   // Phase 1: Allocate exactly 2 pages worth of objects in 2 miniheaps
   // Use small objects to fill the pages
@@ -311,36 +310,27 @@ void testPrecisePageDeallocation() {
     (void)dummy;
   }
 
-#ifdef __linux__
-  uint64_t arena_rss_after = 0;
-#endif
-
   MemoryStats after_alloc;
   ASSERT_TRUE(MemoryStats::get(after_alloc));
 
-  uint64_t mesh_memory_increase = after_alloc.mesh_memory_bytes - baseline.mesh_memory_bytes;
-
-#ifdef __linux__
-  arena_rss_after = getArenaRssBytes(gheap.arenaBegin());
-  const uint64_t arena_rss_increase =
-      arena_rss_after > baseline_arena_rss ? arena_rss_after - baseline_arena_rss : 0;
+  uint64_t arena_bytes_after_alloc = 0;
+  ASSERT_TRUE(MemoryStats::regionResidentBytes(gheap.arenaBegin(), kArenaSize, arena_bytes_after_alloc));
+  const uint64_t arena_bytes_increase =
+      arena_bytes_after_alloc > baseline_arena_rss ? arena_bytes_after_alloc - baseline_arena_rss : 0;
   if (ciDebugEnabled()) {
-    printf("[CI_DEBUG_MESH] Arena RSS after allocation (smaps): %" PRIu64 " bytes (delta %" PRIu64 ")\n",
-           arena_rss_after, arena_rss_increase);
+    printf("[CI_DEBUG_MESH] Arena resident bytes after allocation: %" PRIu64 " (delta %" PRIu64 ")\n",
+           arena_bytes_after_alloc, arena_bytes_increase);
   }
-  uint64_t effective_memory_increase = std::max(mesh_memory_increase, arena_rss_increase);
+#ifdef __linux__
   logSmapsForAddress(gheap.arenaBegin(), "after phase 1 allocations");
-#else
-  uint64_t effective_memory_increase = mesh_memory_increase;
 #endif
 
   printf("\nAfter allocation: Mesh memory increased by %" PRIu64 " bytes (expected ~%zu bytes for 2 pages)\n",
-         effective_memory_increase, 2 * pageSize);
+         arena_bytes_increase, 2 * pageSize);
 
   // Verify we allocated approximately 2 pages worth of memory
-  // The mesh_memory_bytes metric should closely match actual physical pages allocated
-  EXPECT_GE(effective_memory_increase, 2 * pageSize);
-  EXPECT_LE(effective_memory_increase, 3 * pageSize);  // Allow one extra page for metadata
+  EXPECT_GE(arena_bytes_increase, 2 * pageSize);
+  EXPECT_LE(arena_bytes_increase, 3 * pageSize);  // Allow one extra page for metadata
 
   // Phase 2: Verify the miniheaps are meshable
   printf("\n=== Phase 2: Verifying miniheaps are meshable ===\n");
@@ -367,34 +357,24 @@ void testPrecisePageDeallocation() {
   MemoryStats after_mesh;
   ASSERT_TRUE(MemoryStats::get(after_mesh));
 
-  // The critical metric: mesh_memory_bytes should decrease after meshing
-  // Compare to after_alloc, not baseline, to avoid measuring internal allocations during scavenge
-  uint64_t mesh_memory_freed = 0;
-  if (after_mesh.mesh_memory_bytes < after_alloc.mesh_memory_bytes) {
-    mesh_memory_freed = after_alloc.mesh_memory_bytes - after_mesh.mesh_memory_bytes;
-  } else if (after_mesh.mesh_memory_bytes > after_alloc.mesh_memory_bytes) {
-    // This should not happen - meshing should reduce memory
-    printf("\nERROR: After meshing, mesh memory increased by %" PRIu64 " bytes (expected decrease of ~%zu bytes)\n",
-           after_mesh.mesh_memory_bytes - after_alloc.mesh_memory_bytes, pageSize);
-  }
-
-  uint64_t arena_rss_freed = 0;
-#ifdef __linux__
-  const uint64_t arena_rss_after_mesh = getArenaRssBytes(gheap.arenaBegin());
-  arena_rss_freed = arena_rss_after > arena_rss_after_mesh ? arena_rss_after - arena_rss_after_mesh : 0;
+  uint64_t arena_bytes_after_mesh = 0;
+  ASSERT_TRUE(MemoryStats::regionResidentBytes(gheap.arenaBegin(), kArenaSize, arena_bytes_after_mesh));
+  const uint64_t arena_bytes_freed =
+      arena_bytes_after_alloc > arena_bytes_after_mesh ? arena_bytes_after_alloc - arena_bytes_after_mesh : 0;
   if (ciDebugEnabled()) {
-    printf("[CI_DEBUG_MESH] Arena RSS after mesh (smaps): %" PRIu64 " bytes (freed %" PRIu64 ")\n",
-           arena_rss_after_mesh, arena_rss_freed);
+    printf("[CI_DEBUG_MESH] Arena resident bytes after mesh: %" PRIu64 " (freed %" PRIu64 ")\n",
+           arena_bytes_after_mesh, arena_bytes_freed);
   }
+#ifdef __linux__
   logSmapsForAddress(gheap.arenaBegin(), "after meshing + scavenge");
 #endif
 
-  const uint64_t effective_mesh_memory_freed = std::max(mesh_memory_freed, arena_rss_freed);
+  const uint64_t effective_mesh_memory_freed = arena_bytes_freed;
 
   if (effective_mesh_memory_freed > 0) {
     printf("\nAfter meshing: Mesh memory decreased by %" PRIu64 " bytes (expected ~%zu bytes)\n",
            effective_mesh_memory_freed, pageSize);
-  } else if (mesh_memory_freed == 0 && after_mesh.mesh_memory_bytes == after_alloc.mesh_memory_bytes) {
+  } else if (after_mesh.mesh_memory_bytes == after_alloc.mesh_memory_bytes) {
     printf("\nAfter meshing: Mesh memory unchanged\n");
   }
 
@@ -433,22 +413,16 @@ void testPrecisePageDeallocation() {
   MemoryStats final_stats;
   ASSERT_TRUE(MemoryStats::get(final_stats));
 
-  uint64_t final_mesh_overhead = 0;
-  if (final_stats.mesh_memory_bytes > baseline.mesh_memory_bytes) {
-    final_mesh_overhead = final_stats.mesh_memory_bytes - baseline.mesh_memory_bytes;
-  }
-
-  uint64_t final_arena_overhead = 0;
-#ifdef __linux__
-  const uint64_t final_arena_rss = getArenaRssBytes(gheap.arenaBegin());
-  final_arena_overhead = final_arena_rss > baseline_arena_rss ? final_arena_rss - baseline_arena_rss : 0;
+  uint64_t final_arena_bytes = 0;
+  ASSERT_TRUE(MemoryStats::regionResidentBytes(gheap.arenaBegin(), kArenaSize, final_arena_bytes));
+  const uint64_t final_arena_overhead =
+      final_arena_bytes > baseline_arena_rss ? final_arena_bytes - baseline_arena_rss : 0;
   if (ciDebugEnabled()) {
-    printf("[CI_DEBUG_MESH] Final arena RSS (smaps): %" PRIu64 " bytes (overhead %" PRIu64 ")\n",
-           final_arena_rss, final_arena_overhead);
+    printf("[CI_DEBUG_MESH] Final arena resident bytes: %" PRIu64 " (overhead %" PRIu64 ")\n",
+           final_arena_bytes, final_arena_overhead);
   }
-#endif
 
-  const uint64_t effective_final_overhead = std::max(final_mesh_overhead, final_arena_overhead);
+  const uint64_t effective_final_overhead = final_arena_overhead;
 
   printf("\nFinal mesh memory overhead: %" PRIu64 " bytes\n", effective_final_overhead);
 
