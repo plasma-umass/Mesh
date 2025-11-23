@@ -154,6 +154,14 @@ void testPrecisePageDeallocation() {
       printf("Continuing test anyway...\n\n");
       // Don't skip - let's see if the test can still work
     }
+
+    // Force scavenge to clean up the test allocation before continuing
+    gheap.scavenge(true);
+
+    // Take a fresh baseline AFTER cleanup for accurate Phase 1 measurements
+    ASSERT_TRUE(MemoryStats::get(baseline));
+    printf("Post-cleanup baseline RSS: %" PRIu64 " bytes, Mesh memory: %" PRIu64 " bytes\n\n",
+           baseline.resident_size_bytes, baseline.mesh_memory_bytes);
   }
 #endif
 
