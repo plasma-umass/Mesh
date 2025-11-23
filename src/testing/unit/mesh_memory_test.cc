@@ -17,9 +17,6 @@
 #include "runtime.h"
 #include "memory_stats.h"
 #include "fixed_array.h"
-#ifdef __APPLE__
-#include "memory_stats_macos.h"
-#endif
 #include "internal.h"
 #include "meshing.h"
 
@@ -107,26 +104,12 @@ void testPrecisePageDeallocation() {
   const char* region_begin = gheap.arenaBegin() + region_start_off * pageSize;
 
   auto measure_heap_bytes = [&]() -> uint64_t {
-#ifdef __APPLE__
-    MacOSMemoryStats stats;
-    if (!MacOSMemoryStats::get(stats)) {
-      ADD_FAILURE() << "Failed to read macOS memory stats";
-      return 0;
-    }
-    return stats.resident_size;
-#else
     MemoryStats stats;
     if (!MemoryStats::get(stats)) {
       ADD_FAILURE() << "Failed to read memory stats";
       return 0;
     }
-    uint64_t bytes = 0;
-    if (!MemoryStats::regionResidentBytes(region_begin, region_size, bytes)) {
-      ADD_FAILURE() << "Failed to read region resident bytes";
-      return 0;
-    }
-    return bytes;
-#endif
+    return stats.mesh_memory_bytes;
   };
 
   const uint64_t baseline_region_bytes = measure_heap_bytes();

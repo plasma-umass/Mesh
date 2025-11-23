@@ -76,9 +76,9 @@ bool MemoryStats::get(MemoryStats& stats) {
   if (!MacOSMemoryStats::get(macos_stats)) {
     return false;
   }
-  // Use RSS as the primary metric for cross-platform consistency
+  // Keep RSS for comparability with Linux process stats
   stats.resident_size_bytes = macos_stats.resident_size;
-  // On macOS, MAP_SHARED memory (used by mesh) shows up in RSS
+  // On macOS, MAP_SHARED memory (used by mesh) shows up in RSS.
   stats.mesh_memory_bytes = macos_stats.resident_size;
   return true;
 }
