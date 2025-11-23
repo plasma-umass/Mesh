@@ -77,25 +77,60 @@ void testPrecisePageDeallocation() {
   // Some CI environments or containers might not support this properly.
   // Check if RssShmem tracking is working by looking at the current process.
   {
+    printf("\n=== Checking RssShmem tracking availability ===\n");
+
+    // First check baseline RssShmem before any test allocation
+    MemoryStats baseline_check;
+    bool baseline_success = MemoryStats::get(baseline_check);
+    printf("Baseline MemoryStats::get() returned: %s\n", baseline_success ? "true" : "false");
+    if (baseline_success) {
+      printf("Baseline mesh_memory_bytes before test allocation: %" PRIu64 " bytes\n",
+             baseline_check.mesh_memory_bytes);
+    }
+
     // First, force some mesh memory allocation through the existing global heap
     FixedArray<MiniHeap<PageSize>, 1> test_array{};
+    printf("Allocating test MiniHeap with size class 256...\n");
     gheap.allocSmallMiniheaps(SizeMap::SizeClass(256), 256, test_array, tid);
     MiniHeap<PageSize>* test_mh = test_array[0];
+
     if (test_mh) {
+      printf("MiniHeap allocated at %p\n", test_mh);
+      printf("MiniHeap physical span pages: %zu\n", test_mh->spanSize() / pageSize);
+
       void* test_ptr = test_mh->mallocAt(gheap.arenaBegin(), 0);
+      printf("Test allocation returned: %p\n", test_ptr);
+
       if (test_ptr) {
         memset(test_ptr, 0x42, 256);
         volatile char dummy = *reinterpret_cast<char*>(test_ptr);
         (void)dummy;
+        printf("Successfully wrote to and read from test allocation\n");
       }
 
       // Give time for kernel to update stats
+      printf("Sleeping 100ms for kernel to update stats...\n");
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
       MemoryStats test_stats;
-      if (MemoryStats::get(test_stats)) {
+      bool test_success = MemoryStats::get(test_stats);
+      printf("After allocation MemoryStats::get() returned: %s\n", test_success ? "true" : "false");
+
+      if (test_success) {
+        printf("After allocation mesh_memory_bytes: %" PRIu64 " bytes\n",
+               test_stats.mesh_memory_bytes);
+        printf("Increase from baseline: %" PRIu64 " bytes\n",
+               test_stats.mesh_memory_bytes > baseline_check.mesh_memory_bytes ?
+               test_stats.mesh_memory_bytes - baseline_check.mesh_memory_bytes : 0);
+
         // If we allocated memory but mesh_memory_bytes is still 0, RssShmem isn't working
         if (test_stats.mesh_memory_bytes == 0) {
+          printf("\n=== HYPOTHESIS CHECK: mesh_memory_bytes is 0 after allocation ===\n");
+          printf("This suggests one of the following:\n");
+          printf("1. RssShmem field is missing from /proc/self/status (kernel doesn't support it)\n");
+          printf("2. RssShmem field exists but is 0 (memfd_create not creating shared memory)\n");
+          printf("3. Memory allocation didn't use memfd_create path\n");
+          printf("Check stderr output above for [MemoryStats] DEBUG messages for details.\n");
           printf("\n=== SKIPPING TEST: RssShmem tracking not available in this environment ===\n");
           printf("This typically happens in CI containers or systems with restricted shared memory.\n");
           printf("The test passes on systems with proper RssShmem support.\n");
@@ -107,7 +142,20 @@ void testPrecisePageDeallocation() {
           gheap.freeMiniheap(test_mh);
 
           GTEST_SKIP() << "RssShmem tracking not available in this environment";
+        } else {
+          printf("RssShmem tracking appears to be working correctly.\n");
         }
+      } else {
+        printf("ERROR: MemoryStats::get() failed after allocation\n");
+        printf("Check stderr output above for [MemoryStats] DEBUG messages.\n");
+
+        // Clean up before skipping
+        if (test_ptr) {
+          gheap.free(test_ptr);
+        }
+        gheap.freeMiniheap(test_mh);
+
+        GTEST_SKIP() << "MemoryStats::get() failed - unable to read memory statistics";
       }
 
       // Clean up test allocation
@@ -115,6 +163,9 @@ void testPrecisePageDeallocation() {
         gheap.free(test_ptr);
       }
       gheap.freeMiniheap(test_mh);
+    } else {
+      printf("ERROR: Failed to allocate test MiniHeap\n");
+      GTEST_SKIP() << "Failed to allocate test MiniHeap";
     }
   }
 #endif
