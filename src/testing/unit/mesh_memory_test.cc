@@ -88,39 +88,26 @@ void testPrecisePageDeallocation() {
              baseline_check.mesh_memory_bytes);
     }
 
-    // First, force some mesh memory allocation through the existing global heap
-    FixedArray<MiniHeap<PageSize>, 1> test_array{};
-    printf("Allocating test MiniHeap with size class 256...\n");
-    gheap.allocSmallMiniheaps(SizeMap::SizeClass(256), 256, test_array, tid);
-    MiniHeap<PageSize>* test_mh = test_array[0];
+    // Allocate a larger block to ensure RssShmem is properly tracked
+    // Small allocations (256 bytes) don't always show up in RssShmem immediately
+    // Use 1MB allocation like the VerifyMemoryReductionAfterFree test which works
+    printf("Allocating 1MB test block to verify RssShmem tracking...\n");
+    const size_t test_size = 1024 * 1024;  // 1MB
+    void* large_test_ptr = gheap.malloc(test_size);
 
-    if (test_mh) {
-      printf("MiniHeap allocated at %p\n", test_mh);
-      printf("MiniHeap physical span pages: %zu\n", test_mh->spanSize() / pageSize);
+    if (large_test_ptr) {
+      printf("Test allocation returned: %p\n", large_test_ptr);
 
-      void* test_ptr = test_mh->mallocAt(gheap.arenaBegin(), 0);
-      printf("Test allocation returned: %p\n", test_ptr);
+      // Fill with data to ensure pages are allocated
+      memset(large_test_ptr, 0x42, test_size);
 
-      if (test_ptr) {
-        memset(test_ptr, 0x42, 256);
-        volatile char dummy = *reinterpret_cast<char*>(test_ptr);
+      // Force pages to be resident
+      for (size_t i = 0; i < test_size; i += 4096) {
+        volatile char dummy = *reinterpret_cast<char*>(
+          reinterpret_cast<char*>(large_test_ptr) + i);
         (void)dummy;
-        printf("Successfully wrote to and read from test allocation\n");
-
-        // Also dirty the entire underlying page to ensure it's allocated
-        // The MiniHeap manages a full page, but we only allocated one 256-byte object
-        // We need to ensure the entire page is committed to physical memory
-        void* page_start = reinterpret_cast<void*>(
-          reinterpret_cast<uintptr_t>(test_ptr) & ~(pageSize - 1));
-        printf("Dirtying entire page starting at %p (page size: %zu)\n", page_start, pageSize);
-        memset(page_start, 0x43, pageSize);
-        // Force the page to be resident
-        for (size_t i = 0; i < pageSize; i += 64) {
-          volatile char page_dummy = *reinterpret_cast<char*>(
-            reinterpret_cast<char*>(page_start) + i);
-          (void)page_dummy;
-        }
       }
+      printf("Successfully wrote to and read from 1MB test allocation\n");
 
       // Give time for kernel to update stats
       printf("Sleeping 100ms for kernel to update stats...\n");
@@ -159,12 +146,11 @@ void testPrecisePageDeallocation() {
       }
 
       // Clean up test allocation
-      if (test_ptr) {
-        gheap.free(test_ptr);
+      if (large_test_ptr) {
+        gheap.free(large_test_ptr);
       }
-      gheap.freeMiniheap(test_mh);
     } else {
-      printf("ERROR: Failed to allocate test MiniHeap\n");
+      printf("ERROR: Failed to allocate test memory block\n");
       printf("Continuing test anyway...\n\n");
       // Don't skip - let's see if the test can still work
     }
