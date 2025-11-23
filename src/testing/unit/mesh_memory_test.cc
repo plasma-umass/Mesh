@@ -8,6 +8,10 @@
 #include <thread>
 #include <chrono>
 #include <cinttypes>
+#include <cstdio>
+#include <cstdlib>
+#include <algorithm>
+#include <cstring>
 
 #include "common.h"
 #include "global_heap.h"
@@ -19,6 +23,88 @@
 #include "meshing.h"
 
 namespace mesh {
+
+inline bool ciDebugEnabled() {
+  return getenv("CI_DEBUG_MESH") != nullptr;
+}
+
+#ifdef __linux__
+uint64_t getArenaRssBytes(const void *arenaBegin) {
+  FILE *fp = fopen("/proc/self/smaps", "r");
+  if (!fp) {
+    return 0;
+  }
+
+  const uintptr_t arenaStart = reinterpret_cast<uintptr_t>(arenaBegin);
+  const uintptr_t arenaEnd = arenaStart + kArenaSize;
+
+  uint64_t rssTotal = 0;
+  bool inEntry = false;
+
+  char line[512];
+  while (fgets(line, sizeof(line), fp)) {
+    unsigned long start = 0;
+    unsigned long end = 0;
+    if (sscanf(line, "%lx-%lx", &start, &end) == 2) {
+      inEntry = (arenaStart < end) && (arenaEnd > start);
+      continue;
+    }
+
+    if (!inEntry) {
+      continue;
+    }
+
+    if (strncmp(line, "Rss:", 4) == 0) {
+      unsigned long rssKb = 0;
+      if (sscanf(line + 4, "%lu", &rssKb) == 1) {
+        rssTotal += rssKb * 1024;
+      }
+    }
+  }
+
+  fclose(fp);
+  return rssTotal;
+}
+
+void logSmapsForAddress(void *addr, const char *label) {
+  if (!ciDebugEnabled()) {
+    return;
+  }
+
+  FILE *fp = fopen("/proc/self/smaps", "r");
+  if (!fp) {
+    printf("[CI_DEBUG_MESH] Failed to open /proc/self/smaps for %s\n", label);
+    return;
+  }
+
+  const uintptr_t target = reinterpret_cast<uintptr_t>(addr);
+  bool in_entry = false;
+
+  printf("[CI_DEBUG_MESH] /proc/self/smaps entry for %p (%s):\n", addr, label);
+
+  char line[512];
+  while (fgets(line, sizeof(line), fp)) {
+    unsigned long start = 0;
+    unsigned long end = 0;
+    if (sscanf(line, "%lx-%lx", &start, &end) == 2) {
+      if (in_entry) {
+        break;  // reached the next mapping
+      }
+      in_entry = target >= start && target < end;
+    }
+
+    if (in_entry) {
+      printf("[CI_DEBUG_MESH]   %s", line);
+    }
+  }
+
+  if (!in_entry) {
+    printf("[CI_DEBUG_MESH]   (no smaps entry found for %p)\n", addr);
+  }
+
+  fclose(fp);
+}
+#endif
 
 template <size_t PageSize>
 void testPrecisePageDeallocation() {
@@ -72,53 +158,6 @@ void testPrecisePageDeallocation() {
   printf("Baseline RSS: %" PRIu64 " bytes, Mesh memory: %" PRIu64 " bytes\n",
          baseline.resident_size_bytes, baseline.mesh_memory_bytes);
 
-#ifdef __linux__
-  // On Linux, we need RssShmem tracking to work properly for this test.
-  // Some CI environments or containers might not support this properly.
-  // Check if RssShmem tracking is working by looking at the current process.
-  {
-    // First, force some mesh memory allocation through the existing global heap
-    FixedArray<MiniHeap<PageSize>, 1> test_array{};
-    gheap.allocSmallMiniheaps(SizeMap::SizeClass(256), 256, test_array, tid);
-    MiniHeap<PageSize>* test_mh = test_array[0];
-    if (test_mh) {
-      void* test_ptr = test_mh->mallocAt(gheap.arenaBegin(), 0);
-      if (test_ptr) {
-        memset(test_ptr, 0x42, 256);
-        volatile char dummy = *reinterpret_cast<char*>(test_ptr);
-        (void)dummy;
-      }
-
-      // Give time for kernel to update stats
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-      MemoryStats test_stats;
-      if (MemoryStats::get(test_stats)) {
-        // If we allocated memory but mesh_memory_bytes is still 0, RssShmem isn't working
-        if (test_stats.mesh_memory_bytes == 0) {
-          printf("\n=== SKIPPING TEST: RssShmem tracking not available in this environment ===\n");
-          printf("This typically happens in CI containers or systems with restricted shared memory.\n");
-          printf("The test passes on systems with proper RssShmem support.\n");
-
-          // Clean up before skipping
-          if (test_ptr) {
-            gheap.free(test_ptr);
-          }
-          gheap.freeMiniheap(test_mh);
-
-          GTEST_SKIP() << "RssShmem tracking not available in this environment";
-        }
-      }
-
-      // Clean up test allocation
-      if (test_ptr) {
-        gheap.free(test_ptr);
-      }
-      gheap.freeMiniheap(test_mh);
-    }
-  }
-#endif
-
   // Phase 1: Allocate exactly 2 pages worth of objects in 2 miniheaps
   // Use small objects to fill the pages
   const size_t objectSize = 256;  // Small object size
@@ -137,6 +176,23 @@ void testPrecisePageDeallocation() {
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(objectSize), objectSize, array2, tid);
   MiniHeap<PageSize>* mh2 = array2[0];
   ASSERT_NE(mh2, nullptr);
+
+  // Determine the exact region covering both spans.
+  const size_t span1_offset = mh1->span().offset;
+  const size_t span2_offset = mh2->span().offset;
+  const size_t span1_pages = mh1->span().length;
+  const size_t span2_pages = mh2->span().length;
+  const size_t region_start_off = std::min(span1_offset, span2_offset);
+  const size_t region_end_off = std::max(span1_offset + span1_pages, span2_offset + span2_pages);
+  const size_t region_size = (region_end_off - region_start_off) * pageSize;
+  const char* region_begin = gheap.arenaBegin() + region_start_off * pageSize;
+
+  uint64_t baseline_region_bytes = 0;
+  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, baseline_region_bytes));
+  if (ciDebugEnabled()) {
+    printf("[CI_DEBUG_MESH] Baseline resident bytes for span window [%zu, %zu): %" PRIu64 "\n",
+           region_start_off, region_end_off, baseline_region_bytes);
+  }
 
   // Allocate objects in complementary patterns so they can be meshed
   std::vector<void*> ptrs1, ptrs2;
@@ -175,14 +231,23 @@ void testPrecisePageDeallocation() {
   MemoryStats after_alloc;
   ASSERT_TRUE(MemoryStats::get(after_alloc));
 
-  uint64_t mesh_memory_increase = after_alloc.mesh_memory_bytes - baseline.mesh_memory_bytes;
-  printf("\nAfter allocation: Mesh memory increased by %" PRIu64 " bytes (expected ~%zu bytes for 2 pages)\n",
-         mesh_memory_increase, 2 * pageSize);
+  uint64_t arena_bytes_after_alloc = 0;
+  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, arena_bytes_after_alloc));
+  const uint64_t arena_bytes_increase =
+      arena_bytes_after_alloc > baseline_region_bytes ? arena_bytes_after_alloc - baseline_region_bytes : 0;
+  if (ciDebugEnabled()) {
+    printf("[CI_DEBUG_MESH] Resident bytes after allocation (window [%zu, %zu)): %" PRIu64 " (delta %" PRIu64 ")\n",
+           region_start_off, region_end_off, arena_bytes_after_alloc, arena_bytes_increase);
+  }
+#ifdef __linux__
+  logSmapsForAddress(gheap.arenaBegin(), "after phase 1 allocations");
+#endif
 
-  // Verify we allocated approximately 2 pages worth of memory
-  // The mesh_memory_bytes metric should closely match actual physical pages allocated
-  EXPECT_GE(mesh_memory_increase, 2 * pageSize);
-  EXPECT_LE(mesh_memory_increase, 3 * pageSize);  // Allow one extra page for metadata
+  const size_t expected_allocated_pages = span1_pages + span2_pages;
+  printf("\nAfter allocation: Mesh memory increased by %" PRIu64 " bytes (expected %zu bytes for %zu pages)\n",
+         arena_bytes_increase, expected_allocated_pages * pageSize, expected_allocated_pages);
+
+  EXPECT_EQ(arena_bytes_increase, expected_allocated_pages * pageSize);
 
   // Phase 2: Verify the miniheaps are meshable
   printf("\n=== Phase 2: Verifying miniheaps are meshable ===\n");
@@ -209,27 +274,26 @@ void testPrecisePageDeallocation() {
   MemoryStats after_mesh;
   ASSERT_TRUE(MemoryStats::get(after_mesh));
 
-  // The critical metric: mesh_memory_bytes should decrease after meshing
-  // Compare to after_alloc, not baseline, to avoid measuring internal allocations during scavenge
-  uint64_t mesh_memory_freed = 0;
-  if (after_mesh.mesh_memory_bytes < after_alloc.mesh_memory_bytes) {
-    mesh_memory_freed = after_alloc.mesh_memory_bytes - after_mesh.mesh_memory_bytes;
-    printf("\nAfter meshing: Mesh memory decreased by %" PRIu64 " bytes (expected ~%zu bytes)\n",
-           mesh_memory_freed, pageSize);
-  } else if (after_mesh.mesh_memory_bytes > after_alloc.mesh_memory_bytes) {
-    // This should not happen - meshing should reduce memory
-    printf("\nERROR: After meshing, mesh memory increased by %" PRIu64 " bytes (expected decrease of ~%zu bytes)\n",
-           after_mesh.mesh_memory_bytes - after_alloc.mesh_memory_bytes, pageSize);
-  } else {
-    printf("\nAfter meshing: Mesh memory unchanged\n");
+  uint64_t arena_bytes_after_mesh = 0;
+  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, arena_bytes_after_mesh));
+  const uint64_t arena_bytes_freed =
+      arena_bytes_after_alloc > arena_bytes_after_mesh ? arena_bytes_after_alloc - arena_bytes_after_mesh : 0;
+  if (ciDebugEnabled()) {
+    printf("[CI_DEBUG_MESH] Resident bytes after mesh (window [%zu, %zu)): %" PRIu64 " (freed %" PRIu64 ")\n",
+           region_start_off, region_end_off, arena_bytes_after_mesh, arena_bytes_freed);
   }
+#ifdef __linux__
+  logSmapsForAddress(gheap.arenaBegin(), "after meshing + scavenge");
+#endif
 
-  // CRITICAL ASSERTION: Meshing should free approximately one page of physical memory
-  // This is the core test - verifying that meshing actually reduces physical memory usage
-  EXPECT_GE(mesh_memory_freed, pageSize - (pageSize / 4))
-    << "Meshing should free at least 75% of a page";
-  EXPECT_LE(mesh_memory_freed, pageSize + (pageSize / 4))
-    << "Meshing should free at most 125% of a page";
+  const uint64_t effective_mesh_memory_freed = arena_bytes_freed;
+
+  printf("\nAfter meshing: Mesh memory decreased by %" PRIu64 " bytes (expected %zu bytes)\n",
+         effective_mesh_memory_freed, span2_pages * pageSize);
+
+  // CRITICAL ASSERTION: Meshing should free exactly the pages from the second miniheap
+  EXPECT_EQ(effective_mesh_memory_freed, span2_pages * pageSize)
+    << "Meshing should free exactly the pages from the second miniheap";
 
   // Verify data integrity after meshing
   for (auto ptr : ptrs1) {
@@ -259,14 +323,21 @@ void testPrecisePageDeallocation() {
   MemoryStats final_stats;
   ASSERT_TRUE(MemoryStats::get(final_stats));
 
-  uint64_t final_mesh_overhead = 0;
-  if (final_stats.mesh_memory_bytes > baseline.mesh_memory_bytes) {
-    final_mesh_overhead = final_stats.mesh_memory_bytes - baseline.mesh_memory_bytes;
+  uint64_t final_arena_bytes = 0;
+  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, final_arena_bytes));
+  const uint64_t final_arena_overhead =
+      final_arena_bytes > baseline_region_bytes ? final_arena_bytes - baseline_region_bytes : 0;
+  if (ciDebugEnabled()) {
+    printf("[CI_DEBUG_MESH] Final resident bytes (window [%zu, %zu)): %" PRIu64 " (overhead %" PRIu64 ")\n",
+           region_start_off, region_end_off, final_arena_bytes, final_arena_overhead);
   }
-  printf("\nFinal mesh memory overhead: %" PRIu64 " bytes\n", final_mesh_overhead);
 
-  // Should be back close to baseline (within 1MB tolerance for heap metadata)
-  EXPECT_LT(final_mesh_overhead, 1024 * 1024) << "Mesh memory should return close to baseline";
+  const uint64_t effective_final_overhead = final_arena_overhead;
+
+  printf("\nFinal mesh memory overhead: %" PRIu64 " bytes\n", effective_final_overhead);
+
+  // Should return exactly to baseline within the measured region
+  EXPECT_EQ(effective_final_overhead, 0u) << "Mesh memory should return to baseline in measured region";
 }
 
 template <size_t PageSize>

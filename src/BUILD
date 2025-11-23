@@ -202,6 +202,7 @@ cc_test(
     copts = [
         "-Isrc",
     ] + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,  # Include common defines for consistent behavior
     linkopts = COMMON_LINKOPTS,
     deps = [
         ":mesh-core",

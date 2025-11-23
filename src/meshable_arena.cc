@@ -399,7 +399,15 @@ void MeshableArena::partialScavenge() {
 void MeshableArena::scavenge(bool force) {
   const size_t minDirtyPageThreshold = (kMinDirtyPageThreshold * kPageSizeMin) / getPageSize();
 
+#ifdef CI_DEBUG_MESH
+  fprintf(stderr, "[CI_DEBUG_MESH] scavenge called: force=%s, dirtyPageCount=%zu, threshold=%zu\n",
+          force ? "true" : "false", _dirtyPageCount, minDirtyPageThreshold);
+#endif
+
   if (!force && _dirtyPageCount < minDirtyPageThreshold) {
+#ifdef CI_DEBUG_MESH
+    fprintf(stderr, "[CI_DEBUG_MESH] scavenge: Skipping (dirty pages below threshold)\n");
+#endif
     return;
   }
 
@@ -491,6 +499,17 @@ void MeshableArena::scavenge(bool force) {
       hard_assert(false);
     }
   }
+#endif
+
+#ifdef CI_DEBUG_MESH
+  size_t cleanPageCount = 0;
+  for (size_t i = 0; i < kSpanClassCount; i++) {
+    for (const auto& span : _clean[i]) {
+      cleanPageCount += span.length;
+    }
+  }
+  fprintf(stderr, "[CI_DEBUG_MESH] scavenge: Completed. Clean pages: %zu, Meshed pages: %zu\n",
+          cleanPageCount, _meshedPageCount);
 #endif
 }
 

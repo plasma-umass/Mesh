@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v1
       - name: build in debug mode
         run: |
-          ./bazel test -c dbg //src:unit-tests --cxxopt=-DCI_DEBUG_MESH=1
+          ./bazel test -c dbg //src:unit-tests --copt=-DCI_DEBUG_MESH=1 --host_copt=-DCI_DEBUG_MESH=1 --test_env=CI_DEBUG_MESH=1
       - name: build tests and binary
         run: |
           make -j1
@@ -52,7 +52,7 @@ jobs:
     - uses: actions/checkout@v1
     - name: build in debug mode
       run: |
-        ./bazel test -c dbg //src:unit-tests --test_output=all --cxxopt=-DCI_DEBUG_MESH=1
+        ./bazel test -c dbg //src:unit-tests --test_output=all --copt=-DCI_DEBUG_MESH=1 --host_copt=-DCI_DEBUG_MESH=1 --test_env=CI_DEBUG_MESH=1
     - name: build tests and binary
       run: |
         make -j1
