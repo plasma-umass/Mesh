@@ -3,8 +3,6 @@ on: [push]
 jobs:
   Ubuntu_cmake:
     runs-on: ubuntu-latest
-    env:
-      CI_DEBUG_MESH: 1
     steps:
     - uses: actions/checkout@v1
     - name: Install required packages
@@ -21,7 +19,7 @@ jobs:
         cd ../
         mkdir cmake-cache
         cd cmake-cache
-        ../cmake/bin/cmake -DGCOV=ON -DCI_DEBUG_MESH=$CI_DEBUG_MESH ..
+        ../cmake/bin/cmake -DGCOV=ON ..
     - name: Build mesh
       run: |
         cd cmake-cache
@@ -33,26 +31,22 @@ jobs:
 
   Ubuntu_bazel:
     runs-on: ubuntu-latest
-    env:
-      CI_DEBUG_MESH: 1
     steps:
       - uses: actions/checkout@v1
       - name: build in debug mode
         run: |
-          ./bazel test -c dbg //src:unit-tests --copt=-DCI_DEBUG_MESH=1 --host_copt=-DCI_DEBUG_MESH=1 --test_env=CI_DEBUG_MESH=1
+          ./bazel test -c dbg //src:unit-tests
       - name: build tests and binary
         run: |
           make -j1
 
   macOS_bazel:
     runs-on: macos-latest
-    env:
-      CI_DEBUG_MESH: 1
     steps:
     - uses: actions/checkout@v1
     - name: build in debug mode
       run: |
-        ./bazel test -c dbg //src:unit-tests --test_output=all --copt=-DCI_DEBUG_MESH=1 --host_copt=-DCI_DEBUG_MESH=1 --test_env=CI_DEBUG_MESH=1
+        ./bazel test -c dbg //src:unit-tests --test_output=all
     - name: build tests and binary
       run: |
         make -j1
@@ -147,4 +141,3 @@ jobs:
   #    run: cd cmake-cache && ninja run_local-alloc
   #  - name: Run thread
   #    run: cd cmake-cache && ninja run_thread
-

@@ -5,106 +5,27 @@
 
 #include <gtest/gtest.h>
 #include <unistd.h>
-#include <thread>
-#include <chrono>
 #include <cinttypes>
 #include <cstdio>
-#include <cstdlib>
 #include <algorithm>
 #include <cstring>
+#include <vector>
 
 #include "common.h"
 #include "global_heap.h"
 #include "mini_heap.h"
 #include "runtime.h"
 #include "memory_stats.h"
+#ifdef __APPLE__
+#include "memory_stats_macos.h"
+#include <thread>
+#include <chrono>
+#endif
 #include "fixed_array.h"
 #include "internal.h"
 #include "meshing.h"
 
 namespace mesh {
-
-inline bool ciDebugEnabled() {
-  return getenv("CI_DEBUG_MESH") != nullptr;
-}
-
-#ifdef __linux__
-uint64_t getArenaRssBytes(const void *arenaBegin) {
-  FILE *fp = fopen("/proc/self/smaps", "r");
-  if (!fp) {
-    return 0;
-  }
-
-  const uintptr_t arenaStart = reinterpret_cast<uintptr_t>(arenaBegin);
-  const uintptr_t arenaEnd = arenaStart + kArenaSize;
-
-  uint64_t rssTotal = 0;
-  bool inEntry = false;
-
-  char line[512];
-  while (fgets(line, sizeof(line), fp)) {
-    unsigned long start = 0;
-    unsigned long end = 0;
-    if (sscanf(line, "%lx-%lx", &start, &end) == 2) {
-      inEntry = (arenaStart < end) && (arenaEnd > start);
-      continue;
-    }
-
-    if (!inEntry) {
-      continue;
-    }
-
-    if (strncmp(line, "Rss:", 4) == 0) {
-      unsigned long rssKb = 0;
-      if (sscanf(line + 4, "%lu", &rssKb) == 1) {
-        rssTotal += rssKb * 1024;
-      }
-    }
-  }
-
-  fclose(fp);
-  return rssTotal;
-}
-
-void logSmapsForAddress(void *addr, const char *label) {
-  if (!ciDebugEnabled()) {
-    return;
-  }
-
-  FILE *fp = fopen("/proc/self/smaps", "r");
-  if (!fp) {
-    printf("[CI_DEBUG_MESH] Failed to open /proc/self/smaps for %s\n", label);
-    return;
-  }
-
-  const uintptr_t target = reinterpret_cast<uintptr_t>(addr);
-  bool in_entry = false;
-
-  printf("[CI_DEBUG_MESH] /proc/self/smaps entry for %p (%s):\n", addr, label);
-
-  char line[512];
-  while (fgets(line, sizeof(line), fp)) {
-    unsigned long start = 0;
-    unsigned long end = 0;
-    if (sscanf(line, "%lx-%lx", &start, &end) == 2) {
-      if (in_entry) {
-        break;  // reached the next mapping
-      }
-      in_entry = target >= start && target < end;
-    }
-
-    if (in_entry) {
-      printf("[CI_DEBUG_MESH]   %s", line);
-    }
-  }
-
-  if (!in_entry) {
-    printf("[CI_DEBUG_MESH]   (no smaps entry found for %p)\n", addr);
-  }
-
-  fclose(fp);
-}
-#endif
 
 template <size_t PageSize>
 void testPrecisePageDeallocation() {
@@ -187,12 +108,25 @@ void testPrecisePageDeallocation() {
   const size_t region_size = (region_end_off - region_start_off) * pageSize;
   const char* region_begin = gheap.arenaBegin() + region_start_off * pageSize;
 
-  uint64_t baseline_region_bytes = 0;
-  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, baseline_region_bytes));
-  if (ciDebugEnabled()) {
-    printf("[CI_DEBUG_MESH] Baseline resident bytes for span window [%zu, %zu): %" PRIu64 "\n",
-           region_start_off, region_end_off, baseline_region_bytes);
-  }
+  auto measure_region_bytes = [&]() -> uint64_t {
+#ifdef __APPLE__
+    MacOSMemoryStats stats;
+    if (!MacOSMemoryStats::get(stats)) {
+      ADD_FAILURE() << "Failed to read macOS memory stats";
+      return 0;
+    }
+    return stats.resident_size;
+#else
+    uint64_t bytes = 0;
+    if (!MemoryStats::regionResidentBytes(region_begin, region_size, bytes)) {
+      ADD_FAILURE() << "Failed to read region resident bytes";
+      return 0;
+    }
+    return bytes;
+#endif
+  };
+
+  const uint64_t baseline_region_bytes = measure_region_bytes();
 
   // Allocate objects in complementary patterns so they can be meshed
   std::vector<void*> ptrs1, ptrs2;
@@ -228,20 +162,9 @@ void testPrecisePageDeallocation() {
     (void)dummy;
   }
 
-  MemoryStats after_alloc;
-  ASSERT_TRUE(MemoryStats::get(after_alloc));
-
-  uint64_t arena_bytes_after_alloc = 0;
-  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, arena_bytes_after_alloc));
+  const uint64_t arena_bytes_after_alloc = measure_region_bytes();
   const uint64_t arena_bytes_increase =
       arena_bytes_after_alloc > baseline_region_bytes ? arena_bytes_after_alloc - baseline_region_bytes : 0;
-  if (ciDebugEnabled()) {
-    printf("[CI_DEBUG_MESH] Resident bytes after allocation (window [%zu, %zu)): %" PRIu64 " (delta %" PRIu64 ")\n",
-           region_start_off, region_end_off, arena_bytes_after_alloc, arena_bytes_increase);
-  }
-#ifdef __linux__
-  logSmapsForAddress(gheap.arenaBegin(), "after phase 1 allocations");
-#endif
 
   const size_t expected_allocated_pages = span1_pages + span2_pages;
   printf("\nAfter allocation: Mesh memory increased by %" PRIu64 " bytes (expected %zu bytes for %zu pages)\n",
@@ -270,21 +193,14 @@ void testPrecisePageDeallocation() {
   // The meshing should have freed one physical page
   // Now scavenge to ensure the page is returned to the OS
   gheap.scavenge(true);
+#ifdef __APPLE__
+  // Allow macOS accounting to reflect reclaimed MAP_SHARED pages
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#endif
 
-  MemoryStats after_mesh;
-  ASSERT_TRUE(MemoryStats::get(after_mesh));
-
-  uint64_t arena_bytes_after_mesh = 0;
-  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, arena_bytes_after_mesh));
+  const uint64_t arena_bytes_after_mesh = measure_region_bytes();
   const uint64_t arena_bytes_freed =
       arena_bytes_after_alloc > arena_bytes_after_mesh ? arena_bytes_after_alloc - arena_bytes_after_mesh : 0;
-  if (ciDebugEnabled()) {
-    printf("[CI_DEBUG_MESH] Resident bytes after mesh (window [%zu, %zu)): %" PRIu64 " (freed %" PRIu64 ")\n",
-           region_start_off, region_end_off, arena_bytes_after_mesh, arena_bytes_freed);
-  }
-#ifdef __linux__
-  logSmapsForAddress(gheap.arenaBegin(), "after meshing + scavenge");
-#endif
 
   const uint64_t effective_mesh_memory_freed = arena_bytes_freed;
 
@@ -319,18 +235,13 @@ void testPrecisePageDeallocation() {
 
   // Force a thorough cleanup to ensure memory is returned
   gheap.scavenge(true);
+#ifdef __APPLE__
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#endif
 
-  MemoryStats final_stats;
-  ASSERT_TRUE(MemoryStats::get(final_stats));
-
-  uint64_t final_arena_bytes = 0;
-  ASSERT_TRUE(MemoryStats::regionResidentBytes(region_begin, region_size, final_arena_bytes));
+  const uint64_t final_arena_bytes = measure_region_bytes();
   const uint64_t final_arena_overhead =
       final_arena_bytes > baseline_region_bytes ? final_arena_bytes - baseline_region_bytes : 0;
-  if (ciDebugEnabled()) {
-    printf("[CI_DEBUG_MESH] Final resident bytes (window [%zu, %zu)): %" PRIu64 " (overhead %" PRIu64 ")\n",
-           region_start_off, region_end_off, final_arena_bytes, final_arena_overhead);
-  }
 
   const uint64_t effective_final_overhead = final_arena_overhead;
 

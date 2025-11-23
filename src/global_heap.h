@@ -119,13 +119,6 @@ public:
     d_assert(spanBegin != nullptr);
     d_assert((reinterpret_cast<uintptr_t>(spanBegin) / getPageSize()) % pageAlignment == 0);
 
-#ifdef CI_DEBUG_MESH
-    fprintf(stderr, "[CI_DEBUG_MESH] allocMiniheapLocked: Allocated span for sizeClass=%d, pageCount=%zu, objectSize=%zu\n",
-            sizeClass, pageCount, objectSize);
-    fprintf(stderr, "[CI_DEBUG_MESH]   span: offset=%u, length=%zu bytes, spanBegin=%p\n",
-            span.offset, span.byteLength(), static_cast<void*>(spanBegin));
-#endif
-
     MiniHeapT *mh = new (buf) MiniHeapT(arenaBegin(), span, objectCount, objectSize);
 
     const auto miniheapID = MiniHeapID{_mhAllocator.offsetFor(buf)};
