@@ -40,8 +40,12 @@ bool MemoryStats::get(MemoryStats& stats) {
   // Initialize to detect if we found the values
   long rss_kb = -1;
   long rss_shmem_kb = -1;
+  long rss_anon_kb = -1;
+  long rss_file_kb = -1;
   bool found_rss_line = false;
   bool found_rss_shmem_line = false;
+  bool found_rss_anon_line = false;
+  bool found_rss_file_line = false;
 
   // Parse VmRSS and RssShmem lines
   for (char* line = buf; line != nullptr && *line != '\0'; line = strchr(line, '\n')) {
@@ -67,10 +71,26 @@ bool MemoryStats::get(MemoryStats& stats) {
       }
       rss_shmem_kb = strtol(str, nullptr, 10);
       fprintf(stderr, "[MemoryStats] DEBUG: Found RssShmem line, value=%ld KB\n", rss_shmem_kb);
+    } else if (strncmp(line, "RssAnon:", 8) == 0) {
+      found_rss_anon_line = true;
+      char* str = line + 8;
+      while (*str == ' ' || *str == '\t') {
+        str++;
+      }
+      rss_anon_kb = strtol(str, nullptr, 10);
+      fprintf(stderr, "[MemoryStats] DEBUG: Found RssAnon line, value=%ld KB\n", rss_anon_kb);
+    } else if (strncmp(line, "RssFile:", 8) == 0) {
+      found_rss_file_line = true;
+      char* str = line + 8;
+      while (*str == ' ' || *str == '\t') {
+        str++;
+      }
+      rss_file_kb = strtol(str, nullptr, 10);
+      fprintf(stderr, "[MemoryStats] DEBUG: Found RssFile line, value=%ld KB\n", rss_file_kb);
     }
 
     // Stop if we found both values
-    if (rss_kb >= 0 && rss_shmem_kb >= 0) {
+    if (rss_kb >= 0 && rss_shmem_kb >= 0 && rss_anon_kb >= 0 && rss_file_kb >= 0) {
       break;
     }
   }
@@ -81,6 +101,12 @@ bool MemoryStats::get(MemoryStats& stats) {
   }
   if (!found_rss_shmem_line) {
     fprintf(stderr, "[MemoryStats] DEBUG: RssShmem line NOT found in /proc/self/status (kernel may not support it)\n");
+  }
+  if (!found_rss_anon_line) {
+    fprintf(stderr, "[MemoryStats] DEBUG: RssAnon line NOT found in /proc/self/status\n");
+  }
+  if (!found_rss_file_line) {
+    fprintf(stderr, "[MemoryStats] DEBUG: RssFile line NOT found in /proc/self/status\n");
   }
 
   // Check we found both values
@@ -94,9 +120,12 @@ bool MemoryStats::get(MemoryStats& stats) {
   // On Linux, mesh's memfd_create memory shows up in RssShmem
   stats.mesh_memory_bytes = static_cast<uint64_t>(rss_shmem_kb) * 1024;
 
-  fprintf(stderr, "[MemoryStats] DEBUG: Successfully parsed - RSS=%llu bytes, mesh_memory=%llu bytes\n",
+  fprintf(stderr,
+          "[MemoryStats] DEBUG: Successfully parsed - RSS=%llu bytes, mesh_memory=%llu bytes, RssAnon=%ld KB, "
+          "RssFile=%ld KB\n",
           static_cast<unsigned long long>(stats.resident_size_bytes),
-          static_cast<unsigned long long>(stats.mesh_memory_bytes));
+          static_cast<unsigned long long>(stats.mesh_memory_bytes),
+          rss_anon_kb, rss_file_kb);
 
   return true;
 }

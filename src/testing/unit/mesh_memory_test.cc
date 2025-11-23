@@ -8,6 +8,8 @@
 #include <thread>
 #include <chrono>
 #include <cinttypes>
+#include <cstdio>
+#include <cstdlib>
 
 #include "common.h"
 #include "global_heap.h"
@@ -19,6 +21,51 @@
 #include "meshing.h"
 
 namespace mesh {
+
+#ifdef __linux__
+bool ciDebugEnabled() {
+  return getenv("CI_DEBUG_MESH") != nullptr;
+}
+
+void logSmapsForAddress(void *addr, const char *label) {
+  if (!ciDebugEnabled()) {
+    return;
+  }
+
+  FILE *fp = fopen("/proc/self/smaps", "r");
+  if (!fp) {
+    printf("[CI_DEBUG_MESH] Failed to open /proc/self/smaps for %s\n", label);
+    return;
+  }
+
+  const uintptr_t target = reinterpret_cast<uintptr_t>(addr);
+  bool in_entry = false;
+
+  printf("[CI_DEBUG_MESH] /proc/self/smaps entry for %p (%s):\n", addr, label);
+
+  char line[512];
+  while (fgets(line, sizeof(line), fp)) {
+    unsigned long start = 0;
+    unsigned long end = 0;
+    if (sscanf(line, "%lx-%lx", &start, &end) == 2) {
+      if (in_entry) {
+        break;  // reached the next mapping
+      }
+      in_entry = target >= start && target < end;
+    }
+
+    if (in_entry) {
+      printf("[CI_DEBUG_MESH]   %s", line);
+    }
+  }
+
+  if (!in_entry) {
+    printf("[CI_DEBUG_MESH]   (no smaps entry found for %p)\n", addr);
+  }
+
+  fclose(fp);
+}
+#endif
 
 template <size_t PageSize>
 void testPrecisePageDeallocation() {
@@ -222,6 +269,11 @@ void testPrecisePageDeallocation() {
   ASSERT_TRUE(MemoryStats::get(after_alloc));
 
   uint64_t mesh_memory_increase = after_alloc.mesh_memory_bytes - baseline.mesh_memory_bytes;
+
+#ifdef __linux__
+  logSmapsForAddress(gheap.arenaBegin(), "after phase 1 allocations");
+#endif
+
   printf("\nAfter allocation: Mesh memory increased by %" PRIu64 " bytes (expected ~%zu bytes for 2 pages)\n",
          mesh_memory_increase, 2 * pageSize);
 
@@ -254,6 +306,10 @@ void testPrecisePageDeallocation() {
 
   MemoryStats after_mesh;
   ASSERT_TRUE(MemoryStats::get(after_mesh));
+
+#ifdef __linux__
+  logSmapsForAddress(gheap.arenaBegin(), "after meshing + scavenge");
+#endif
 
   // The critical metric: mesh_memory_bytes should decrease after meshing
   // Compare to after_alloc, not baseline, to avoid measuring internal allocations during scavenge
