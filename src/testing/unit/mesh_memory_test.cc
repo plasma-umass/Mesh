@@ -106,6 +106,20 @@ void testPrecisePageDeallocation() {
         volatile char dummy = *reinterpret_cast<char*>(test_ptr);
         (void)dummy;
         printf("Successfully wrote to and read from test allocation\n");
+
+        // Also dirty the entire underlying page to ensure it's allocated
+        // The MiniHeap manages a full page, but we only allocated one 256-byte object
+        // We need to ensure the entire page is committed to physical memory
+        void* page_start = reinterpret_cast<void*>(
+          reinterpret_cast<uintptr_t>(test_ptr) & ~(pageSize - 1));
+        printf("Dirtying entire page starting at %p (page size: %zu)\n", page_start, pageSize);
+        memset(page_start, 0x43, pageSize);
+        // Force the page to be resident
+        for (size_t i = 0; i < pageSize; i += 64) {
+          volatile char page_dummy = *reinterpret_cast<char*>(
+            reinterpret_cast<char*>(page_start) + i);
+          (void)page_dummy;
+        }
       }
 
       // Give time for kernel to update stats
@@ -123,39 +137,25 @@ void testPrecisePageDeallocation() {
                test_stats.mesh_memory_bytes > baseline_check.mesh_memory_bytes ?
                test_stats.mesh_memory_bytes - baseline_check.mesh_memory_bytes : 0);
 
-        // If we allocated memory but mesh_memory_bytes is still 0, RssShmem isn't working
+        // If we allocated memory but mesh_memory_bytes is still 0, something is wrong
         if (test_stats.mesh_memory_bytes == 0) {
-          printf("\n=== HYPOTHESIS CHECK: mesh_memory_bytes is 0 after allocation ===\n");
+          printf("\n=== WARNING: mesh_memory_bytes is 0 after allocation ===\n");
           printf("This suggests one of the following:\n");
-          printf("1. RssShmem field is missing from /proc/self/status (kernel doesn't support it)\n");
-          printf("2. RssShmem field exists but is 0 (memfd_create not creating shared memory)\n");
-          printf("3. Memory allocation didn't use memfd_create path\n");
-          printf("Check stderr output above for [MemoryStats] DEBUG messages for details.\n");
-          printf("\n=== SKIPPING TEST: RssShmem tracking not available in this environment ===\n");
-          printf("This typically happens in CI containers or systems with restricted shared memory.\n");
-          printf("The test passes on systems with proper RssShmem support.\n");
-
-          // Clean up before skipping
-          if (test_ptr) {
-            gheap.free(test_ptr);
-          }
-          gheap.freeMiniheap(test_mh);
-
-          GTEST_SKIP() << "RssShmem tracking not available in this environment";
+          printf("1. Memory allocation didn't use memfd_create path (most likely)\n");
+          printf("2. RssShmem field exists but is 0 (pages not yet resident)\n");
+          printf("3. Build configuration issue (CI_DEBUG_MESH not propagating)\n");
+          printf("Check stderr output for [CI_DEBUG_MESH] messages.\n");
+          printf("Continuing test anyway to see if it's a measurement issue...\n\n");
+          // Don't skip - let's see if the test can still work
         } else {
-          printf("RssShmem tracking appears to be working correctly.\n");
+          printf("RssShmem tracking appears to be working correctly (mesh_memory=%llu bytes).\n",
+                 static_cast<unsigned long long>(test_stats.mesh_memory_bytes));
         }
       } else {
         printf("ERROR: MemoryStats::get() failed after allocation\n");
         printf("Check stderr output above for [MemoryStats] DEBUG messages.\n");
-
-        // Clean up before skipping
-        if (test_ptr) {
-          gheap.free(test_ptr);
-        }
-        gheap.freeMiniheap(test_mh);
-
-        GTEST_SKIP() << "MemoryStats::get() failed - unable to read memory statistics";
+        printf("Continuing test anyway...\n\n");
+        // Don't skip - let's see if the test can still work
       }
 
       // Clean up test allocation
@@ -165,7 +165,8 @@ void testPrecisePageDeallocation() {
       gheap.freeMiniheap(test_mh);
     } else {
       printf("ERROR: Failed to allocate test MiniHeap\n");
-      GTEST_SKIP() << "Failed to allocate test MiniHeap";
+      printf("Continuing test anyway...\n\n");
+      // Don't skip - let's see if the test can still work
     }
   }
 #endif
