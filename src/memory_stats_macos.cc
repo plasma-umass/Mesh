@@ -9,8 +9,12 @@
 #include "memory_stats.h"
 #include <unistd.h>
 #include <stdio.h>
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#include <mach/vm_region.h>
 #include <sys/mman.h>
 #include <vector>
+#include <unordered_set>
 #include <cstdint>
 
 namespace mesh {
@@ -78,28 +82,76 @@ bool MemoryStats::get(MemoryStats &stats) {
 }
 
 bool MemoryStats::regionResidentBytes(const void *region_begin, size_t region_size, uint64_t &bytes_out) {
+  struct PageKey {
+    uint64_t object;
+    uint64_t offset;
+    uint32_t depth;
+    bool operator==(const PageKey &other) const {
+      return object == other.object && offset == other.offset && depth == other.depth;
+    }
+  };
+
+  struct PageKeyHash {
+    size_t operator()(const PageKey &k) const {
+      size_t h1 = std::hash<uint64_t>{}(k.object);
+      size_t h2 = std::hash<uint64_t>{}(k.offset);
+      size_t h3 = std::hash<uint32_t>{}(k.depth);
+      size_t combined = h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2));
+      return combined ^ (h3 + 0x9e3779b97f4a7c15ULL + (combined << 6) + (combined >> 2));
+    }
+  };
+
   const size_t page_size = static_cast<size_t>(getpagesize());
-  const uintptr_t start = reinterpret_cast<uintptr_t>(region_begin);
-  const uintptr_t page_aligned_start = start & ~(static_cast<uintptr_t>(page_size) - 1);
-  const size_t offset = start - page_aligned_start;
+  const mach_vm_address_t start = reinterpret_cast<mach_vm_address_t>(region_begin);
+  const mach_vm_address_t page_aligned_start = start & ~(static_cast<mach_vm_address_t>(page_size - 1));
+  const size_t offset = static_cast<size_t>(start - page_aligned_start);
   const size_t length = region_size + offset;
   const size_t page_count = (length + page_size - 1) / page_size;
 
-  std::vector<unsigned char> residency(page_count);
-  if (mincore(reinterpret_cast<void *>(page_aligned_start), page_count * page_size,
-              reinterpret_cast<char *>(residency.data())) != 0) {
-    return false;
-  }
+  std::unordered_set<PageKey, PageKeyHash> unique_pages;
 
-  uint64_t resident_bytes = 0;
+  const bool debug = getenv("MESH_DEBUG_PAGEINFO") != nullptr;
+  static std::atomic<uint64_t> debug_call_id{0};
+  const uint64_t call_id = debug ? debug_call_id.fetch_add(1, std::memory_order_relaxed) : 0;
+
   for (size_t i = 0; i < page_count; i++) {
-    if (residency[i] & 0x1) {
-      // count full pages; test expects full-page allocations
-      resident_bytes += page_size;
+    const mach_vm_address_t addr = page_aligned_start + static_cast<mach_vm_address_t>(i * page_size);
+    vm_page_info_basic_data_t info{};
+    mach_msg_type_number_t info_count = VM_PAGE_INFO_BASIC_COUNT;
+
+    kern_return_t kr = mach_vm_page_info(mach_task_self(), addr, VM_PAGE_INFO_BASIC,
+                                         reinterpret_cast<vm_page_info_t>(&info), &info_count);
+    if (kr != KERN_SUCCESS || info_count < VM_PAGE_INFO_BASIC_COUNT) {
+      if (debug) {
+        fprintf(stderr, "[pageinfo %llu] mach_vm_page_info failed at addr 0x%llx: kr=%d count=%u\n",
+                static_cast<unsigned long long>(call_id), static_cast<unsigned long long>(addr), kr, info_count);
+      }
+      return false;
     }
+
+    // disposition == 0 indicates an unmapped hole; skip it. Otherwise count resident pages.
+    if (info.disposition == 0) {
+      if (debug) {
+        fprintf(stderr, "[pageinfo %llu] addr 0x%llx: disposition=0 object=0x%llx offset=0x%llx depth=%d\n",
+                static_cast<unsigned long long>(call_id), static_cast<unsigned long long>(addr),
+                static_cast<unsigned long long>(info.object_id), static_cast<unsigned long long>(info.offset),
+                info.depth);
+      }
+      continue;
+    }
+
+    if (debug) {
+      fprintf(stderr, "[pageinfo %llu] addr 0x%llx: disposition=%d object=0x%llx offset=0x%llx depth=%d\n",
+              static_cast<unsigned long long>(call_id), static_cast<unsigned long long>(addr), info.disposition,
+              static_cast<unsigned long long>(info.object_id), static_cast<unsigned long long>(info.offset),
+              info.depth);
+    }
+
+    unique_pages.insert(PageKey{static_cast<uint64_t>(info.object_id), static_cast<uint64_t>(info.offset),
+                                static_cast<uint32_t>(info.depth)});
   }
 
-  bytes_out = resident_bytes;
+  bytes_out = unique_pages.size() * page_size;
   return true;
 }
 

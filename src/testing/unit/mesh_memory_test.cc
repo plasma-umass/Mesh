@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstring>
 #include <vector>
+#include <sys/mman.h>
 
 #include "common.h"
 #include "global_heap.h"
@@ -17,7 +18,6 @@
 #include "runtime.h"
 #include "memory_stats.h"
 #ifdef __APPLE__
-#include "memory_stats_macos.h"
 #include <thread>
 #include <chrono>
 #endif
@@ -107,22 +107,16 @@ void testPrecisePageDeallocation() {
   const size_t region_size = (region_end_off - region_start_off) * pageSize;
   const char *region_begin = gheap.arenaBegin() + region_start_off * pageSize;
 
+  // Ensure the measured region starts cold so deltas reflect just this test's activity.
+  (void)madvise(const_cast<char *>(region_begin), region_size, MADV_DONTNEED);
+
   auto measure_region_bytes = [&]() -> uint64_t {
-#ifdef __APPLE__
-    MacOSMemoryStats stats;
-    if (!MacOSMemoryStats::get(stats)) {
-      ADD_FAILURE() << "Failed to read macOS memory stats";
-      return 0;
-    }
-    return stats.resident_size;
-#else
     uint64_t bytes = 0;
     if (!MemoryStats::regionResidentBytes(region_begin, region_size, bytes)) {
       ADD_FAILURE() << "Failed to read region resident bytes";
       return 0;
     }
     return bytes;
-#endif
   };
 
   const uint64_t baseline_region_bytes = measure_region_bytes();
@@ -162,14 +156,12 @@ void testPrecisePageDeallocation() {
   }
 
   const uint64_t arena_bytes_after_alloc = measure_region_bytes();
-  const uint64_t arena_bytes_increase =
-      arena_bytes_after_alloc > baseline_region_bytes ? arena_bytes_after_alloc - baseline_region_bytes : 0;
 
   const size_t expected_allocated_pages = span1_pages + span2_pages;
-  printf("\nAfter allocation: Mesh memory increased by %" PRIu64 " bytes (expected %zu bytes for %zu pages)\n",
-         arena_bytes_increase, expected_allocated_pages * pageSize, expected_allocated_pages);
+  printf("\nAfter allocation: Mesh memory resident %" PRIu64 " bytes (expected %zu bytes for %zu pages)\n",
+         arena_bytes_after_alloc, expected_allocated_pages * pageSize, expected_allocated_pages);
 
-  EXPECT_EQ(arena_bytes_increase, expected_allocated_pages * pageSize);
+  EXPECT_EQ(arena_bytes_after_alloc, expected_allocated_pages * pageSize);
 
   // Phase 2: Verify the miniheaps are meshable
   printf("\n=== Phase 2: Verifying miniheaps are meshable ===\n");
@@ -198,17 +190,13 @@ void testPrecisePageDeallocation() {
 #endif
 
   const uint64_t arena_bytes_after_mesh = measure_region_bytes();
-  const uint64_t arena_bytes_freed =
-      arena_bytes_after_alloc > arena_bytes_after_mesh ? arena_bytes_after_alloc - arena_bytes_after_mesh : 0;
 
-  const uint64_t effective_mesh_memory_freed = arena_bytes_freed;
+  printf("\nAfter meshing: Mesh memory resident %" PRIu64 " bytes (expected %zu bytes)\n", arena_bytes_after_mesh,
+         span1_pages * pageSize);
 
-  printf("\nAfter meshing: Mesh memory decreased by %" PRIu64 " bytes (expected %zu bytes)\n",
-         effective_mesh_memory_freed, span2_pages * pageSize);
-
-  // CRITICAL ASSERTION: Meshing should free exactly the pages from the second miniheap
-  EXPECT_EQ(effective_mesh_memory_freed, span2_pages * pageSize)
-      << "Meshing should free exactly the pages from the second miniheap";
+  // After meshing, only the first span's pages should remain physically resident.
+  EXPECT_EQ(arena_bytes_after_mesh, span1_pages * pageSize)
+      << "Meshing should leave only the first miniheap's pages resident";
 
   // Verify data integrity after meshing
   for (auto ptr : ptrs1) {
@@ -239,15 +227,11 @@ void testPrecisePageDeallocation() {
 #endif
 
   const uint64_t final_arena_bytes = measure_region_bytes();
-  const uint64_t final_arena_overhead =
-      final_arena_bytes > baseline_region_bytes ? final_arena_bytes - baseline_region_bytes : 0;
 
-  const uint64_t effective_final_overhead = final_arena_overhead;
+  printf("\nFinal mesh memory overhead: %" PRIu64 " bytes\n", final_arena_bytes);
 
-  printf("\nFinal mesh memory overhead: %" PRIu64 " bytes\n", effective_final_overhead);
-
-  // Should return exactly to baseline within the measured region
-  EXPECT_EQ(effective_final_overhead, 0u) << "Mesh memory should return to baseline in measured region";
+  // Should return to (or below) the baseline we saw before allocations.
+  EXPECT_LE(final_arena_bytes, baseline_region_bytes) << "Mesh memory should return to baseline in measured region";
 }
 
 template <size_t PageSize>
