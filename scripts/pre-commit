@@ -7,9 +7,21 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Determine repository root (pre-commit lives in .git/hooks)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Resolve script location (handles symlinks from .git/hooks)
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SCRIPT_SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+    SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+    [[ "$SCRIPT_SOURCE" != /* ]] && SCRIPT_SOURCE="$DIR/$SCRIPT_SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+
+# Determine repository root robustly
+if REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
+    :
+else
+    REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
 
 echo "The project passed all pre-commit checks before your changes. Any failing checks reported are the result of your changes and need to be fixed by addressing their root cause." >&2
 
@@ -73,11 +85,7 @@ trap "rm -rf $TEMP_DIR" EXIT
 CLAUDE_SANITY_OUTPUT="$TEMP_DIR/claude_sanity_output.txt"
 echo -n "Running claude to check that we don't have incomplete tests..."
 cd "$REPO_ROOT"
-if [[ -x "$REPO_ROOT/with_api_keys.sh" ]]; then
-    ./with_api_keys.sh "$CLAUDE" -p --allowedTools 'Bash(git:*)' LS Read --model sonnet "a user is looking to commit code - look at what parts of the diff being committed are in *_test.go files, and if any of the tests take shortcuts or are stubbed out (e.g. a comment to the effect of 'real logic to test this would go here'), start your response with 'FAIL: ' followed by a description of what is wrong, and what needs to happen.  Based on the test name and surrounding code, be clear on what test functionality is missing and needs to be implemented before it can be committed.  Strictly follow CLAUDE.md, provide guidance referencing CLAUDE.md, and tell the user to closely follow CLAUDE.md as they address the problem.  Also tell them they MUST NOT delete the tests, the only way to succeed on the task is to fully implement the test.  Tests shouldn't manually construct models by directly instantiating sd.Model instances, but use the internal/sdtest helpers (it is OK to use json, protobuf/protobin, or XMILE/stmx files in testdata/ as well).  Additionally, the code author has a tendancy to leave fallback code that violates the guidelines in CLAUDE.md.  Errors should be idiomatically wrapped in fmt.Errorf and returned rather than worked around.  As we are building new functionality it is ok for functions/implementations in non-test .go files to be stubbed out in order to commit the unit of work.  If the tests look reasonable AND the guidelines in CLAUDE.md have been faithfully followed, you MUST respond succinctly with the 1-word message: SUCCESS" > "$CLAUDE_SANITY_OUTPUT" 2>&1
-else
-    echo "SUCCESS (with_api_keys.sh missing; skipping claude sanity check)" > "$CLAUDE_SANITY_OUTPUT"
-fi
+"$CLAUDE" -p --allowedTools 'Bash(git:*)' LS Read --model sonnet "a user is looking to commit code - look at what parts of the diff being committed are in *_test.go files, and if any of the tests take shortcuts or are stubbed out (e.g. a comment to the effect of 'real logic to test this would go here'), start your response with 'FAIL: ' followed by a description of what is wrong, and what needs to happen.  Based on the test name and surrounding code, be clear on what test functionality is missing and needs to be implemented before it can be committed.  Strictly follow CLAUDE.md, provide guidance referencing CLAUDE.md, and tell the user to closely follow CLAUDE.md as they address the problem.  Also tell them they MUST NOT delete the tests, the only way to succeed on the task is to fully implement the test.  Tests shouldn't manually construct models by directly instantiating sd.Model instances, but use the internal/sdtest helpers (it is OK to use json, protobuf/protobin, or XMILE/stmx files in testdata/ as well).  Additionally, the code author has a tendancy to leave fallback code that violates the guidelines in CLAUDE.md.  Errors should be idiomatically wrapped in fmt.Errorf and returned rather than worked around.  As we are building new functionality it is ok for functions/implementations in non-test .go files to be stubbed out in order to commit the unit of work.  If the tests look reasonable AND the guidelines in CLAUDE.md have been faithfully followed, you MUST respond succinctly with the 1-word message: SUCCESS" > "$CLAUDE_SANITY_OUTPUT" 2>&1
 
 if grep -q "SUCCESS" "$CLAUDE_SANITY_OUTPUT"; then
     echo -e " ${GREEN}✓${NC}"
