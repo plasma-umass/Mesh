@@ -36,6 +36,16 @@ INSTALL_LIB  = libmesh$(LIB_SUFFIX).$(LIB_EXT)
 COV_DIR = coverage
 CONFIG  = Makefile
 
+# clang-format sources (exclude gnulib's rpl_printf.c)
+FORMAT_SRCS := $(filter-out src/rpl_printf.c, \
+	$(wildcard src/*.cc src/*.c src/*.h) \
+	$(wildcard src/plasma/*.h) \
+	$(wildcard src/rng/*.h) \
+	$(wildcard src/static/*.h) \
+	$(wildcard src/testing/unit/*.cc) \
+	$(wildcard src/testing/*.cc) \
+	$(wildcard src/testing/benchmark/*.cc))
+
 # quiet output, but allow us to look at what commands are being
 # executed by passing 'V=1' to make, without requiring temporarily
 # editing the Makefile.
@@ -73,7 +83,7 @@ benchmark:
 	./bazel-bin/src/local-refill-benchmark
 
 format:
-	clang-format -i src/*.cc src/*.c src/*.h  src/plasma/*.h src/rng/*.h src/static/*.h src/testing/unit/*.cc src/testing/*.cc src/testing/benchmark/*.cc
+	clang-format -i $(FORMAT_SRCS)
 
 clean:
 	find . -name '*~' -print0 | xargs -0 rm -f

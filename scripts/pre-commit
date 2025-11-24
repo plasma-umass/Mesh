@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Determine repository root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+echo "The project passed all pre-commit checks before your changes. Any failing checks reported are the result of your changes and need to be fixed by addressing their root cause." >&2
+
+echo "Running pre-commit checks..."
+
+# 1. Run clang-format via make format (will apply changes if needed)
+echo -n "Running clang-format (make format)... "
+if (cd "$REPO_ROOT" && make format > /dev/null 2>&1); then
+    echo -e "${GREEN}✓${NC}"
+else
+    echo -e "${RED}✗${NC}"
+    echo -e "${RED}Formatting failed${NC}"
+    echo -e "${YELLOW}Run 'make format' to see details${NC}"
+    exit 1
+fi
+
+# 2. Build everything (make)
+echo -n "Building (make)... "
+if (cd "$REPO_ROOT" && make > /dev/null 2>&1); then
+    echo -e "${GREEN}✓${NC}"
+else
+    echo -e "${RED}✗${NC}"
+    echo -e "${RED}Build failed${NC}"
+    echo -e "${YELLOW}Run 'make' to see errors${NC}"
+    exit 1
+fi
+
+# 3. Run unit tests
+echo -n "Running tests (make test)... "
+if (cd "$REPO_ROOT" && make test > /dev/null 2>&1); then
+    echo -e "${GREEN}✓${NC}"
+else
+    echo -e "${RED}✗${NC}"
+    echo -e "${RED}Tests failed${NC}"
+    echo -e "${YELLOW}Run 'make test' to see failures${NC}"
+    exit 1
+fi
+
+# 4. Run benchmarks
+echo -n "Running benchmarks (make benchmark)... "
+if (cd "$REPO_ROOT" && make benchmark > /dev/null 2>&1); then
+    echo -e "${GREEN}✓${NC}"
+else
+    echo -e "${RED}✗${NC}"
+    echo -e "${RED}Benchmarks failed${NC}"
+    echo -e "${YELLOW}Run 'make benchmark' to see errors${NC}"
+    exit 1
+fi
+
+# 5. Make sure no cheating happened with tests (kept exactly as provided)
+# Set CLAUDE to the full path of claude if found on PATH, otherwise use local installation
+if command -v claude > /dev/null 2>&1; then
+    CLAUDE=$(command -v claude)
+else
+    CLAUDE="$HOME/.claude/local/claude"
+fi
+
+TEMP_DIR="$(mktemp -d)"
+trap "rm -rf $TEMP_DIR" EXIT
+
+CLAUDE_SANITY_OUTPUT="$TEMP_DIR/claude_sanity_output.txt"
+echo -n "Running claude to check that we don't have incomplete tests..."
+cd "$REPO_ROOT"
+./with_api_keys.sh "$CLAUDE" -p --allowedTools 'Bash(git:*)' LS Read --model sonnet "a user is looking to commit code - look at what parts of the diff being committed are in *_test.go files, and if any of the tests take shortcuts or are stubbed out (e.g. a comment to the effect of 'real logic to test this would go here'), start your response with 'FAIL: ' followed by a description of what is wrong, and what needs to happen.  Based on the test name and surrounding code, be clear on what test functionality is missing and needs to be implemented before it can be committed.  Strictly follow CLAUDE.md, provide guidance referencing CLAUDE.md, and tell the user to closely follow CLAUDE.md as they address the problem.  Also tell them they MUST NOT delete the tests, the only way to succeed on the task is to fully implement the test.  Tests shouldn't manually construct models by directly instantiating sd.Model instances, but use the internal/sdtest helpers (it is OK to use json, protobuf/protobin, or XMILE/stmx files in testdata/ as well).  Additionally, the code author has a tendancy to leave fallback code that violates the guidelines in CLAUDE.md.  Errors should be idiomatically wrapped in fmt.Errorf and returned rather than worked around.  As we are building new functionality it is ok for functions/implementations in non-test .go files to be stubbed out in order to commit the unit of work.  If the tests look reasonable AND the guidelines in CLAUDE.md have been faithfully followed, you MUST respond succinctly with the 1-word message: SUCCESS" > "$CLAUDE_SANITY_OUTPUT" 2>&1
+
+if grep -q "SUCCESS" "$CLAUDE_SANITY_OUTPUT"; then
+    echo -e " ${GREEN}✓${NC}"
+else
+    echo -e " ${RED}✗${NC}"
+    echo -e "${RED}Test quality check failed:${NC}"
+    cat "$CLAUDE_SANITY_OUTPUT"
+    exit 1
+fi
+
+echo -e "${GREEN}All pre-commit checks passed!${NC}"
