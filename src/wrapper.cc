@@ -259,8 +259,7 @@ extern "C" MESH_EXPORT struct mallinfo CUSTOM_MALLINFO() {
 #ifndef NEW_INCLUDED
 #define NEW_INCLUDED
 
-MESH_EXPORT CACHELINE_ALIGNED_FN void *
-operator new(size_t sz)
+MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz)
 #if defined(_GLIBCXX_THROW)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif

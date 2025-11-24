@@ -61,7 +61,7 @@ public:
 #if defined(__APPLE__) && defined(__arm64__)
   enum { Alignment = 16384 };  // 16KB pages on Apple Silicon
 #else
-  enum { Alignment = 4096 };   // 4KB pages on Intel Mac, Linux, and other platforms
+  enum { Alignment = 4096 };  // 4KB pages on Intel Mac, Linux, and other platforms
 #endif
 
   explicit MeshableArena();

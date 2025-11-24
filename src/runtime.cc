@@ -17,7 +17,7 @@
 
 #include "runtime.h"
 #include "runtime_impl.h"
-#include "thread_local_heap.h" // Needed for explicit instantiation if it uses TLH
+#include "thread_local_heap.h"  // Needed for explicit instantiation if it uses TLH
 
 namespace mesh {
 

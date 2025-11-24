@@ -50,8 +50,8 @@ public:
   using iterator_category = std::forward_iterator_tag;
   using value_type = size_t;
   using difference_type = std::ptrdiff_t;
-  using pointer = size_t*;
-  using reference = size_t&;
+  using pointer = size_t *;
+  using reference = size_t &;
 
   BitmapIter(const Container &a, const size_t i) : _i(i), _cont(a) {
   }
@@ -589,7 +589,8 @@ using RelaxedFixedBitmap = bitmap::BitmapBase<bitmap::RelaxedFixedBitmapBase<Pag
 typedef bitmap::BitmapBase<bitmap::RelaxedBitmapBase> RelaxedBitmap;
 
 // static_assert(sizeof(Bitmap) == sizeof(size_t) * 16, "Bitmap unexpected size (expected 128 bytes for 1024 bits)");
-// static_assert(sizeof(RelaxedFixedBitmap) == sizeof(size_t) * 16, "Bitmap unexpected size (expected 128 bytes for 1024 bits)");
+// static_assert(sizeof(RelaxedFixedBitmap) == sizeof(size_t) * 16, "Bitmap unexpected size (expected 128 bytes for 1024
+// bits)");
 static_assert(sizeof(RelaxedBitmap) == sizeof(size_t) * 2, "Bitmap unexpected size");
 }  // namespace internal
 }  // namespace mesh

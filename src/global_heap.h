@@ -107,7 +107,7 @@ public:
 
   // must be called with exclusive _mhRWLock held
   inline MiniHeapT *ATTRIBUTE_ALWAYS_INLINE allocMiniheapLocked(int sizeClass, size_t pageCount, size_t objectCount,
-                                                               size_t objectSize, size_t pageAlignment = 1) {
+                                                                size_t objectSize, size_t pageAlignment = 1) {
     d_assert(0 < pageCount);
 
     void *buf = _mhAllocator.alloc();
@@ -310,7 +310,8 @@ public:
     // 2048 byte objects would allocate 4 4KB pages (or 16KB pages on Apple Silicon).
     // Cap at 1024 to fit within the MiniHeap bitmap size limit (128 bytes = 1024 bits)
     const size_t bitmapLimit = PageSize / kMinObjectSize;
-    const size_t objectCount = min(max(getPageSize() / objectSize, static_cast<size_t>(kMinStringLen)), static_cast<size_t>(bitmapLimit));
+    const size_t objectCount =
+        min(max(getPageSize() / objectSize, static_cast<size_t>(kMinStringLen)), static_cast<size_t>(bitmapLimit));
     const size_t pageCount = PageCount(objectSize * objectCount);
 
     while (bytesFree < kMiniheapRefillGoalSize && !miniheaps.full()) {
@@ -513,7 +514,7 @@ public:
 
   inline internal::vector<MiniHeapT *> meshingCandidatesLocked(int sizeClass) const {
     // FIXME: duplicated with code in halfSplit
-    internal::vector<MiniHeapT *> bucket {};
+    internal::vector<MiniHeapT *> bucket{};
 
     auto nextId = _partialFreelist[sizeClass].first.next();
     while (nextId != list::Head) {
@@ -531,7 +532,8 @@ private:
   // check for meshes in all size classes -- must be called LOCKED
   void meshAllSizeClassesLocked();
   // meshSizeClassLocked returns the number of merged sets found
-  size_t meshSizeClassLocked(size_t sizeClass, MergeSetArray<PageSize> &mergeSets, SplitArray<PageSize> &left, SplitArray<PageSize> &right);
+  size_t meshSizeClassLocked(size_t sizeClass, MergeSetArray<PageSize> &mergeSets, SplitArray<PageSize> &left,
+                             SplitArray<PageSize> &right);
 
   const size_t _maxObjectSize;
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};
@@ -540,7 +542,7 @@ private:
   atomic_size_t ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _lastMeshEffective{0};
 
   // we want this on its own cacheline
-  EpochLock ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _meshEpoch {};
+  EpochLock ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _meshEpoch{};
 
   // always accessed with the mhRWLock exclusively locked.  cachline
   // aligned to avoid sharing cacheline with _meshEpoch
@@ -559,9 +561,9 @@ private:
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
 
-  mutable mutex _miniheapLock {};
+  mutable mutex _miniheapLock{};
 
-  GlobalHeapStats _stats {};
+  GlobalHeapStats _stats{};
 
   // XXX: should be atomic, but has exception spec?
   time::time_point _lastMesh;

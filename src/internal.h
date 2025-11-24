@@ -213,7 +213,6 @@ private:
 template <size_t PageSize>
 using MiniHeapListEntry = ListEntry<MiniHeap<PageSize>, MiniHeapID>;
 
-
 typedef uint32_t Offset;
 typedef uint32_t Length;
 
@@ -283,7 +282,7 @@ size_t measurePssKiB();
 
 inline void *MaskToPage(const void *ptr) {
   const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-  return reinterpret_cast<void *>(ptrval & (uintptr_t) ~(CPUInfo::PageSize - 1));
+  return reinterpret_cast<void *>(ptrval & (uintptr_t)~(CPUInfo::PageSize - 1));
 }
 
 // efficiently copy data from srcFd to dstFd

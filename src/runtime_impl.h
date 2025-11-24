@@ -210,7 +210,7 @@ int Runtime<PageSize>::epollWait(int __epfd, struct epoll_event *__events, int _
 
 template <size_t PageSize>
 int Runtime<PageSize>::epollPwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
-                        const __sigset_t *__ss) {
+                                  const __sigset_t *__ss) {
   if (unlikely(mesh::real::epoll_pwait == nullptr))
     mesh::real::init();
 
@@ -391,4 +391,4 @@ void Runtime<PageSize>::installSegfaultHandler() {
 
 }  // namespace mesh
 
-#endif // MESH_RUNTIME_IMPL_H
+#endif  // MESH_RUNTIME_IMPL_H

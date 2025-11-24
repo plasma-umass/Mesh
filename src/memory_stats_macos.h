@@ -17,20 +17,24 @@ struct MacOSMemoryStats {
   uint64_t resident_size;       // Traditional RSS
   uint64_t virtual_size;        // Virtual memory size
   uint64_t compressed;          // Compressed memory
-  uint64_t dirty;              // Dirty pages
-  uint64_t purgeable;          // Purgeable pages
+  uint64_t dirty;               // Dirty pages
+  uint64_t purgeable;           // Purgeable pages
 
   // Get current memory statistics
-  static bool get(MacOSMemoryStats& stats);
+  static bool get(MacOSMemoryStats &stats);
 
   // Print detailed memory stats
   void print() const;
 
   // Get footprint in KB (main metric for memory usage on macOS)
-  uint64_t footprint_kb() const { return physical_footprint / 1024; }
+  uint64_t footprint_kb() const {
+    return physical_footprint / 1024;
+  }
 
   // Get RSS in KB (for compatibility)
-  uint64_t rss_kb() const { return resident_size / 1024; }
+  uint64_t rss_kb() const {
+    return resident_size / 1024;
+  }
 };
 
 // Get physical footprint in bytes (most accurate memory metric on macOS)

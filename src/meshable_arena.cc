@@ -13,8 +13,8 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-//#include <sys/memfd.h>
-//#include <asm/unistd_64.h>
+// #include <sys/memfd.h>
+// #include <asm/unistd_64.h>
 #include <sys/syscall.h>
 #include <linux/memfd.h>
 #endif
@@ -343,9 +343,9 @@ char *MeshableArena::pageAlloc(Span &result, size_t pageCount, size_t pageAlignm
     mesh::debug("----\n");
     void *mh_void = miniheapForArenaOffset(span.offset);
     if (getPageSize() == kPageSize4K) {
-       reinterpret_cast<MiniHeap<kPageSize4K>*>(mh_void)->dumpDebug();
+      reinterpret_cast<MiniHeap<kPageSize4K> *>(mh_void)->dumpDebug();
     } else {
-       reinterpret_cast<MiniHeap<kPageSize16K>*>(mh_void)->dumpDebug();
+      reinterpret_cast<MiniHeap<kPageSize16K> *>(mh_void)->dumpDebug();
     }
   }
 #endif
@@ -488,7 +488,6 @@ void MeshableArena::scavenge(bool force) {
     }
   }
 #endif
-
 }
 
 void MeshableArena::freePhys(void *ptr, size_t sz) {
@@ -513,9 +512,7 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
 
 #ifdef __FreeBSD__
 #if __FreeBSD_version >= 1400000
-  struct spacectl_range range = {
-	  off, static_cast<off_t>(sz)
-  };
+  struct spacectl_range range = {off, static_cast<off_t>(sz)};
   int result = fspacectl(_fd, SPACECTL_DEALLOC, &range, 0, NULL);
   d_assert_msg(result == 0, "fspacectl(fd %d): %d errno %d (%s)\n", _fd, result, errno, strerror(errno));
 #else
@@ -532,8 +529,8 @@ void MeshableArena::freePhys(void *ptr, size_t sz) {
   if (result != 0) {
     // F_PUNCHHOLE may fail on some file systems or configurations
     // This is non-fatal - madvise will still help with memory pressure
-    debug("F_PUNCHHOLE failed (fd %d, off %lld, sz %zu): errno %d (%s)\n",
-          _fd, (long long)off, sz, errno, strerror(errno));
+    debug("F_PUNCHHOLE failed (fd %d, off %lld, sz %zu): errno %d (%s)\n", _fd, (long long)off, sz, errno,
+          strerror(errno));
   }
 #else
   // Linux: Use fallocate with FALLOC_FL_PUNCH_HOLE
@@ -577,24 +574,22 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
     mach_vm_address_t target_address = reinterpret_cast<mach_vm_address_t>(remove);
     mach_vm_address_t source_address = reinterpret_cast<mach_vm_address_t>(keep);
 
-    kern_return_t kr = mach_vm_remap(
-        mach_task_self(),                     // target task
-        &target_address,                      // target address (in/out)
-        sz,                                   // size
-        0,                                    // mask (0 = no specific alignment beyond size)
-        VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,  // flags: fixed address, overwrite existing
-        mach_task_self(),                     // source task
-        source_address,                       // source address
-        FALSE,                                // copy (FALSE = share same physical memory)
-        &cur_protection,                      // current protection (out)
-        &max_protection,                      // max protection (out)
-        VM_INHERIT_SHARE                      // inheritance
+    kern_return_t kr = mach_vm_remap(mach_task_self(),  // target task
+                                     &target_address,   // target address (in/out)
+                                     sz,                // size
+                                     0,                 // mask (0 = no specific alignment beyond size)
+                                     VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,  // flags: fixed address, overwrite existing
+                                     mach_task_self(),                     // source task
+                                     source_address,                       // source address
+                                     FALSE,                                // copy (FALSE = share same physical memory)
+                                     &cur_protection,                      // current protection (out)
+                                     &max_protection,                      // max protection (out)
+                                     VM_INHERIT_SHARE                      // inheritance
     );
 
     hard_assert_msg(kr == KERN_SUCCESS, "mach_vm_remap failed: %d", kr);
     hard_assert_msg(target_address == reinterpret_cast<mach_vm_address_t>(remove),
-                    "vm_remap changed target address: expected %p, got %p",
-                    remove, (void*)target_address);
+                    "vm_remap changed target address: expected %p, got %p", remove, (void *)target_address);
   }
 #else
   // Linux: Use mmap to create file-backed alias
@@ -827,7 +822,7 @@ void MeshableArena::afterForkChild() {
       seenMiniheaps.insert(mh_void);
 
       // Lambda to handle the logic regardless of page size
-      auto processMiniHeap = [&](auto* mh) {
+      auto processMiniHeap = [&](auto *mh) {
         const auto meshCount = mh->meshCount();
         d_assert(meshCount > 1);
 
@@ -843,13 +838,13 @@ void MeshableArena::afterForkChild() {
           const auto remove = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
           const auto removeOff = offsetFor(remove);
 
-  #ifndef NDEBUG
+#ifndef NDEBUG
           const size_t pageSz = getPageSize();
           const Length pageCount = sz / pageSz;
           for (size_t i = 0; i < pageCount; i++) {
             d_assert(_mhIndex[removeOff + i].load().value() == _mhIndex[keepOff].load().value());
           }
-  #endif
+#endif
 
           void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff * pageSize);
 
@@ -860,9 +855,9 @@ void MeshableArena::afterForkChild() {
       };
 
       if (getPageSize() == kPageSize4K) {
-        processMiniHeap(reinterpret_cast<MiniHeap<kPageSize4K>*>(mh_void));
+        processMiniHeap(reinterpret_cast<MiniHeap<kPageSize4K> *>(mh_void));
       } else {
-        processMiniHeap(reinterpret_cast<MiniHeap<kPageSize16K>*>(mh_void));
+        processMiniHeap(reinterpret_cast<MiniHeap<kPageSize16K> *>(mh_void));
       }
     }
   }

@@ -4,8 +4,8 @@
 #define MESH_MWC_H
 
 #include "../common.h"
-//#include <assert.h>
-//#define d_assert assert
+// #include <assert.h>
+// #define d_assert assert
 
 #include "mwc64.h"
 // #include "sx.hh"

@@ -112,8 +112,7 @@ public:
     return _global->pageAlignedAlloc(pageAlignment, pageCount);
   }
 
-  inline void *ATTRIBUTE_ALWAYS_INLINE ATTRIBUTE_ALLOC_SIZE(3)
-    realloc(void *oldPtr, size_t newSize) {
+  inline void *ATTRIBUTE_ALWAYS_INLINE ATTRIBUTE_ALLOC_SIZE(3) realloc(void *oldPtr, size_t newSize) {
     if (oldPtr == nullptr) {
       return this->malloc(newSize);
     }
@@ -151,8 +150,7 @@ public:
     }
   }
 
-  inline void *ATTRIBUTE_ALWAYS_INLINE ATTRIBUTE_MALLOC ATTRIBUTE_ALLOC_SIZE2(2, 3)
-    calloc(size_t count, size_t size) {
+  inline void *ATTRIBUTE_ALWAYS_INLINE ATTRIBUTE_MALLOC ATTRIBUTE_ALLOC_SIZE2(2, 3) calloc(size_t count, size_t size) {
     if (unlikely(size && count > (size_t)-1 / size)) {
       errno = ENOMEM;
       return nullptr;
@@ -415,7 +413,8 @@ void *CACHELINE_ALIGNED_FN ThreadLocalHeap<PageSize>::smallAllocSlowpath(size_t 
 }
 
 template <size_t PageSize>
-void *CACHELINE_ALIGNED_FN ThreadLocalHeap<PageSize>::smallAllocGlobalRefill(ShuffleVectorT &shuffleVector, size_t sizeClass) {
+void *CACHELINE_ALIGNED_FN ThreadLocalHeap<PageSize>::smallAllocGlobalRefill(ShuffleVectorT &shuffleVector,
+                                                                             size_t sizeClass) {
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
   _global->allocSmallMiniheaps(sizeClass, sizeMax, shuffleVector.miniheaps(), _current);

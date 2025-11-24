@@ -49,8 +49,8 @@ static void ATTRIBUTE_NEVER_INLINE initAndRefill(FixedArray<MiniHeap<PageSize>, 
       auto mh = array[n++];
       // Reset bitmap to ensure we can allocate from it again
       // We just clear it to 0 (empty) to ensure progress
-      mh->takeBitmap(); 
-      
+      mh->takeBitmap();
+
       miniheaps.append(mh);
     }
   }
@@ -84,19 +84,19 @@ static void BM_LocalRefill1Impl(benchmark::State &state) {
     // hard_assert_msg(initialAllocCount == 0UL, "expected 0 initial MHs, not %zu", initialAllocCount);
 
     const uint32_t objCount = PageSize / kObjSize;
-    
+
     gheap.lock();
     while (!array.full()) {
-       // SizeClass(kObjSize), 1 page, objCount, kObjSize
-       auto mh = gheap.allocMiniheapLocked(SizeMap::SizeClass(kObjSize), 1, objCount, kObjSize);
-       // We must attach it to prevent it from being considered "free" immediately if we were to return it
-       // But here we just hold it in array.
-       // The original allocSmallMiniheaps did setAttached.
-       mh->setAttached(tid, gheap.freelistFor(mh->freelistId(), mh->sizeClass()));
-       array.append(mh);
+      // SizeClass(kObjSize), 1 page, objCount, kObjSize
+      auto mh = gheap.allocMiniheapLocked(SizeMap::SizeClass(kObjSize), 1, objCount, kObjSize);
+      // We must attach it to prevent it from being considered "free" immediately if we were to return it
+      // But here we just hold it in array.
+      // The original allocSmallMiniheaps did setAttached.
+      mh->setAttached(tid, gheap.freelistFor(mh->freelistId(), mh->sizeClass()));
+      array.append(mh);
     }
     gheap.unlock();
-    
+
     mesh::debug("initializing the miniheaps\n");
   }
 

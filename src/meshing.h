@@ -50,12 +50,13 @@ namespace method {
 
 // split miniheaps into two lists in a random order
 template <size_t PageSize>
-void halfSplit(MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, size_t &leftSize, SplitArray<PageSize> &right,
-               size_t &rightSize) noexcept;
+void halfSplit(MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, size_t &leftSize,
+               SplitArray<PageSize> &right, size_t &rightSize) noexcept;
 
 template <size_t PageSize>
-void shiftedSplitting(MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, SplitArray<PageSize> &right,
-                      const function<bool(std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> &&)> &meshFound) noexcept;
+void shiftedSplitting(
+    MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, SplitArray<PageSize> &right,
+    const function<bool(std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> &&)> &meshFound) noexcept;
 }  // namespace method
 }  // namespace mesh
 

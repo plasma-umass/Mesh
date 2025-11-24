@@ -30,7 +30,7 @@ TEST(MacOSMemory, PrecisePageDeallocationWithPunchhole) {
     GTEST_SKIP();
   }
 
-  GlobalHeapType& gheap = runtime<PageSize>().heap();
+  GlobalHeapType &gheap = runtime<PageSize>().heap();
   const auto tid = gettid();
   const size_t pageSize = PageSize;  // 16KB on Apple Silicon, 4KB on Intel
 
@@ -56,24 +56,24 @@ TEST(MacOSMemory, PrecisePageDeallocationWithPunchhole) {
   // Create first miniheap and allocate objects at specific offsets
   FixedArray<MiniHeapType, 1> array1{};
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(objectSize), objectSize, array1, tid);
-  MiniHeapType* mh1 = array1[0];
+  MiniHeapType *mh1 = array1[0];
   ASSERT_NE(mh1, nullptr);
 
   // Create second miniheap
   FixedArray<MiniHeapType, 1> array2{};
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(objectSize), objectSize, array2, tid);
-  MiniHeapType* mh2 = array2[0];
+  MiniHeapType *mh2 = array2[0];
   ASSERT_NE(mh2, nullptr);
 
   // Allocate objects in complementary patterns so they can be meshed
-  std::vector<void*> ptrs1, ptrs2;
+  std::vector<void *> ptrs1, ptrs2;
 
   // We need at least 2 objects per miniheap to demonstrate meshing
   const size_t numObjects = std::min(objectsPerPage, static_cast<size_t>(16));
 
   // MiniHeap 1: Allocate at even indices
   for (size_t i = 0; i < numObjects; i += 2) {
-    void* ptr = mh1->mallocAt(gheap.arenaBegin(), i);
+    void *ptr = mh1->mallocAt(gheap.arenaBegin(), i);
     if (ptr) {
       ptrs1.push_back(ptr);
       memset(ptr, 0xAA, objectSize);  // Fill to ensure pages are allocated
@@ -82,7 +82,7 @@ TEST(MacOSMemory, PrecisePageDeallocationWithPunchhole) {
 
   // MiniHeap 2: Allocate at odd indices
   for (size_t i = 1; i < numObjects; i += 2) {
-    void* ptr = mh2->mallocAt(gheap.arenaBegin(), i);
+    void *ptr = mh2->mallocAt(gheap.arenaBegin(), i);
     if (ptr) {
       ptrs2.push_back(ptr);
       memset(ptr, 0xBB, objectSize);  // Fill to ensure pages are allocated
@@ -91,11 +91,11 @@ TEST(MacOSMemory, PrecisePageDeallocationWithPunchhole) {
 
   // Force pages to be resident
   for (auto ptr : ptrs1) {
-    volatile char dummy = *reinterpret_cast<char*>(ptr);
+    volatile char dummy = *reinterpret_cast<char *>(ptr);
     (void)dummy;
   }
   for (auto ptr : ptrs2) {
-    volatile char dummy = *reinterpret_cast<char*>(ptr);
+    volatile char dummy = *reinterpret_cast<char *>(ptr);
     (void)dummy;
   }
 
@@ -106,8 +106,8 @@ TEST(MacOSMemory, PrecisePageDeallocationWithPunchhole) {
   ASSERT_TRUE(MacOSMemoryStats::get(after_alloc));
 
   uint64_t memory_increase = after_alloc.resident_size - baseline.resident_size;
-  printf("\nAfter allocation: RSS increased by %llu bytes (expected ~%zu bytes for 2 pages)\n",
-         memory_increase, 2 * pageSize);
+  printf("\nAfter allocation: RSS increased by %llu bytes (expected ~%zu bytes for 2 pages)\n", memory_increase,
+         2 * pageSize);
 
   // Verify we allocated approximately 2 pages worth of memory
   // Allow some overhead for metadata
@@ -123,7 +123,7 @@ TEST(MacOSMemory, PrecisePageDeallocationWithPunchhole) {
   ASSERT_EQ(len, mh2->bitmap().byteCount());
 
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2, len))
-    << "Miniheaps should be meshable with complementary allocation patterns";
+      << "Miniheaps should be meshable with complementary allocation patterns";
 
   // Phase 3: Mesh the miniheaps - this should free exactly 1 page
   printf("\n=== Phase 3: Meshing miniheaps (should free exactly %zu bytes) ===\n", pageSize);
@@ -141,22 +141,19 @@ TEST(MacOSMemory, PrecisePageDeallocationWithPunchhole) {
   ASSERT_TRUE(MacOSMemoryStats::get(after_mesh));
 
   uint64_t memory_freed = after_alloc.resident_size - after_mesh.resident_size;
-  printf("\nAfter meshing: RSS decreased by %llu bytes (expected %zu bytes)\n",
-         memory_freed, pageSize);
+  printf("\nAfter meshing: RSS decreased by %llu bytes (expected %zu bytes)\n", memory_freed, pageSize);
 
   // CRITICAL ASSERTION: We should have freed exactly one page
   // Allow small tolerance for measurement precision (±2KB)
-  EXPECT_GE(memory_freed, pageSize - 2048)
-    << "Should free at least one page minus small tolerance";
-  EXPECT_LE(memory_freed, pageSize + 2048)
-    << "Should free at most one page plus small tolerance";
+  EXPECT_GE(memory_freed, pageSize - 2048) << "Should free at least one page minus small tolerance";
+  EXPECT_LE(memory_freed, pageSize + 2048) << "Should free at most one page plus small tolerance";
 
   // Verify data integrity after meshing
   for (auto ptr : ptrs1) {
-    ASSERT_EQ(*reinterpret_cast<uint8_t*>(ptr), 0xAA) << "Data corruption in mh1";
+    ASSERT_EQ(*reinterpret_cast<uint8_t *>(ptr), 0xAA) << "Data corruption in mh1";
   }
   for (auto ptr : ptrs2) {
-    ASSERT_EQ(*reinterpret_cast<uint8_t*>(ptr), 0xBB) << "Data corruption in mh2";
+    ASSERT_EQ(*reinterpret_cast<uint8_t *>(ptr), 0xBB) << "Data corruption in mh2";
   }
 
   // Phase 4: Clean up and verify return to baseline
@@ -190,7 +187,7 @@ TEST(MacOSMemory, VerifyPunchholeReducesFileSize) {
   }
 
   // Direct test of F_PUNCHHOLE on our arena file
-  GlobalHeapType& gheap = runtime<PageSize>().heap();
+  GlobalHeapType &gheap = runtime<PageSize>().heap();
 
   printf("\n=== Testing F_PUNCHHOLE memory release ===\n");
 
@@ -200,14 +197,14 @@ TEST(MacOSMemory, VerifyPunchholeReducesFileSize) {
 
   // Allocate a large block to ensure we have file-backed pages
   const size_t blockSize = 1024 * 1024;  // 1MB
-  void* ptr = gheap.malloc(blockSize);
+  void *ptr = gheap.malloc(blockSize);
   ASSERT_NE(ptr, nullptr);
 
   // Fill with data to ensure pages are allocated
   memset(ptr, 0xFF, blockSize);
 
   // Force pages to be resident
-  volatile char dummy = *reinterpret_cast<char*>(ptr);
+  volatile char dummy = *reinterpret_cast<char *>(ptr);
   (void)dummy;
 
   // Let memory settle
@@ -243,12 +240,9 @@ TEST(MacOSMemory, CompareFootprintVsRSS) {
   ASSERT_TRUE(MacOSMemoryStats::get(stats));
 
   printf("\n=== Footprint vs RSS Comparison ===\n");
-  printf("Physical Footprint: %.2f MB (excludes MAP_SHARED pages)\n",
-         stats.physical_footprint / (1024.0 * 1024.0));
-  printf("Resident Size (RSS): %.2f MB (includes MAP_SHARED pages)\n",
-         stats.resident_size / (1024.0 * 1024.0));
-  printf("Compressed Memory: %.2f MB\n",
-         stats.compressed / (1024.0 * 1024.0));
+  printf("Physical Footprint: %.2f MB (excludes MAP_SHARED pages)\n", stats.physical_footprint / (1024.0 * 1024.0));
+  printf("Resident Size (RSS): %.2f MB (includes MAP_SHARED pages)\n", stats.resident_size / (1024.0 * 1024.0));
+  printf("Compressed Memory: %.2f MB\n", stats.compressed / (1024.0 * 1024.0));
 
   // With MAP_SHARED memory, RSS can be greater than footprint
   // This is expected behavior on macOS

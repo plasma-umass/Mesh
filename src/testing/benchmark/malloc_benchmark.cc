@@ -5,14 +5,14 @@
 #include <vector>
 
 extern "C" {
-  void *mesh_malloc(size_t sz);
-  void mesh_free(void *ptr);
+void *mesh_malloc(size_t sz);
+void mesh_free(void *ptr);
 }
 
-static void BM_MallocFree(benchmark::State& state) {
+static void BM_MallocFree(benchmark::State &state) {
   const size_t size = state.range(0);
   for (auto _ : state) {
-    void* ptr = mesh_malloc(size);
+    void *ptr = mesh_malloc(size);
     benchmark::DoNotOptimize(ptr);
     mesh_free(ptr);
   }

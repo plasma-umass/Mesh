@@ -40,10 +40,10 @@ private:
 
   // ensure we don't mistakenly create additional runtime instances
   explicit Runtime() {
-      if (internal::getSeedMutex() == nullptr) {
-          // force init
-          internal::seed();
-      }
+    if (internal::getSeedMutex() == nullptr) {
+      // force init
+      internal::seed();
+    }
   }
 
 public:

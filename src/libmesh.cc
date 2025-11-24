@@ -72,48 +72,33 @@ using namespace mesh;
 // initialized yet when IFUNC resolvers run.
 // ===================================================================
 
-__attribute__((no_stack_protector))
-static long ifunc_syscall_3(long nr, long arg0, long arg1, long arg2) {
+__attribute__((no_stack_protector)) static long ifunc_syscall_3(long nr, long arg0, long arg1, long arg2) {
   register long x8 __asm__("x8") = nr;
   register long x0 __asm__("x0") = arg0;
   register long x1 __asm__("x1") = arg1;
   register long x2 __asm__("x2") = arg2;
-  __asm__ volatile(
-    "svc #0"
-    : "+r"(x0)
-    : "r"(x8), "r"(x1), "r"(x2)
-    : "memory", "cc"
-  );
+  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2) : "memory", "cc");
   return x0;
 }
 
-__attribute__((no_stack_protector))
-static long ifunc_syscall_1(long nr, long arg0) {
+__attribute__((no_stack_protector)) static long ifunc_syscall_1(long nr, long arg0) {
   register long x8 __asm__("x8") = nr;
   register long x0 __asm__("x0") = arg0;
-  __asm__ volatile(
-    "svc #0"
-    : "+r"(x0)
-    : "r"(x8)
-    : "memory", "cc"
-  );
+  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8) : "memory", "cc");
   return x0;
 }
 
 // Direct syscall wrappers using inline assembly
-__attribute__((no_stack_protector))
-static int ifunc_sys_open(const char *pathname, int flags) {
+__attribute__((no_stack_protector)) static int ifunc_sys_open(const char *pathname, int flags) {
   // Use openat with AT_FDCWD (-100) to open relative to current directory
   return ifunc_syscall_3(SYS_openat, -100 /* AT_FDCWD */, (long)pathname, flags);
 }
 
-__attribute__((no_stack_protector))
-static ssize_t ifunc_sys_read(int fd, void *buf, size_t count) {
+__attribute__((no_stack_protector)) static ssize_t ifunc_sys_read(int fd, void *buf, size_t count) {
   return ifunc_syscall_3(SYS_read, fd, (long)buf, count);
 }
 
-__attribute__((no_stack_protector))
-static int ifunc_sys_close(int fd) {
+__attribute__((no_stack_protector)) static int ifunc_sys_close(int fd) {
   return ifunc_syscall_1(SYS_close, fd);
 }
 
@@ -135,57 +120,39 @@ static int ifunc_sys_close(int fd) {
 // initialized yet when IFUNC resolvers run.
 // ===================================================================
 
-__attribute__((no_stack_protector))
-static long ifunc_syscall_3(long nr, long arg0, long arg1, long arg2) {
+__attribute__((no_stack_protector)) static long ifunc_syscall_3(long nr, long arg0, long arg1, long arg2) {
   long ret;
-  __asm__ volatile(
-    "syscall"
-    : "=a"(ret)
-    : "a"(nr), "D"(arg0), "S"(arg1), "d"(arg2)
-    : "rcx", "r11", "memory", "cc"
-  );
+  __asm__ volatile("syscall" : "=a"(ret) : "a"(nr), "D"(arg0), "S"(arg1), "d"(arg2) : "rcx", "r11", "memory", "cc");
   return ret;
 }
 
-__attribute__((no_stack_protector))
-static long ifunc_syscall_4(long nr, long arg0, long arg1, long arg2, long arg3) {
+__attribute__((no_stack_protector)) static long ifunc_syscall_4(long nr, long arg0, long arg1, long arg2, long arg3) {
   long ret;
-  __asm__ volatile(
-    "syscall"
-    : "=a"(ret)
-    : "a"(nr), "D"(arg0), "S"(arg1), "d"(arg2), "r"((long)arg3)
-    : "rcx", "r11", "memory", "cc"
-  );
+  __asm__ volatile("syscall"
+                   : "=a"(ret)
+                   : "a"(nr), "D"(arg0), "S"(arg1), "d"(arg2), "r"((long)arg3)
+                   : "rcx", "r11", "memory", "cc");
   return ret;
 }
 
-__attribute__((no_stack_protector))
-static long ifunc_syscall_1(long nr, long arg0) {
+__attribute__((no_stack_protector)) static long ifunc_syscall_1(long nr, long arg0) {
   long ret;
-  __asm__ volatile(
-    "syscall"
-    : "=a"(ret)
-    : "a"(nr), "D"(arg0)
-    : "rcx", "r11", "memory", "cc"
-  );
+  __asm__ volatile("syscall" : "=a"(ret) : "a"(nr), "D"(arg0) : "rcx", "r11", "memory", "cc");
   return ret;
 }
 
 // Direct syscall wrappers using inline assembly
-__attribute__((no_stack_protector))
-static int ifunc_sys_open(const char *pathname, int flags) {
+__attribute__((no_stack_protector)) static int ifunc_sys_open(const char *pathname, int flags) {
   // x86_64 still has the open syscall (SYS_open = 2)
   // But we'll use openat for consistency
   return ifunc_syscall_4(SYS_openat, -100 /* AT_FDCWD */, (long)pathname, flags, 0);
 }
 
-__attribute__((no_stack_protector))
-static ssize_t ifunc_sys_read(int fd, void *buf, size_t count) {
+__attribute__((no_stack_protector)) static ssize_t ifunc_sys_read(int fd, void *buf, size_t count) {
   return ifunc_syscall_3(SYS_read, fd, (long)buf, count);
 }
 
-__attribute__((no_stack_protector))
-static int ifunc_sys_close(int fd) {
+__attribute__((no_stack_protector)) static int ifunc_sys_close(int fd) {
   return ifunc_syscall_1(SYS_close, fd);
 }
 
@@ -220,8 +187,7 @@ static size_t getPageSizeFromAuxv() {
 //   - ARM64: 16KB (common on newer ARM64 systems, safe for 4KB systems)
 //   - x86_64: 4KB (standard and only option on x86_64)
 // ===================================================================
-__attribute__((no_stack_protector))
-static size_t getPageSizeFromAuxv() {
+__attribute__((no_stack_protector)) static size_t getPageSizeFromAuxv() {
   // Use stack buffer to avoid any heap allocation (malloc not available)
   // 512 bytes is enough to hold several auxv entries
   unsigned char buffer[512];
@@ -232,7 +198,7 @@ static size_t getPageSizeFromAuxv() {
 #ifdef __aarch64__
     return kPageSize16K;  // ARM64 commonly uses 16k pages
 #else
-    return kPageSize4K;   // x86_64 uses 4k pages
+    return kPageSize4K;  // x86_64 uses 4k pages
 #endif
   }
 
@@ -294,7 +260,7 @@ static __attribute__((constructor)) void libmesh_init() {
     abort();
   }
 
-  dispatchByPageSize([](auto& rt) {
+  dispatchByPageSize([](auto &rt) {
     rt.createSignalFd();
     rt.installSegfaultHandler();
     rt.initMaxMapCount();
@@ -312,9 +278,7 @@ static __attribute__((constructor)) void libmesh_init() {
     if (period < 0) {
       period = 0;
     }
-    dispatchByPageSize([period](auto& rt) {
-      rt.setMeshPeriodMs(std::chrono::milliseconds{period});
-    });
+    dispatchByPageSize([period](auto &rt) { rt.setMeshPeriodMs(std::chrono::milliseconds{period}); });
   }
 
   char *bgThread = getenv("MESH_BACKGROUND_THREAD");
@@ -323,9 +287,7 @@ static __attribute__((constructor)) void libmesh_init() {
 
   int shouldThread = atoi(bgThread);
   if (shouldThread) {
-    dispatchByPageSize([](auto& rt) {
-      rt.startBgThread();
-    });
+    dispatchByPageSize([](auto &rt) { rt.startBgThread(); });
   }
 }
 
@@ -340,60 +302,50 @@ static __attribute__((destructor)) void libmesh_fini() {
   else if (mlevel > 2)
     mlevel = 2;
 
-  dispatchByPageSize([mlevel](auto& rt) {
-    rt.heap().dumpStats(mlevel, false);
-  });
+  dispatchByPageSize([mlevel](auto &rt) { rt.heap().dumpStats(mlevel, false); });
 }
 
 namespace mesh {
 
 template <size_t PageSize>
-ATTRIBUTE_NEVER_INLINE
-void *allocSlowpath(size_t sz) {
+ATTRIBUTE_NEVER_INLINE void *allocSlowpath(size_t sz) {
   ThreadLocalHeap<PageSize> *localHeap = ThreadLocalHeap<PageSize>::GetHeap();
   return localHeap->malloc(sz);
 }
 
 template <size_t PageSize>
-ATTRIBUTE_NEVER_INLINE
-__attribute__((unused))
-void *cxxNewSlowpath(size_t sz) {
+ATTRIBUTE_NEVER_INLINE __attribute__((unused)) void *cxxNewSlowpath(size_t sz) {
   ThreadLocalHeap<PageSize> *localHeap = ThreadLocalHeap<PageSize>::GetHeap();
   return localHeap->cxxNew(sz);
 }
 
 template <size_t PageSize>
-ATTRIBUTE_NEVER_INLINE
-void freeSlowpath(void *ptr) {
+ATTRIBUTE_NEVER_INLINE void freeSlowpath(void *ptr) {
   // instead of instantiating a thread-local heap on free, just free
   // to the global heap directly
   runtime<PageSize>().heap().free(ptr);
 }
 
 template <size_t PageSize>
-ATTRIBUTE_NEVER_INLINE
-void *reallocSlowpath(void *oldPtr, size_t newSize) {
+ATTRIBUTE_NEVER_INLINE void *reallocSlowpath(void *oldPtr, size_t newSize) {
   ThreadLocalHeap<PageSize> *localHeap = ThreadLocalHeap<PageSize>::GetHeap();
   return localHeap->realloc(oldPtr, newSize);
 }
 
 template <size_t PageSize>
-ATTRIBUTE_NEVER_INLINE
-void *callocSlowpath(size_t count, size_t size) {
+ATTRIBUTE_NEVER_INLINE void *callocSlowpath(size_t count, size_t size) {
   ThreadLocalHeap<PageSize> *localHeap = ThreadLocalHeap<PageSize>::GetHeap();
   return localHeap->calloc(count, size);
 }
 
 template <size_t PageSize>
-ATTRIBUTE_NEVER_INLINE
-size_t usableSizeSlowpath(void *ptr) {
+ATTRIBUTE_NEVER_INLINE size_t usableSizeSlowpath(void *ptr) {
   ThreadLocalHeap<PageSize> *localHeap = ThreadLocalHeap<PageSize>::GetHeap();
   return localHeap->getSize(ptr);
 }
 
 template <size_t PageSize>
-ATTRIBUTE_NEVER_INLINE
-void *memalignSlowpath(size_t alignment, size_t size) {
+ATTRIBUTE_NEVER_INLINE void *memalignSlowpath(size_t alignment, size_t size) {
   ThreadLocalHeap<PageSize> *localHeap = ThreadLocalHeap<PageSize>::GetHeap();
   return localHeap->memalign(alignment, size);
 }
@@ -495,38 +447,32 @@ typedef size_t (*usable_size_func)(void *);
 typedef void *(*memalign_func)(size_t, size_t);
 typedef void *(*calloc_func)(size_t, size_t);
 
-__attribute__((no_stack_protector))
-static malloc_func resolve_mesh_malloc() {
+__attribute__((no_stack_protector)) static malloc_func resolve_mesh_malloc() {
   size_t pageSize = getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_malloc_impl<kPageSize4K> : mesh_malloc_impl<kPageSize16K>;
 }
-__attribute__((no_stack_protector))
-static free_func resolve_mesh_free() {
+__attribute__((no_stack_protector)) static free_func resolve_mesh_free() {
   size_t pageSize = getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_free_impl<kPageSize4K> : mesh_free_impl<kPageSize16K>;
 }
-__attribute__((no_stack_protector))
-static sized_free_func resolve_mesh_sized_free() {
+__attribute__((no_stack_protector)) static sized_free_func resolve_mesh_sized_free() {
   size_t pageSize = getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_sized_free_impl<kPageSize4K> : mesh_sized_free_impl<kPageSize16K>;
 }
-__attribute__((no_stack_protector))
-static realloc_func resolve_mesh_realloc() {
+__attribute__((no_stack_protector)) static realloc_func resolve_mesh_realloc() {
   size_t pageSize = getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_realloc_impl<kPageSize4K> : mesh_realloc_impl<kPageSize16K>;
 }
-__attribute__((no_stack_protector))
-static usable_size_func resolve_mesh_malloc_usable_size() {
+__attribute__((no_stack_protector)) static usable_size_func resolve_mesh_malloc_usable_size() {
   size_t pageSize = getPageSizeFromAuxv();
-  return (pageSize == kPageSize4K) ? mesh_malloc_usable_size_impl<kPageSize4K> : mesh_malloc_usable_size_impl<kPageSize16K>;
+  return (pageSize == kPageSize4K) ? mesh_malloc_usable_size_impl<kPageSize4K>
+                                   : mesh_malloc_usable_size_impl<kPageSize16K>;
 }
-__attribute__((no_stack_protector))
-static memalign_func resolve_mesh_memalign() {
+__attribute__((no_stack_protector)) static memalign_func resolve_mesh_memalign() {
   size_t pageSize = getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_memalign_impl<kPageSize4K> : mesh_memalign_impl<kPageSize16K>;
 }
-__attribute__((no_stack_protector))
-static calloc_func resolve_mesh_calloc() {
+__attribute__((no_stack_protector)) static calloc_func resolve_mesh_calloc() {
   size_t pageSize = getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_calloc_impl<kPageSize4K> : mesh_calloc_impl<kPageSize16K>;
 }
@@ -589,12 +535,12 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, siz
 
 #if defined(__FreeBSD__)
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_reallocarray(void *oldPtr, size_t count, size_t size) {
-	size_t total;
-	if (unlikely(__builtin_umull_overflow(count, size, &total))) {
-		return NULL;
-	} else {
-		return mesh_realloc(oldPtr, total);
-	}
+  size_t total;
+  if (unlikely(__builtin_umull_overflow(count, size, &total))) {
+    return NULL;
+  } else {
+    return mesh_realloc(oldPtr, total);
+  }
 }
 #endif
 
@@ -624,7 +570,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
     throw()
 #endif
 #ifdef __linux__
-    __attribute__((ifunc("resolve_mesh_memalign")));
+        __attribute__((ifunc("resolve_mesh_memalign")));
 #else
 {
   if (likely(getPageSize() == kPageSize4K)) {
@@ -662,39 +608,29 @@ size_t MESH_EXPORT mesh_usable_size(void *ptr) {
 // structures while forking.  This is not normally invoked when
 // libmesh is dynamically linked or LD_PRELOADed into a binary.
 void MESH_EXPORT xxmalloc_lock(void) {
-  mesh::dispatchByPageSize([](auto& rt) {
-    rt.lock();
-  });
+  mesh::dispatchByPageSize([](auto &rt) { rt.lock(); });
 }
 
 // ensure we don't concurrently allocate/mess with internal heap data
 // structures while forking.  This is not normally invoked when
 // libmesh is dynamically linked or LD_PRELOADed into a binary.
 void MESH_EXPORT xxmalloc_unlock(void) {
-  mesh::dispatchByPageSize([](auto& rt) {
-    rt.unlock();
-  });
+  mesh::dispatchByPageSize([](auto &rt) { rt.unlock(); });
 }
 
 int MESH_EXPORT sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) MESH_THROW {
-  return mesh::dispatchByPageSize([=](auto& rt) {
-    return rt.sigaction(signum, act, oldact);
-  });
+  return mesh::dispatchByPageSize([=](auto &rt) { return rt.sigaction(signum, act, oldact); });
 }
 
 int MESH_EXPORT sigprocmask(int how, const sigset_t *set, sigset_t *oldset) MESH_THROW {
-  return mesh::dispatchByPageSize([=](auto& rt) {
-    return rt.sigprocmask(how, set, oldset);
-  });
+  return mesh::dispatchByPageSize([=](auto &rt) { return rt.sigprocmask(how, set, oldset); });
 }
 
 // we need to wrap pthread_create and pthread_exit so that we can
 // install our segfault handler and cleanup thread-local heaps.
 int MESH_EXPORT pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
                                void *arg) MESH_THROW {
-  return mesh::dispatchByPageSize([=](auto& rt) {
-    return rt.createThread(thread, attr, startRoutine, arg);
-  });
+  return mesh::dispatchByPageSize([=](auto &rt) { return rt.createThread(thread, attr, startRoutine, arg); });
 }
 
 void MESH_EXPORT ATTRIBUTE_NORETURN pthread_exit(void *retval) {
@@ -708,39 +644,30 @@ void MESH_EXPORT ATTRIBUTE_NORETURN pthread_exit(void *retval) {
 // Same API as je_mallctl, allows a program to query stats and set
 // allocator-related options.
 int MESH_EXPORT mesh_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-  return mesh::dispatchByPageSize([=](auto& rt) {
-    return rt.heap().mallctl(name, oldp, oldlenp, newp, newlen);
-  });
+  return mesh::dispatchByPageSize([=](auto &rt) { return rt.heap().mallctl(name, oldp, oldlenp, newp, newlen); });
 }
 
 #ifdef __linux__
 
 int MESH_EXPORT epoll_wait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout) {
-  return mesh::dispatchByPageSize([=](auto& rt) {
-    return rt.epollWait(__epfd, __events, __maxevents, __timeout);
-  });
+  return mesh::dispatchByPageSize([=](auto &rt) { return rt.epollWait(__epfd, __events, __maxevents, __timeout); });
 }
 
 int MESH_EXPORT epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents, int __timeout,
                             const __sigset_t *__ss) {
-  return mesh::dispatchByPageSize([=](auto& rt) {
-    return rt.epollPwait(__epfd, __events, __maxevents, __timeout, __ss);
-  });
+  return mesh::dispatchByPageSize(
+      [=](auto &rt) { return rt.epollPwait(__epfd, __events, __maxevents, __timeout, __ss); });
 }
 
 #endif
 #if __linux__
 
 ssize_t MESH_EXPORT recv(int sockfd, void *buf, size_t len, int flags) {
-  return mesh::dispatchByPageSize([=](auto& rt) {
-    return rt.recv(sockfd, buf, len, flags);
-  });
+  return mesh::dispatchByPageSize([=](auto &rt) { return rt.recv(sockfd, buf, len, flags); });
 }
 
 ssize_t MESH_EXPORT recvmsg(int sockfd, struct msghdr *msg, int flags) {
-  return mesh::dispatchByPageSize([=](auto& rt) {
-    return rt.recvmsg(sockfd, msg, flags);
-  });
+  return mesh::dispatchByPageSize([=](auto &rt) { return rt.recvmsg(sockfd, msg, flags); });
 }
 #endif
 }

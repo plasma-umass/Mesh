@@ -29,8 +29,8 @@ namespace mesh {
 // ===================================================================
 
 // Dispatch helper that calls a function with the correct runtime instance
-template<typename Func>
-inline auto dispatchByPageSize(Func&& func) -> decltype(func(runtime<kPageSize4K>())) {
+template <typename Func>
+inline auto dispatchByPageSize(Func &&func) -> decltype(func(runtime<kPageSize4K>())) {
   if (likely(getPageSize() == kPageSize4K)) {
     return func(runtime<kPageSize4K>());
   } else {
@@ -39,9 +39,8 @@ inline auto dispatchByPageSize(Func&& func) -> decltype(func(runtime<kPageSize4K
 }
 
 // Dispatch helper for functions that take no runtime but need page size selection
-template<typename Func4K, typename Func16K>
-inline auto dispatchByPageSizeEx(Func4K&& func4k, Func16K&& func16k)
-    -> decltype(func4k()) {
+template <typename Func4K, typename Func16K>
+inline auto dispatchByPageSizeEx(Func4K &&func4k, Func16K &&func16k) -> decltype(func4k()) {
   if (likely(getPageSize() == kPageSize4K)) {
     return func4k();
   } else {
@@ -52,46 +51,39 @@ inline auto dispatchByPageSizeEx(Func4K&& func4k, Func16K&& func16k)
 // Macro for simpler dispatch when you just need to call a templated function
 // Usage: DISPATCH_BY_PAGE_SIZE(someFunction)();
 #define DISPATCH_BY_PAGE_SIZE(func) \
-  ((likely(getPageSize() == kPageSize4K)) \
-    ? (func<kPageSize4K>) \
-    : (func<kPageSize16K>))
+  ((likely(getPageSize() == kPageSize4K)) ? (func<kPageSize4K>) : (func<kPageSize16K>))
 
 // Macro for getting the correct runtime instance
 // Usage: auto& rt = GET_RUNTIME();
-#define GET_RUNTIME() \
-  ((likely(getPageSize() == kPageSize4K)) \
-    ? runtime<kPageSize4K>() \
-    : runtime<kPageSize16K>())
+#define GET_RUNTIME() ((likely(getPageSize() == kPageSize4K)) ? runtime<kPageSize4K>() : runtime<kPageSize16K>())
 
 // Macro for getting the correct heap instance
 // Usage: auto& heap = GET_HEAP();
 #define GET_HEAP() \
-  ((likely(getPageSize() == kPageSize4K)) \
-    ? runtime<kPageSize4K>().heap() \
-    : runtime<kPageSize16K>().heap())
+  ((likely(getPageSize() == kPageSize4K)) ? runtime<kPageSize4K>().heap() : runtime<kPageSize16K>().heap())
 
 // Template helper to get ThreadLocalHeap for the current page size
-template<typename Func>
-inline auto withThreadLocalHeap(Func&& func) {
+template <typename Func>
+inline auto withThreadLocalHeap(Func &&func) {
   if (likely(getPageSize() == kPageSize4K)) {
-    auto* heap = ThreadLocalHeap<kPageSize4K>::GetHeapIfPresent();
+    auto *heap = ThreadLocalHeap<kPageSize4K>::GetHeapIfPresent();
     return func(heap, std::integral_constant<size_t, kPageSize4K>{});
   } else {
-    auto* heap = ThreadLocalHeap<kPageSize16K>::GetHeapIfPresent();
+    auto *heap = ThreadLocalHeap<kPageSize16K>::GetHeapIfPresent();
     return func(heap, std::integral_constant<size_t, kPageSize16K>{});
   }
 }
 
 // Helper for casting MiniHeap pointers based on page size
-template<typename Func>
-inline auto withMiniHeap(void* mh_void, Func&& func) {
+template <typename Func>
+inline auto withMiniHeap(void *mh_void, Func &&func) {
   if (likely(getPageSize() == kPageSize4K)) {
-    return func(reinterpret_cast<MiniHeap<kPageSize4K>*>(mh_void));
+    return func(reinterpret_cast<MiniHeap<kPageSize4K> *>(mh_void));
   } else {
-    return func(reinterpret_cast<MiniHeap<kPageSize16K>*>(mh_void));
+    return func(reinterpret_cast<MiniHeap<kPageSize16K> *>(mh_void));
   }
 }
 
-} // namespace mesh
+}  // namespace mesh
 
-#endif // MESH__DISPATCH_UTILS_H
+#endif  // MESH__DISPATCH_UTILS_H

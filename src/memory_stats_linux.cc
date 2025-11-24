@@ -18,7 +18,7 @@
 
 namespace mesh {
 
-bool MemoryStats::get(MemoryStats& stats) {
+bool MemoryStats::get(MemoryStats &stats) {
   // Read /proc/self/status to get memory metrics
   constexpr size_t kBufLen = 4096;
   char buf[kBufLen] = {0};
@@ -50,14 +50,14 @@ bool MemoryStats::get(MemoryStats& stats) {
   bool found_rss_file_line = false;
 
   // Parse VmRSS and RssShmem lines
-  for (char* line = buf; line != nullptr && *line != '\0'; line = strchr(line, '\n')) {
+  for (char *line = buf; line != nullptr && *line != '\0'; line = strchr(line, '\n')) {
     if (*line == '\n') {
       line++;
     }
 
     if (strncmp(line, "VmRSS:", 6) == 0) {
       found_rss_line = true;
-      char* str = line + 6;
+      char *str = line + 6;
       // Skip whitespace
       while (*str == ' ' || *str == '\t') {
         str++;
@@ -66,7 +66,7 @@ bool MemoryStats::get(MemoryStats& stats) {
       fprintf(stderr, "[MemoryStats] DEBUG: Found VmRSS line, value=%ld KB\n", rss_kb);
     } else if (strncmp(line, "RssShmem:", 9) == 0) {
       found_rss_shmem_line = true;
-      char* str = line + 9;
+      char *str = line + 9;
       // Skip whitespace
       while (*str == ' ' || *str == '\t') {
         str++;
@@ -75,7 +75,7 @@ bool MemoryStats::get(MemoryStats& stats) {
       fprintf(stderr, "[MemoryStats] DEBUG: Found RssShmem line, value=%ld KB\n", rss_shmem_kb);
     } else if (strncmp(line, "RssAnon:", 8) == 0) {
       found_rss_anon_line = true;
-      char* str = line + 8;
+      char *str = line + 8;
       while (*str == ' ' || *str == '\t') {
         str++;
       }
@@ -83,7 +83,7 @@ bool MemoryStats::get(MemoryStats& stats) {
       fprintf(stderr, "[MemoryStats] DEBUG: Found RssAnon line, value=%ld KB\n", rss_anon_kb);
     } else if (strncmp(line, "RssFile:", 8) == 0) {
       found_rss_file_line = true;
-      char* str = line + 8;
+      char *str = line + 8;
       while (*str == ' ' || *str == '\t') {
         str++;
       }
@@ -113,8 +113,8 @@ bool MemoryStats::get(MemoryStats& stats) {
 
   // Check we found both values
   if (rss_kb < 0 || rss_shmem_kb < 0) {
-    fprintf(stderr, "[MemoryStats] DEBUG: Missing required values - VmRSS=%ld KB, RssShmem=%ld KB\n",
-            rss_kb, rss_shmem_kb);
+    fprintf(stderr, "[MemoryStats] DEBUG: Missing required values - VmRSS=%ld KB, RssShmem=%ld KB\n", rss_kb,
+            rss_shmem_kb);
     return false;
   }
 
@@ -126,13 +126,12 @@ bool MemoryStats::get(MemoryStats& stats) {
           "[MemoryStats] DEBUG: Successfully parsed - RSS=%llu bytes, mesh_memory=%llu bytes, RssAnon=%ld KB, "
           "RssFile=%ld KB\n",
           static_cast<unsigned long long>(stats.resident_size_bytes),
-          static_cast<unsigned long long>(stats.mesh_memory_bytes),
-          rss_anon_kb, rss_file_kb);
+          static_cast<unsigned long long>(stats.mesh_memory_bytes), rss_anon_kb, rss_file_kb);
 
   return true;
 }
 
-bool MemoryStats::regionResidentBytes(const void* region_begin, size_t region_size, uint64_t& bytes_out) {
+bool MemoryStats::regionResidentBytes(const void *region_begin, size_t region_size, uint64_t &bytes_out) {
   FILE *fp = fopen("/proc/self/smaps", "r");
   if (!fp) {
     return false;

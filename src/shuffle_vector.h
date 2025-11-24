@@ -272,16 +272,16 @@ public:
   }
 
 private:
-  uintptr_t _start[kMaxMiniheapsPerShuffleVector];                           // 32  32
-  const char *_arenaBegin;                                                   // 8   40
-  int16_t _maxCount{0};                                                      // 2   42
-  int16_t _off{0};                                                           // 2   44
-  uint32_t _objectSize{0};                                                   // 4   48
+  uintptr_t _start[kMaxMiniheapsPerShuffleVector];                            // 32  32
+  const char *_arenaBegin;                                                    // 8   40
+  int16_t _maxCount{0};                                                       // 2   42
+  int16_t _off{0};                                                            // 2   44
+  uint32_t _objectSize{0};                                                    // 4   48
   FixedArray<MiniHeapT, kMaxMiniheapsPerShuffleVector> _attachedMiniheaps{};  // 36  128
-  MWC _prng;                                                                 // 36  84
-  float _objectSizeReciprocal{0.0};                                          // 4   88
-  uint32_t _attachedOff{0};                                                  //
-  sv::Entry _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;                // 512 640
+  MWC _prng;                                                                  // 36  84
+  float _objectSizeReciprocal{0.0};                                           // 4   88
+  uint32_t _attachedOff{0};                                                   //
+  sv::Entry _list[kMaxShuffleVectorLength] CACHELINE_ALIGNED;                 // 512 640
 };
 
 // static_assert(HL::gcd<sizeof(ShuffleVector), CACHELINE_SIZE>::value == CACHELINE_SIZE,

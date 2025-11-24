@@ -27,13 +27,13 @@ struct MemoryStats {
 
   // Get current memory statistics for this process.
   // Returns true on success, false on failure.
-  static bool get(MemoryStats& stats);
+  static bool get(MemoryStats &stats);
 
   // Best-effort resident byte count for a specific virtual address range.
   // - Linux: parsed from /proc/self/smaps (Rss field)
   // - macOS: falls back to mesh_memory_bytes (process RSS) as a coarse proxy
   // Returns true on success, false on failure.
-  static bool regionResidentBytes(const void* region_begin, size_t region_size, uint64_t& bytes_out);
+  static bool regionResidentBytes(const void *region_begin, size_t region_size, uint64_t &bytes_out);
 };
 
 }  // namespace mesh

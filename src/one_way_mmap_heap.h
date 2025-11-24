@@ -50,7 +50,7 @@ public:
 
     // Round up to the size of a page.
     const size_t pageSize = getPageSize();
-    sz = (sz + pageSize - 1) & (size_t) ~(pageSize - 1);
+    sz = (sz + pageSize - 1) & (size_t)~(pageSize - 1);
 
     void *ptr = mmap(nullptr, sz, HL_MMAP_PROTECTION_MASK, flags, fd, 0);
     if (ptr == MAP_FAILED)

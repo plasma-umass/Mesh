@@ -37,8 +37,8 @@ static atomic<int> ShouldContinueTest;
 #define PTHREAD_CREATE_THROW throw()
 #endif
 
-extern "C" int __attribute__((weak)) pthread_create(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine,
-                              void *arg) PTHREAD_CREATE_THROW {
+extern "C" int __attribute__((weak)) pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+                                                    mesh::PthreadFn startRoutine, void *arg) PTHREAD_CREATE_THROW {
   if (getPageSize() == 4096) {
     return mesh::runtime<4096>().createThread(thread, attr, startRoutine, arg);
   } else {

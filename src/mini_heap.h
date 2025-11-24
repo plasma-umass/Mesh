@@ -519,9 +519,9 @@ protected:
     return spanptr;
   }
 
-  BitmapType *_bitmap;          // 8 bytes  8
+  BitmapType *_bitmap;                // 8 bytes  8
   const Span _span;                   // 8        16
-  ListEntryType _freelist{};      // 8        24
+  ListEntryType _freelist{};          // 8        24
   atomic<pid_t> _current{0};          // 4        28
   Flags _flags;                       // 4        32
   const float _objectSizeReciprocal;  // 4        36

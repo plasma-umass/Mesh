@@ -34,7 +34,7 @@ void testPrecisePageDeallocation() {
   }
 
   // Initialize the runtime first - this creates MeshableArena which prints messages
-  GlobalHeap<PageSize>& gheap = runtime<PageSize>().heap();
+  GlobalHeap<PageSize> &gheap = runtime<PageSize>().heap();
   const auto tid = gettid();
   const size_t pageSize = PageSize;  // 16KB on Apple Silicon, 4KB on x86
 
@@ -48,9 +48,9 @@ void testPrecisePageDeallocation() {
     // Warm up by doing a dummy allocation and scavenge
     FixedArray<MiniHeap<PageSize>, 1> dummy_array{};
     gheap.allocSmallMiniheaps(SizeMap::SizeClass(256), 256, dummy_array, tid);
-    MiniHeap<PageSize>* dummy_mh = dummy_array[0];
+    MiniHeap<PageSize> *dummy_mh = dummy_array[0];
     if (dummy_mh) {
-      void* dummy_ptr = dummy_mh->mallocAt(gheap.arenaBegin(), 0);
+      void *dummy_ptr = dummy_mh->mallocAt(gheap.arenaBegin(), 0);
       if (dummy_ptr) {
         gheap.free(dummy_ptr);
       }
@@ -59,7 +59,6 @@ void testPrecisePageDeallocation() {
     // Trigger scavenge to initialize allocatedBitmap's internal heap
     gheap.scavenge(true);
   }
-
 
   printf("\n=== Testing Precise Page Deallocation ===\n");
   printf("Page size: %zu bytes\n", pageSize);
@@ -76,8 +75,8 @@ void testPrecisePageDeallocation() {
   // Get baseline memory stats AFTER warm-up to avoid measuring initialization
   MemoryStats baseline;
   ASSERT_TRUE(MemoryStats::get(baseline));
-  printf("Baseline RSS: %" PRIu64 " bytes, Mesh memory: %" PRIu64 " bytes\n",
-         baseline.resident_size_bytes, baseline.mesh_memory_bytes);
+  printf("Baseline RSS: %" PRIu64 " bytes, Mesh memory: %" PRIu64 " bytes\n", baseline.resident_size_bytes,
+         baseline.mesh_memory_bytes);
 
   // Phase 1: Allocate exactly 2 pages worth of objects in 2 miniheaps
   // Use small objects to fill the pages
@@ -89,13 +88,13 @@ void testPrecisePageDeallocation() {
   // Create first miniheap and allocate objects at specific offsets
   FixedArray<MiniHeap<PageSize>, 1> array1{};
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(objectSize), objectSize, array1, tid);
-  MiniHeap<PageSize>* mh1 = array1[0];
+  MiniHeap<PageSize> *mh1 = array1[0];
   ASSERT_NE(mh1, nullptr);
 
   // Create second miniheap
   FixedArray<MiniHeap<PageSize>, 1> array2{};
   gheap.allocSmallMiniheaps(SizeMap::SizeClass(objectSize), objectSize, array2, tid);
-  MiniHeap<PageSize>* mh2 = array2[0];
+  MiniHeap<PageSize> *mh2 = array2[0];
   ASSERT_NE(mh2, nullptr);
 
   // Determine the exact region covering both spans.
@@ -106,7 +105,7 @@ void testPrecisePageDeallocation() {
   const size_t region_start_off = std::min(span1_offset, span2_offset);
   const size_t region_end_off = std::max(span1_offset + span1_pages, span2_offset + span2_pages);
   const size_t region_size = (region_end_off - region_start_off) * pageSize;
-  const char* region_begin = gheap.arenaBegin() + region_start_off * pageSize;
+  const char *region_begin = gheap.arenaBegin() + region_start_off * pageSize;
 
   auto measure_region_bytes = [&]() -> uint64_t {
 #ifdef __APPLE__
@@ -129,14 +128,14 @@ void testPrecisePageDeallocation() {
   const uint64_t baseline_region_bytes = measure_region_bytes();
 
   // Allocate objects in complementary patterns so they can be meshed
-  std::vector<void*> ptrs1, ptrs2;
+  std::vector<void *> ptrs1, ptrs2;
 
   // We need at least 2 objects per miniheap to demonstrate meshing
   const size_t numObjects = std::min(objectsPerPage, static_cast<size_t>(16));
 
   // MiniHeap 1: Allocate at even indices
   for (size_t i = 0; i < numObjects; i += 2) {
-    void* ptr = mh1->mallocAt(gheap.arenaBegin(), i);
+    void *ptr = mh1->mallocAt(gheap.arenaBegin(), i);
     if (ptr) {
       ptrs1.push_back(ptr);
       memset(ptr, 0xAA, objectSize);  // Fill to ensure pages are allocated
@@ -145,7 +144,7 @@ void testPrecisePageDeallocation() {
 
   // MiniHeap 2: Allocate at odd indices
   for (size_t i = 1; i < numObjects; i += 2) {
-    void* ptr = mh2->mallocAt(gheap.arenaBegin(), i);
+    void *ptr = mh2->mallocAt(gheap.arenaBegin(), i);
     if (ptr) {
       ptrs2.push_back(ptr);
       memset(ptr, 0xBB, objectSize);  // Fill to ensure pages are allocated
@@ -154,11 +153,11 @@ void testPrecisePageDeallocation() {
 
   // Force pages to be resident
   for (auto ptr : ptrs1) {
-    volatile char dummy = *reinterpret_cast<char*>(ptr);
+    volatile char dummy = *reinterpret_cast<char *>(ptr);
     (void)dummy;
   }
   for (auto ptr : ptrs2) {
-    volatile char dummy = *reinterpret_cast<char*>(ptr);
+    volatile char dummy = *reinterpret_cast<char *>(ptr);
     (void)dummy;
   }
 
@@ -181,7 +180,7 @@ void testPrecisePageDeallocation() {
   ASSERT_EQ(len, mh2->bitmap().byteCount());
 
   ASSERT_TRUE(mesh::bitmapsMeshable(bitmap1, bitmap2, len))
-    << "Miniheaps should be meshable with complementary allocation patterns";
+      << "Miniheaps should be meshable with complementary allocation patterns";
 
   // Phase 3: Mesh the miniheaps - this should free exactly 1 page
   printf("\n=== Phase 3: Meshing miniheaps (should free exactly %zu bytes) ===\n", pageSize);
@@ -209,14 +208,14 @@ void testPrecisePageDeallocation() {
 
   // CRITICAL ASSERTION: Meshing should free exactly the pages from the second miniheap
   EXPECT_EQ(effective_mesh_memory_freed, span2_pages * pageSize)
-    << "Meshing should free exactly the pages from the second miniheap";
+      << "Meshing should free exactly the pages from the second miniheap";
 
   // Verify data integrity after meshing
   for (auto ptr : ptrs1) {
-    ASSERT_EQ(*reinterpret_cast<uint8_t*>(ptr), 0xAA) << "Data corruption in mh1";
+    ASSERT_EQ(*reinterpret_cast<uint8_t *>(ptr), 0xAA) << "Data corruption in mh1";
   }
   for (auto ptr : ptrs2) {
-    ASSERT_EQ(*reinterpret_cast<uint8_t*>(ptr), 0xBB) << "Data corruption in mh2";
+    ASSERT_EQ(*reinterpret_cast<uint8_t *>(ptr), 0xBB) << "Data corruption in mh2";
   }
 
   // Phase 4: Clean up and verify return to baseline
@@ -258,7 +257,7 @@ void testMemoryReductionAfterFree() {
   }
 
   // Direct test of memory release through free/scavenge
-  GlobalHeap<PageSize>& gheap = runtime<PageSize>().heap();
+  GlobalHeap<PageSize> &gheap = runtime<PageSize>().heap();
 
   printf("\n=== Testing Memory Release After Free ===\n");
 
@@ -268,14 +267,14 @@ void testMemoryReductionAfterFree() {
 
   // Allocate a large block to ensure we have physical pages
   const size_t blockSize = 1024 * 1024;  // 1MB
-  void* ptr = gheap.malloc(blockSize);
+  void *ptr = gheap.malloc(blockSize);
   ASSERT_NE(ptr, nullptr);
 
   // Fill with data to ensure pages are allocated
   memset(ptr, 0xFF, blockSize);
 
   // Force pages to be resident
-  volatile char dummy = *reinterpret_cast<char*>(ptr);
+  volatile char dummy = *reinterpret_cast<char *>(ptr);
   (void)dummy;
 
   MemoryStats after_alloc;
@@ -327,8 +326,7 @@ TEST(MeshMemory, BasicMemoryStats) {
   ASSERT_TRUE(MemoryStats::get(stats));
 
   printf("\n=== Basic Memory Statistics ===\n");
-  printf("Resident Size (RSS): %.2f MB\n",
-         stats.resident_size_bytes / (1024.0 * 1024.0));
+  printf("Resident Size (RSS): %.2f MB\n", stats.resident_size_bytes / (1024.0 * 1024.0));
 
   // Just verify we got valid values
   EXPECT_GT(stats.resident_size_bytes, 0);

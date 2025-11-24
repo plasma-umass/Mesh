@@ -91,18 +91,18 @@ static constexpr uint64_t kPageSize16K = 16384;
 
 // Runtime page size detection for Apple Silicon (16KB) and x86 (4KB) compatibility
 namespace internal {
-  inline size_t initPageSize() {
+inline size_t initPageSize() {
 #if defined(_WIN32)
-    SYSTEM_INFO sysInfo;
-    GetSystemInfo(&sysInfo);
-    return sysInfo.dwPageSize;
+  SYSTEM_INFO sysInfo;
+  GetSystemInfo(&sysInfo);
+  return sysInfo.dwPageSize;
 #elif defined(__linux__)
-    return getauxval(AT_PAGESZ);
+  return getauxval(AT_PAGESZ);
 #else
-    return static_cast<size_t>(sysconf(_SC_PAGESIZE));
+  return static_cast<size_t>(sysconf(_SC_PAGESIZE));
 #endif
-  }
 }
+}  // namespace internal
 
 #if defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
 // Apple Silicon always uses 16KB pages; make this a compile-time constant so
@@ -237,7 +237,7 @@ using std::unique_lock;
 #define ATTRIBUTE_ALIGNED(s) __attribute__((aligned(s)))
 #define ATTRIBUTE_MALLOC __attribute__((malloc))
 #define ATTRIBUTE_ALLOC_SIZE(x) __attribute__((alloc_size(x)))
-#define ATTRIBUTE_ALLOC_SIZE2(x,y) __attribute__((alloc_size(x, y)))
+#define ATTRIBUTE_ALLOC_SIZE2(x, y) __attribute__((alloc_size(x, y)))
 #define CACHELINE_SIZE 64
 #define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 #define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
@@ -284,8 +284,8 @@ void debug(const char *fmt, ...);
 
 namespace internal {
 // assertions that don't attempt to recursively malloc
-void __attribute__((noreturn))
-__mesh_assert_fail(const char *assertion, const char *file, const char *func, int line, const char *fmt, ...);
+void __attribute__((noreturn)) __mesh_assert_fail(const char *assertion, const char *file, const char *func, int line,
+                                                  const char *fmt, ...);
 
 inline static mutex *getSeedMutex() {
   static char muBuf[sizeof(mutex)];

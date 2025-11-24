@@ -24,18 +24,18 @@ MiniHeapT *GetMiniHeap(const MiniHeapID id) {
   // But runtime() is now templated.
   // Ideally GetMiniHeap shouldn't depend on runtime() if possible, or runtime() needs to be accessible.
   // However, miniheapForID is on GlobalHeap which is on runtime().
-  
-  // HACK: We assume the caller knows what they are doing. 
+
+  // HACK: We assume the caller knows what they are doing.
   // But wait, runtime() requires PageSize.
   // If MiniHeapT is MiniHeap<4096>, we should call runtime<4096>().
   // We can deduce PageSize from MiniHeapT? No, MiniHeapT is a class.
   // But MiniHeap<PageSize> has kPageSize? No.
-  
+
   // Let's dispatch based on runtime page size check
   if (getPageSize() == kPageSize4K) {
-      return reinterpret_cast<MiniHeapT*>(runtime<kPageSize4K>().heap().miniheapForID(id));
+    return reinterpret_cast<MiniHeapT *>(runtime<kPageSize4K>().heap().miniheapForID(id));
   } else {
-      return reinterpret_cast<MiniHeapT*>(runtime<kPageSize16K>().heap().miniheapForID(id));
+    return reinterpret_cast<MiniHeapT *>(runtime<kPageSize16K>().heap().miniheapForID(id));
   }
 }
 
@@ -47,12 +47,12 @@ MiniHeapID GetMiniHeapID(const MiniHeapT *mh) {
   }
 
   if (getPageSize() == kPageSize4K) {
-      // Cast to specific type to satisfy type system, though void* would work for miniheapIDFor if it took void*
-      // miniheapIDFor takes const MiniHeapT*
-      // GlobalHeap<kPageSize4K>::miniheapIDFor takes const MiniHeap<kPageSize4K>*
-      return runtime<kPageSize4K>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<kPageSize4K>*>(mh));
+    // Cast to specific type to satisfy type system, though void* would work for miniheapIDFor if it took void*
+    // miniheapIDFor takes const MiniHeapT*
+    // GlobalHeap<kPageSize4K>::miniheapIDFor takes const MiniHeap<kPageSize4K>*
+    return runtime<kPageSize4K>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<kPageSize4K> *>(mh));
   } else {
-      return runtime<kPageSize16K>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<kPageSize16K>*>(mh));
+    return runtime<kPageSize16K>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<kPageSize16K> *>(mh));
   }
 }
 
@@ -217,7 +217,7 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
         // meshing relationship) to the one we had before grabbing the
         // lock.
         if (!mh->isRelated(origMh)) {
-          // the original miniheap was freed and a new (unrelated) 
+          // the original miniheap was freed and a new (unrelated)
           // Miniheap allocated for the address space.  nothing else
           // for us to do.
           return;
@@ -346,8 +346,8 @@ void GlobalHeap<PageSize>::meshLocked(MiniHeapT *dst, MiniHeapT *&src) {
 }
 
 template <size_t PageSize>
-size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray<PageSize> &mergeSets, SplitArray<PageSize> &left,
-                                       SplitArray<PageSize> &right) {
+size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray<PageSize> &mergeSets,
+                                                 SplitArray<PageSize> &left, SplitArray<PageSize> &right) {
   size_t mergeSetCount = 0;
   // memset(reinterpret_cast<void *>(&mergeSets), 0, sizeof(mergeSets));
   // memset(&left, 0, sizeof(left));
@@ -419,25 +419,26 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
 template <size_t PageSize>
 void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
   static MergeSetArray<PageSize> *MergeSetsPtr = []() {
-      void* ptr = mmap(nullptr, sizeof(MergeSetArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-      hard_assert(ptr != MAP_FAILED);
-      return new (ptr) MergeSetArray<PageSize>();
+    void *ptr =
+        mmap(nullptr, sizeof(MergeSetArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    hard_assert(ptr != MAP_FAILED);
+    return new (ptr) MergeSetArray<PageSize>();
   }();
   static MergeSetArray<PageSize> &MergeSets = *MergeSetsPtr;
   // static_assert(sizeof(MergeSets) == sizeof(void *) * 2 * 4096, "array too big");
   d_assert((reinterpret_cast<uintptr_t>(&MergeSets) & (getPageSize() - 1)) == 0);
 
   static SplitArray<PageSize> *LeftPtr = []() {
-      void* ptr = mmap(nullptr, sizeof(SplitArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-      hard_assert(ptr != MAP_FAILED);
-      return new (ptr) SplitArray<PageSize>();
+    void *ptr = mmap(nullptr, sizeof(SplitArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    hard_assert(ptr != MAP_FAILED);
+    return new (ptr) SplitArray<PageSize>();
   }();
   static SplitArray<PageSize> &Left = *LeftPtr;
 
   static SplitArray<PageSize> *RightPtr = []() {
-      void* ptr = mmap(nullptr, sizeof(SplitArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-      hard_assert(ptr != MAP_FAILED);
-      return new (ptr) SplitArray<PageSize>();
+    void *ptr = mmap(nullptr, sizeof(SplitArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    hard_assert(ptr != MAP_FAILED);
+    return new (ptr) SplitArray<PageSize>();
   }();
   static SplitArray<PageSize> &Right = *RightPtr;
 
@@ -516,8 +517,8 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
 namespace method {
 
 template <size_t PageSize>
-void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, size_t &leftSize,
-                                      SplitArray<PageSize> &right, size_t &rightSize) noexcept {
+void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left,
+                                      size_t &leftSize, SplitArray<PageSize> &right, size_t &rightSize) noexcept {
   d_assert(leftSize == 0);
   d_assert(rightSize == 0);
   MiniHeapID mhId = miniheaps->next();
@@ -543,9 +544,9 @@ void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry<PageSize> *mi
 }
 
 template <size_t PageSize>
-void ATTRIBUTE_NEVER_INLINE
-shiftedSplitting(MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, SplitArray<PageSize> &right,
-                 const function<bool(std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> &&)> &meshFound) noexcept {
+void ATTRIBUTE_NEVER_INLINE shiftedSplitting(
+    MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, SplitArray<PageSize> &right,
+    const function<bool(std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> &&)> &meshFound) noexcept {
   constexpr size_t t = 64;
 
   if (miniheaps->empty()) {
@@ -604,4 +605,4 @@ shiftedSplitting(MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<P
 }  // namespace method
 }  // namespace mesh
 
-#endif // MESH_GLOBAL_HEAP_IMPL_H
+#endif  // MESH_GLOBAL_HEAP_IMPL_H

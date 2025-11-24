@@ -13,7 +13,7 @@ void safe_increment() {
 
   for (size_t i = 0; i < 100; ++i) {
     c = new char[16];
-    delete [] c;
+    delete[] c;
   }
 
   std::cout << std::this_thread::get_id() << ": " << g_i << '\n';

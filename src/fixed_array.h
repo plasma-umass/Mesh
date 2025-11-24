@@ -19,8 +19,8 @@ public:
   using iterator_category = std::forward_iterator_tag;
   using value_type = typename FixedArray::value_type;
   using difference_type = std::ptrdiff_t;
-  using pointer = value_type*;
-  using reference = value_type&;
+  using pointer = value_type *;
+  using reference = value_type &;
 
   FixedArrayIter(const FixedArray &a, const uint32_t i) : _i(i), _array(a) {
   }
