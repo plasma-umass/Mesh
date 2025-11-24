@@ -20,17 +20,14 @@ endif
 
 ifeq ($(UNAME_S),Darwin)
 LIB_EXT      = dylib
-BAZEL_PREFIX = darwin
 LDCONFIG     =
 PREFIX       = /usr/local
 else
 LIB_EXT      = so
-BAZEL_PREFIX = k8
 LDCONFIG     = ldconfig
 endif
 
-LIB          = mesh
-FS_LIB       = libmesh.so
+LIB          = libmesh.$(LIB_EXT)
 INSTALL_LIB  = libmesh$(LIB_SUFFIX).$(LIB_EXT)
 
 COV_DIR = coverage
@@ -65,7 +62,7 @@ test check:
 	./bazel test $(BAZEL_CONFIG) //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
 
 install:
-	install -c -m 0755 bazel-out/$(BAZEL_PREFIX)-opt/bin/src/$(FS_LIB) $(PREFIX)/lib/$(INSTALL_LIB)
+	install -c -m 0755 bazel-bin/src/$(LIB) $(PREFIX)/lib/$(INSTALL_LIB)
 	$(LDCONFIG)
 	mkdir -p $(PREFIX)/include/plasma
 	install -c -m 0755 src/plasma/mesh.h $(PREFIX)/include/plasma/mesh.h

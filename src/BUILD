@@ -256,3 +256,69 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+MESH_SHARED_SRCS = [
+    "d_assert.cc",
+    "global_heap.cc",
+    "libmesh.cc",
+    "measure_rss.cc",
+    "meshable_arena.cc",
+    "real.cc",
+    "runtime.cc",
+    "thread_local_heap.cc",
+]
+
+MESH_SHARED_HDRS = glob([
+    "*.h",
+    "plasma/*.h",
+    "rng/*.h",
+    "static/*.h",
+])
+
+cc_library(
+    name = "mesh-textual-hdrs",
+    hdrs = MESH_SHARED_HDRS,
+    textual_hdrs = [
+        "rpl_printf.c",
+        "size_classes.def",
+        "wrapper.cc",
+        "gnu_wrapper.cc",
+        "mac_wrapper.cc",
+    ],
+    visibility = ["//visibility:private"],
+    deps = [
+        "@org_heaplayers",
+    ],
+)
+
+cc_binary(
+    name = "libmesh.dylib",
+    srcs = MESH_SHARED_SRCS + [
+        "memory_stats_macos.cc",
+    ],
+    copts = ["-Isrc"] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
+    linkshared = True,
+    target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":mesh-textual-hdrs",
+    ],
+)
+
+cc_binary(
+    name = "libmesh.so",
+    srcs = MESH_SHARED_SRCS + [
+        "memory_stats_linux.cc",
+    ],
+    copts = ["-Isrc"] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
+    linkshared = True,
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":mesh-textual-hdrs",
+    ],
+)
