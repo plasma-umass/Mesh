@@ -4,6 +4,8 @@ project(Mesh CXX C)
 
 
 SET(CMAKE_BUILD_TYPE "" CACHE STRING "Just making sure the default CMAKE_BUILD_TYPE configurations won't interfere" FORCE)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 #Set output folders
 set(CMAKE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
@@ -93,6 +95,14 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT HAS_IPO)
+    if(${HAS_IPO})
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+endif()
+
 if (${GCOV} AND GCC)
     find_program(GCOVp gcov)
     if (GCOVp)
@@ -138,32 +148,59 @@ else()
     message(FATAL_ERROR "Unknown option for Randomization parameter")
 endif()
 
-#Additional compile and linking configuration
-add_definitions(
-        -fPIC
-        -pipe
-        -fno-builtin-malloc
-        -fno-omit-frame-pointer
-        -ffunction-sections
-        -fdata-sections
-        -Werror=pointer-arith
-        -Wall -Wextra -pedantic
-        -Werror=return-type
-        -Wtype-limits
-        -Wempty-body
-        -Wvariadic-macros
-        -Wcast-align
-)
+if (NOT MSVC)
+    add_compile_options(
+            -fPIC
+            -pipe
+            -fno-builtin-malloc
+            -fno-builtin-free
+            -fno-omit-frame-pointer
+            -ffunction-sections
+            -fdata-sections
+            -Wall -Wextra -pedantic
+            -Werror=pointer-arith
+            -Werror=return-type
+            -Wtype-limits
+            -Wempty-body
+            -Winvalid-offsetof
+            -Wvariadic-macros
+            -Wcast-align
+            -Wno-unused-parameter
+            -Wno-unused-variable
+            -Woverloaded-virtual
+            -fvisibility=hidden
+    )
+endif()
+
+if (NOT WIN32)
+    add_compile_options(-pthread)
+endif()
+
+if (NOT APPLE AND NOT WIN32)
+    add_compile_definitions(
+            _DEFAULT_SOURCE
+            _BSD_SOURCE
+            _XOPEN_SOURCE=700
+    )
+    add_compile_options(
+            -U_FORTIFY_SOURCE
+            -Wa,--noexecstack
+    )
+endif()
+
+if (NOT MSVC)
+    add_link_options(-fvisibility=hidden)
+endif()
+
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND NOT MSVC)
+    add_compile_options(-march=westmere -mavx2)
+    add_link_options(-march=westmere -mavx2)
+endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${custom_c_flags}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${custom_cxx_flags}")
 
-if (NOT APPLE AND GCC)
-    add_definitions(
-            -Wno-unused-parameter
-            -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700
-            -Wundef
-        )
+if (NOT APPLE AND NOT WIN32)
     add_link_options(
             -Wl,--no-as-needed
             -Wl,--no-add-needed
@@ -176,11 +213,12 @@ if (NOT APPLE AND GCC)
             -ftls-model=initial-exec
             -Wl,--exclude-libs,ALL
             -static-libstdc++ -static-libgcc
+            -Wl,-Bstatic -l:libstdc++.a -Wl,-Bdynamic
             -lrt
         )
 endif()
 
-set(CMAKE_CXX_STANDARD 14)
+add_compile_definitions($<$<CONFIG:Release>:_FORTIFY_SOURCE=2>)
 
 #Create folder for coverage
 file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/coverage)

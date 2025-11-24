@@ -41,6 +41,14 @@ config_setting(
     visibility = ["//visibility:private"],
 )
 
+config_setting(
+    name = "opt_build",
+    values = {
+        "compilation_mode": "opt",
+    },
+    visibility = ["//visibility:private"],
+)
+
 NO_BUILTIN_MALLOC = [
     "-fno-builtin-malloc",
     "-fno-builtin-free",
@@ -56,12 +64,14 @@ COMMON_DEFINES = [] + select({
     ":shuffle_on_free": ["SHUFFLE_ON_FREE=1"],
     "//conditions:default": ["SHUFFLE_ON_FREE=0"],
 }) + select({
-    "@bazel_tools//src/conditions:linux_x86_64": [
-        # "_FORTIFY_SOURCE=2",  # TODO: only in release; but I think Bazel takes care of this?
+    "@platforms//os:linux": [
         "_DEFAULT_SOURCE",
         "_BSD_SOURCE",
         "_XOPEN_SOURCE=700",
     ],
+    "//conditions:default": [],
+}) + select({
+    ":opt_build": [],
     "//conditions:default": [],
 })
 
@@ -70,18 +80,37 @@ COMMON_LINKOPTS = [
     "-lpthread",
     "-ldl",
 ] + select({
-    "@bazel_tools//src/conditions:linux_x86_64": [
+    "@platforms//os:linux": [
         "-Wl,--no-as-needed",
         "-Wl,--no-add-needed",
         "-Wl,--sort-common",
+        "-Wl,--gc-sections",
         "-Wl,--hash-style=both",
         "-Wl,--no-undefined",
         "-Wl,-Bsymbolic-functions",
         "-Wl,-z,now,-z,relro",
-        "-Wl,--exclude-libs=libc++.a",
-        "-Wl,--exclude-libs=libc++abi.a",
-        "-Wl,--exclude-libs=libunwind.a",
+        "-ftls-model=initial-exec",
+        "-Wl,--exclude-libs,ALL",
+        "-static-libstdc++",
+        "-static-libgcc",
+        "-Wl,-Bstatic",
+        "-l:libstdc++.a",
+        "-Wl,-Bdynamic",
+        "-lrt",
     ],
+    "//conditions:default": [],
+})
+
+ARCH_LINKOPTS = select({
+    "@platforms//cpu:x86_64": [
+        "-march=westmere",
+        "-mavx2",
+    ],
+    "//conditions:default": [],
+})
+
+LTO_LINKOPTS = select({
+    ":opt_build": ["-flto"],
     "//conditions:default": [],
 })
 
@@ -112,7 +141,7 @@ cc_library(
     ]),
     copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     defines = COMMON_DEFINES,
-    linkopts = COMMON_LINKOPTS,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
     linkstatic = True,
     visibility = ["//visibility:private"],
     deps = [
@@ -138,7 +167,7 @@ cc_library(
     # TODO: config options here too
     copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     defines = COMMON_DEFINES,
-    linkopts = COMMON_LINKOPTS,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
     linkstatic = True,
     visibility = ["//visibility:private"],
     deps = [
@@ -171,7 +200,7 @@ cc_library(
     ]),
     copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     defines = COMMON_DEFINES,
-    linkopts = COMMON_LINKOPTS,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
     linkstatic = False,
     visibility = ["//visibility:public"],
     # disabled, as we directly specify the source files above.
@@ -201,9 +230,9 @@ cc_test(
     }),
     copts = [
         "-Isrc",
-    ] + MESH_DEFAULT_COPTS,
+    ] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     defines = COMMON_DEFINES,  # Include common defines for consistent behavior
-    linkopts = COMMON_LINKOPTS,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
     deps = [
         ":mesh-core",
         "@com_google_googletest//:gtest_main",
@@ -219,7 +248,8 @@ cc_test(
     copts = [
         "-Isrc",
     ] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
-    linkopts = COMMON_LINKOPTS,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
+    linkstatic = True,
     deps = [
         ":mesh",  # Use :mesh to get exported symbols like mesh_malloc
         "@com_google_benchmark//:benchmark",
