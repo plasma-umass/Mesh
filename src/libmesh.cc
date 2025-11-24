@@ -87,15 +87,6 @@ static long ifunc_syscall_3(long nr, long arg0, long arg1, long arg2) {
   return x0;
 }
 
-// Debug write to stderr using direct syscall
-__attribute__((no_stack_protector))
-static void ifunc_debug_write(const char *msg) {
-  const char *p = msg;
-  size_t len = 0;
-  while (*p++) len++;
-  ifunc_syscall_3(SYS_write, 2, (long)msg, len);
-}
-
 __attribute__((no_stack_protector))
 static long ifunc_syscall_1(long nr, long arg0) {
   register long x8 __asm__("x8") = nr;
@@ -154,15 +145,6 @@ static long ifunc_syscall_3(long nr, long arg0, long arg1, long arg2) {
     : "rcx", "r11", "memory", "cc"
   );
   return ret;
-}
-
-// Debug write to stderr using direct syscall
-__attribute__((no_stack_protector))
-static void ifunc_debug_write(const char *msg) {
-  const char *p = msg;
-  size_t len = 0;
-  while (*p++) len++;
-  ifunc_syscall_3(SYS_write, 2, (long)msg, len);
 }
 
 __attribute__((no_stack_protector))
