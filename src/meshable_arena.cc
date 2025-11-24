@@ -561,36 +561,10 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   trackMeshed(removedSpan);
 
 #ifdef __APPLE__
-  if (_fd >= 0) {
-    // macOS with file-backed memory: Use mmap to create file-backed alias
-    // This enables F_PUNCHHOLE to work correctly
-    void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * pageSize);
-    hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-  } else {
-    // Fallback: Use Mach VM API for anonymous memory (legacy path)
-    vm_prot_t cur_protection = VM_PROT_DEFAULT;
-    vm_prot_t max_protection = VM_PROT_DEFAULT;
-
-    mach_vm_address_t target_address = reinterpret_cast<mach_vm_address_t>(remove);
-    mach_vm_address_t source_address = reinterpret_cast<mach_vm_address_t>(keep);
-
-    kern_return_t kr = mach_vm_remap(mach_task_self(),  // target task
-                                     &target_address,   // target address (in/out)
-                                     sz,                // size
-                                     0,                 // mask (0 = no specific alignment beyond size)
-                                     VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,  // flags: fixed address, overwrite existing
-                                     mach_task_self(),                     // source task
-                                     source_address,                       // source address
-                                     FALSE,                                // copy (FALSE = share same physical memory)
-                                     &cur_protection,                      // current protection (out)
-                                     &max_protection,                      // max protection (out)
-                                     VM_INHERIT_SHARE                      // inheritance
-    );
-
-    hard_assert_msg(kr == KERN_SUCCESS, "mach_vm_remap failed: %d", kr);
-    hard_assert_msg(target_address == reinterpret_cast<mach_vm_address_t>(remove),
-                    "vm_remap changed target address: expected %p, got %p", remove, (void *)target_address);
-  }
+  hard_assert(_fd >= 0);
+  // macOS: Use mmap to create file-backed alias so F_PUNCHHOLE can release pages
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * pageSize);
+  hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
 #else
   // Linux: Use mmap to create file-backed alias
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * pageSize);
