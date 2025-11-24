@@ -18,3 +18,6 @@ build:shuffle-on-free --define shuffle_on_free=true
 
 build:modern-amd64 --copt=-mavx # --copt=-march=westmere
 build:modern-amd64 --linkopt=-mavx # --linkopt=-march=westmere
+
+build:modern-arm64 --copt=-mcpu=native
+build:modern-arm64 --linkopt=-mcpu=native
