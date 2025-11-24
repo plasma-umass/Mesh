@@ -5,6 +5,7 @@
 build --cxxopt='-std=c++17'
 #build --crosstool_top=@llvm_toolchain//:toolchain --copt=-D_LIBCPP_ENABLE_NODISCARD
 build --strip=never
+build --experimental_cc_static_library
 
 # largely from sorbet
 build:debugsymbols --copt=-g3

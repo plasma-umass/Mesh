@@ -19,16 +19,20 @@ BAZEL_CONFIG =
 endif
 
 ifeq ($(UNAME_S),Darwin)
-LIB_EXT      = dylib
-LDCONFIG     =
-PREFIX       = /usr/local
+LIB_EXT        = dylib
+STATIC_TARGET  = mesh_static_macos
+LDCONFIG       =
+PREFIX         = /usr/local
 else
-LIB_EXT      = so
-LDCONFIG     = ldconfig
+LIB_EXT        = so
+STATIC_TARGET  = mesh_static_linux
+LDCONFIG       = ldconfig
 endif
 
-LIB          = libmesh.$(LIB_EXT)
-INSTALL_LIB  = libmesh$(LIB_SUFFIX).$(LIB_EXT)
+DYNAMIC_LIB    = libmesh.$(LIB_EXT)
+STATIC_LIB     = lib$(STATIC_TARGET).a
+INSTALL_DYNAMIC = libmesh$(LIB_SUFFIX).$(LIB_EXT)
+INSTALL_STATIC  = libmesh$(LIB_SUFFIX).a
 
 COV_DIR = coverage
 CONFIG  = Makefile
@@ -56,18 +60,19 @@ endif
 all: test build
 
 build lib:
-	./bazel build $(BAZEL_CONFIG) -c opt //src:$(LIB)
+	./bazel build $(BAZEL_CONFIG) -c opt //src:$(DYNAMIC_LIB) //src:$(STATIC_TARGET)
 
 test check:
 	./bazel test $(BAZEL_CONFIG) //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
 
 install:
-	install -c -m 0755 bazel-bin/src/$(LIB) $(PREFIX)/lib/$(INSTALL_LIB)
+	install -c -m 0755 bazel-bin/src/$(DYNAMIC_LIB) $(PREFIX)/lib/$(INSTALL_DYNAMIC)
+	install -c -m 0644 bazel-bin/src/$(STATIC_LIB) $(PREFIX)/lib/$(INSTALL_STATIC)
 	$(LDCONFIG)
 	mkdir -p $(PREFIX)/include/plasma
 	install -c -m 0755 src/plasma/mesh.h $(PREFIX)/include/plasma/mesh.h
 
-clang-coverage: $(UNIT_BIN) $(LIB) $(CONFIG)
+clang-coverage: $(UNIT_BIN) $(CONFIG)
 	mkdir -p "$(COV_DIR)"
 	rm -f "$(COV_DIR)/unit.test.profdata"
 	cd "$(COV_DIR)" && llvm-profdata merge -sparse ../default.profraw -o unit.test.profdata

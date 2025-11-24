@@ -322,3 +322,49 @@ cc_binary(
         ":mesh-textual-hdrs",
     ],
 )
+
+cc_library(
+    name = "mesh-static-macos",
+    srcs = MESH_SHARED_SRCS + [
+        "memory_stats_macos.cc",
+    ],
+    copts = ["-Isrc"] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":mesh-textual-hdrs",
+    ],
+)
+
+cc_library(
+    name = "mesh-static-linux",
+    srcs = MESH_SHARED_SRCS + [
+        "memory_stats_linux.cc",
+    ],
+    copts = ["-Isrc"] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":mesh-textual-hdrs",
+    ],
+)
+
+cc_static_library(
+    name = "mesh_static_macos",
+    deps = [":mesh-static-macos"],
+    target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//visibility:public"],
+)
+
+cc_static_library(
+    name = "mesh_static_linux",
+    deps = [":mesh-static-linux"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+)
