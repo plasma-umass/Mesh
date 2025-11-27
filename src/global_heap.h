@@ -280,10 +280,23 @@ public:
 
     d_assert(sizeClass >= 0);
 
-    for (MiniHeapT *oldMH : miniheaps) {
-      releaseMiniheapLocked(oldMH, sizeClass);
+    // Only detach MiniHeaps that are mostly empty (good meshing candidates).
+    // Keep high-occupancy MiniHeaps attached so frees can use the fast path.
+    uint32_t keepCount = 0;
+    for (uint32_t i = 0; i < miniheaps.size(); i++) {
+      MiniHeapT *oldMH = miniheaps[i];
+      const auto inUse = oldMH->inUseCount();
+      const auto maxCount = oldMH->maxCount();
+      // Detach if less than 25% full - these are good meshing candidates
+      // and have few live objects that would hit the slow free path
+      if (inUse * 4 < maxCount) {
+        releaseMiniheapLocked(oldMH, sizeClass);
+      } else {
+        // Keep this MiniHeap attached for fast-path frees
+        miniheaps.set(keepCount++, oldMH);
+      }
     }
-    miniheaps.clear();
+    miniheaps.setSize(keepCount);
 
     d_assert(objectSize <= _maxObjectSize);
 

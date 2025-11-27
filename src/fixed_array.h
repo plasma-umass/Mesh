@@ -90,6 +90,16 @@ public:
     _size++;
   }
 
+  void setSize(uint32_t newSize) {
+    d_assert(newSize <= _size);
+    _size = newSize;
+  }
+
+  void set(uint32_t i, T *obj) {
+    d_assert(i < Capacity);
+    _objects[i] = obj;
+  }
+
   T *operator[](uint32_t i) const {
     // d_assert(i < _size);
     return _objects[i];
