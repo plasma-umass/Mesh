@@ -33,6 +33,7 @@ private:
   static constexpr uint32_t FreelistIdShift = 6;
   static constexpr uint32_t ShuffleVectorOffsetShift = 8;
   static constexpr uint32_t MaxCountShift = 16;
+  static constexpr uint32_t PendingOffset = 27;
   static constexpr uint32_t MeshedOffset = 30;
 
   inline void ATTRIBUTE_ALWAYS_INLINE setMasked(uint32_t mask, uint32_t newVal) {
@@ -69,6 +70,29 @@ public:
     setMasked(mask, newVal);
   }
 
+  // Atomically set pending flag if current state is Full.
+  // FreelisId remains Full. Returns true on success.
+  inline bool trySetPendingFromFull() {
+    constexpr uint32_t freelistMask = static_cast<uint32_t>(0x3) << FreelistIdShift;
+    constexpr uint32_t fullVal = static_cast<uint32_t>(list::Full) << FreelistIdShift;
+    constexpr uint32_t pendingBit = static_cast<uint32_t>(1) << PendingOffset;
+
+    uint32_t oldFlags = _flags.load(std::memory_order_relaxed);
+    while (true) {
+      if ((oldFlags & freelistMask) != fullVal) {
+        return false;
+      }
+      if (oldFlags & pendingBit) {
+        return false;  // Already pending
+      }
+      // Set pending flag, keep freelistId as Full
+      uint32_t desired = oldFlags | pendingBit;
+      if (_flags.compare_exchange_weak(oldFlags, desired, std::memory_order_release, std::memory_order_relaxed)) {
+        return true;
+      }
+    }
+  }
+
   inline uint32_t maxCount() const {
     // XXX: does this assume little endian?
     // 0x7ff = 11 bits, supports values up to 2047 (we cap at 1024 for bitmap limit)
@@ -100,6 +124,18 @@ public:
 
   inline bool ATTRIBUTE_ALWAYS_INLINE isMeshed() const {
     return is(MeshedOffset);
+  }
+
+  inline void setPending() {
+    set(PendingOffset);
+  }
+
+  inline void clearPending() {
+    unset(PendingOffset);
+  }
+
+  inline bool ATTRIBUTE_ALWAYS_INLINE isPending() const {
+    return is(PendingOffset);
   }
 
 private:
@@ -315,6 +351,19 @@ public:
 
   inline void setFreelistId(uint8_t id) {
     _flags.setFreelistId(id);
+  }
+
+  // Atomically set pending flag if current state is Full.
+  inline bool trySetPendingFromFull() {
+    return _flags.trySetPendingFromFull();
+  }
+
+  inline bool isPending() const {
+    return _flags.isPending();
+  }
+
+  inline void clearPending() {
+    _flags.clearPending();
   }
 
   inline pid_t current() const {

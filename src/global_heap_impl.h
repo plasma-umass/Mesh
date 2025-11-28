@@ -136,6 +136,7 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
     // and now.  synchronize to avoid races
     d_assert(sizeClass >= 0 && sizeClass < kNumBins);
     lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+    drainPendingPartialLocked(sizeClass);
 
     const auto origMh = mh;
     mh = miniheapForWithEpoch(ptr, startEpoch);
@@ -183,66 +184,77 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
     // make sure to update the littleheaps
     if (!isAttached && (remaining == 0 || freelistId == list::Full)) {
       d_assert(sizeClass >= 0 && sizeClass < kNumBins);
-      lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
 
-      // there are 2 ways we could have raced with meshing:
-      //
-      // 1. when writing to the MiniHeap's bitmap (which we check for
-      //    above with the !_meshEpoch.isSame(current)).  this is what
-      //    the outer if statement here takes care of.
-      //
-      // 2. this thread losing the race with acquiring _miniheapLocks[sizeClass]
-      //    (what we care about here).  for thi case, we know a) our
-      //    write to the MiniHeap's bitmap succeeded (or we would be
-      //    in the other side of the outer if statement), and b) our
-      //    MiniHeap could have been freed from under us while we were
-      //    waiting for this lock (if e.g. remaining == 0, a mesh
-      //    happened on another thread, and the other thread notices
-      //    this MiniHeap is empty (b.c. an empty MiniHeap meshes with
-      //    every other MiniHeap).  We need to be careful here.
+      if (remaining > 0 && freelistId == list::Full) {
+        // Lock-free path: Full -> Partial transition
+        // Either we succeed in pushing to pending list, or another thread
+        // already did it. Either way, no lock needed.
+        tryPushPendingPartial(mh, sizeClass);
+        shouldMesh = true;
+      } else {
+        // remaining == 0: need lock for Empty transition
+        lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+        drainPendingPartialLocked(sizeClass);
 
-      const auto origMh = mh;
-      // we have to reload the miniheap here because of the
-      // just-described possible race
-      mh = miniheapForWithEpoch(ptr, startEpoch);
+        // there are 2 ways we could have raced with meshing:
+        //
+        // 1. when writing to the MiniHeap's bitmap (which we check for
+        //    above with the !_meshEpoch.isSame(current)).  this is what
+        //    the outer if statement here takes care of.
+        //
+        // 2. this thread losing the race with acquiring _miniheapLocks[sizeClass]
+        //    (what we care about here).  for thi case, we know a) our
+        //    write to the MiniHeap's bitmap succeeded (or we would be
+        //    in the other side of the outer if statement), and b) our
+        //    MiniHeap could have been freed from under us while we were
+        //    waiting for this lock (if e.g. remaining == 0, a mesh
+        //    happened on another thread, and the other thread notices
+        //    this MiniHeap is empty (b.c. an empty MiniHeap meshes with
+        //    every other MiniHeap).  We need to be careful here.
 
-      // if the MiniHeap associated with the ptr we freed has changed,
-      // there are a few possibilities.
-      if (unlikely(mh != origMh)) {
-        // another thread took care of freeing this MiniHeap for us,
-        // super!  nothing else to do.
-        if (mh == nullptr) {
+        const auto origMh = mh;
+        // we have to reload the miniheap here because of the
+        // just-described possible race
+        mh = miniheapForWithEpoch(ptr, startEpoch);
+
+        // if the MiniHeap associated with the ptr we freed has changed,
+        // there are a few possibilities.
+        if (unlikely(mh != origMh)) {
+          // another thread took care of freeing this MiniHeap for us,
+          // super!  nothing else to do.
+          if (mh == nullptr) {
+            return;
+          }
+
+          // check to make sure the new MiniHeap is related (via a
+          // meshing relationship) to the one we had before grabbing the
+          // lock.
+          if (!mh->isRelated(origMh)) {
+            // the original miniheap was freed and a new (unrelated)
+            // Miniheap allocated for the address space.  nothing else
+            // for us to do.
+            return;
+          } else {
+            // TODO: we should really store 'created epoch' on mh and
+            // check those are the same here, too.
+          }
+        }
+
+        if (unlikely(mh->sizeClass() != sizeClass || mh->isLargeAlloc())) {
+          // TODO: This papers over a bug where the miniheap was freed
+          //  + reused out from under us while we were waiting for the mh lock.
+          //  It doesn't eliminate the problem (which should be solved
+          //  by storing the 'created epoch' on the MiniHeap), but it should
+          //  further reduce its probability
           return;
         }
 
-        // check to make sure the new MiniHeap is related (via a
-        // meshing relationship) to the one we had before grabbing the
-        // lock.
-        if (!mh->isRelated(origMh)) {
-          // the original miniheap was freed and a new (unrelated)
-          // Miniheap allocated for the address space.  nothing else
-          // for us to do.
-          return;
-        } else {
-          // TODO: we should really store 'created epoch' on mh and
-          // check those are the same here, too.
-        }
+        // a lot could have happened between when we read this without
+        // the lock held and now; just recalculate it.
+        remaining = mh->inUseCount();
+        postFreeLocked(mh, sizeClass, remaining);
+        // Note: flushBinLocked deferred to next mesh cycle (requires arena lock)
       }
-
-      if (unlikely(mh->sizeClass() != sizeClass || mh->isLargeAlloc())) {
-        // TODO: This papers over a bug where the miniheap was freed
-        //  + reused out from under us while we were waiting for the mh lock.
-        //  It doesn't eliminate the problem (which should be solved
-        //  by storing the 'created epoch' on the MiniHeap), but it should
-        //  further reduce its probability
-        return;
-      }
-
-      // a lot could have happened between when we read this without
-      // the lock held and now; just recalculate it.
-      remaining = mh->inUseCount();
-      postFreeLocked(mh, sizeClass, remaining);
-      // Note: flushBinLocked deferred to next mesh cycle (requires arena lock)
     } else {
       shouldMesh = !isAttached;
     }
@@ -472,8 +484,9 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
 
   // const auto start = time::now();
 
-  // first, clear out any free memory we might have
+  // first, drain pending partial lists and clear out any free memory we might have
   for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
+    drainPendingPartialLocked(sizeClass);
     flushBinLocked(sizeClass);
   }
 

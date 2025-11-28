@@ -194,18 +194,86 @@ public:
     case list::Partial:
       return &_partialFreelist[sizeClass].first;
     case list::Full:
-      return &_fullList[sizeClass].first;
+      // Full miniheaps are not on any list (lock-free transition path)
+      return nullptr;
     }
     // remaining case is 'attached', for which there is no freelist
     return nullptr;
   }
 
+  // Drain the lock-free pending partial list into the actual partial freelist.
+  // Must be called with _miniheapLocks[sizeClass] held.
+  inline void drainPendingPartialLocked(int sizeClass) {
+    MiniHeapID head = _pendingPartialHead[sizeClass].exchange(MiniHeapID{}, std::memory_order_acquire);
+
+    while (head.hasValue() && head != list::Head) {
+      MiniHeapT *mh = GetMiniHeap<MiniHeapT>(head);
+      MiniHeapID next = mh->getFreelist()->next();
+
+      // Clear the pending link before add() so it doesn't try to remove from a list
+      mh->getFreelist()->setNext(MiniHeapID{});
+      mh->getFreelist()->setPrev(MiniHeapID{});
+
+      // Check current state - inUse may have changed since queuing
+      auto inUse = mh->inUseCount();
+      auto max = mh->maxCount();
+
+      // IMPORTANT: add() sets freelistId BEFORE we clear pending.
+      // This prevents races where another thread could push the same miniheap
+      // back to pending between clearing pending and changing freelistId.
+      // Once freelistId != Full, trySetPendingFromFull will fail.
+      if (inUse == 0) {
+        _emptyFreelist[sizeClass].first.add(nullptr, list::Empty, list::Head, mh);
+        _emptyFreelist[sizeClass].second++;
+      } else if (inUse == max) {
+        // Rare: became full again. Keep freelistId=Full, but we MUST clear pending
+        // before the loop continues. We set freelistId explicitly to mark the
+        // transition complete even though it's already Full.
+      } else {
+        // Common case: add to partial freelist
+        _partialFreelist[sizeClass].first.add(nullptr, list::Partial, list::Head, mh);
+        _partialFreelist[sizeClass].second++;
+      }
+
+      // Clear pending AFTER freelistId is updated. This closes the race window.
+      mh->clearPending();
+
+      head = next;
+    }
+  }
+
+  // Push a miniheap onto the pending partial list (lock-free).
+  // Atomically sets pending flag if Full, then pushes to pending list.
+  // FreelisId remains Full until drained. If not Full, this is a no-op.
+  inline void tryPushPendingPartial(MiniHeapT *mh, int sizeClass) {
+    // Atomically set pending flag if Full
+    if (!mh->trySetPendingFromFull()) {
+      return;
+    }
+
+    // Push onto pending list using _freelist._next for linking
+    MiniHeapID myId = GetMiniHeapID(mh);
+    MiniHeapID oldHead = _pendingPartialHead[sizeClass].load(std::memory_order_relaxed);
+    do {
+      mh->getFreelist()->setNext(oldHead);
+    } while (!_pendingPartialHead[sizeClass].compare_exchange_weak(oldHead, myId, std::memory_order_release,
+                                                                   std::memory_order_relaxed));
+  }
+
+  // Must call drainPendingPartialLocked before this if not already drained.
   inline bool postFreeLocked(MiniHeapT *mh, int sizeClass, size_t inUse) {
     // its possible we raced between reading isAttached + grabbing a lock.
     // just check here to avoid having to play whack-a-mole at each call site.
     if (mh->isAttached()) {
       return false;
     }
+
+    // If miniheap is pending (on lock-free pending list), don't manipulate it.
+    // The drain will handle it on next lock acquisition.
+    if (mh->isPending()) {
+      return false;
+    }
+
     const auto currFreelistId = mh->freelistId();
     auto currFreelist = freelistFor(currFreelistId, sizeClass);
     const auto max = mh->maxCount();
@@ -224,8 +292,15 @@ public:
       if (currFreelistId == list::Full) {
         return false;
       }
-      newListId = list::Full;
-      list = &_fullList[sizeClass];
+      // Full miniheaps are not on any list - just set state and remove from current list
+      if (currFreelist != nullptr) {
+        mh->getFreelist()->remove(currFreelist);
+      }
+      mh->setFreelistId(list::Full);
+      // Clear freelist pointers so they're known to be unlinked
+      mh->getFreelist()->setNext(MiniHeapID{});
+      mh->getFreelist()->setPrev(MiniHeapID{});
+      return false;
     } else {
       if (currFreelistId == list::Partial) {
         return false;
@@ -258,6 +333,7 @@ public:
     d_assert(sizeClass >= 0 && sizeClass < kNumBins);
 
     lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+    drainPendingPartialLocked(sizeClass);
     for (auto mh : miniheaps) {
       d_assert(mh->sizeClass() == sizeClass);
       releaseMiniheapLocked(mh, sizeClass);
@@ -319,6 +395,9 @@ public:
     // Lock ordering: arena lock first, then size-class lock
     lock_guard<mutex> arenaLock(_arenaLock);
     lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+
+    // Drain pending partial list so freed miniheaps are immediately available
+    drainPendingPartialLocked(sizeClass);
 
     for (MiniHeapT *oldMH : miniheaps) {
       releaseMiniheapLocked(oldMH, sizeClass);
@@ -638,9 +717,10 @@ private:
   std::array<std::pair<MiniHeapListEntryT, size_t>, kNumBins> _partialFreelist{
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
-  std::array<std::pair<MiniHeapListEntryT, size_t>, kNumBins> _fullList{
-      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
-      Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
+
+  // Lock-free pending partial list: miniheaps transitioning from Full to Partial
+  // are pushed here without holding locks. Drained to _partialFreelist under lock.
+  std::array<std::atomic<MiniHeapID>, kNumBins> _pendingPartialHead{};
 
   // Per-size-class locks to reduce contention on freelists
   mutable std::array<mutex, kNumBins> _miniheapLocks{};
@@ -657,7 +737,7 @@ private:
 
 static_assert(kNumBins == 25, "if this changes, add more 'Head's above");
 static_assert(sizeof(std::array<MiniHeapListEntry<4096>, kNumBins>) == kNumBins * 8, "list size is right");
-static_assert(sizeof(GlobalHeap<4096>) < (kNumBins * 8 * 3 + 64 * 7 + 100000), "gh small enough");
+static_assert(sizeof(GlobalHeap<4096>) < (kNumBins * 8 * 2 + kNumBins * 8 + 64 * 7 + 100000), "gh small enough");
 }  // namespace mesh
 
 #endif  // MESH_GLOBAL_HEAP_H
