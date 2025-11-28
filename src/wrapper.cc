@@ -12,6 +12,7 @@
 #include "common.h"
 #include "thread_local_heap.h"
 #include "dispatch_utils.h"
+#include "ifunc_resolver.h"
 
 using namespace mesh;
 
@@ -259,100 +260,168 @@ extern "C" MESH_EXPORT struct mallinfo CUSTOM_MALLINFO() {
 #ifndef NEW_INCLUDED
 #define NEW_INCLUDED
 
+// ===================================================================
+// C++ Operator Implementation Templates
+// ===================================================================
+// These template functions provide the actual implementation for each
+// C++ memory operator. On Linux, IFUNC resolvers select between 4KB
+// and 16KB variants at load time. On other platforms, runtime dispatch
+// is used.
+// ===================================================================
+
+template <size_t PageSize>
+static void *cxx_new_impl(size_t sz) {
+  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
+  if (unlikely(localHeap == nullptr)) {
+    return mesh::cxxNewSlowpath<PageSize>(sz);
+  }
+  return localHeap->cxxNew(sz);
+}
+
+template <size_t PageSize>
+static void *cxx_new_nothrow_impl(size_t sz, const std::nothrow_t &) {
+  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
+  if (unlikely(localHeap == nullptr)) {
+    return mesh::allocSlowpath<PageSize>(sz);
+  }
+  return localHeap->malloc(sz);
+}
+
+template <size_t PageSize>
+static void cxx_delete_impl(void *ptr) {
+  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
+  if (unlikely(localHeap == nullptr)) {
+    mesh::freeSlowpath<PageSize>(ptr);
+    return;
+  }
+  localHeap->free(ptr);
+}
+
+template <size_t PageSize>
+static void cxx_sized_delete_impl(void *ptr, size_t sz) {
+  auto *localHeap = ThreadLocalHeap<PageSize>::GetHeapIfPresent();
+  if (unlikely(localHeap == nullptr)) {
+    mesh::freeSlowpath<PageSize>(ptr);
+    return;
+  }
+  localHeap->sizedFree(ptr, sz);
+}
+
+#ifdef __linux__
+// ===================================================================
+// IFUNC Resolvers for C++ Operators
+// ===================================================================
+// These resolver functions run during dynamic linking to select the
+// appropriate page-size-specific implementation. They use the IFUNC
+// infrastructure from ifunc_resolver.h.
+// ===================================================================
+
+extern "C" {
+typedef void *(*cxx_new_func)(size_t);
+typedef void *(*cxx_new_nothrow_func)(size_t, const std::nothrow_t &);
+typedef void (*cxx_delete_func)(void *);
+typedef void (*cxx_sized_delete_func)(void *, size_t);
+
+__attribute__((no_stack_protector)) static cxx_new_func resolve_cxx_new() {
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
+  return (pageSize == kPageSize4K) ? cxx_new_impl<kPageSize4K> : cxx_new_impl<kPageSize16K>;
+}
+
+__attribute__((no_stack_protector)) static cxx_new_nothrow_func resolve_cxx_new_nothrow() {
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
+  return (pageSize == kPageSize4K) ? cxx_new_nothrow_impl<kPageSize4K> : cxx_new_nothrow_impl<kPageSize16K>;
+}
+
+__attribute__((no_stack_protector)) static cxx_delete_func resolve_cxx_delete() {
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
+  return (pageSize == kPageSize4K) ? cxx_delete_impl<kPageSize4K> : cxx_delete_impl<kPageSize16K>;
+}
+
+__attribute__((no_stack_protector)) static cxx_sized_delete_func resolve_cxx_sized_delete() {
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
+  return (pageSize == kPageSize4K) ? cxx_sized_delete_impl<kPageSize4K> : cxx_sized_delete_impl<kPageSize16K>;
+}
+}
+#endif  // __linux__
+
+// ===================================================================
+// C++ Operator Definitions
+// ===================================================================
+// On Linux, these use IFUNC for load-time dispatch. On other platforms,
+// they fall back to runtime page size checks.
+// ===================================================================
+
 MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz)
 #if defined(_GLIBCXX_THROW)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
+#ifdef __linux__
+    __attribute__((ifunc("resolve_cxx_new")));
+#else
 {
   if (likely(getPageSize() == kPageSize4K)) {
-    ThreadLocalHeap<kPageSize4K> *localHeap = ThreadLocalHeap<kPageSize4K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      return mesh::cxxNewSlowpath<kPageSize4K>(sz);
-    }
-    return localHeap->cxxNew(sz);
+    return cxx_new_impl<kPageSize4K>(sz);
   } else {
-    ThreadLocalHeap<kPageSize16K> *localHeap = ThreadLocalHeap<kPageSize16K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      return mesh::cxxNewSlowpath<kPageSize16K>(sz);
-    }
-    return localHeap->cxxNew(sz);
+    return cxx_new_impl<kPageSize16K>(sz);
   }
 }
-
-MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr)
-#if !defined(linux_)
-    throw()
 #endif
+
+MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr) noexcept
+#ifdef __linux__
+    __attribute__((ifunc("resolve_cxx_delete")));
+#else
 {
   if (likely(getPageSize() == kPageSize4K)) {
-    ThreadLocalHeap<kPageSize4K> *localHeap = ThreadLocalHeap<kPageSize4K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      mesh::freeSlowpath<kPageSize4K>(ptr);
-      return;
-    }
-    localHeap->free(ptr);
+    cxx_delete_impl<kPageSize4K>(ptr);
   } else {
-    ThreadLocalHeap<kPageSize16K> *localHeap = ThreadLocalHeap<kPageSize16K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      mesh::freeSlowpath<kPageSize16K>(ptr);
-      return;
-    }
-    localHeap->free(ptr);
+    cxx_delete_impl<kPageSize16K>(ptr);
   }
 }
+#endif
 
 #if !defined(__SUNPRO_CC) || __SUNPRO_CC > 0x420
-MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz, const std::nothrow_t &) throw() {
+MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz, const std::nothrow_t &nt) throw()
+#ifdef __linux__
+    __attribute__((ifunc("resolve_cxx_new_nothrow")));
+#else
+{
   if (likely(getPageSize() == kPageSize4K)) {
-    ThreadLocalHeap<kPageSize4K> *localHeap = ThreadLocalHeap<kPageSize4K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      return mesh::allocSlowpath<kPageSize4K>(sz);
-    }
-    return localHeap->malloc(sz);
+    return cxx_new_nothrow_impl<kPageSize4K>(sz, nt);
   } else {
-    ThreadLocalHeap<kPageSize16K> *localHeap = ThreadLocalHeap<kPageSize16K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      return mesh::allocSlowpath<kPageSize16K>(sz);
-    }
-    return localHeap->malloc(sz);
+    return cxx_new_nothrow_impl<kPageSize16K>(sz, nt);
   }
 }
+#endif
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz)
 #if defined(_GLIBCXX_THROW)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
+#ifdef __linux__
+    __attribute__((ifunc("resolve_cxx_new")));
+#else
 {
   if (likely(getPageSize() == kPageSize4K)) {
-    ThreadLocalHeap<kPageSize4K> *localHeap = ThreadLocalHeap<kPageSize4K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      return mesh::cxxNewSlowpath<kPageSize4K>(sz);
-    }
-    return localHeap->cxxNew(sz);
+    return cxx_new_impl<kPageSize4K>(sz);
   } else {
-    ThreadLocalHeap<kPageSize16K> *localHeap = ThreadLocalHeap<kPageSize16K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      return mesh::cxxNewSlowpath<kPageSize16K>(sz);
-    }
-    return localHeap->cxxNew(sz);
+    return cxx_new_impl<kPageSize16K>(sz);
   }
 }
+#endif
 
-MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz, const std::nothrow_t &) throw() {
+MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz, const std::nothrow_t &nt) throw()
+#ifdef __linux__
+    __attribute__((ifunc("resolve_cxx_new_nothrow")));
+#else
+{
   if (likely(getPageSize() == kPageSize4K)) {
-    ThreadLocalHeap<kPageSize4K> *localHeap = ThreadLocalHeap<kPageSize4K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      return mesh::allocSlowpath<kPageSize4K>(sz);
-    }
-    return localHeap->malloc(sz);
+    return cxx_new_nothrow_impl<kPageSize4K>(sz, nt);
   } else {
-    ThreadLocalHeap<kPageSize16K> *localHeap = ThreadLocalHeap<kPageSize16K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      return mesh::allocSlowpath<kPageSize16K>(sz);
-    }
-    return localHeap->malloc(sz);
+    return cxx_new_nothrow_impl<kPageSize16K>(sz, nt);
   }
 }
+#endif
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr)
 #if defined(_GLIBCXX_USE_NOEXCEPT)
@@ -363,73 +432,53 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr)
     _NOEXCEPT
 #endif
 #endif
+#ifdef __linux__
+    __attribute__((ifunc("resolve_cxx_delete")));
+#else
 {
   if (likely(getPageSize() == kPageSize4K)) {
-    ThreadLocalHeap<kPageSize4K> *localHeap = ThreadLocalHeap<kPageSize4K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      mesh::freeSlowpath<kPageSize4K>(ptr);
-      return;
-    }
-    localHeap->free(ptr);
+    cxx_delete_impl<kPageSize4K>(ptr);
   } else {
-    ThreadLocalHeap<kPageSize16K> *localHeap = ThreadLocalHeap<kPageSize16K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      mesh::freeSlowpath<kPageSize16K>(ptr);
-      return;
-    }
-    localHeap->free(ptr);
+    cxx_delete_impl<kPageSize16K>(ptr);
   }
 }
+#endif
 
 #if defined(__cpp_sized_deallocation) && __cpp_sized_deallocation >= 201309
 
-MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr, size_t sz)
-#if !defined(linux_)
-    throw()
-#endif
+MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr, size_t sz) noexcept
+#ifdef __linux__
+    __attribute__((ifunc("resolve_cxx_sized_delete")));
+#else
 {
   if (likely(getPageSize() == kPageSize4K)) {
-    ThreadLocalHeap<kPageSize4K> *localHeap = ThreadLocalHeap<kPageSize4K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      mesh::freeSlowpath<kPageSize4K>(ptr);
-      return;
-    }
-    localHeap->sizedFree(ptr, sz);
+    cxx_sized_delete_impl<kPageSize4K>(ptr, sz);
   } else {
-    ThreadLocalHeap<kPageSize16K> *localHeap = ThreadLocalHeap<kPageSize16K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      mesh::freeSlowpath<kPageSize16K>(ptr);
-      return;
-    }
-    localHeap->sizedFree(ptr, sz);
+    cxx_sized_delete_impl<kPageSize16K>(ptr, sz);
   }
 }
+#endif
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr, size_t sz)
 #if defined(__GNUC__)
     _GLIBCXX_USE_NOEXCEPT
 #endif
+#ifdef __linux__
+    __attribute__((ifunc("resolve_cxx_sized_delete")));
+#else
 {
   if (likely(getPageSize() == kPageSize4K)) {
-    ThreadLocalHeap<kPageSize4K> *localHeap = ThreadLocalHeap<kPageSize4K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      mesh::freeSlowpath<kPageSize4K>(ptr);
-      return;
-    }
-    localHeap->free(ptr);
+    cxx_sized_delete_impl<kPageSize4K>(ptr, sz);
   } else {
-    ThreadLocalHeap<kPageSize16K> *localHeap = ThreadLocalHeap<kPageSize16K>::GetHeapIfPresent();
-    if (unlikely(localHeap == nullptr)) {
-      mesh::freeSlowpath<kPageSize16K>(ptr);
-      return;
-    }
-    localHeap->free(ptr);
+    cxx_sized_delete_impl<kPageSize16K>(ptr, sz);
   }
 }
 #endif
 
-#endif
-#endif
+#endif  // __cpp_sized_deallocation
+
+#endif  // !defined(__SUNPRO_CC) || __SUNPRO_CC > 0x420
+#endif  // NEW_INCLUDED
 
 /***** replacement functions for GNU libc extensions to malloc *****/
 
