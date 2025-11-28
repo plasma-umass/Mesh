@@ -93,15 +93,25 @@ endif
 # Larson benchmark - multi-threaded allocation stress test
 # Default runs with meshing disabled for baseline comparison
 # Args: sleep_sec min_size max_size chunks_per_thread num_rounds seed num_threads
+LARSON_ARGS = 2 8 1000 5000 100 4141 8
+PERF_FREQ = 997
+FLAMEGRAPH_DIR = third_party/FlameGraph
+
 larson: larson-nomesh
 
 larson-mesh:
 	./bazel build $(BAZEL_CONFIG) --config=nolto -c opt //src:larson-benchmark
-	./bazel-bin/src/larson-benchmark 2 8 1000 5000 100 4141 8
+	./bazel-bin/src/larson-benchmark $(LARSON_ARGS)
 
 larson-nomesh:
 	./bazel build $(BAZEL_CONFIG) --config=disable-meshing --config=nolto -c opt //src:larson-benchmark
-	./bazel-bin/src/larson-benchmark 2 8 1000 5000 100 4141 8
+ifeq ($(UNAME_S),Linux)
+	perf record -F $(PERF_FREQ) -g --call-graph dwarf -o perf-larson-nomesh.data -- ./bazel-bin/src/larson-benchmark $(LARSON_ARGS)
+	perf script -i perf-larson-nomesh.data | $(FLAMEGRAPH_DIR)/stackcollapse-perf.pl | $(FLAMEGRAPH_DIR)/flamegraph.pl --title "larson-nomesh" > flamegraph-larson-nomesh.svg
+	@echo "Flamegraph written to flamegraph-larson-nomesh.svg"
+else
+	./bazel-bin/src/larson-benchmark $(LARSON_ARGS)
+endif
 
 format:
 	clang-format -i $(FORMAT_SRCS)
