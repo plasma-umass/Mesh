@@ -19,24 +19,9 @@ template <typename MiniHeapT>
 MiniHeapT *GetMiniHeap(const MiniHeapID id) {
   hard_assert(id.hasValue() && id != list::Head);
 
-  // We assume GetMiniHeap is called with the correct MiniHeap type for the active runtime
-  // This is tricky because we don't have PageSize here easily unless passed in
-  // But runtime() is now templated.
-  // Ideally GetMiniHeap shouldn't depend on runtime() if possible, or runtime() needs to be accessible.
-  // However, miniheapForID is on GlobalHeap which is on runtime().
-
-  // HACK: We assume the caller knows what they are doing.
-  // But wait, runtime() requires PageSize.
-  // If MiniHeapT is MiniHeap<4096>, we should call runtime<4096>().
-  // We can deduce PageSize from MiniHeapT? No, MiniHeapT is a class.
-  // But MiniHeap<PageSize> has kPageSize? No.
-
-  // Let's dispatch based on runtime page size check
-  if (getPageSize() == kPageSize4K) {
-    return reinterpret_cast<MiniHeapT *>(runtime<kPageSize4K>().heap().miniheapForID(id));
-  } else {
-    return reinterpret_cast<MiniHeapT *>(runtime<kPageSize16K>().heap().miniheapForID(id));
-  }
+  // Extract PageSize from the MiniHeap type at compile time
+  constexpr size_t PageSize = MiniHeapT::kPageSize;
+  return reinterpret_cast<MiniHeapT *>(runtime<PageSize>().heap().miniheapForID(id));
 }
 
 template <typename MiniHeapT>
@@ -46,14 +31,9 @@ MiniHeapID GetMiniHeapID(const MiniHeapT *mh) {
     return MiniHeapID{0};
   }
 
-  if (getPageSize() == kPageSize4K) {
-    // Cast to specific type to satisfy type system, though void* would work for miniheapIDFor if it took void*
-    // miniheapIDFor takes const MiniHeapT*
-    // GlobalHeap<kPageSize4K>::miniheapIDFor takes const MiniHeap<kPageSize4K>*
-    return runtime<kPageSize4K>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<kPageSize4K> *>(mh));
-  } else {
-    return runtime<kPageSize16K>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<kPageSize16K> *>(mh));
-  }
+  // Extract PageSize from the MiniHeap type at compile time
+  constexpr size_t PageSize = MiniHeapT::kPageSize;
+  return runtime<PageSize>().heap().miniheapIDFor(mh);
 }
 
 template <size_t PageSize>

@@ -356,7 +356,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
 #ifdef __linux__
-    __attribute__((ifunc("resolve_cxx_new")));
+        __attribute__((ifunc("resolve_cxx_new")));
 #else
 {
   if (likely(getPageSize() == kPageSize4K)) {
@@ -399,7 +399,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
 #ifdef __linux__
-    __attribute__((ifunc("resolve_cxx_new")));
+        __attribute__((ifunc("resolve_cxx_new")));
 #else
 {
   if (likely(getPageSize() == kPageSize4K)) {

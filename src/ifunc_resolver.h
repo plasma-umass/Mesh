@@ -107,8 +107,10 @@ __attribute__((no_stack_protector)) inline long syscall_3(long nr, long arg0, lo
 __attribute__((no_stack_protector)) inline long syscall_4(long nr, long arg0, long arg1, long arg2, long arg3) {
   long ret;
   register long r10 __asm__("r10") = arg3;
-  __asm__ volatile("syscall" : "=a"(ret) : "a"(nr), "D"(arg0), "S"(arg1), "d"(arg2), "r"(r10) : "rcx", "r11", "memory",
-                   "cc");
+  __asm__ volatile("syscall"
+                   : "=a"(ret)
+                   : "a"(nr), "D"(arg0), "S"(arg1), "d"(arg2), "r"(r10)
+                   : "rcx", "r11", "memory", "cc");
   return ret;
 }
 

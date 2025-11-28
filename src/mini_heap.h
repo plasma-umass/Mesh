@@ -179,6 +179,7 @@ private:
 public:
   using BitmapType = internal::Bitmap<PageSize>;
   using ListEntryType = MiniHeapListEntry<PageSize>;
+  static constexpr size_t kPageSize = PageSize;
   static constexpr unsigned kPageShift = __builtin_ctzl(PageSize);
 
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
