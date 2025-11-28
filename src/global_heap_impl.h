@@ -99,7 +99,9 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
   // This can also include, for example, single page allocations w/
   // 16KB alignment.
   if (mh->isLargeAlloc()) {
-    lock_guard<mutex> lock(_miniheapLock);
+    // Lock ordering: arena lock first, then large alloc lock
+    lock_guard<mutex> arenaLock(_arenaLock);
+    lock_guard<mutex> lock(_largeAllocLock);
     freeMiniheapLocked(mh, false);
     return;
   }
@@ -132,7 +134,8 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
   if (startEpoch % 2 == 1 || !_meshEpoch.isSame(startEpoch)) {
     // a mesh was started in between when we looked up our miniheap
     // and now.  synchronize to avoid races
-    lock_guard<mutex> lock(_miniheapLock);
+    d_assert(sizeClass >= 0 && sizeClass < kNumBins);
+    lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
 
     const auto origMh = mh;
     mh = miniheapForWithEpoch(ptr, startEpoch);
@@ -169,11 +172,9 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
     if (!isAttached && (remaining == 0 || freelistId == list::Full)) {
       // this may free the miniheap -- we can't safely access it after
       // this point.
-      const bool shouldFlush = postFreeLocked(mh, sizeClass, remaining);
+      postFreeLocked(mh, sizeClass, remaining);
       mh = nullptr;
-      if (unlikely(shouldFlush)) {
-        flushBinLocked(sizeClass);
-      }
+      // Note: flushBinLocked deferred to next mesh cycle (requires arena lock)
     } else {
       shouldMesh = true;
     }
@@ -181,7 +182,8 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
     // the free went through ok; if we _were_ full, or now _are_ empty,
     // make sure to update the littleheaps
     if (!isAttached && (remaining == 0 || freelistId == list::Full)) {
-      lock_guard<mutex> lock(_miniheapLock);
+      d_assert(sizeClass >= 0 && sizeClass < kNumBins);
+      lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
 
       // there are 2 ways we could have raced with meshing:
       //
@@ -189,7 +191,7 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
       //    above with the !_meshEpoch.isSame(current)).  this is what
       //    the outer if statement here takes care of.
       //
-      // 2. this thread losing the race with acquiring _miniheapLock
+      // 2. this thread losing the race with acquiring _miniheapLocks[sizeClass]
       //    (what we care about here).  for thi case, we know a) our
       //    write to the MiniHeap's bitmap succeeded (or we would be
       //    in the other side of the outer if statement), and b) our
@@ -239,10 +241,8 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
       // a lot could have happened between when we read this without
       // the lock held and now; just recalculate it.
       remaining = mh->inUseCount();
-      const bool shouldFlush = postFreeLocked(mh, sizeClass, remaining);
-      if (unlikely(shouldFlush)) {
-        flushBinLocked(sizeClass);
-      }
+      postFreeLocked(mh, sizeClass, remaining);
+      // Note: flushBinLocked deferred to next mesh cycle (requires arena lock)
     } else {
       shouldMesh = !isAttached;
     }
@@ -255,12 +255,29 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
 
 template <size_t PageSize>
 int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-  unique_lock<mutex> lock(_miniheapLock);
-
   if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
     return -1;
 
   auto statp = reinterpret_cast<size_t *>(oldp);
+
+  // Handle operations that need special lock handling first
+  if (strcmp(name, "mesh.scavenge") == 0) {
+    // scavenge() acquires locks internally
+    scavenge(true);
+    return 0;
+  } else if (strcmp(name, "mesh.compact") == 0) {
+    // Acquire all locks for meshing, then release for scavenge
+    {
+      AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
+      meshAllSizeClassesLocked();
+    }
+    // scavenge() acquires locks internally
+    scavenge(true);
+    return 0;
+  }
+
+  // All other operations need locks held
+  AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
 
   if (strcmp(name, "mesh.check_period") == 0) {
     *statp = _meshPeriod;
@@ -269,15 +286,6 @@ int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp,
     auto newVal = reinterpret_cast<size_t *>(newp);
     _meshPeriod = *newVal;
     // resetNextMeshCheck();
-  } else if (strcmp(name, "mesh.scavenge") == 0) {
-    lock.unlock();
-    scavenge(true);
-    lock.lock();
-  } else if (strcmp(name, "mesh.compact") == 0) {
-    meshAllSizeClassesLocked();
-    lock.unlock();
-    scavenge(true);
-    lock.lock();
   } else if (strcmp(name, "arena") == 0) {
     // not sure what this should do
   } else if (strcmp(name, "stats.resident") == 0) {
@@ -495,7 +503,7 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   if (level < 1)
     return;
 
-  lock_guard<mutex> lock(_miniheapLock);
+  AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
 
   const auto meshedPageHWM = meshedPageHighWaterMark();
 
