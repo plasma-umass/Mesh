@@ -143,6 +143,7 @@ private:
 public:
   using BitmapType = internal::Bitmap<PageSize>;
   using ListEntryType = MiniHeapListEntry<PageSize>;
+  static constexpr unsigned kPageShift = __builtin_ctzl(PageSize);
 
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
       : _bitmap(nullptr),
@@ -155,7 +156,7 @@ public:
     _bitmap = new (mem) BitmapType(objectCount);
     d_assert(_bitmap->inUseCount() == 0);
 
-    const auto expectedSpanSize = _span.byteLength();
+    const auto expectedSpanSize = static_cast<size_t>(_span.length) << kPageShift;
     d_assert_msg(expectedSpanSize == spanSize(), "span size %zu == %zu (%u, %u)", expectedSpanSize, spanSize(),
                  maxCount(), this->objectSize());
 
@@ -240,7 +241,7 @@ public:
   }
 
   inline size_t spanSize() const {
-    return _span.byteLength();
+    return static_cast<size_t>(_span.length) << kPageShift;
   }
 
   inline uint32_t ATTRIBUTE_ALWAYS_INLINE maxCount() const {
@@ -257,7 +258,7 @@ public:
       // but it does work for all of our small object size classes
       return static_cast<size_t>(1 / _objectSizeReciprocal + 0.5);
     } else {
-      return _span.length * getPageSize();
+      return static_cast<size_t>(_span.length) << kPageShift;
     }
   }
 
@@ -267,7 +268,7 @@ public:
 
   inline uintptr_t getSpanStart(const void *arenaBegin) const {
     const auto beginval = reinterpret_cast<uintptr_t>(arenaBegin);
-    return beginval + _span.offset * getPageSize();
+    return beginval + (static_cast<size_t>(_span.offset) << kPageShift);
   }
 
   inline bool ATTRIBUTE_ALWAYS_INLINE isEmpty() const {
@@ -338,7 +339,7 @@ public:
   }
 
   inline bool isMeshingCandidate() const {
-    return !isAttached() && objectSize() < getPageSize();
+    return !isAttached() && objectSize() < PageSize;
   }
 
   /// Returns the fraction full (in the range [0, 1]) that this miniheap is.
@@ -449,11 +450,11 @@ public:
     const auto heapPages = spanSize() / HL::CPUInfo::PageSize;
     const size_t inUseCount = this->inUseCount();
     const size_t meshCount = this->meshCount();
-    const size_t pageSize = getPageSize();
+    const auto spanOffset = static_cast<size_t>(_span.offset) << kPageShift;
     mesh::debug(
         "MiniHeap(%p:%5zu): %3zu objects on %2zu pages (inUse: %zu, spans: %zu)\t%p-%p\tFreelist{prev:%u, next:%u}\n",
-        this, objectSize(), maxCount(), heapPages, inUseCount, meshCount, _span.offset * pageSize,
-        _span.offset * pageSize + spanSize(), _freelist.prev(), _freelist.next());
+        this, objectSize(), maxCount(), heapPages, inUseCount, meshCount, spanOffset, spanOffset + spanSize(),
+        _freelist.prev(), _freelist.next());
     mesh::debug("\t%s\n", _bitmap->to_string(maxCount()).c_str());
   }
 
@@ -461,7 +462,7 @@ public:
   inline uint16_t ATTRIBUTE_ALWAYS_INLINE getUnmeshedOff(const void *arenaBegin, void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
-    uintptr_t span = reinterpret_cast<uintptr_t>(arenaBegin) + _span.offset * getPageSize();
+    uintptr_t span = reinterpret_cast<uintptr_t>(arenaBegin) + (static_cast<size_t>(_span.offset) << kPageShift);
     d_assert(span != 0);
 
     const size_t off = (ptrval - span) * _objectSizeReciprocal;
@@ -484,12 +485,11 @@ public:
 protected:
   inline uintptr_t ATTRIBUTE_ALWAYS_INLINE spanStart(uintptr_t arenaBegin, void *ptr) const {
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
-    const auto len = _span.byteLength();
+    const auto len = static_cast<size_t>(_span.length) << kPageShift;
 
     // manually unroll loop once to capture the common case of
     // un-meshed miniheaps
-    const size_t pageSize = getPageSize();
-    uintptr_t spanptr = arenaBegin + _span.offset * pageSize;
+    uintptr_t spanptr = arenaBegin + (static_cast<size_t>(_span.offset) << kPageShift);
     if (likely(spanptr <= ptrval && ptrval < spanptr + len)) {
       return spanptr;
     }
@@ -498,7 +498,7 @@ protected:
   }
 
   uintptr_t ATTRIBUTE_NEVER_INLINE spanStartSlowpath(uintptr_t arenaBegin, uintptr_t ptrval) const {
-    const auto len = _span.byteLength();
+    const auto len = static_cast<size_t>(_span.length) << kPageShift;
     uintptr_t spanptr = 0;
 
     const MiniHeap *mh = this;
@@ -509,7 +509,7 @@ protected:
 
       mh = GetMiniHeap<MiniHeap>(mh->_nextMeshed);
 
-      const uintptr_t meshedSpanptr = arenaBegin + mh->span().offset * getPageSize();
+      const uintptr_t meshedSpanptr = arenaBegin + (static_cast<size_t>(mh->span().offset) << kPageShift);
       if (meshedSpanptr <= ptrval && ptrval < meshedSpanptr + len) {
         spanptr = meshedSpanptr;
         break;

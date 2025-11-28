@@ -277,7 +277,7 @@ private:
 
   inline void resetSpanMapping(const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
-    auto sz = span.byteLength();
+    auto sz = static_cast<size_t>(span.length) << _pageShift;
     mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset << _pageShift);
   }
 
