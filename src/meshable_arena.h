@@ -165,7 +165,7 @@ private:
   void *malloc(size_t sz) = delete;
 
   inline bool isAligned(const Span &span, const size_t pageAlignment) const {
-    return ptrvalFromOffset(span.offset) % (pageAlignment * getPageSize()) == 0;
+    return ptrvalFromOffset(span.offset) % (pageAlignment << _pageShift) == 0;
   }
 
   static constexpr size_t indexSize() {
@@ -197,13 +197,13 @@ private:
 
     if (flags == internal::PageType::Dirty) {
       if (kAdviseDump) {
-        madvise(ptrFromOffset(span.offset), span.length * getPageSize(), MADV_DONTDUMP);
+        madvise(ptrFromOffset(span.offset), span.length << _pageShift, MADV_DONTDUMP);
       }
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
       _dirtyPageCount += span.length;
 
-      const size_t maxDirtyPageThreshold = (kMaxDirtyPageThreshold * kPageSizeMin) / getPageSize();
+      const size_t maxDirtyPageThreshold = (kMaxDirtyPageThreshold * kPageSizeMin) >> _pageShift;
 
       if (_dirtyPageCount > maxDirtyPageThreshold) {
         // do a full scavenge with a probability 1/10
@@ -230,11 +230,11 @@ private:
 
     d_assert(ptrval >= arena);
 
-    return (ptrval - arena) / getPageSize();
+    return (ptrval - arena) >> _pageShift;
   }
 
   inline uintptr_t ptrvalFromOffset(size_t off) const {
-    return reinterpret_cast<uintptr_t>(_arenaBegin) + off * getPageSize();
+    return reinterpret_cast<uintptr_t>(_arenaBegin) + (off << _pageShift);
   }
 
   inline void *ptrFromOffset(size_t off) const {
@@ -278,7 +278,7 @@ private:
   inline void resetSpanMapping(const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
-    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset * getPageSize());
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset << _pageShift);
   }
 
   void prepareForFork();
@@ -286,6 +286,10 @@ private:
   void afterForkChild();
 
   void *_arenaBegin{nullptr};
+  // Cached page size - avoids function-local static guard check overhead on hot path
+  size_t _pageSize{0};
+  // Page shift for bit operations: pageSize = 1 << _pageShift (e.g., 12 for 4KB, 14 for 16KB)
+  unsigned _pageShift{0};
   // indexed by page offset.
   atomic<MiniHeapID> *_mhIndex{nullptr};
 

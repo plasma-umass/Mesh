@@ -72,3 +72,36 @@ TEST(Alignment, NonOverlapping) {
     TestNonOverlapping<16384>();
   }
 }
+
+// Test that _pageShift is initialized correctly from page size
+// _pageShift = __builtin_ctzl(pageSize) for power-of-2 page sizes
+TEST(Alignment, PageShiftInitialization) {
+  const size_t pageSize = getPageSize();
+
+  // Verify page size is a power of 2
+  ASSERT_GT(pageSize, 0UL);
+  ASSERT_EQ(pageSize & (pageSize - 1), 0UL) << "Page size must be power of 2";
+
+  // Calculate expected shift using the same formula as MeshableArena constructor
+  const unsigned expectedShift = static_cast<unsigned>(__builtin_ctzl(pageSize));
+
+  // Verify the shift reconstructs the original page size
+  ASSERT_EQ(static_cast<size_t>(1UL << expectedShift), pageSize) << "1 << pageShift should equal pageSize";
+
+  // Verify expected values for known page sizes
+  if (pageSize == 4096) {
+    ASSERT_EQ(expectedShift, 12U) << "4KB pages should have shift=12";
+  } else if (pageSize == 16384) {
+    ASSERT_EQ(expectedShift, 14U) << "16KB pages should have shift=14";
+  }
+
+  // Test that division by page size equals right shift by pageShift
+  const size_t testValue = 1024 * 1024;  // 1MB
+  ASSERT_EQ(testValue / pageSize, testValue >> expectedShift)
+      << "Division by pageSize should equal right shift by pageShift";
+
+  // Test that multiplication by page size equals left shift by pageShift
+  const size_t testOffset = 256;
+  ASSERT_EQ(testOffset * pageSize, testOffset << expectedShift)
+      << "Multiplication by pageSize should equal left shift by pageShift";
+}

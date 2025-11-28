@@ -45,7 +45,11 @@ static const char *const TMP_DIRS[] = {
     "/tmp",
 };
 
-MeshableArena::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), internal::seed()) {
+MeshableArena::MeshableArena()
+    : SuperHeap(),
+      _pageSize(getPageSize()),
+      _pageShift(static_cast<unsigned>(__builtin_ctzl(getPageSize()))),
+      _fastPrng(internal::seed(), internal::seed()) {
   d_assert(arenaInstance == nullptr);
   arenaInstance = this;
 
@@ -160,7 +164,7 @@ void MeshableArena::expandArena(size_t minPagesAdded) {
   Span expansion(_end, pageCount);
   _end += pageCount;
 
-  const size_t maxPages = kArenaSize / getPageSize();
+  const size_t maxPages = kArenaSize >> _pageShift;
   if (unlikely(_end >= maxPages)) {
     debug("Mesh: arena exhausted: current arena size is %.1f GB; recompile with larger arena size.",
           kArenaSize / 1024.0 / 1024.0 / 1024.0);
@@ -259,14 +263,13 @@ Span MeshableArena::reservePages(const size_t pageCount, const size_t pageAlignm
   d_assert(!result.empty());
   d_assert(flags != internal::PageType::Unknown);
 
-  const size_t pageSize = getPageSize();
-  if (unlikely(pageAlignment > 1 && ((ptrvalFromOffset(result.offset) / pageSize) % pageAlignment != 0))) {
+  if (unlikely(pageAlignment > 1 && ((ptrvalFromOffset(result.offset) >> _pageShift) % pageAlignment != 0))) {
     freeSpan(result, flags);
     // recurse once, asking for enough extra space that we are sure to
     // be able to find an aligned offset of pageCount pages within.
     result = reservePages(pageCount + 2 * pageAlignment, 1);
 
-    const size_t alignment = pageAlignment * pageSize;
+    const size_t alignment = pageAlignment << _pageShift;
     const uintptr_t alignedPtr = (ptrvalFromOffset(result.offset) + alignment - 1) & ~(alignment - 1);
     const auto alignedOff = offsetFor(reinterpret_cast<void *>(alignedPtr));
     d_assert(alignedOff >= result.offset);
@@ -342,7 +345,7 @@ char *MeshableArena::pageAlloc(Span &result, size_t pageCount, size_t pageAlignm
   if (_mhIndex[span.offset].load().hasValue()) {
     mesh::debug("----\n");
     void *mh_void = miniheapForArenaOffset(span.offset);
-    if (getPageSize() == kPageSize4K) {
+    if (_pageSize == kPageSize4K) {
       reinterpret_cast<MiniHeap<kPageSize4K> *>(mh_void)->dumpDebug();
     } else {
       reinterpret_cast<MiniHeap<kPageSize16K> *>(mh_void)->dumpDebug();
@@ -353,7 +356,7 @@ char *MeshableArena::pageAlloc(Span &result, size_t pageCount, size_t pageAlignm
   char *ptr = reinterpret_cast<char *>(ptrFromOffset(span.offset));
 
   if (kAdviseDump) {
-    madvise(ptr, pageCount * getPageSize(), MADV_DODUMP);
+    madvise(ptr, pageCount << _pageShift, MADV_DODUMP);
   }
 
   result = span;
@@ -367,11 +370,10 @@ void MeshableArena::free(void *ptr, size_t sz, internal::PageType type) {
   }
   d_assert(sz > 0);
 
-  const size_t pageSize = getPageSize();
-  d_assert(sz / pageSize > 0);
-  d_assert(sz % pageSize == 0);
+  d_assert((sz >> _pageShift) > 0);
+  d_assert((sz & (_pageSize - 1)) == 0);
 
-  const Span span(offsetFor(ptr), sz / pageSize);
+  const Span span(offsetFor(ptr), sz >> _pageShift);
   freeSpan(span, type);
 }
 
@@ -393,7 +395,7 @@ void MeshableArena::partialScavenge() {
 }
 
 void MeshableArena::scavenge(bool force) {
-  const size_t minDirtyPageThreshold = (kMinDirtyPageThreshold * kPageSizeMin) / getPageSize();
+  const size_t minDirtyPageThreshold = (kMinDirtyPageThreshold * kPageSizeMin) >> _pageShift;
 
   if (!force && _dirtyPageCount < minDirtyPageThreshold) {
     return;
@@ -548,8 +550,7 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
   const auto keepOff = offsetFor(keep);
   const auto removeOff = offsetFor(remove);
 
-  const size_t pageSize = getPageSize();
-  const size_t pageCount = sz / pageSize;
+  const size_t pageCount = sz >> _pageShift;
 
   const MiniHeapID keepID = _mhIndex[keepOff].load(std::memory_order_acquire);
   for (size_t i = 0; i < pageCount; i++) {
@@ -563,11 +564,11 @@ void MeshableArena::finalizeMesh(void *keep, void *remove, size_t sz) {
 #ifdef __APPLE__
   hard_assert(_fd >= 0);
   // macOS: Use mmap to create file-backed alias so F_PUNCHHOLE can release pages
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * pageSize);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff << _pageShift);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
 #else
   // Linux: Use mmap to create file-backed alias
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff * pageSize);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff << _pageShift);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
 #endif
 }
@@ -668,7 +669,7 @@ void MeshableArena::prepareForFork() {
   }
 
   // debug("%d: prepare fork", getpid());
-  if (getPageSize() == kPageSize4K) {
+  if (_pageSize == kPageSize4K) {
     runtime<kPageSize4K>().heap().lock();
     runtime<kPageSize4K>().lock();
   } else {
@@ -716,7 +717,7 @@ void MeshableArena::afterForkParent() {
   hard_assert(r == 0);
 
   // debug("%d: after fork parent", getpid());
-  if (getPageSize() == kPageSize4K) {
+  if (_pageSize == kPageSize4K) {
     runtime<kPageSize4K>().unlock();
     runtime<kPageSize4K>().heap().unlock();
   } else {
@@ -730,7 +731,7 @@ void MeshableArena::doAfterForkChild() {
 }
 
 void MeshableArena::afterForkChild() {
-  if (getPageSize() == kPageSize4K) {
+  if (_pageSize == kPageSize4K) {
     runtime<kPageSize4K>().updatePid();
   } else {
     runtime<kPageSize16K>().updatePid();
@@ -747,7 +748,7 @@ void MeshableArena::afterForkChild() {
 
   // debug("%d: after fork child", getpid());
   internal::Heap().unlock();
-  if (getPageSize() == kPageSize4K) {
+  if (_pageSize == kPageSize4K) {
     runtime<kPageSize4K>().unlock();
     runtime<kPageSize4K>().heap().unlock();
   } else {
@@ -769,10 +770,9 @@ void MeshableArena::afterForkChild() {
 
   const int oldFd = _fd;
 
-  const size_t pageSize = getPageSize();
   const auto bitmap = allocatedBitmap();
   for (auto const &i : bitmap) {
-    int result = internal::copyFile(newFd, oldFd, i * pageSize, pageSize);
+    int result = internal::copyFile(newFd, oldFd, i << _pageShift, _pageSize);
     d_assert(result == CPUInfo::PageSize);
   }
 
@@ -813,14 +813,13 @@ void MeshableArena::afterForkChild() {
           const auto removeOff = offsetFor(remove);
 
 #ifndef NDEBUG
-          const size_t pageSz = getPageSize();
-          const Length pageCount = sz / pageSz;
+          const Length pageCount = sz >> _pageShift;
           for (size_t i = 0; i < pageCount; i++) {
             d_assert(_mhIndex[removeOff + i].load().value() == _mhIndex[keepOff].load().value());
           }
 #endif
 
-          void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff * pageSize);
+          void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff << _pageShift);
 
           hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
 
@@ -828,7 +827,7 @@ void MeshableArena::afterForkChild() {
         });
       };
 
-      if (getPageSize() == kPageSize4K) {
+      if (_pageSize == kPageSize4K) {
         processMiniHeap(reinterpret_cast<MiniHeap<kPageSize4K> *>(mh_void));
       } else {
         processMiniHeap(reinterpret_cast<MiniHeap<kPageSize16K> *>(mh_void));
