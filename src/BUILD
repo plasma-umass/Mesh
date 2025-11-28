@@ -273,9 +273,8 @@ cc_test(
     linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
     linkstatic = True,
     deps = [
-        ":mesh",  # Use :mesh to get exported symbols like mesh_malloc
-        "@com_google_benchmark//:benchmark",
-        "@com_google_googletest//:gtest_main",
+        ":mesh",
+        "@com_google_benchmark//:benchmark_main",
     ],
 )
 

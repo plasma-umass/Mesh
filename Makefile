@@ -87,7 +87,7 @@ ifeq ($(UNAME_S),Darwin)
 else
 	LD_PRELOAD=./bazel-bin/src/$(DYNAMIC_LIB) ./bazel-bin/src/fragmenter
 endif
-	./bazel build $(BAZEL_CONFIG) --config=disable-meshing -c opt //src:local-refill-benchmark
+	./bazel build $(BAZEL_CONFIG) --config=disable-meshing --config=nolto -c opt //src:local-refill-benchmark
 	./bazel-bin/src/local-refill-benchmark
 
 format:
