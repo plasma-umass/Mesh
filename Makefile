@@ -81,6 +81,12 @@ clang-coverage: $(UNIT_BIN) $(CONFIG)
 	rm -f default.profraw
 
 benchmark:
+	./bazel build $(BAZEL_CONFIG) -c opt //src:fragmenter //src:$(DYNAMIC_LIB)
+ifeq ($(UNAME_S),Darwin)
+	DYLD_INSERT_LIBRARIES=./bazel-bin/src/$(DYNAMIC_LIB) ./bazel-bin/src/fragmenter
+else
+	LD_PRELOAD=./bazel-bin/src/$(DYNAMIC_LIB) ./bazel-bin/src/fragmenter
+endif
 	./bazel build $(BAZEL_CONFIG) --config=disable-meshing -c opt //src:local-refill-benchmark
 	./bazel-bin/src/local-refill-benchmark
 

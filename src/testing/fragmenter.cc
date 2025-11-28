@@ -94,8 +94,6 @@ void NOINLINE basic_fragment(int64_t n, size_t m_total) {
 
   // mesh_mallctl("mesh.scavenge", nullptr, nullptr, nullptr, 0);
 
-  print_rss();
-
   for (size_t i = 0; i < ptr_table_len; i++) {
     bench_free((voidptr)retained_table[i]);
   }
@@ -113,7 +111,6 @@ int main(int argc, char *argv[]) {
 
   basic_fragment(512, 128 * MB);
 
-  print_rss();
   // char *env = getenv("LD_PRELOAD");
   // if (env && strstr(env, "libmesh.so") != NULL) {
   //   fprintf(stderr, "meshing stuff\n");

@@ -220,6 +220,25 @@ cc_library(
     alwayslink = 1,
 )
 
+cc_library(
+    name = "measure_rss",
+    srcs = ["measure_rss.cc"],
+    hdrs = ["measure_rss.h"],
+    copts = MESH_DEFAULT_COPTS,
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "fragmenter",
+    srcs = ["testing/fragmenter.cc"],
+    copts = ["-Isrc"] + MESH_DEFAULT_COPTS,
+    linkopts = select({
+        "@platforms//os:linux": ["-ldl"],
+        "//conditions:default": [],
+    }),
+    deps = [":measure_rss"],
+)
+
 cc_test(
     name = "unit-tests",
     size = "small",  # Test runs in ~2.5s
