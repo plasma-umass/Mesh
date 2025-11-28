@@ -30,6 +30,9 @@ ARCH_FLAGS = select({
         "-march=westmere",
         "-mavx2",
     ],
+    "@platforms//cpu:aarch64": [
+        "-march=armv8.2-a",
+    ],
     "//conditions:default": [],
 })
 
