@@ -52,4 +52,19 @@ LTO_FLAGS = select({
     "//conditions:default": [],
 })
 
+# On Linux, use gold linker instead of lld for GCC LTO compatibility.
+# Bazel may auto-detect lld and configure it, but GCC's LTO bytecode
+# is incompatible with lld (which only supports LLVM's LTO format).
+# We use gold rather than bfd because gold supports --start-lib/--end-lib.
+LINKER_FLAGS = select({
+    "@platforms//os:linux": ["-fuse-ld=gold"],
+    "//conditions:default": [],
+})
+
+LTO_LINKOPTS = select({
+    "//src:opt_build": ["-flto"],
+    "//conditions:default": [],
+})
+
 MESH_DEFAULT_COPTS = COMMON_FLAGS + ARCH_FLAGS + LINUX_FLAGS + LTO_FLAGS
+MESH_DEFAULT_LINKOPTS = LINKER_FLAGS + LTO_LINKOPTS

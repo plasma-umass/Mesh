@@ -33,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
+      - name: Install gold linker
+        run: sudo apt-get update && sudo apt-get -y install binutils-gold
       - name: build in debug mode
         run: |
           ./bazel test -c dbg //src:unit-tests

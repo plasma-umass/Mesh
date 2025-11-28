@@ -2,7 +2,7 @@
 # Use of this source code is governed by the Apache License,
 # Version 2.0, that can be found in the LICENSE file.
 
-load("//src:copts.bzl", "MESH_DEFAULT_COPTS")
+load("//src:copts.bzl", "MESH_DEFAULT_COPTS", "MESH_DEFAULT_LINKOPTS")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -112,7 +112,15 @@ ARCH_LINKOPTS = select({
     "//conditions:default": [],
 })
 
-LTO_LINKOPTS = select({
+# On Linux, use gold linker instead of lld for GCC LTO compatibility.
+# Bazel may auto-detect lld and configure it, but GCC's LTO bytecode
+# is incompatible with lld (which only supports LLVM's LTO format).
+LINKER_FLAGS = select({
+    "@platforms//os:linux": ["-fuse-ld=gold"],
+    "//conditions:default": [],
+})
+
+LTO_LINKOPTS = LINKER_FLAGS + select({
     ":opt_build": ["-flto"],
     "//conditions:default": [],
 })
@@ -232,7 +240,7 @@ cc_binary(
     name = "fragmenter",
     srcs = ["testing/fragmenter.cc"],
     copts = ["-Isrc"] + MESH_DEFAULT_COPTS,
-    linkopts = select({
+    linkopts = MESH_DEFAULT_LINKOPTS + select({
         "@platforms//os:linux": ["-ldl"],
         "//conditions:default": [],
     }),
