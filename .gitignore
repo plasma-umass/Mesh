@@ -10,6 +10,7 @@ TAGS
 /src/test/fork-example
 /src/test/thread-example
 /unit.test
+/*.old
 /meshing-benchmark
 config.mk
 /build
