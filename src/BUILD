@@ -278,6 +278,25 @@ cc_test(
     ],
 )
 
+# Larson benchmark - multi-threaded allocation stress test
+# This benchmark exercises the "remote free" path where threads free memory
+# allocated by other threads. Use --config=disable-meshing for nomesh variant.
+cc_binary(
+    name = "larson-benchmark",
+    srcs = [
+        "testing/benchmark/larson.cc",
+    ],
+    copts = [
+        "-Isrc",
+    ] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
+    linkstatic = True,
+    deps = [
+        ":mesh",
+    ],
+)
+
 MESH_SHARED_SRCS = [
     "d_assert.cc",
     "global_heap.cc",

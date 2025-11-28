@@ -90,6 +90,19 @@ endif
 	./bazel build $(BAZEL_CONFIG) --config=disable-meshing --config=nolto -c opt //src:local-refill-benchmark
 	./bazel-bin/src/local-refill-benchmark
 
+# Larson benchmark - multi-threaded allocation stress test
+# Default runs with meshing disabled for baseline comparison
+# Args: sleep_sec min_size max_size chunks_per_thread num_rounds seed num_threads
+larson: larson-nomesh
+
+larson-mesh:
+	./bazel build $(BAZEL_CONFIG) --config=nolto -c opt //src:larson-benchmark
+	./bazel-bin/src/larson-benchmark 2 8 1000 5000 100 4141 8
+
+larson-nomesh:
+	./bazel build $(BAZEL_CONFIG) --config=disable-meshing --config=nolto -c opt //src:larson-benchmark
+	./bazel-bin/src/larson-benchmark 2 8 1000 5000 100 4141 8
+
 format:
 	clang-format -i $(FORMAT_SRCS)
 
@@ -107,4 +120,4 @@ TAGS:
 	@echo "  TAGS"
 	find . -type f | egrep '\.(cpp|h|cc|hh)$$' | grep -v google | xargs etags -l c++
 
-.PHONY: all clean distclean format test test_frag check build benchmark install TAGS
+.PHONY: all clean distclean format test test_frag check build benchmark install TAGS larson larson-mesh larson-nomesh
