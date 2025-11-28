@@ -79,11 +79,40 @@ public:
   using MiniHeapT = MiniHeap<PageSize>;
   using MiniHeapListEntryT = MiniHeapListEntry<PageSize>;
 
+  // RAII guard to acquire all locks in consistent order (for meshing)
+  class AllLocksGuard {
+  private:
+    DISALLOW_COPY_AND_ASSIGN(AllLocksGuard);
+    std::array<mutex, kNumBins> &_locks;
+    mutex &_largeLock;
+    mutex &_arenaLockRef;
+
+  public:
+    AllLocksGuard(std::array<mutex, kNumBins> &locks, mutex &largeLock, mutex &arenaLockRef)
+        : _locks(locks), _largeLock(largeLock), _arenaLockRef(arenaLockRef) {
+      // Always acquire in consistent order: arena first, large lock, then size classes 0..N-1
+      _arenaLockRef.lock();
+      _largeLock.lock();
+      for (size_t i = 0; i < kNumBins; i++) {
+        _locks[i].lock();
+      }
+    }
+
+    ~AllLocksGuard() {
+      // Release in reverse order
+      for (size_t i = kNumBins; i > 0; i--) {
+        _locks[i - 1].unlock();
+      }
+      _largeLock.unlock();
+      _arenaLockRef.unlock();
+    }
+  };
+
   GlobalHeap() : Super(), _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)), _lastMesh{time::now()} {
   }
 
   inline void dumpStrings() const {
-    lock_guard<mutex> lock(_miniheapLock);
+    AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
 
     mesh::debug("TODO: reimplement printOccupancy\n");
     // for (size_t i = 0; i < kNumBins; i++) {
@@ -98,14 +127,14 @@ public:
   }
 
   void scavenge(bool force = false) {
-    lock_guard<mutex> lock(_miniheapLock);
+    AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
 
     Super::scavenge(force);
   }
 
   void dumpStats(int level, bool beDetailed) const;
 
-  // must be called with exclusive _mhRWLock held
+  // must be called with _arenaLock AND appropriate size-class lock held
   inline MiniHeapT *ATTRIBUTE_ALWAYS_INLINE allocMiniheapLocked(int sizeClass, size_t pageCount, size_t objectCount,
                                                                 size_t objectSize, size_t pageAlignment = 1) {
     d_assert(0 < pageCount);
@@ -128,7 +157,8 @@ public:
 
     _miniheapCount++;
     _stats.mhAllocCount++;
-    _stats.mhHighWaterMark = max(_miniheapCount, _stats.mhHighWaterMark);
+    const size_t count = _miniheapCount.load(std::memory_order_relaxed);
+    _stats.mhHighWaterMark = max(count, _stats.mhHighWaterMark);
 
     return mh;
   }
@@ -141,7 +171,9 @@ public:
       return nullptr;
     }
 
-    lock_guard<mutex> lock(_miniheapLock);
+    // Lock ordering: arena lock first, then large alloc lock
+    lock_guard<mutex> arenaLock(_arenaLock);
+    lock_guard<mutex> lock(_largeAllocLock);
 
     const size_t pageSize = getPageSize();
     MiniHeapT *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * pageSize, pageAlignment);
@@ -221,9 +253,14 @@ public:
       return;
     }
 
-    lock_guard<mutex> lock(_miniheapLock);
+    // All miniheaps in the array are from the same size class
+    const int sizeClass = miniheaps[0]->sizeClass();
+    d_assert(sizeClass >= 0 && sizeClass < kNumBins);
+
+    lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
     for (auto mh : miniheaps) {
-      releaseMiniheapLocked(mh, mh->sizeClass());
+      d_assert(mh->sizeClass() == sizeClass);
+      releaseMiniheapLocked(mh, sizeClass);
     }
     miniheaps.clear();
   }
@@ -276,9 +313,12 @@ public:
   template <uint32_t Size>
   inline void allocSmallMiniheaps(int sizeClass, uint32_t objectSize, FixedArray<MiniHeapT, Size> &miniheaps,
                                   pid_t current) {
-    lock_guard<mutex> lock(_miniheapLock);
-
     d_assert(sizeClass >= 0);
+    d_assert(sizeClass < kNumBins);
+
+    // Lock ordering: arena lock first, then size-class lock
+    lock_guard<mutex> arenaLock(_arenaLock);
+    lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
 
     for (MiniHeapT *oldMH : miniheaps) {
       releaseMiniheapLocked(oldMH, sizeClass);
@@ -293,8 +333,6 @@ public:
     d_assert_msg(objectSize == classMaxSize, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize,
                  classMaxSize, sizeClass);
 #endif
-    d_assert(sizeClass >= 0);
-    d_assert(sizeClass < kNumBins);
 
     d_assert(miniheaps.size() == 0);
 
@@ -373,10 +411,20 @@ public:
   }
 
   void freeMiniheap(MiniHeapT *&mh, bool untrack = true) {
-    lock_guard<mutex> lock(_miniheapLock);
-    freeMiniheapLocked(mh, untrack);
+    const int sizeClass = mh->sizeClass();
+    // Lock ordering: arena lock first, then size-class/large lock
+    lock_guard<mutex> arenaLock(_arenaLock);
+    if (sizeClass >= 0) {
+      lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+      freeMiniheapLocked(mh, untrack);
+    } else {
+      // Large allocation
+      lock_guard<mutex> lock(_largeAllocLock);
+      freeMiniheapLocked(mh, untrack);
+    }
   }
 
+  // must be called with _arenaLock AND appropriate size-class lock held
   void freeMiniheapLocked(MiniHeapT *&mh, bool untrack) {
     const auto spanSize = mh->spanSize();
     MiniHeapT *toFree[kMaxMeshes];
@@ -429,20 +477,36 @@ public:
     if (unlikely(ptr == nullptr))
       return 0;
 
-    lock_guard<mutex> lock(_miniheapLock);
+    // Look up miniheap first (doesn't require lock)
     auto mh = miniheapFor(ptr);
-    if (likely(mh)) {
-      return mh->objectSize();
-    } else {
+    if (unlikely(!mh)) {
       return 0;
     }
+
+    const int sizeClass = mh->sizeClass();
+    if (sizeClass >= 0) {
+      lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+      // Re-verify miniheap is still valid after acquiring lock
+      mh = miniheapFor(ptr);
+      if (likely(mh)) {
+        return mh->objectSize();
+      }
+    } else {
+      // Large allocation
+      lock_guard<mutex> lock(_largeAllocLock);
+      mh = miniheapFor(ptr);
+      if (likely(mh)) {
+        return mh->objectSize();
+      }
+    }
+    return 0;
   }
 
   int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
   size_t getAllocatedMiniheapCount() const {
-    lock_guard<mutex> lock(_miniheapLock);
-    return _miniheapCount;
+    AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
+    return _miniheapCount.load(std::memory_order_relaxed);
   }
 
   void setMeshPeriodMs(std::chrono::milliseconds period) {
@@ -450,13 +514,19 @@ public:
   }
 
   void lock() {
-    _miniheapLock.lock();
-    // internal::Heap().lock();
+    // Acquire all locks in consistent order
+    _largeAllocLock.lock();
+    for (size_t i = 0; i < kNumBins; i++) {
+      _miniheapLocks[i].lock();
+    }
   }
 
   void unlock() {
-    // internal::Heap().unlock();
-    _miniheapLock.unlock();
+    // Release all locks in reverse order
+    for (size_t i = kNumBins; i > 0; i--) {
+      _miniheapLocks[i - 1].unlock();
+    }
+    _largeAllocLock.unlock();
   }
 
   // PUBLIC ONLY FOR TESTING
@@ -483,7 +553,7 @@ public:
       return;
     }
 
-    lock_guard<mutex> lock(_miniheapLock);
+    AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
 
     {
       // ensure if two threads tried to grab the mesh lock at the same
@@ -503,13 +573,24 @@ public:
   }
 
   inline bool okToProceed(void *ptr) const {
-    lock_guard<mutex> lock(_miniheapLock);
-
     if (ptr == nullptr) {
       return false;
     }
 
-    return miniheapFor(ptr) != nullptr;
+    // Look up miniheap first (doesn't require lock)
+    auto mh = miniheapFor(ptr);
+    if (!mh) {
+      return false;
+    }
+
+    const int sizeClass = mh->sizeClass();
+    if (sizeClass >= 0) {
+      lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+      return miniheapFor(ptr) != nullptr;
+    } else {
+      lock_guard<mutex> lock(_largeAllocLock);
+      return miniheapFor(ptr) != nullptr;
+    }
   }
 
   inline internal::vector<MiniHeapT *> meshingCandidatesLocked(int sizeClass) const {
@@ -544,13 +625,13 @@ private:
   // we want this on its own cacheline
   EpochLock ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _meshEpoch{};
 
-  // always accessed with the mhRWLock exclusively locked.  cachline
-  // aligned to avoid sharing cacheline with _meshEpoch
-  size_t ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _miniheapCount{0};
+  // Atomic count of miniheaps - accessed under different size-class locks
+  // Cacheline aligned to avoid sharing cacheline with _meshEpoch
+  atomic_size_t ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _miniheapCount{0};
 
   static constexpr std::pair<MiniHeapListEntryT, size_t> Head{MiniHeapListEntryT{list::Head, list::Head}, 0};
 
-  // these must only be accessed or modified with the _miniheapLock held
+  // these must only be accessed or modified with the appropriate _miniheapLocks[sizeClass] held
   std::array<std::pair<MiniHeapListEntryT, size_t>, kNumBins> _emptyFreelist{
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
@@ -561,7 +642,12 @@ private:
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head,
       Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head, Head};
 
-  mutable mutex _miniheapLock{};
+  // Per-size-class locks to reduce contention on freelists
+  mutable std::array<mutex, kNumBins> _miniheapLocks{};
+  // Separate lock for large allocations (sizeClass == -1)
+  mutable mutex _largeAllocLock{};
+  // Lock for shared arena/allocator state (pageAlloc, trackMiniHeap, _mhAllocator)
+  mutable mutex _arenaLock{};
 
   GlobalHeapStats _stats{};
 
