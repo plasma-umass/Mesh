@@ -99,9 +99,9 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
   // This can also include, for example, single page allocations w/
   // 16KB alignment.
   if (mh->isLargeAlloc()) {
-    // Lock ordering: arena lock first, then large alloc lock
-    lock_guard<mutex> arenaLock(_arenaLock);
+    // Lock ordering: large alloc lock -> arena lock
     lock_guard<mutex> lock(_largeAllocLock);
+    lock_guard<mutex> arenaLock(_arenaLock);
     freeMiniheapLocked(mh, false);
     return;
   }

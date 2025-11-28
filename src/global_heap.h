@@ -90,21 +90,23 @@ public:
   public:
     AllLocksGuard(std::array<mutex, kNumBins> &locks, mutex &largeLock, mutex &arenaLockRef)
         : _locks(locks), _largeLock(largeLock), _arenaLockRef(arenaLockRef) {
-      // Always acquire in consistent order: arena first, large lock, then size classes 0..N-1
-      _arenaLockRef.lock();
-      _largeLock.lock();
+      // Lock ordering: size-classes[0..N-1] -> large -> arena
+      // This allows the fast path (reusing miniheaps) to only acquire size-class lock,
+      // then optionally acquire arena lock later if new allocation is needed.
       for (size_t i = 0; i < kNumBins; i++) {
         _locks[i].lock();
       }
+      _largeLock.lock();
+      _arenaLockRef.lock();
     }
 
     ~AllLocksGuard() {
       // Release in reverse order
+      _arenaLockRef.unlock();
+      _largeLock.unlock();
       for (size_t i = kNumBins; i > 0; i--) {
         _locks[i - 1].unlock();
       }
-      _largeLock.unlock();
-      _arenaLockRef.unlock();
     }
   };
 
@@ -171,9 +173,9 @@ public:
       return nullptr;
     }
 
-    // Lock ordering: arena lock first, then large alloc lock
-    lock_guard<mutex> arenaLock(_arenaLock);
+    // Lock ordering: large alloc lock -> arena lock
     lock_guard<mutex> lock(_largeAllocLock);
+    lock_guard<mutex> arenaLock(_arenaLock);
 
     const size_t pageSize = getPageSize();
     MiniHeapT *mh = allocMiniheapLocked(-1, pageCount, 1, pageCount * pageSize, pageAlignment);
@@ -391,9 +393,17 @@ public:
                                   pid_t current) {
     d_assert(sizeClass >= 0);
     d_assert(sizeClass < kNumBins);
+    d_assert(objectSize <= _maxObjectSize);
 
-    // Lock ordering: arena lock first, then size-class lock
-    lock_guard<mutex> arenaLock(_arenaLock);
+#ifndef NDEBUG
+    const size_t classMaxSize = SizeMap::ByteSizeForClass(sizeClass);
+    d_assert_msg(objectSize == classMaxSize, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize,
+                 classMaxSize, sizeClass);
+#endif
+
+    // Lock ordering: size-class lock -> arena lock
+    // We acquire size-class lock first and try to reuse existing miniheaps.
+    // Only if we need new miniheaps do we acquire the arena lock.
     lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
 
     // Drain pending partial list so freed miniheaps are immediately available
@@ -404,22 +414,16 @@ public:
     }
     miniheaps.clear();
 
-    d_assert(objectSize <= _maxObjectSize);
-
-#ifndef NDEBUG
-    const size_t classMaxSize = SizeMap::ByteSizeForClass(sizeClass);
-
-    d_assert_msg(objectSize == classMaxSize, "sz(%zu) shouldn't be greater than %zu (class %d)", objectSize,
-                 classMaxSize, sizeClass);
-#endif
-
     d_assert(miniheaps.size() == 0);
 
-    // check our bins for a miniheap to reuse
+    // Fast path: check our bins for a miniheap to reuse (no arena lock needed)
     auto bytesFree = selectForReuse(sizeClass, miniheaps, current);
     if (bytesFree >= kMiniheapRefillGoalSize || miniheaps.full()) {
       return;
     }
+
+    // Slow path: need to allocate new miniheaps, acquire arena lock
+    lock_guard<mutex> arenaLock(_arenaLock);
 
     // if we have objects bigger than the size of a page, allocate
     // multiple pages to amortize the cost of creating a
@@ -491,14 +495,15 @@ public:
 
   void freeMiniheap(MiniHeapT *&mh, bool untrack = true) {
     const int sizeClass = mh->sizeClass();
-    // Lock ordering: arena lock first, then size-class/large lock
-    lock_guard<mutex> arenaLock(_arenaLock);
+    // Lock ordering: size-class/large lock -> arena lock
     if (sizeClass >= 0) {
       lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+      lock_guard<mutex> arenaLock(_arenaLock);
       freeMiniheapLocked(mh, untrack);
     } else {
       // Large allocation
       lock_guard<mutex> lock(_largeAllocLock);
+      lock_guard<mutex> arenaLock(_arenaLock);
       freeMiniheapLocked(mh, untrack);
     }
   }
@@ -593,19 +598,21 @@ public:
   }
 
   void lock() {
-    // Acquire all locks in consistent order
-    _largeAllocLock.lock();
+    // Acquire all locks in consistent order: size-classes -> large -> arena
     for (size_t i = 0; i < kNumBins; i++) {
       _miniheapLocks[i].lock();
     }
+    _largeAllocLock.lock();
+    _arenaLock.lock();
   }
 
   void unlock() {
-    // Release all locks in reverse order
+    // Release in reverse order
+    _arenaLock.unlock();
+    _largeAllocLock.unlock();
     for (size_t i = kNumBins; i > 0; i--) {
       _miniheapLocks[i - 1].unlock();
     }
-    _largeAllocLock.unlock();
   }
 
   // PUBLIC ONLY FOR TESTING
