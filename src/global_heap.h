@@ -21,6 +21,17 @@ using namespace HL;
 
 namespace mesh {
 
+// Cache-line-padded atomic MiniHeapID to avoid false sharing in _pendingPartialHead array.
+// Without padding, multiple size classes share the same cache line, causing severe
+// contention when multiple threads perform lock-free operations on different size classes.
+struct alignas(CACHELINE_SIZE) CachelinePaddedAtomicMiniHeapID {
+  std::atomic<MiniHeapID> head{};
+};
+static_assert(sizeof(CachelinePaddedAtomicMiniHeapID) == CACHELINE_SIZE,
+              "CachelinePaddedAtomicMiniHeapID must be exactly one cache line");
+static_assert(alignof(CachelinePaddedAtomicMiniHeapID) == CACHELINE_SIZE,
+              "CachelinePaddedAtomicMiniHeapID must be cache-line aligned");
+
 class EpochLock {
 private:
   DISALLOW_COPY_AND_ASSIGN(EpochLock);
@@ -206,7 +217,7 @@ public:
   // Drain the lock-free pending partial list into the actual partial freelist.
   // Must be called with _miniheapLocks[sizeClass] held.
   inline void drainPendingPartialLocked(int sizeClass) {
-    MiniHeapID head = _pendingPartialHead[sizeClass].exchange(MiniHeapID{}, std::memory_order_acquire);
+    MiniHeapID head = _pendingPartialHead[sizeClass].head.exchange(MiniHeapID{}, std::memory_order_acquire);
 
     while (head.hasValue() && head != list::Head) {
       MiniHeapT *mh = GetMiniHeap<MiniHeapT>(head);
@@ -255,11 +266,11 @@ public:
 
     // Push onto pending list using _freelist._next for linking
     MiniHeapID myId = GetMiniHeapID(mh);
-    MiniHeapID oldHead = _pendingPartialHead[sizeClass].load(std::memory_order_relaxed);
+    MiniHeapID oldHead = _pendingPartialHead[sizeClass].head.load(std::memory_order_relaxed);
     do {
       mh->getFreelist()->setNext(oldHead);
-    } while (!_pendingPartialHead[sizeClass].compare_exchange_weak(oldHead, myId, std::memory_order_release,
-                                                                   std::memory_order_relaxed));
+    } while (!_pendingPartialHead[sizeClass].head.compare_exchange_weak(oldHead, myId, std::memory_order_release,
+                                                                        std::memory_order_relaxed));
   }
 
   // Must call drainPendingPartialLocked before this if not already drained.
@@ -727,7 +738,8 @@ private:
 
   // Lock-free pending partial list: miniheaps transitioning from Full to Partial
   // are pushed here without holding locks. Drained to _partialFreelist under lock.
-  std::array<std::atomic<MiniHeapID>, kNumBins> _pendingPartialHead{};
+  // Each entry is cache-line-padded to avoid false sharing between size classes.
+  std::array<CachelinePaddedAtomicMiniHeapID, kNumBins> _pendingPartialHead{};
 
   // Per-size-class locks to reduce contention on freelists
   mutable std::array<mutex, kNumBins> _miniheapLocks{};
@@ -744,7 +756,9 @@ private:
 
 static_assert(kNumBins == 25, "if this changes, add more 'Head's above");
 static_assert(sizeof(std::array<MiniHeapListEntry<4096>, kNumBins>) == kNumBins * 8, "list size is right");
-static_assert(sizeof(GlobalHeap<4096>) < (kNumBins * 8 * 2 + kNumBins * 8 + 64 * 7 + 100000), "gh small enough");
+// GlobalHeap size includes: kNumBins * CACHELINE_SIZE for cache-line-padded _pendingPartialHead
+static_assert(sizeof(GlobalHeap<4096>) < (kNumBins * 8 * 2 + kNumBins * CACHELINE_SIZE + 64 * 7 + 100000),
+              "gh small enough");
 }  // namespace mesh
 
 #endif  // MESH_GLOBAL_HEAP_H
