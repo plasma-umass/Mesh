@@ -7,247 +7,16 @@
 
 #ifdef __linux__
 #include <sys/auxv.h>
-#include <elf.h>
 #include <unistd.h>
-#include <stdio.h>  // For debug fprintf
 #endif
 
 #include "runtime.h"
 #include "thread_local_heap.h"
 #include "runtime_impl.h"
 #include "dispatch_utils.h"
+#include "ifunc_resolver.h"
 
 using namespace mesh;
-
-#ifdef __linux__
-// ===================================================================
-// CRITICAL: IFUNC Resolver Constraints and Implementation
-// ===================================================================
-//
-// IFUNC (Indirect Function) resolvers execute during dynamic linking
-// BEFORE any of the following are available:
-//   - glibc initialization (no malloc, no stdio, no getauxval)
-//   - libstdc++ availability (no C++ standard library)
-//   - TLS (Thread-Local Storage) setup
-//   - Most syscall wrappers (syscall() function not available)
-//   - Any library functions whatsoever
-//
-// The resolver runs in an extremely restricted environment where we
-// MUST:
-//   - Parse auxv (auxiliary vector) directly from /proc/self/auxv
-//   - Use ONLY raw syscalls via inline assembly (no libc wrappers)
-//   - Avoid ALL library function calls
-//   - Keep logic minimal and completely self-contained
-//   - Not use any global variables (they may not be initialized)
-//
-// This is why we have what appears to be "complex" code below:
-//   - Raw inline assembly for syscalls (ifunc_syscall_*)
-//   - Manual parsing of auxiliary vector without getauxval()
-//   - Direct file I/O using syscalls instead of open/read/close
-//   - Conservative fallback values for error cases
-//
-// The page size detection is critical for ARM64/Apple Silicon support
-// where pages can be 4KB, 16KB, or even 64KB depending on the system.
-// ===================================================================
-
-// Direct auxiliary vector access for IFUNC resolvers
-// Uses /proc/self/auxv with inline assembly syscalls to avoid libc dependencies
-#include <sys/syscall.h>
-#include <fcntl.h>
-
-#ifdef __aarch64__
-// ===================================================================
-// ARM64 Syscall Implementation
-// ===================================================================
-// ARM64 inline assembly for system calls - REQUIRED because syscall()
-// wrapper is not available during IFUNC resolution.
-//
-// ARM64 calling convention for syscalls:
-//   - Syscall number goes in x8 register
-//   - Arguments go in x0-x5 registers
-//   - Return value comes back in x0
-//   - SVC #0 instruction triggers the syscall
-//
-// We cannot use the glibc syscall() wrapper because glibc isn't
-// initialized yet when IFUNC resolvers run.
-// ===================================================================
-
-__attribute__((no_stack_protector)) static long ifunc_syscall_3(long nr, long arg0, long arg1, long arg2) {
-  register long x8 __asm__("x8") = nr;
-  register long x0 __asm__("x0") = arg0;
-  register long x1 __asm__("x1") = arg1;
-  register long x2 __asm__("x2") = arg2;
-  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2) : "memory", "cc");
-  return x0;
-}
-
-__attribute__((no_stack_protector)) static long ifunc_syscall_1(long nr, long arg0) {
-  register long x8 __asm__("x8") = nr;
-  register long x0 __asm__("x0") = arg0;
-  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8) : "memory", "cc");
-  return x0;
-}
-
-// Direct syscall wrappers using inline assembly
-__attribute__((no_stack_protector)) static int ifunc_sys_open(const char *pathname, int flags) {
-  // Use openat with AT_FDCWD (-100) to open relative to current directory
-  return ifunc_syscall_3(SYS_openat, -100 /* AT_FDCWD */, (long)pathname, flags);
-}
-
-__attribute__((no_stack_protector)) static ssize_t ifunc_sys_read(int fd, void *buf, size_t count) {
-  return ifunc_syscall_3(SYS_read, fd, (long)buf, count);
-}
-
-__attribute__((no_stack_protector)) static int ifunc_sys_close(int fd) {
-  return ifunc_syscall_1(SYS_close, fd);
-}
-
-#elif defined(__x86_64__)
-// ===================================================================
-// x86_64 Syscall Implementation
-// ===================================================================
-// x86_64 inline assembly for system calls - REQUIRED because syscall()
-// wrapper is not available during IFUNC resolution.
-//
-// x86_64 calling convention for syscalls:
-//   - Syscall number goes in rax register
-//   - Arguments go in rdi, rsi, rdx, r10, r8, r9 registers (in order)
-//   - Return value comes back in rax
-//   - SYSCALL instruction triggers the syscall
-//   - rcx and r11 are clobbered by SYSCALL instruction
-//
-// We cannot use the glibc syscall() wrapper because glibc isn't
-// initialized yet when IFUNC resolvers run.
-// ===================================================================
-
-__attribute__((no_stack_protector)) static long ifunc_syscall_3(long nr, long arg0, long arg1, long arg2) {
-  long ret;
-  __asm__ volatile("syscall" : "=a"(ret) : "a"(nr), "D"(arg0), "S"(arg1), "d"(arg2) : "rcx", "r11", "memory", "cc");
-  return ret;
-}
-
-__attribute__((no_stack_protector)) static long ifunc_syscall_4(long nr, long arg0, long arg1, long arg2, long arg3) {
-  long ret;
-  __asm__ volatile("syscall"
-                   : "=a"(ret)
-                   : "a"(nr), "D"(arg0), "S"(arg1), "d"(arg2), "r"((long)arg3)
-                   : "rcx", "r11", "memory", "cc");
-  return ret;
-}
-
-__attribute__((no_stack_protector)) static long ifunc_syscall_1(long nr, long arg0) {
-  long ret;
-  __asm__ volatile("syscall" : "=a"(ret) : "a"(nr), "D"(arg0) : "rcx", "r11", "memory", "cc");
-  return ret;
-}
-
-// Direct syscall wrappers using inline assembly
-__attribute__((no_stack_protector)) static int ifunc_sys_open(const char *pathname, int flags) {
-  // x86_64 still has the open syscall (SYS_open = 2)
-  // But we'll use openat for consistency
-  return ifunc_syscall_4(SYS_openat, -100 /* AT_FDCWD */, (long)pathname, flags, 0);
-}
-
-__attribute__((no_stack_protector)) static ssize_t ifunc_sys_read(int fd, void *buf, size_t count) {
-  return ifunc_syscall_3(SYS_read, fd, (long)buf, count);
-}
-
-__attribute__((no_stack_protector)) static int ifunc_sys_close(int fd) {
-  return ifunc_syscall_1(SYS_close, fd);
-}
-
-#else
-// For other architectures, fall back to hardcoded 4k (conservative)
-static size_t getPageSizeFromAuxv() {
-  return kPageSize4K;
-}
-#endif
-
-#if defined(__aarch64__) || defined(__x86_64__)
-// ===================================================================
-// Page Size Detection via Auxiliary Vector
-// ===================================================================
-// This function reads the page size from the kernel's auxiliary vector
-// by directly parsing /proc/self/auxv. We CANNOT use getauxval(AT_PAGESZ)
-// because:
-//   1. getauxval() is part of glibc which isn't initialized yet
-//   2. We're running in the IFUNC resolver context before libraries load
-//
-// The auxiliary vector is a set of key-value pairs passed by the kernel
-// to each process at startup, containing information like page size,
-// clock tick rate, etc. AT_PAGESZ (type 6) contains the system page size.
-//
-// We must:
-//   - Open /proc/self/auxv using raw syscalls (no open() function)
-//   - Read it using raw syscalls (no read() function)
-//   - Parse the Elf64_auxv_t structures manually
-//   - Use conservative fallbacks if anything fails
-//
-// Fallback values:
-//   - ARM64: 16KB (common on newer ARM64 systems, safe for 4KB systems)
-//   - x86_64: 4KB (standard and only option on x86_64)
-// ===================================================================
-__attribute__((no_stack_protector)) static size_t getPageSizeFromAuxv() {
-  // Use stack buffer to avoid any heap allocation (malloc not available)
-  // 512 bytes is enough to hold several auxv entries
-  unsigned char buffer[512];
-  int fd = ifunc_sys_open("/proc/self/auxv", O_RDONLY);
-
-  if (fd < 0) {
-    // Can't open /proc/self/auxv, fall back
-#ifdef __aarch64__
-    return kPageSize16K;  // ARM64 commonly uses 16k pages
-#else
-    return kPageSize4K;  // x86_64 uses 4k pages
-#endif
-  }
-
-  ssize_t bytes_read = ifunc_sys_read(fd, buffer, sizeof(buffer));
-  ifunc_sys_close(fd);
-
-  if (bytes_read < (ssize_t)sizeof(Elf64_auxv_t)) {
-    // Not enough data read
-#ifdef __aarch64__
-    return kPageSize16K;
-#else
-    return kPageSize4K;
-#endif
-  }
-
-  // Parse the auxiliary vector
-  Elf64_auxv_t *auxv = (Elf64_auxv_t *)buffer;
-  Elf64_auxv_t *auxv_end = (Elf64_auxv_t *)(buffer + bytes_read);
-
-  while (auxv < auxv_end && auxv->a_type != AT_NULL) {
-    if (auxv->a_type == AT_PAGESZ) {
-      size_t pagesize = auxv->a_un.a_val;
-      // Sanity check the value - we ONLY support 4KB and 16KB page sizes
-      // 4KB: Standard on x86_64 and older ARM64
-      // 16KB: Common on newer ARM64 systems (Apple Silicon, some Linux)
-      // Any other page size (including 64KB) is NOT supported
-      if (pagesize == kPageSize4K || pagesize == kPageSize16K) {
-        return pagesize;
-      }
-      // Invalid page size, fall back
-#ifdef __aarch64__
-      return kPageSize16K;
-#else
-      return kPageSize4K;
-#endif
-    }
-    auxv++;
-  }
-
-  // AT_PAGESZ not found (should never happen on Linux)
-#ifdef __aarch64__
-  return kPageSize16K;
-#else
-  return kPageSize4K;
-#endif
-}
-#endif
-
-#endif
 
 static __attribute__((constructor)) void libmesh_init() {
   mesh::real::init();
@@ -417,9 +186,9 @@ static void *mesh_calloc_impl(size_t count, size_t size) {
   return localHeap->calloc(count, size);
 }
 
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
 // ===================================================================
-// IFUNC Resolver Functions
+// IFUNC Resolver Functions (ARM64 Linux only)
 // ===================================================================
 // These resolver functions are called by the dynamic linker to determine
 // which implementation to use for each memory allocation function.
@@ -437,6 +206,9 @@ static void *mesh_calloc_impl(size_t count, size_t size) {
 // The dynamic linker replaces calls to mesh_malloc, mesh_free, etc.
 // with direct calls to the selected implementation (mesh_malloc_impl<4096>
 // or mesh_malloc_impl<16384>), eliminating runtime overhead.
+//
+// Note: x86_64 Linux always uses 4KB pages, so we use compile-time
+// dispatch instead of IFUNC there (the branch is optimized away).
 // ===================================================================
 extern "C" {
 typedef void *(*malloc_func)(size_t);
@@ -448,39 +220,39 @@ typedef void *(*memalign_func)(size_t, size_t);
 typedef void *(*calloc_func)(size_t, size_t);
 
 __attribute__((no_stack_protector)) static malloc_func resolve_mesh_malloc() {
-  size_t pageSize = getPageSizeFromAuxv();
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_malloc_impl<kPageSize4K> : mesh_malloc_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector)) static free_func resolve_mesh_free() {
-  size_t pageSize = getPageSizeFromAuxv();
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_free_impl<kPageSize4K> : mesh_free_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector)) static sized_free_func resolve_mesh_sized_free() {
-  size_t pageSize = getPageSizeFromAuxv();
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_sized_free_impl<kPageSize4K> : mesh_sized_free_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector)) static realloc_func resolve_mesh_realloc() {
-  size_t pageSize = getPageSizeFromAuxv();
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_realloc_impl<kPageSize4K> : mesh_realloc_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector)) static usable_size_func resolve_mesh_malloc_usable_size() {
-  size_t pageSize = getPageSizeFromAuxv();
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_malloc_usable_size_impl<kPageSize4K>
                                    : mesh_malloc_usable_size_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector)) static memalign_func resolve_mesh_memalign() {
-  size_t pageSize = getPageSizeFromAuxv();
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_memalign_impl<kPageSize4K> : mesh_memalign_impl<kPageSize16K>;
 }
 __attribute__((no_stack_protector)) static calloc_func resolve_mesh_calloc() {
-  size_t pageSize = getPageSizeFromAuxv();
+  size_t pageSize = mesh::ifunc::getPageSizeFromAuxv();
   return (pageSize == kPageSize4K) ? mesh_calloc_impl<kPageSize4K> : mesh_calloc_impl<kPageSize16K>;
 }
 }
 #endif
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz)
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_malloc")));
 #else
 {
@@ -494,7 +266,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz)
 #define xxmalloc mesh_malloc
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr)
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_free")));
 #else
 {
@@ -508,7 +280,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr)
 #define xxfree mesh_free
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size_t sz)
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_sized_free")));
 #else
 {
@@ -521,7 +293,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size
 #endif
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize)
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_realloc")));
 #else
 {
@@ -549,7 +321,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void 
 #else
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(const void *cptr)
 #endif
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_malloc_usable_size")));
 #else
 {
@@ -569,7 +341,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
 #if !defined(__FreeBSD__) && !defined(__SVR4)
     throw()
 #endif
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
         __attribute__((ifunc("resolve_mesh_memalign")));
 #else
 {
@@ -582,7 +354,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
 #endif
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_calloc(size_t count, size_t size)
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_calloc")));
 #else
 {

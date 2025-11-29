@@ -19,24 +19,9 @@ template <typename MiniHeapT>
 MiniHeapT *GetMiniHeap(const MiniHeapID id) {
   hard_assert(id.hasValue() && id != list::Head);
 
-  // We assume GetMiniHeap is called with the correct MiniHeap type for the active runtime
-  // This is tricky because we don't have PageSize here easily unless passed in
-  // But runtime() is now templated.
-  // Ideally GetMiniHeap shouldn't depend on runtime() if possible, or runtime() needs to be accessible.
-  // However, miniheapForID is on GlobalHeap which is on runtime().
-
-  // HACK: We assume the caller knows what they are doing.
-  // But wait, runtime() requires PageSize.
-  // If MiniHeapT is MiniHeap<4096>, we should call runtime<4096>().
-  // We can deduce PageSize from MiniHeapT? No, MiniHeapT is a class.
-  // But MiniHeap<PageSize> has kPageSize? No.
-
-  // Let's dispatch based on runtime page size check
-  if (getPageSize() == kPageSize4K) {
-    return reinterpret_cast<MiniHeapT *>(runtime<kPageSize4K>().heap().miniheapForID(id));
-  } else {
-    return reinterpret_cast<MiniHeapT *>(runtime<kPageSize16K>().heap().miniheapForID(id));
-  }
+  // Extract PageSize from the MiniHeap type at compile time
+  constexpr size_t PageSize = MiniHeapT::kPageSize;
+  return reinterpret_cast<MiniHeapT *>(runtime<PageSize>().heap().miniheapForID(id));
 }
 
 template <typename MiniHeapT>
@@ -46,14 +31,9 @@ MiniHeapID GetMiniHeapID(const MiniHeapT *mh) {
     return MiniHeapID{0};
   }
 
-  if (getPageSize() == kPageSize4K) {
-    // Cast to specific type to satisfy type system, though void* would work for miniheapIDFor if it took void*
-    // miniheapIDFor takes const MiniHeapT*
-    // GlobalHeap<kPageSize4K>::miniheapIDFor takes const MiniHeap<kPageSize4K>*
-    return runtime<kPageSize4K>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<kPageSize4K> *>(mh));
-  } else {
-    return runtime<kPageSize16K>().heap().miniheapIDFor(reinterpret_cast<const MiniHeap<kPageSize16K> *>(mh));
-  }
+  // Extract PageSize from the MiniHeap type at compile time
+  constexpr size_t PageSize = MiniHeapT::kPageSize;
+  return runtime<PageSize>().heap().miniheapIDFor(mh);
 }
 
 template <size_t PageSize>
@@ -99,7 +79,9 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
   // This can also include, for example, single page allocations w/
   // 16KB alignment.
   if (mh->isLargeAlloc()) {
-    lock_guard<mutex> lock(_miniheapLock);
+    // Lock ordering: large alloc lock -> arena lock
+    lock_guard<mutex> lock(_largeAllocLock);
+    lock_guard<mutex> arenaLock(_arenaLock);
     freeMiniheapLocked(mh, false);
     return;
   }
@@ -132,7 +114,9 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
   if (startEpoch % 2 == 1 || !_meshEpoch.isSame(startEpoch)) {
     // a mesh was started in between when we looked up our miniheap
     // and now.  synchronize to avoid races
-    lock_guard<mutex> lock(_miniheapLock);
+    d_assert(sizeClass >= 0 && sizeClass < kNumBins);
+    lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+    drainPendingPartialLocked(sizeClass);
 
     const auto origMh = mh;
     mh = miniheapForWithEpoch(ptr, startEpoch);
@@ -169,11 +153,9 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
     if (!isAttached && (remaining == 0 || freelistId == list::Full)) {
       // this may free the miniheap -- we can't safely access it after
       // this point.
-      const bool shouldFlush = postFreeLocked(mh, sizeClass, remaining);
+      postFreeLocked(mh, sizeClass, remaining);
       mh = nullptr;
-      if (unlikely(shouldFlush)) {
-        flushBinLocked(sizeClass);
-      }
+      // Note: flushBinLocked deferred to next mesh cycle (requires arena lock)
     } else {
       shouldMesh = true;
     }
@@ -181,67 +163,77 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
     // the free went through ok; if we _were_ full, or now _are_ empty,
     // make sure to update the littleheaps
     if (!isAttached && (remaining == 0 || freelistId == list::Full)) {
-      lock_guard<mutex> lock(_miniheapLock);
+      d_assert(sizeClass >= 0 && sizeClass < kNumBins);
 
-      // there are 2 ways we could have raced with meshing:
-      //
-      // 1. when writing to the MiniHeap's bitmap (which we check for
-      //    above with the !_meshEpoch.isSame(current)).  this is what
-      //    the outer if statement here takes care of.
-      //
-      // 2. this thread losing the race with acquiring _miniheapLock
-      //    (what we care about here).  for thi case, we know a) our
-      //    write to the MiniHeap's bitmap succeeded (or we would be
-      //    in the other side of the outer if statement), and b) our
-      //    MiniHeap could have been freed from under us while we were
-      //    waiting for this lock (if e.g. remaining == 0, a mesh
-      //    happened on another thread, and the other thread notices
-      //    this MiniHeap is empty (b.c. an empty MiniHeap meshes with
-      //    every other MiniHeap).  We need to be careful here.
+      if (remaining > 0 && freelistId == list::Full) {
+        // Lock-free path: Full -> Partial transition
+        // Either we succeed in pushing to pending list, or another thread
+        // already did it. Either way, no lock needed.
+        tryPushPendingPartial(mh, sizeClass);
+        shouldMesh = true;
+      } else {
+        // remaining == 0: need lock for Empty transition
+        lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+        drainPendingPartialLocked(sizeClass);
 
-      const auto origMh = mh;
-      // we have to reload the miniheap here because of the
-      // just-described possible race
-      mh = miniheapForWithEpoch(ptr, startEpoch);
+        // there are 2 ways we could have raced with meshing:
+        //
+        // 1. when writing to the MiniHeap's bitmap (which we check for
+        //    above with the !_meshEpoch.isSame(current)).  this is what
+        //    the outer if statement here takes care of.
+        //
+        // 2. this thread losing the race with acquiring _miniheapLocks[sizeClass]
+        //    (what we care about here).  for thi case, we know a) our
+        //    write to the MiniHeap's bitmap succeeded (or we would be
+        //    in the other side of the outer if statement), and b) our
+        //    MiniHeap could have been freed from under us while we were
+        //    waiting for this lock (if e.g. remaining == 0, a mesh
+        //    happened on another thread, and the other thread notices
+        //    this MiniHeap is empty (b.c. an empty MiniHeap meshes with
+        //    every other MiniHeap).  We need to be careful here.
 
-      // if the MiniHeap associated with the ptr we freed has changed,
-      // there are a few possibilities.
-      if (unlikely(mh != origMh)) {
-        // another thread took care of freeing this MiniHeap for us,
-        // super!  nothing else to do.
-        if (mh == nullptr) {
+        const auto origMh = mh;
+        // we have to reload the miniheap here because of the
+        // just-described possible race
+        mh = miniheapForWithEpoch(ptr, startEpoch);
+
+        // if the MiniHeap associated with the ptr we freed has changed,
+        // there are a few possibilities.
+        if (unlikely(mh != origMh)) {
+          // another thread took care of freeing this MiniHeap for us,
+          // super!  nothing else to do.
+          if (mh == nullptr) {
+            return;
+          }
+
+          // check to make sure the new MiniHeap is related (via a
+          // meshing relationship) to the one we had before grabbing the
+          // lock.
+          if (!mh->isRelated(origMh)) {
+            // the original miniheap was freed and a new (unrelated)
+            // Miniheap allocated for the address space.  nothing else
+            // for us to do.
+            return;
+          } else {
+            // TODO: we should really store 'created epoch' on mh and
+            // check those are the same here, too.
+          }
+        }
+
+        if (unlikely(mh->sizeClass() != sizeClass || mh->isLargeAlloc())) {
+          // TODO: This papers over a bug where the miniheap was freed
+          //  + reused out from under us while we were waiting for the mh lock.
+          //  It doesn't eliminate the problem (which should be solved
+          //  by storing the 'created epoch' on the MiniHeap), but it should
+          //  further reduce its probability
           return;
         }
 
-        // check to make sure the new MiniHeap is related (via a
-        // meshing relationship) to the one we had before grabbing the
-        // lock.
-        if (!mh->isRelated(origMh)) {
-          // the original miniheap was freed and a new (unrelated)
-          // Miniheap allocated for the address space.  nothing else
-          // for us to do.
-          return;
-        } else {
-          // TODO: we should really store 'created epoch' on mh and
-          // check those are the same here, too.
-        }
-      }
-
-      if (unlikely(mh->sizeClass() != sizeClass || mh->isLargeAlloc())) {
-        // TODO: This papers over a bug where the miniheap was freed
-        //  + reused out from under us while we were waiting for the mh lock.
-        //  It doesn't eliminate the problem (which should be solved
-        //  by storing the 'created epoch' on the MiniHeap), but it should
-        //  further reduce its probability
-        return;
-      }
-
-      // a lot could have happened between when we read this without
-      // the lock held and now; just recalculate it.
-      remaining = mh->inUseCount();
-      const bool shouldFlush = postFreeLocked(mh, sizeClass, remaining);
-      if (unlikely(shouldFlush)) {
-        flushBinLocked(sizeClass);
+        // a lot could have happened between when we read this without
+        // the lock held and now; just recalculate it.
+        remaining = mh->inUseCount();
+        postFreeLocked(mh, sizeClass, remaining);
+        // Note: flushBinLocked deferred to next mesh cycle (requires arena lock)
       }
     } else {
       shouldMesh = !isAttached;
@@ -255,12 +247,29 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
 
 template <size_t PageSize>
 int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-  unique_lock<mutex> lock(_miniheapLock);
-
   if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
     return -1;
 
   auto statp = reinterpret_cast<size_t *>(oldp);
+
+  // Handle operations that need special lock handling first
+  if (strcmp(name, "mesh.scavenge") == 0) {
+    // scavenge() acquires locks internally
+    scavenge(true);
+    return 0;
+  } else if (strcmp(name, "mesh.compact") == 0) {
+    // Acquire all locks for meshing, then release for scavenge
+    {
+      AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
+      meshAllSizeClassesLocked();
+    }
+    // scavenge() acquires locks internally
+    scavenge(true);
+    return 0;
+  }
+
+  // All other operations need locks held
+  AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
 
   if (strcmp(name, "mesh.check_period") == 0) {
     *statp = _meshPeriod;
@@ -269,15 +278,6 @@ int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp,
     auto newVal = reinterpret_cast<size_t *>(newp);
     _meshPeriod = *newVal;
     // resetNextMeshCheck();
-  } else if (strcmp(name, "mesh.scavenge") == 0) {
-    lock.unlock();
-    scavenge(true);
-    lock.lock();
-  } else if (strcmp(name, "mesh.compact") == 0) {
-    meshAllSizeClassesLocked();
-    lock.unlock();
-    scavenge(true);
-    lock.lock();
   } else if (strcmp(name, "arena") == 0) {
     // not sure what this should do
   } else if (strcmp(name, "stats.resident") == 0) {
@@ -464,8 +464,9 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
 
   // const auto start = time::now();
 
-  // first, clear out any free memory we might have
+  // first, drain pending partial lists and clear out any free memory we might have
   for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
+    drainPendingPartialLocked(sizeClass);
     flushBinLocked(sizeClass);
   }
 
@@ -495,7 +496,7 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   if (level < 1)
     return;
 
-  lock_guard<mutex> lock(_miniheapLock);
+  AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
 
   const auto meshedPageHWM = meshedPageHighWaterMark();
 

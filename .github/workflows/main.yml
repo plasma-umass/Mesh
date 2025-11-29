@@ -41,6 +41,9 @@ jobs:
       - name: build tests and binary
         run: |
           make -j1
+      - name: run benchmark (catches IFUNC static linking issues)
+        run: |
+          make benchmark
 
   macOS_bazel:
     runs-on: macos-latest
@@ -52,6 +55,9 @@ jobs:
     - name: build tests and binary
       run: |
         make -j1
+    - name: run benchmark
+      run: |
+        make benchmark
 
   #Windows_MinGW:   
   #

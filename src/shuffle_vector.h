@@ -263,7 +263,7 @@ public:
     // Cap at 1024 for bitmap limit. Shuffle vector now uses uint16_t in sv::Entry
     // so it can track up to 1024 objects (matching bitmap capacity)
     const size_t bitmapLimit = PageSize / kMinObjectSize;
-    _maxCount = min(max(getPageSize() / sz, static_cast<size_t>(kMinStringLen)), static_cast<size_t>(bitmapLimit));
+    _maxCount = min(max(PageSize / sz, static_cast<size_t>(kMinStringLen)), static_cast<size_t>(bitmapLimit));
     // initially, we are unattached and therefor have no capacity.
     // Setting _off to _maxCount causes isExhausted() to return true
     // so that we don't separately have to check !isAttached() in the
