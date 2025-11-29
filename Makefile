@@ -101,7 +101,13 @@ larson: larson-nomesh
 
 larson-mesh:
 	./bazel build $(BAZEL_CONFIG) --config=nolto -c opt //src:larson-benchmark
+ifeq ($(UNAME_S),Linux)
+	perf record -F $(PERF_FREQ) -g --call-graph fp -o perf-larson-mesh.data -- ./bazel-bin/src/larson-benchmark $(LARSON_ARGS)
+	perf script -i perf-larson-mesh.data | $(FLAMEGRAPH_DIR)/stackcollapse-perf.pl | $(FLAMEGRAPH_DIR)/flamegraph.pl --title "larson-mesh" > flamegraph-larson-mesh.svg
+	@echo "Flamegraph written to flamegraph-larson-mesh.svg"
+else
 	./bazel-bin/src/larson-benchmark $(LARSON_ARGS)
+endif
 
 larson-nomesh:
 	./bazel build $(BAZEL_CONFIG) --config=disable-meshing --config=nolto -c opt //src:larson-benchmark
