@@ -186,9 +186,9 @@ static void *mesh_calloc_impl(size_t count, size_t size) {
   return localHeap->calloc(count, size);
 }
 
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
 // ===================================================================
-// IFUNC Resolver Functions
+// IFUNC Resolver Functions (ARM64 Linux only)
 // ===================================================================
 // These resolver functions are called by the dynamic linker to determine
 // which implementation to use for each memory allocation function.
@@ -206,6 +206,9 @@ static void *mesh_calloc_impl(size_t count, size_t size) {
 // The dynamic linker replaces calls to mesh_malloc, mesh_free, etc.
 // with direct calls to the selected implementation (mesh_malloc_impl<4096>
 // or mesh_malloc_impl<16384>), eliminating runtime overhead.
+//
+// Note: x86_64 Linux always uses 4KB pages, so we use compile-time
+// dispatch instead of IFUNC there (the branch is optimized away).
 // ===================================================================
 extern "C" {
 typedef void *(*malloc_func)(size_t);
@@ -249,7 +252,7 @@ __attribute__((no_stack_protector)) static calloc_func resolve_mesh_calloc() {
 #endif
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz)
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_malloc")));
 #else
 {
@@ -263,7 +266,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_malloc(size_t sz)
 #define xxmalloc mesh_malloc
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr)
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_free")));
 #else
 {
@@ -277,7 +280,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_free(void *ptr)
 #define xxfree mesh_free
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size_t sz)
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_sized_free")));
 #else
 {
@@ -290,7 +293,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void mesh_sized_free(void *ptr, size
 #endif
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_realloc(void *oldPtr, size_t newSize)
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_realloc")));
 #else
 {
@@ -318,7 +321,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(void 
 #else
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN size_t mesh_malloc_usable_size(const void *cptr)
 #endif
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_malloc_usable_size")));
 #else
 {
@@ -338,7 +341,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
 #if !defined(__FreeBSD__) && !defined(__SVR4)
     throw()
 #endif
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
         __attribute__((ifunc("resolve_mesh_memalign")));
 #else
 {
@@ -351,7 +354,7 @@ extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_memalign(size_t alignment
 #endif
 
 extern "C" MESH_EXPORT CACHELINE_ALIGNED_FN void *mesh_calloc(size_t count, size_t size)
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_mesh_calloc")));
 #else
 {

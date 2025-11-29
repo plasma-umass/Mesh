@@ -264,9 +264,10 @@ extern "C" MESH_EXPORT struct mallinfo CUSTOM_MALLINFO() {
 // C++ Operator Implementation Templates
 // ===================================================================
 // These template functions provide the actual implementation for each
-// C++ memory operator. On Linux, IFUNC resolvers select between 4KB
-// and 16KB variants at load time. On other platforms, runtime dispatch
-// is used.
+// C++ memory operator. On ARM64 Linux, IFUNC resolvers select between
+// 4KB and 16KB variants at load time. On x86_64 Linux, getPageSize()
+// is constexpr (always 4KB), so the compiler optimizes away the branch.
+// On other platforms, runtime dispatch is used.
 // ===================================================================
 
 template <size_t PageSize>
@@ -307,13 +308,16 @@ static void cxx_sized_delete_impl(void *ptr, size_t sz) {
   localHeap->sizedFree(ptr, sz);
 }
 
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
 // ===================================================================
-// IFUNC Resolvers for C++ Operators
+// IFUNC Resolvers for C++ Operators (ARM64 Linux only)
 // ===================================================================
 // These resolver functions run during dynamic linking to select the
 // appropriate page-size-specific implementation. They use the IFUNC
 // infrastructure from ifunc_resolver.h.
+//
+// Note: x86_64 Linux always uses 4KB pages, so we use compile-time
+// dispatch instead of IFUNC there (the branch is optimized away).
 // ===================================================================
 
 extern "C" {
@@ -342,20 +346,21 @@ __attribute__((no_stack_protector)) static cxx_sized_delete_func resolve_cxx_siz
   return (pageSize == kPageSize4K) ? cxx_sized_delete_impl<kPageSize4K> : cxx_sized_delete_impl<kPageSize16K>;
 }
 }
-#endif  // __linux__
+#endif  // defined(__linux__) && defined(__aarch64__)
 
 // ===================================================================
 // C++ Operator Definitions
 // ===================================================================
-// On Linux, these use IFUNC for load-time dispatch. On other platforms,
-// they fall back to runtime page size checks.
+// On ARM64 Linux, these use IFUNC for load-time dispatch.
+// On x86_64 Linux, getPageSize() is constexpr, so the branch is optimized away.
+// On other platforms, they use runtime page size checks.
 // ===================================================================
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz)
 #if defined(_GLIBCXX_THROW)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
         __attribute__((ifunc("resolve_cxx_new")));
 #else
 {
@@ -368,7 +373,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz)
 #endif
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr) noexcept
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_cxx_delete")));
 #else
 {
@@ -382,7 +387,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr) noexcept
 
 #if !defined(__SUNPRO_CC) || __SUNPRO_CC > 0x420
 MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new(size_t sz, const std::nothrow_t &nt) throw()
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_cxx_new_nothrow")));
 #else
 {
@@ -398,7 +403,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz)
 #if defined(_GLIBCXX_THROW)
     _GLIBCXX_THROW(std::bad_alloc)
 #endif
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
         __attribute__((ifunc("resolve_cxx_new")));
 #else
 {
@@ -411,7 +416,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz)
 #endif
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void *operator new[](size_t sz, const std::nothrow_t &nt) throw()
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_cxx_new_nothrow")));
 #else
 {
@@ -432,7 +437,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr)
     _NOEXCEPT
 #endif
 #endif
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_cxx_delete")));
 #else
 {
@@ -447,7 +452,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr)
 #if defined(__cpp_sized_deallocation) && __cpp_sized_deallocation >= 201309
 
 MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete(void *ptr, size_t sz) noexcept
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_cxx_sized_delete")));
 #else
 {
@@ -463,7 +468,7 @@ MESH_EXPORT CACHELINE_ALIGNED_FN void operator delete[](void *ptr, size_t sz)
 #if defined(__GNUC__)
     _GLIBCXX_USE_NOEXCEPT
 #endif
-#ifdef __linux__
+#if defined(__linux__) && defined(__aarch64__)
     __attribute__((ifunc("resolve_cxx_sized_delete")));
 #else
 {

@@ -111,8 +111,15 @@ inline constexpr size_t getPageSize() {
   return kPageSize16K;
 }
 static_assert(getPageSize() == kPageSize16K, "Apple Silicon uses 16KB pages");
+#elif defined(__x86_64__)
+// x86_64 always uses 4KB pages; make this a compile-time constant so
+// the compiler can fold away any page-size conditionals.
+inline constexpr size_t getPageSize() {
+  return kPageSize4K;
+}
+static_assert(getPageSize() == kPageSize4K, "x86_64 uses 4KB pages");
 #else
-// Runtime page size - initialized on first access
+// Runtime page size - initialized on first access (ARM64 Linux can have 4KB or 16KB)
 inline size_t getPageSize() {
   static const size_t kPageSize = internal::initPageSize();
   return kPageSize;
