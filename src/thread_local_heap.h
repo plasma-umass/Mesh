@@ -99,7 +99,7 @@ public:
       // if the alignment is for a small allocation that is less than
       // the page size, and the size class size in bytes is a multiple
       // of the alignment, just call malloc
-      if (sizeClassBytes <= getPageSize() && alignment <= sizeClassBytes && (sizeClassBytes % alignment) == 0) {
+      if (sizeClassBytes <= PageSize && alignment <= sizeClassBytes && (sizeClassBytes % alignment) == 0) {
         auto ptr = this->malloc(size);
         d_assert_msg((reinterpret_cast<uintptr_t>(ptr) % alignment) == 0, "%p(%zu) %% %zu != 0", ptr, size, alignment);
         return ptr;
@@ -107,7 +107,7 @@ public:
     }
 
     // fall back to page-aligned allocation
-    const size_t pageAlignment = (alignment + getPageSize() - 1) / getPageSize();
+    const size_t pageAlignment = (alignment + PageSize - 1) / PageSize;
     const size_t pageCount = PageCount(size);
     return _global->pageAlignedAlloc(pageAlignment, pageCount);
   }
