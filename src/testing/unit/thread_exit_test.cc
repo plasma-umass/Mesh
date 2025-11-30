@@ -198,7 +198,7 @@ public:
         batch.reserve(kBatchSize);
 
         for (size_t i = 0; i < kBatchSize; i++) {
-          batch.emplace_back([&barrier]() {
+          batch.emplace_back([&barrier, kBatchSize]() {
             void *p = ::malloc(64);
             if (p) {
               memset(p, 0xAB, 64);
