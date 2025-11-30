@@ -489,7 +489,7 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
 
   Super::scavenge(true);
 
-  _lastMesh = time::now();
+  _lastMesh.store(time::now(), std::memory_order_release);
 
   // const std::chrono::duration<double> duration = _lastMesh - start;
   // debug("mesh took %f, found %zu", duration.count(), totalMeshCount);

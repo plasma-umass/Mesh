@@ -610,7 +610,7 @@ public:
   }
 
   void setMeshPeriodMs(std::chrono::milliseconds period) {
-    _meshPeriodMs = period;
+    _meshPeriodMs.store(period, std::memory_order_release);
   }
 
   void lock() {
@@ -644,14 +644,16 @@ public:
       return;
     }
 
-    if (_meshPeriodMs == kZeroMs) {
+    const auto meshPeriodMs = _meshPeriodMs.load(std::memory_order_acquire);
+    if (meshPeriodMs == kZeroMs) {
       return;
     }
 
     const auto now = time::now();
-    auto duration = chrono::duration_cast<chrono::milliseconds>(now - _lastMesh);
+    const auto lastMesh = _lastMesh.load(std::memory_order_acquire);
+    auto duration = chrono::duration_cast<chrono::milliseconds>(now - lastMesh);
 
-    if (likely(duration < _meshPeriodMs)) {
+    if (likely(duration < meshPeriodMs)) {
       return;
     }
 
@@ -662,14 +664,15 @@ public:
       // time, the second one bows out gracefully without meshing
       // twice in a row.
       const auto lockedNow = time::now();
-      auto duration = chrono::duration_cast<chrono::milliseconds>(lockedNow - _lastMesh);
+      const auto lockedLastMesh = _lastMesh.load(std::memory_order_relaxed);
+      auto duration = chrono::duration_cast<chrono::milliseconds>(lockedNow - lockedLastMesh);
 
-      if (unlikely(duration < _meshPeriodMs)) {
+      if (unlikely(duration < meshPeriodMs)) {
         return;
       }
     }
 
-    _lastMesh = now;
+    _lastMesh.store(now, std::memory_order_release);
 
     meshAllSizeClassesLocked();
   }
@@ -720,7 +723,7 @@ private:
 
   const size_t _maxObjectSize;
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};
-  std::chrono::milliseconds _meshPeriodMs{kMeshPeriodMs};
+  std::atomic<std::chrono::milliseconds> _meshPeriodMs{kMeshPeriodMs};
 
   atomic_size_t ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _lastMeshEffective{0};
 
@@ -756,7 +759,7 @@ private:
   GlobalHeapStats _stats{};
 
   // XXX: should be atomic, but has exception spec?
-  time::time_point _lastMesh;
+  std::atomic<time::time_point> _lastMesh;
 };
 
 static_assert(kNumBins == 25, "if this changes, add more 'Head's above");
