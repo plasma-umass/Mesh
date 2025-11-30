@@ -83,58 +83,6 @@ __attribute__((no_stack_protector)) inline int sys_close(int fd) {
   return syscall_1(SYS_close, fd);
 }
 
-#elif defined(__x86_64__)
-// ===================================================================
-// x86_64 Syscall Implementation
-// ===================================================================
-// x86_64 inline assembly for system calls - REQUIRED because syscall()
-// wrapper is not available during IFUNC resolution.
-//
-// x86_64 calling convention for syscalls:
-//   - Syscall number goes in rax register
-//   - Arguments go in rdi, rsi, rdx, r10, r8, r9 registers (in order)
-//   - Return value comes back in rax
-//   - SYSCALL instruction triggers the syscall
-//   - rcx and r11 are clobbered by SYSCALL instruction
-// ===================================================================
-
-__attribute__((no_stack_protector)) inline long syscall_3(long nr, long arg0, long arg1, long arg2) {
-  long ret;
-  __asm__ volatile("syscall" : "=a"(ret) : "a"(nr), "D"(arg0), "S"(arg1), "d"(arg2) : "rcx", "r11", "memory", "cc");
-  return ret;
-}
-
-__attribute__((no_stack_protector)) inline long syscall_4(long nr, long arg0, long arg1, long arg2, long arg3) {
-  long ret;
-  register long r10 __asm__("r10") = arg3;
-  __asm__ volatile("syscall"
-                   : "=a"(ret)
-                   : "a"(nr), "D"(arg0), "S"(arg1), "d"(arg2), "r"(r10)
-                   : "rcx", "r11", "memory", "cc");
-  return ret;
-}
-
-__attribute__((no_stack_protector)) inline long syscall_1(long nr, long arg0) {
-  long ret;
-  __asm__ volatile("syscall" : "=a"(ret) : "a"(nr), "D"(arg0) : "rcx", "r11", "memory", "cc");
-  return ret;
-}
-
-__attribute__((no_stack_protector)) inline int sys_open(const char *pathname, int flags) {
-  return syscall_4(SYS_openat, -100 /* AT_FDCWD */, (long)pathname, flags, 0);
-}
-
-__attribute__((no_stack_protector)) inline ssize_t sys_read(int fd, void *buf, size_t count) {
-  return syscall_3(SYS_read, fd, (long)buf, count);
-}
-
-__attribute__((no_stack_protector)) inline int sys_close(int fd) {
-  return syscall_1(SYS_close, fd);
-}
-
-#endif  // __x86_64__
-
-#if defined(__aarch64__) || defined(__x86_64__)
 // ===================================================================
 // Page Size Detection via Auxiliary Vector
 // ===================================================================
@@ -148,66 +96,41 @@ __attribute__((no_stack_protector)) inline int sys_close(int fd) {
 // to each process at startup, containing information like page size,
 // clock tick rate, etc. AT_PAGESZ (type 6) contains the system page size.
 //
-// Fallback values:
-//   - ARM64: 16KB (common on newer ARM64 systems, safe for 4KB systems)
-//   - x86_64: 4KB (standard and only option on x86_64)
+// Fallback: 16KB (common on newer ARM64 systems, safe for 4KB systems)
 // ===================================================================
 __attribute__((no_stack_protector)) inline size_t getPageSizeFromAuxv() {
-  // Use stack buffer to avoid any heap allocation (malloc not available)
   unsigned char buffer[512];
   int fd = sys_open("/proc/self/auxv", O_RDONLY);
 
   if (fd < 0) {
-#ifdef __aarch64__
     return kPageSize16K;
-#else
-    return kPageSize4K;
-#endif
   }
 
   ssize_t bytes_read = sys_read(fd, buffer, sizeof(buffer));
   sys_close(fd);
 
   if (bytes_read < (ssize_t)sizeof(Elf64_auxv_t)) {
-#ifdef __aarch64__
     return kPageSize16K;
-#else
-    return kPageSize4K;
-#endif
   }
 
-  // Parse the auxiliary vector
   Elf64_auxv_t *auxv = (Elf64_auxv_t *)buffer;
   Elf64_auxv_t *auxv_end = (Elf64_auxv_t *)(buffer + bytes_read);
 
   while (auxv < auxv_end && auxv->a_type != AT_NULL) {
     if (auxv->a_type == AT_PAGESZ) {
       size_t pagesize = auxv->a_un.a_val;
-      // Sanity check: we ONLY support 4KB and 16KB page sizes
       if (pagesize == kPageSize4K || pagesize == kPageSize16K) {
         return pagesize;
       }
-#ifdef __aarch64__
       return kPageSize16K;
-#else
-      return kPageSize4K;
-#endif
     }
     auxv++;
   }
 
-#ifdef __aarch64__
   return kPageSize16K;
-#else
-  return kPageSize4K;
-#endif
 }
-#else
-// For unsupported architectures, fall back to 4KB
-inline size_t getPageSizeFromAuxv() {
-  return kPageSize4K;
-}
-#endif  // defined(__aarch64__) || defined(__x86_64__)
+
+#endif  // __aarch64__
 
 }  // namespace ifunc
 }  // namespace mesh

@@ -5,7 +5,7 @@ project(Mesh CXX C)
 
 SET(CMAKE_BUILD_TYPE "" CACHE STRING "Just making sure the default CMAKE_BUILD_TYPE configurations won't interfere" FORCE)
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 
 #Set output folders
 set(CMAKE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
