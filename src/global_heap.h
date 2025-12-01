@@ -13,6 +13,7 @@
 
 #include "internal.h"
 #include "meshable_arena.h"
+#include "mesh_trigger.h"
 #include "mini_heap.h"
 
 #include "heaplayers.h"
@@ -127,7 +128,12 @@ public:
     }
   };
 
-  GlobalHeap() : Super(), _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)), _lastMesh{time::now()} {
+  GlobalHeap()
+      : Super(),
+        _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)),
+        _meshEventBudget(initMeshEventBudget()),
+        _meshTrigger(_meshEventBudget),
+        _lastMesh{time::now()} {
   }
 
   inline void dumpStrings() const {
@@ -641,7 +647,7 @@ public:
   // after call to meshLocked() completes src is a nullptr
   void ATTRIBUTE_NEVER_INLINE meshLocked(MiniHeapT *dst, MiniHeapT *&src);
 
-  inline void ATTRIBUTE_ALWAYS_INLINE maybeMesh() {
+  inline void ATTRIBUTE_ALWAYS_INLINE maybeMesh(int preferredSizeClass = -1) {
     if (!kMeshingEnabled) {
       return;
     }
@@ -655,32 +661,12 @@ public:
       return;
     }
 
-    const auto now = time::now();
-    const auto lastMesh = _lastMesh.load(std::memory_order_acquire);
-    auto duration = chrono::duration_cast<chrono::milliseconds>(now - lastMesh);
-
-    if (likely(duration < meshPeriodMs)) {
+    size_t sizeClass = 0;
+    if (!_meshTrigger.popRequested(preferredSizeClass, sizeClass)) {
       return;
     }
 
-    AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
-
-    {
-      // ensure if two threads tried to grab the mesh lock at the same
-      // time, the second one bows out gracefully without meshing
-      // twice in a row.
-      const auto lockedNow = time::now();
-      const auto lockedLastMesh = _lastMesh.load(std::memory_order_relaxed);
-      auto duration = chrono::duration_cast<chrono::milliseconds>(lockedNow - lockedLastMesh);
-
-      if (unlikely(duration < meshPeriodMs)) {
-        return;
-      }
-    }
-
-    _lastMesh.store(now, std::memory_order_release);
-
-    meshAllSizeClassesLocked();
+    processMeshRequest(sizeClass);
   }
 
   inline bool okToProceed(void *ptr) const {
@@ -721,6 +707,8 @@ public:
   }
 
 private:
+  static std::array<uint64_t, kNumBins> initMeshEventBudget();
+  void processMeshRequest(size_t sizeClass);
   // check for meshes in all size classes -- must be called LOCKED
   void meshAllSizeClassesLocked();
   // meshSizeClassLocked returns the number of merged sets found
@@ -730,6 +718,9 @@ private:
   const size_t _maxObjectSize;
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};
   std::atomic<std::chrono::milliseconds> _meshPeriodMs{kMeshPeriodMs};
+
+  std::array<uint64_t, kNumBins> _meshEventBudget{};
+  internal::MeshTrigger<kNumBins> _meshTrigger{_meshEventBudget};
 
   atomic_size_t ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _lastMeshEffective{0};
 

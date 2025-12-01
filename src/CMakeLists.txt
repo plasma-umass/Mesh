@@ -39,6 +39,7 @@ set(unit_src
         testing/unit/concurrent_mesh_test.cc
         testing/unit/mesh_memory_test.cc
         testing/unit/mesh_test.cc
+        testing/unit/mesh_trigger_test.cc
         testing/unit/pending_list_test.cc
         testing/unit/rng_test.cc
         testing/unit/thread_exit_test.cc

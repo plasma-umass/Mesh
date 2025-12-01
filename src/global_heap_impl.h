@@ -37,6 +37,62 @@ MiniHeapID GetMiniHeapID(const MiniHeapT *mh) {
 }
 
 template <size_t PageSize>
+std::array<uint64_t, kNumBins> GlobalHeap<PageSize>::initMeshEventBudget() {
+  std::array<uint64_t, kNumBins> budgets{};
+  constexpr uint64_t minBudget = PageSize;
+  constexpr uint64_t maxBudget = static_cast<uint64_t>(PageSize) * 64ULL;
+  for (size_t i = 0; i < kNumBins; i++) {
+    const uint64_t objSize = static_cast<uint64_t>(SizeMap::ByteSizeForClass(static_cast<int32_t>(i)));
+    uint64_t budget = objSize * 32;
+    if (budget < minBudget) {
+      budget = minBudget;
+    } else if (budget > maxBudget) {
+      budget = maxBudget;
+    }
+    budgets[i] = budget;
+  }
+  return budgets;
+}
+
+template <size_t PageSize>
+struct MeshScratch {
+  MergeSetArray<PageSize> &mergeSets;
+  SplitArray<PageSize> &left;
+  SplitArray<PageSize> &right;
+};
+
+template <size_t PageSize>
+static MeshScratch<PageSize> getMeshScratch() {
+  static MergeSetArray<PageSize> *MergeSetsPtr = []() {
+    void *ptr =
+        mmap(nullptr, sizeof(MergeSetArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    hard_assert(ptr != MAP_FAILED);
+    return new (ptr) MergeSetArray<PageSize>();
+  }();
+  static MergeSetArray<PageSize> &MergeSets = *MergeSetsPtr;
+
+  static SplitArray<PageSize> *LeftPtr = []() {
+    void *ptr = mmap(nullptr, sizeof(SplitArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    hard_assert(ptr != MAP_FAILED);
+    return new (ptr) SplitArray<PageSize>();
+  }();
+  static SplitArray<PageSize> &Left = *LeftPtr;
+
+  static SplitArray<PageSize> *RightPtr = []() {
+    void *ptr = mmap(nullptr, sizeof(SplitArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    hard_assert(ptr != MAP_FAILED);
+    return new (ptr) SplitArray<PageSize>();
+  }();
+  static SplitArray<PageSize> &Right = *RightPtr;
+
+  d_assert((reinterpret_cast<uintptr_t>(&MergeSets) & (getPageSize() - 1)) == 0);
+  d_assert((reinterpret_cast<uintptr_t>(&Left) & (getPageSize() - 1)) == 0);
+  d_assert((reinterpret_cast<uintptr_t>(&Right) & (getPageSize() - 1)) == 0);
+
+  return {MergeSets, Left, Right};
+}
+
+template <size_t PageSize>
 void *GlobalHeap<PageSize>::malloc(size_t sz) {
 #ifndef NDEBUG
   if (unlikely(sz <= kMaxSize)) {
@@ -88,9 +144,14 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
 
   d_assert(mh->maxCount() > 1);
 
+  const size_t objectSize = mh->objectSize();
+  const size_t spanBytes = mh->spanSize();
+
   auto freelistId = mh->freelistId();
   auto isAttached = mh->isAttached();
   auto sizeClass = mh->sizeClass();
+  bool transitionedToPartial = false;
+  bool becameEmpty = false;
 
   // try to avoid storing to this cacheline; the branch is worth it to avoid
   // multi-threaded contention
@@ -151,6 +212,9 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
     isAttached = mh->isAttached();
 
     if (!isAttached && (remaining == 0 || freelistId == list::Full)) {
+      becameEmpty = remaining == 0;
+      transitionedToPartial = remaining > 0 && freelistId == list::Full;
+      shouldMesh = true;
       // this may free the miniheap -- we can't safely access it after
       // this point.
       postFreeLocked(mh, sizeClass, remaining);
@@ -173,6 +237,7 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
         // the exact crossing, the next free will catch it.
         if (isBelowPartialThreshold(remaining, mh->maxCount())) {
           tryPushPendingPartial(mh, sizeClass);
+          transitionedToPartial = true;
         }
         shouldMesh = true;
       } else {
@@ -238,21 +303,67 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
         remaining = mh->inUseCount();
         postFreeLocked(mh, sizeClass, remaining);
         // Note: flushBinLocked deferred to next mesh cycle (requires arena lock)
+        becameEmpty = true;
+        shouldMesh = true;
       }
     } else {
       shouldMesh = !isAttached;
     }
   }
 
-  if (shouldMesh) {
-    // Sample maybeMesh calls using pointer address bits to avoid overhead of
-    // calling clock_gettime on every free. Check ~1 in 4096 frees.
-    // Use bits 12-23 (above page offset, below typical allocation patterns).
-    constexpr uintptr_t kMeshSampleMask = 0xFFF000;
-    if (unlikely((reinterpret_cast<uintptr_t>(ptr) & kMeshSampleMask) == 0)) {
-      maybeMesh();
+  if (shouldMesh && !isAttached && sizeClass >= 0) {
+    size_t delta = objectSize;
+    if (transitionedToPartial || becameEmpty) {
+      delta += spanBytes;
+    }
+    _meshTrigger.add(static_cast<size_t>(sizeClass), delta);
+    maybeMesh(sizeClass);
+  }
+}
+
+template <size_t PageSize>
+void GlobalHeap<PageSize>::processMeshRequest(size_t sizeClass) {
+  d_assert(sizeClass < kNumBins);
+  auto scratch = getMeshScratch<PageSize>();
+  const uint64_t budget = _meshTrigger.adjustedBudget(sizeClass);
+
+  size_t meshCount = 0;
+  bool aboveThreshold = false;
+
+  {
+    // Lock ordering: size-class lock -> arena lock -> epoch lock
+    // This matches meshAllSizeClassesLocked (called via AllLocksGuard in mallctl)
+    lock_guard<mutex> sizeLock(_miniheapLocks[sizeClass]);
+    lock_guard<mutex> arenaLock(_arenaLock);
+
+    // if we have freed but not reset meshed mappings, this will reset
+    // them to the identity mapping, ensuring we don't blow past our VMA
+    // limit (which is why we set the force flag to true)
+    Super::scavenge(true);
+
+    if (Super::aboveMeshThreshold()) {
+      aboveThreshold = true;
+    } else {
+      // Acquire epoch lock last to match lock ordering in meshAllSizeClassesLocked
+      lock_guard<EpochLock> epochLock(_meshEpoch);
+
+      drainPendingPartialLocked(sizeClass);
+      flushBinLocked(sizeClass);
+      meshCount = meshSizeClassLocked(sizeClass, scratch.mergeSets, scratch.left, scratch.right);
+      madvise(&scratch.left, sizeof(scratch.left), MADV_DONTNEED);
+      madvise(&scratch.right, sizeof(scratch.right), MADV_DONTNEED);
+      madvise(&scratch.mergeSets, sizeof(scratch.mergeSets), MADV_DONTNEED);
+      Super::scavenge(true);
     }
   }
+
+  if (!aboveThreshold) {
+    _lastMeshEffective.store(meshCount > 0 ? 1 : 0, std::memory_order_release);
+    _stats.meshCount += meshCount;
+  }
+
+  _meshTrigger.onMeshComplete(sizeClass, meshCount > 0, budget);
+  _lastMesh.store(time::now(), std::memory_order_release);
 }
 
 template <size_t PageSize>
@@ -428,34 +539,7 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
 
 template <size_t PageSize>
 void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
-  static MergeSetArray<PageSize> *MergeSetsPtr = []() {
-    void *ptr =
-        mmap(nullptr, sizeof(MergeSetArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    hard_assert(ptr != MAP_FAILED);
-    return new (ptr) MergeSetArray<PageSize>();
-  }();
-  static MergeSetArray<PageSize> &MergeSets = *MergeSetsPtr;
-  // static_assert(sizeof(MergeSets) == sizeof(void *) * 2 * 4096, "array too big");
-  d_assert((reinterpret_cast<uintptr_t>(&MergeSets) & (getPageSize() - 1)) == 0);
-
-  static SplitArray<PageSize> *LeftPtr = []() {
-    void *ptr = mmap(nullptr, sizeof(SplitArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    hard_assert(ptr != MAP_FAILED);
-    return new (ptr) SplitArray<PageSize>();
-  }();
-  static SplitArray<PageSize> &Left = *LeftPtr;
-
-  static SplitArray<PageSize> *RightPtr = []() {
-    void *ptr = mmap(nullptr, sizeof(SplitArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    hard_assert(ptr != MAP_FAILED);
-    return new (ptr) SplitArray<PageSize>();
-  }();
-  static SplitArray<PageSize> &Right = *RightPtr;
-
-  // static_assert(sizeof(Left) == sizeof(void *) * 16384, "array too big");
-  // static_assert(sizeof(Right) == sizeof(void *) * 16384, "array too big");
-  d_assert((reinterpret_cast<uintptr_t>(&Left) & (getPageSize() - 1)) == 0);
-  d_assert((reinterpret_cast<uintptr_t>(&Right) & (getPageSize() - 1)) == 0);
+  auto scratch = getMeshScratch<PageSize>();
 
   // if we have freed but not reset meshed mappings, this will reset
   // them to the identity mapping, ensuring we don't blow past our VMA
@@ -483,12 +567,12 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
   size_t totalMeshCount = 0;
 
   for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
-    totalMeshCount += meshSizeClassLocked(sizeClass, MergeSets, Left, Right);
+    totalMeshCount += meshSizeClassLocked(sizeClass, scratch.mergeSets, scratch.left, scratch.right);
   }
 
-  madvise(&Left, sizeof(Left), MADV_DONTNEED);
-  madvise(&Right, sizeof(Right), MADV_DONTNEED);
-  madvise(&MergeSets, sizeof(MergeSets), MADV_DONTNEED);
+  madvise(&scratch.left, sizeof(scratch.left), MADV_DONTNEED);
+  madvise(&scratch.right, sizeof(scratch.right), MADV_DONTNEED);
+  madvise(&scratch.mergeSets, sizeof(scratch.mergeSets), MADV_DONTNEED);
 
   _lastMeshEffective = totalMeshCount > 256;
   _stats.meshCount += totalMeshCount;
