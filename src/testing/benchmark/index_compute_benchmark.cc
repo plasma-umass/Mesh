@@ -36,10 +36,10 @@ using namespace mesh;
 namespace magic_div {
 
 struct DivMagic {
-  uint32_t magic;  // multiplier
-  uint8_t shift;   // right shift amount after multiply
-  uint8_t add_one; // 1 if we need to add 1 after shift (for "round-up" cases)
-  uint8_t pad[2];  // padding to 8 bytes
+  uint32_t magic;   // multiplier
+  uint8_t shift;    // right shift amount after multiply
+  uint8_t add_one;  // 1 if we need to add 1 after shift (for "round-up" cases)
+  uint8_t pad[2];   // padding to 8 bytes
 };
 
 constexpr DivMagic computeMagic(uint32_t divisor) {
@@ -77,19 +77,15 @@ constexpr DivMagic computeMagic(uint32_t divisor) {
 }
 
 inline constexpr DivMagic kMagicTable[kClassSizesMax] = {
-    computeMagic(16),    computeMagic(16),    computeMagic(32),
-    computeMagic(48),    computeMagic(64),    computeMagic(80),
-    computeMagic(96),    computeMagic(112),   computeMagic(128),
-    computeMagic(160),   computeMagic(192),   computeMagic(224),
-    computeMagic(256),   computeMagic(320),   computeMagic(384),
-    computeMagic(448),   computeMagic(512),   computeMagic(640),
-    computeMagic(768),   computeMagic(896),   computeMagic(1024),
-    computeMagic(2048),  computeMagic(4096),  computeMagic(8192),
-    computeMagic(16384),
+    computeMagic(16),   computeMagic(16),   computeMagic(32),   computeMagic(48),   computeMagic(64),
+    computeMagic(80),   computeMagic(96),   computeMagic(112),  computeMagic(128),  computeMagic(160),
+    computeMagic(192),  computeMagic(224),  computeMagic(256),  computeMagic(320),  computeMagic(384),
+    computeMagic(448),  computeMagic(512),  computeMagic(640),  computeMagic(768),  computeMagic(896),
+    computeMagic(1024), computeMagic(2048), computeMagic(4096), computeMagic(8192), computeMagic(16384),
 };
 
 inline size_t ATTRIBUTE_ALWAYS_INLINE computeIndex(size_t byteOffset, uint32_t sizeClass) {
-  const DivMagic& m = kMagicTable[sizeClass];
+  const DivMagic &m = kMagicTable[sizeClass];
   uint64_t result = (static_cast<uint64_t>(byteOffset) * m.magic) >> m.shift;
   return static_cast<size_t>(result);
 }
@@ -99,20 +95,17 @@ inline size_t ATTRIBUTE_ALWAYS_INLINE computeIndex(size_t byteOffset, uint32_t s
 namespace magic_div64 {
 
 constexpr uint64_t computeMagic64(uint32_t divisor) {
-  if (divisor == 0) return 0;
+  if (divisor == 0)
+    return 0;
   return ((1ULL << 48) + divisor - 1) / divisor;
 }
 
 inline constexpr uint64_t kMagicTable64[kClassSizesMax] = {
-    computeMagic64(16),    computeMagic64(16),    computeMagic64(32),
-    computeMagic64(48),    computeMagic64(64),    computeMagic64(80),
-    computeMagic64(96),    computeMagic64(112),   computeMagic64(128),
-    computeMagic64(160),   computeMagic64(192),   computeMagic64(224),
-    computeMagic64(256),   computeMagic64(320),   computeMagic64(384),
-    computeMagic64(448),   computeMagic64(512),   computeMagic64(640),
-    computeMagic64(768),   computeMagic64(896),   computeMagic64(1024),
-    computeMagic64(2048),  computeMagic64(4096),  computeMagic64(8192),
-    computeMagic64(16384),
+    computeMagic64(16),   computeMagic64(16),   computeMagic64(32),   computeMagic64(48),   computeMagic64(64),
+    computeMagic64(80),   computeMagic64(96),   computeMagic64(112),  computeMagic64(128),  computeMagic64(160),
+    computeMagic64(192),  computeMagic64(224),  computeMagic64(256),  computeMagic64(320),  computeMagic64(384),
+    computeMagic64(448),  computeMagic64(512),  computeMagic64(640),  computeMagic64(768),  computeMagic64(896),
+    computeMagic64(1024), computeMagic64(2048), computeMagic64(4096), computeMagic64(8192), computeMagic64(16384),
 };
 
 inline size_t ATTRIBUTE_ALWAYS_INLINE computeIndex(size_t byteOffset, uint32_t sizeClass) {
@@ -210,18 +203,17 @@ static void verifyCorrectness() {
         size_t magic64Result = magic_div64::computeIndex(offset, sc);
 
         if (floatResult != expected) {
-          fprintf(stderr, "FLOAT MISMATCH: sc=%u offset=%u expected=%zu got=%zu\n",
-                  sc, offset, expected, floatResult);
+          fprintf(stderr, "FLOAT MISMATCH: sc=%u offset=%u expected=%zu got=%zu\n", sc, offset, expected, floatResult);
           hasErrors = true;
         }
         if (magic32Result != expected) {
-          fprintf(stderr, "MAGIC32 MISMATCH: sc=%u offset=%u expected=%zu got=%zu\n",
-                  sc, offset, expected, magic32Result);
+          fprintf(stderr, "MAGIC32 MISMATCH: sc=%u offset=%u expected=%zu got=%zu\n", sc, offset, expected,
+                  magic32Result);
           hasErrors = true;
         }
         if (magic64Result != expected) {
-          fprintf(stderr, "MAGIC64 MISMATCH: sc=%u offset=%u expected=%zu got=%zu\n",
-                  sc, offset, expected, magic64Result);
+          fprintf(stderr, "MAGIC64 MISMATCH: sc=%u offset=%u expected=%zu got=%zu\n", sc, offset, expected,
+                  magic64Result);
           hasErrors = true;
         }
       }
@@ -233,7 +225,7 @@ static void verifyCorrectness() {
 }
 
 // Benchmark: Direct integer division (baseline)
-static void BM_IndexCompute_DirectDivision(benchmark::State& state) {
+static void BM_IndexCompute_DirectDivision(benchmark::State &state) {
   const uint32_t sizeClass = kTestSizeClasses[state.range(0) % kNumTestClasses];
   const size_t pageSize = state.range(1);
   TestData data = generateTestData(sizeClass, pageSize);
@@ -251,7 +243,7 @@ static void BM_IndexCompute_DirectDivision(benchmark::State& state) {
 }
 
 // Benchmark: Float reciprocal (current Mesh approach, moved to table)
-static void BM_IndexCompute_FloatReciprocal(benchmark::State& state) {
+static void BM_IndexCompute_FloatReciprocal(benchmark::State &state) {
   const uint32_t sizeClass = kTestSizeClasses[state.range(0) % kNumTestClasses];
   const size_t pageSize = state.range(1);
   TestData data = generateTestData(sizeClass, pageSize);
@@ -269,7 +261,7 @@ static void BM_IndexCompute_FloatReciprocal(benchmark::State& state) {
 }
 
 // Benchmark: Integer magic division (32-bit magic, variable shift)
-static void BM_IndexCompute_MagicDiv32(benchmark::State& state) {
+static void BM_IndexCompute_MagicDiv32(benchmark::State &state) {
   const uint32_t sizeClass = kTestSizeClasses[state.range(0) % kNumTestClasses];
   const size_t pageSize = state.range(1);
   TestData data = generateTestData(sizeClass, pageSize);
@@ -287,7 +279,7 @@ static void BM_IndexCompute_MagicDiv32(benchmark::State& state) {
 }
 
 // Benchmark: Integer magic division (64-bit magic, fixed 48-bit shift)
-static void BM_IndexCompute_MagicDiv64(benchmark::State& state) {
+static void BM_IndexCompute_MagicDiv64(benchmark::State &state) {
   const uint32_t sizeClass = kTestSizeClasses[state.range(0) % kNumTestClasses];
   const size_t pageSize = state.range(1);
   TestData data = generateTestData(sizeClass, pageSize);
@@ -305,7 +297,7 @@ static void BM_IndexCompute_MagicDiv64(benchmark::State& state) {
 }
 
 // Benchmark with mixed size classes (more realistic workload)
-static void BM_IndexCompute_Mixed_DirectDivision(benchmark::State& state) {
+static void BM_IndexCompute_Mixed_DirectDivision(benchmark::State &state) {
   const size_t pageSize = state.range(0);
   std::vector<TestData> allData;
   for (uint32_t sc : kTestSizeClasses) {
@@ -314,12 +306,12 @@ static void BM_IndexCompute_Mixed_DirectDivision(benchmark::State& state) {
 
   size_t sum = 0;
   size_t opsPerIter = 0;
-  for (const auto& data : allData) {
+  for (const auto &data : allData) {
     opsPerIter += data.numOffsets;
   }
 
   for (auto _ : state) {
-    for (const auto& data : allData) {
+    for (const auto &data : allData) {
       for (size_t i = 0; i < data.numOffsets; i++) {
         sum += computeIndexDirect(data.offsets[i], data.objectSize);
       }
@@ -329,7 +321,7 @@ static void BM_IndexCompute_Mixed_DirectDivision(benchmark::State& state) {
   state.SetItemsProcessed(state.iterations() * opsPerIter);
 }
 
-static void BM_IndexCompute_Mixed_FloatReciprocal(benchmark::State& state) {
+static void BM_IndexCompute_Mixed_FloatReciprocal(benchmark::State &state) {
   const size_t pageSize = state.range(0);
   std::vector<TestData> allData;
   for (uint32_t sc : kTestSizeClasses) {
@@ -338,12 +330,12 @@ static void BM_IndexCompute_Mixed_FloatReciprocal(benchmark::State& state) {
 
   size_t sum = 0;
   size_t opsPerIter = 0;
-  for (const auto& data : allData) {
+  for (const auto &data : allData) {
     opsPerIter += data.numOffsets;
   }
 
   for (auto _ : state) {
-    for (const auto& data : allData) {
+    for (const auto &data : allData) {
       for (size_t i = 0; i < data.numOffsets; i++) {
         sum += float_recip::computeIndex(data.offsets[i], data.sizeClass);
       }
@@ -353,7 +345,7 @@ static void BM_IndexCompute_Mixed_FloatReciprocal(benchmark::State& state) {
   state.SetItemsProcessed(state.iterations() * opsPerIter);
 }
 
-static void BM_IndexCompute_Mixed_MagicDiv32(benchmark::State& state) {
+static void BM_IndexCompute_Mixed_MagicDiv32(benchmark::State &state) {
   const size_t pageSize = state.range(0);
   std::vector<TestData> allData;
   for (uint32_t sc : kTestSizeClasses) {
@@ -362,12 +354,12 @@ static void BM_IndexCompute_Mixed_MagicDiv32(benchmark::State& state) {
 
   size_t sum = 0;
   size_t opsPerIter = 0;
-  for (const auto& data : allData) {
+  for (const auto &data : allData) {
     opsPerIter += data.numOffsets;
   }
 
   for (auto _ : state) {
-    for (const auto& data : allData) {
+    for (const auto &data : allData) {
       for (size_t i = 0; i < data.numOffsets; i++) {
         sum += magic_div::computeIndex(data.offsets[i], data.sizeClass);
       }
@@ -377,7 +369,7 @@ static void BM_IndexCompute_Mixed_MagicDiv32(benchmark::State& state) {
   state.SetItemsProcessed(state.iterations() * opsPerIter);
 }
 
-static void BM_IndexCompute_Mixed_MagicDiv64(benchmark::State& state) {
+static void BM_IndexCompute_Mixed_MagicDiv64(benchmark::State &state) {
   const size_t pageSize = state.range(0);
   std::vector<TestData> allData;
   for (uint32_t sc : kTestSizeClasses) {
@@ -386,12 +378,12 @@ static void BM_IndexCompute_Mixed_MagicDiv64(benchmark::State& state) {
 
   size_t sum = 0;
   size_t opsPerIter = 0;
-  for (const auto& data : allData) {
+  for (const auto &data : allData) {
     opsPerIter += data.numOffsets;
   }
 
   for (auto _ : state) {
-    for (const auto& data : allData) {
+    for (const auto &data : allData) {
       for (size_t i = 0; i < data.numOffsets; i++) {
         sum += magic_div64::computeIndex(data.offsets[i], data.sizeClass);
       }
@@ -404,40 +396,68 @@ static void BM_IndexCompute_Mixed_MagicDiv64(benchmark::State& state) {
 // Register benchmarks with different size classes and page sizes
 // Args: (size_class_index, page_size)
 BENCHMARK(BM_IndexCompute_DirectDivision)
-    ->Args({0, kBenchPageSize4K})->Args({0, kBenchPageSize16K})   // 16 bytes
-    ->Args({1, kBenchPageSize4K})->Args({1, kBenchPageSize16K})   // 48 bytes
-    ->Args({2, kBenchPageSize4K})->Args({2, kBenchPageSize16K})   // 96 bytes
-    ->Args({3, kBenchPageSize4K})->Args({3, kBenchPageSize16K})   // 128 bytes
-    ->Args({4, kBenchPageSize4K})->Args({4, kBenchPageSize16K})   // 256 bytes
-    ->Args({5, kBenchPageSize4K})->Args({5, kBenchPageSize16K})   // 512 bytes
-    ->Args({6, kBenchPageSize4K})->Args({6, kBenchPageSize16K});  // 1024 bytes
+    ->Args({0, kBenchPageSize4K})
+    ->Args({0, kBenchPageSize16K})  // 16 bytes
+    ->Args({1, kBenchPageSize4K})
+    ->Args({1, kBenchPageSize16K})  // 48 bytes
+    ->Args({2, kBenchPageSize4K})
+    ->Args({2, kBenchPageSize16K})  // 96 bytes
+    ->Args({3, kBenchPageSize4K})
+    ->Args({3, kBenchPageSize16K})  // 128 bytes
+    ->Args({4, kBenchPageSize4K})
+    ->Args({4, kBenchPageSize16K})  // 256 bytes
+    ->Args({5, kBenchPageSize4K})
+    ->Args({5, kBenchPageSize16K})  // 512 bytes
+    ->Args({6, kBenchPageSize4K})
+    ->Args({6, kBenchPageSize16K});  // 1024 bytes
 
 BENCHMARK(BM_IndexCompute_FloatReciprocal)
-    ->Args({0, kBenchPageSize4K})->Args({0, kBenchPageSize16K})
-    ->Args({1, kBenchPageSize4K})->Args({1, kBenchPageSize16K})
-    ->Args({2, kBenchPageSize4K})->Args({2, kBenchPageSize16K})
-    ->Args({3, kBenchPageSize4K})->Args({3, kBenchPageSize16K})
-    ->Args({4, kBenchPageSize4K})->Args({4, kBenchPageSize16K})
-    ->Args({5, kBenchPageSize4K})->Args({5, kBenchPageSize16K})
-    ->Args({6, kBenchPageSize4K})->Args({6, kBenchPageSize16K});
+    ->Args({0, kBenchPageSize4K})
+    ->Args({0, kBenchPageSize16K})
+    ->Args({1, kBenchPageSize4K})
+    ->Args({1, kBenchPageSize16K})
+    ->Args({2, kBenchPageSize4K})
+    ->Args({2, kBenchPageSize16K})
+    ->Args({3, kBenchPageSize4K})
+    ->Args({3, kBenchPageSize16K})
+    ->Args({4, kBenchPageSize4K})
+    ->Args({4, kBenchPageSize16K})
+    ->Args({5, kBenchPageSize4K})
+    ->Args({5, kBenchPageSize16K})
+    ->Args({6, kBenchPageSize4K})
+    ->Args({6, kBenchPageSize16K});
 
 BENCHMARK(BM_IndexCompute_MagicDiv32)
-    ->Args({0, kBenchPageSize4K})->Args({0, kBenchPageSize16K})
-    ->Args({1, kBenchPageSize4K})->Args({1, kBenchPageSize16K})
-    ->Args({2, kBenchPageSize4K})->Args({2, kBenchPageSize16K})
-    ->Args({3, kBenchPageSize4K})->Args({3, kBenchPageSize16K})
-    ->Args({4, kBenchPageSize4K})->Args({4, kBenchPageSize16K})
-    ->Args({5, kBenchPageSize4K})->Args({5, kBenchPageSize16K})
-    ->Args({6, kBenchPageSize4K})->Args({6, kBenchPageSize16K});
+    ->Args({0, kBenchPageSize4K})
+    ->Args({0, kBenchPageSize16K})
+    ->Args({1, kBenchPageSize4K})
+    ->Args({1, kBenchPageSize16K})
+    ->Args({2, kBenchPageSize4K})
+    ->Args({2, kBenchPageSize16K})
+    ->Args({3, kBenchPageSize4K})
+    ->Args({3, kBenchPageSize16K})
+    ->Args({4, kBenchPageSize4K})
+    ->Args({4, kBenchPageSize16K})
+    ->Args({5, kBenchPageSize4K})
+    ->Args({5, kBenchPageSize16K})
+    ->Args({6, kBenchPageSize4K})
+    ->Args({6, kBenchPageSize16K});
 
 BENCHMARK(BM_IndexCompute_MagicDiv64)
-    ->Args({0, kBenchPageSize4K})->Args({0, kBenchPageSize16K})
-    ->Args({1, kBenchPageSize4K})->Args({1, kBenchPageSize16K})
-    ->Args({2, kBenchPageSize4K})->Args({2, kBenchPageSize16K})
-    ->Args({3, kBenchPageSize4K})->Args({3, kBenchPageSize16K})
-    ->Args({4, kBenchPageSize4K})->Args({4, kBenchPageSize16K})
-    ->Args({5, kBenchPageSize4K})->Args({5, kBenchPageSize16K})
-    ->Args({6, kBenchPageSize4K})->Args({6, kBenchPageSize16K});
+    ->Args({0, kBenchPageSize4K})
+    ->Args({0, kBenchPageSize16K})
+    ->Args({1, kBenchPageSize4K})
+    ->Args({1, kBenchPageSize16K})
+    ->Args({2, kBenchPageSize4K})
+    ->Args({2, kBenchPageSize16K})
+    ->Args({3, kBenchPageSize4K})
+    ->Args({3, kBenchPageSize16K})
+    ->Args({4, kBenchPageSize4K})
+    ->Args({4, kBenchPageSize16K})
+    ->Args({5, kBenchPageSize4K})
+    ->Args({5, kBenchPageSize16K})
+    ->Args({6, kBenchPageSize4K})
+    ->Args({6, kBenchPageSize16K});
 
 // Mixed workload benchmarks
 BENCHMARK(BM_IndexCompute_Mixed_DirectDivision)->Arg(kBenchPageSize4K)->Arg(kBenchPageSize16K);
@@ -452,17 +472,17 @@ static void runVerification() {
   fprintf(stderr, "\n");
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   runVerification();
 
   // Print table sizes for comparison
   fprintf(stderr, "Table sizes:\n");
-  fprintf(stderr, "  Float reciprocal: %zu bytes (%zu entries x %zu bytes)\n",
-          sizeof(float_recip::kReciprocals), kClassSizesMax, sizeof(float));
-  fprintf(stderr, "  Magic div 32-bit: %zu bytes (%zu entries x %zu bytes)\n",
-          sizeof(magic_div::kMagicTable), kClassSizesMax, sizeof(magic_div::DivMagic));
-  fprintf(stderr, "  Magic div 64-bit: %zu bytes (%zu entries x %zu bytes)\n",
-          sizeof(magic_div64::kMagicTable64), kClassSizesMax, sizeof(uint64_t));
+  fprintf(stderr, "  Float reciprocal: %zu bytes (%zu entries x %zu bytes)\n", sizeof(float_recip::kReciprocals),
+          kClassSizesMax, sizeof(float));
+  fprintf(stderr, "  Magic div 32-bit: %zu bytes (%zu entries x %zu bytes)\n", sizeof(magic_div::kMagicTable),
+          kClassSizesMax, sizeof(magic_div::DivMagic));
+  fprintf(stderr, "  Magic div 64-bit: %zu bytes (%zu entries x %zu bytes)\n", sizeof(magic_div64::kMagicTable64),
+          kClassSizesMax, sizeof(uint64_t));
   fprintf(stderr, "\n");
 
   benchmark::Initialize(&argc, argv);

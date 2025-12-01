@@ -134,7 +134,8 @@ void MeshableArena<PageSize>::afterForkChild() {
         }
 #endif
 
-        void *remapPtr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff << kPageShift);
+        void *remapPtr =
+            mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, keepOff << kPageShift);
         hard_assert_msg(remapPtr != MAP_FAILED, "mesh remap failed: %d", errno);
 
         return false;

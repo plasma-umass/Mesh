@@ -32,31 +32,31 @@ static constexpr size_t kClassSizesMax = 25;
 namespace float_recip {
 
 inline constexpr float kReciprocals[kClassSizesMax] = {
-    1.0f / 16.0f,    // class 0: 16 bytes
-    1.0f / 16.0f,    // class 1: 16 bytes
-    1.0f / 32.0f,    // class 2: 32 bytes
-    1.0f / 48.0f,    // class 3: 48 bytes
-    1.0f / 64.0f,    // class 4: 64 bytes
-    1.0f / 80.0f,    // class 5: 80 bytes
-    1.0f / 96.0f,    // class 6: 96 bytes
-    1.0f / 112.0f,   // class 7: 112 bytes
-    1.0f / 128.0f,   // class 8: 128 bytes
-    1.0f / 160.0f,   // class 9: 160 bytes
-    1.0f / 192.0f,   // class 10: 192 bytes
-    1.0f / 224.0f,   // class 11: 224 bytes
-    1.0f / 256.0f,   // class 12: 256 bytes
-    1.0f / 320.0f,   // class 13: 320 bytes
-    1.0f / 384.0f,   // class 14: 384 bytes
-    1.0f / 448.0f,   // class 15: 448 bytes
-    1.0f / 512.0f,   // class 16: 512 bytes
-    1.0f / 640.0f,   // class 17: 640 bytes
-    1.0f / 768.0f,   // class 18: 768 bytes
-    1.0f / 896.0f,   // class 19: 896 bytes
-    1.0f / 1024.0f,  // class 20: 1024 bytes
-    1.0f / 2048.0f,  // class 21: 2048 bytes
-    1.0f / 4096.0f,  // class 22: 4096 bytes
-    1.0f / 8192.0f,  // class 23: 8192 bytes
-    1.0f / 16384.0f, // class 24: 16384 bytes
+    1.0f / 16.0f,     // class 0: 16 bytes
+    1.0f / 16.0f,     // class 1: 16 bytes
+    1.0f / 32.0f,     // class 2: 32 bytes
+    1.0f / 48.0f,     // class 3: 48 bytes
+    1.0f / 64.0f,     // class 4: 64 bytes
+    1.0f / 80.0f,     // class 5: 80 bytes
+    1.0f / 96.0f,     // class 6: 96 bytes
+    1.0f / 112.0f,    // class 7: 112 bytes
+    1.0f / 128.0f,    // class 8: 128 bytes
+    1.0f / 160.0f,    // class 9: 160 bytes
+    1.0f / 192.0f,    // class 10: 192 bytes
+    1.0f / 224.0f,    // class 11: 224 bytes
+    1.0f / 256.0f,    // class 12: 256 bytes
+    1.0f / 320.0f,    // class 13: 320 bytes
+    1.0f / 384.0f,    // class 14: 384 bytes
+    1.0f / 448.0f,    // class 15: 448 bytes
+    1.0f / 512.0f,    // class 16: 512 bytes
+    1.0f / 640.0f,    // class 17: 640 bytes
+    1.0f / 768.0f,    // class 18: 768 bytes
+    1.0f / 896.0f,    // class 19: 896 bytes
+    1.0f / 1024.0f,   // class 20: 1024 bytes
+    1.0f / 2048.0f,   // class 21: 2048 bytes
+    1.0f / 4096.0f,   // class 22: 4096 bytes
+    1.0f / 8192.0f,   // class 23: 8192 bytes
+    1.0f / 16384.0f,  // class 24: 16384 bytes
 };
 
 // Compute object index from byte offset using float reciprocal

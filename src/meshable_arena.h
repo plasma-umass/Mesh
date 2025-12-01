@@ -386,8 +386,7 @@ private:
 // Implementation
 
 template <size_t PageSize>
-MeshableArena<PageSize>::MeshableArena()
-    : SuperHeap(), _fastPrng(internal::seed(), internal::seed()) {
+MeshableArena<PageSize>::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), internal::seed()) {
   d_assert(getArenaInstance<PageSize>() == nullptr);
   getArenaInstance<PageSize>() = this;
 

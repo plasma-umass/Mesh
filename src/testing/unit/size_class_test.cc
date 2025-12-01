@@ -85,9 +85,8 @@ TEST(SizeClass, ReciprocalTable) {
     for (size_t j = 0; j <= getPageSize(); j += 8) {
       const size_t tableOff = float_recip::computeIndex(j, i);
       const size_t directOff = j / objectSize;
-      ASSERT_EQ(tableOff, directOff)
-          << "Mismatch at sizeClass=" << i << " offset=" << j
-          << " objectSize=" << objectSize;
+      ASSERT_EQ(tableOff, directOff) << "Mismatch at sizeClass=" << i << " offset=" << j
+                                     << " objectSize=" << objectSize;
     }
   }
 }

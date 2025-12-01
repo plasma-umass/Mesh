@@ -196,7 +196,6 @@ public:
     d_assert(!_nextMeshed.hasValue());
   }
 
-
   inline Span span() const {
     return _span;
   }

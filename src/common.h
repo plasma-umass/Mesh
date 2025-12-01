@@ -163,8 +163,13 @@ static constexpr size_t kMinArenaExpansion = 4096;  // 4096 pages (16 MB on 4KB 
 
 // ensures we amortize the cost of going to the global heap enough
 static constexpr uint64_t kMinStringLen = 8;
-static constexpr size_t kMiniheapRefillGoalSize = 4 * 1024;
-static constexpr size_t kMaxMiniheapsPerShuffleVector = 24;
+// Increased from 4KB to 16KB to reduce frequency of global refills.
+// Each refill grabs more capacity, trading some RSS for fewer lock acquisitions.
+static constexpr size_t kMiniheapRefillGoalSize = 16 * 1024;
+// Increased from 24 to 48 - this is the key driver of performance improvement.
+// More attached miniheaps means more capacity before needing global refills.
+// For small objects (256/miniheap): 48 miniheaps = 12K allocations before refill.
+static constexpr size_t kMaxMiniheapsPerShuffleVector = 48;
 
 // shuffle vector features
 static constexpr int16_t kMaxShuffleVectorLength = 1024;  // increased to support 16KB pages with 16-byte objects
