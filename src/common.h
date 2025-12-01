@@ -73,11 +73,6 @@ static constexpr int kMapShared = 1;
 static constexpr int kMapShared = kMeshingEnabled ? MAP_SHARED : MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
 #endif
 
-// we have to define this here for use in meshable_arena's CheapHeap we allocate
-// MiniHeaps out of.  We validate (and fail compilation) if this gets out of date
-// with a static_assert at the bottom of mini_heap.h
-static constexpr size_t kMiniHeapSize = 64;
-
 static constexpr size_t kMinObjectSize = 16;
 static constexpr size_t kMaxSize = 16384;
 static constexpr size_t kClassSizesMax = 25;
@@ -88,6 +83,12 @@ static constexpr int kMinAlign = 16;
 static constexpr uint64_t kPageSizeMin = 4096;
 static constexpr uint64_t kPageSize4K = 4096;
 static constexpr uint64_t kPageSize16K = 16384;
+
+// MiniHeap size depends on page size due to inlined bitmap
+template <size_t PageSize>
+constexpr size_t MiniHeapSizeFor() {
+  return (PageSize == kPageSize4K) ? 64 : 160;
+}
 
 // Runtime page size detection for Apple Silicon (16KB) and x86 (4KB) compatibility
 namespace internal {

@@ -104,7 +104,7 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
   // here can't call mh->free(arenaBegin(), ptr), because in consume takeBitmap always clear the bitmap,
   // if clearIfNotFree after takeBitmap
   // it alwasy return false, but in this case, you need to free again.
-  auto wasSet = mh->clearIfNotFree(arenaBegin(), ptr);
+  auto wasSet = mh->clearIfNotFree(this->arenaBegin(), ptr);
 
   bool shouldMesh = false;
 
@@ -130,7 +130,7 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
         // we have confirmation that we raced with meshing, so free the pointer
         // on the new miniheap
         d_assert(sizeClass == mh->sizeClass());
-        mh->free(arenaBegin(), ptr);
+        mh->free(this->arenaBegin(), ptr);
       } else {
         // our MiniHeap is unrelated to whatever is here in memory now - get out of here.
         return;
@@ -317,27 +317,27 @@ void GlobalHeap<PageSize>::meshLocked(MiniHeapT *dst, MiniHeapT *&src) {
   // dst->dumpDebug();
   // src->dumpDebug();
   const size_t dstSpanSize = dst->spanSize();
-  const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart(arenaBegin()));
+  const auto dstSpanStart = reinterpret_cast<void *>(dst->getSpanStart(this->arenaBegin()));
 
   src->forEachMeshed([&](const MiniHeapT *mh) {
     // marks srcSpans read-only
-    const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
+    const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(this->arenaBegin()));
     Super::beginMesh(dstSpanStart, srcSpan, dstSpanSize);
     return false;
   });
 
   // does the copying of objects and updating of span metadata
-  dst->consume(arenaBegin(), src);
+  dst->consume(this->arenaBegin(), src);
   d_assert(src->isMeshed());
 
   src->forEachMeshed([&](const MiniHeapT *mh) {
     d_assert(mh->isMeshed());
-    const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(arenaBegin()));
+    const auto srcSpan = reinterpret_cast<void *>(mh->getSpanStart(this->arenaBegin()));
     // frees physical memory + re-marks srcSpans as read/write
     Super::finalizeMesh(dstSpanStart, srcSpan, dstSpanSize);
     return false;
   });
-  Super::freePhys(reinterpret_cast<void *>(src->getSpanStart(arenaBegin())), dstSpanSize);
+  Super::freePhys(reinterpret_cast<void *>(src->getSpanStart(this->arenaBegin())), dstSpanSize);
 
   // make sure we adjust what bin the destination is in -- it might
   // now be full and not a candidate for meshing
@@ -362,7 +362,7 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
         return mergeSetCount < kMaxMergeSets;
       });
 
-  method::shiftedSplitting(_fastPrng, &_partialFreelist[sizeClass].first, left, right, meshFound);
+  method::shiftedSplitting(this->_fastPrng, &_partialFreelist[sizeClass].first, left, right, meshFound);
 
   if (mergeSetCount == 0) {
     // debug("nothing to mesh.");
@@ -403,7 +403,7 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
       oneEmpty = true;
     }
 
-    if (!oneEmpty && !aboveMeshThreshold()) {
+    if (!oneEmpty && !this->aboveMeshThreshold()) {
       meshLocked(dst, src);
       meshCount++;
     }
@@ -498,7 +498,7 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
 
   AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
 
-  const auto meshedPageHWM = meshedPageHighWaterMark();
+  const auto meshedPageHWM = this->meshedPageHighWaterMark();
 
   debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
   debug("Meshed MB (total):  %.1f\n", (size_t)_stats.meshCount * (double)PageSize / 1024.0 / 1024.0);

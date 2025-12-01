@@ -77,16 +77,16 @@ public:
 };
 
 template <size_t PageSize>
-class GlobalHeap : public MeshableArena {
+class GlobalHeap : public MeshableArena<PageSize> {
 private:
   DISALLOW_COPY_AND_ASSIGN(GlobalHeap);
-  typedef MeshableArena Super;
-
-  static_assert(HL::gcd<MmapHeap::Alignment, Alignment>::value == Alignment,
-                "expected MmapHeap to have 16-byte alignment");
+  typedef MeshableArena<PageSize> Super;
 
 public:
   enum { Alignment = 16 };
+
+  static_assert(HL::gcd<MmapHeap::Alignment, Alignment>::value == Alignment,
+                "expected MmapHeap to have 16-byte alignment");
   using MiniHeapT = MiniHeap<PageSize>;
   using MiniHeapListEntryT = MiniHeapListEntry<PageSize>;
 
@@ -152,7 +152,7 @@ public:
                                                                 size_t objectSize, size_t pageAlignment = 1) {
     d_assert(0 < pageCount);
 
-    void *buf = _mhAllocator.alloc();
+    void *buf = this->_mhAllocator.alloc();
     d_assert(buf != nullptr);
 
     // allocate out of the arena
@@ -161,9 +161,9 @@ public:
     d_assert(spanBegin != nullptr);
     d_assert((reinterpret_cast<uintptr_t>(spanBegin) / getPageSize()) % pageAlignment == 0);
 
-    MiniHeapT *mh = new (buf) MiniHeapT(arenaBegin(), span, objectCount, objectSize);
+    MiniHeapT *mh = new (buf) MiniHeapT(this->arenaBegin(), span, objectCount, objectSize);
 
-    const auto miniheapID = MiniHeapID{_mhAllocator.offsetFor(buf)};
+    const auto miniheapID = MiniHeapID{this->_mhAllocator.offsetFor(buf)};
     Super::trackMiniHeap(span, miniheapID);
 
     // mesh::debug("%p (%u) created!\n", mh, GetMiniHeapID(mh));
@@ -195,7 +195,7 @@ public:
     d_assert(mh->spanSize() == pageCount * pageSize);
     // d_assert(mh->objectSize() == pageCount * pageSize);
 
-    void *ptr = mh->mallocAt(arenaBegin(), 0);
+    void *ptr = mh->mallocAt(this->arenaBegin(), 0);
 
     return ptr;
   }
@@ -476,13 +476,13 @@ public:
   }
 
   inline MiniHeapT *ATTRIBUTE_ALWAYS_INLINE miniheapForID(const MiniHeapID id) const {
-    auto mh = reinterpret_cast<MiniHeapT *>(_mhAllocator.ptrFromOffset(id.value()));
+    auto mh = reinterpret_cast<MiniHeapT *>(this->_mhAllocator.ptrFromOffset(id.value()));
     __builtin_prefetch(mh, 1, 2);
     return mh;
   }
 
   inline MiniHeapID miniheapIDFor(const MiniHeapT *mh) const {
-    return MiniHeapID{_mhAllocator.offsetFor(mh)};
+    return MiniHeapID{this->_mhAllocator.offsetFor(mh)};
   }
 
   void untrackMiniheapLocked(MiniHeapT *mh) {
@@ -504,7 +504,7 @@ public:
     d_assert(!mh->getFreelist()->next().hasValue());
     mh->MiniHeapT::~MiniHeap();
     // memset(reinterpret_cast<char *>(mh), 0x77, sizeof(MiniHeap));
-    _mhAllocator.free(mh);
+    this->_mhAllocator.free(mh);
     _miniheapCount--;
   }
 
@@ -541,7 +541,7 @@ public:
       MiniHeapT *mh = toFree[i];
       const bool isMeshed = mh->isMeshed();
       const auto type = isMeshed ? internal::PageType::Meshed : internal::PageType::Dirty;
-      Super::free(reinterpret_cast<void *>(mh->getSpanStart(arenaBegin())), spanSize, type);
+      Super::free(reinterpret_cast<void *>(mh->getSpanStart(this->arenaBegin())), spanSize, type);
       _stats.mhFreeCount++;
       freeMiniheapAfterMeshLocked(mh, untrack);
     }
