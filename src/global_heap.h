@@ -305,11 +305,12 @@ public:
       }
       newListId = list::Empty;
       list = &_emptyFreelist[sizeClass];
-    } else if (inUse == max) {
+    } else if (inUse == max || !isBelowPartialThreshold(inUse, max)) {
+      // Full or above 80% threshold - not on any list
       if (currFreelistId == list::Full) {
         return false;
       }
-      // Full miniheaps are not on any list - just set state and remove from current list
+      // Remove from current list and set to Full state
       if (currFreelist != nullptr) {
         mh->getFreelist()->remove(currFreelist);
       }

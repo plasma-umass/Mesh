@@ -60,7 +60,7 @@ public:
   }
 
   inline uint32_t freelistId() const {
-    return (_flags.load(std::memory_order_seq_cst) >> FreelistIdShift) & 0x3;
+    return (_flags.load(std::memory_order_acquire) >> FreelistIdShift) & 0x3;
   }
 
   inline void setFreelistId(uint32_t freelistId) {
@@ -97,15 +97,15 @@ public:
   inline uint32_t maxCount() const {
     // XXX: does this assume little endian?
     // 0x7ff = 11 bits, supports values up to 2047 (we cap at 1024 for bitmap limit)
-    return (_flags.load(std::memory_order_seq_cst) >> MaxCountShift) & 0x7ff;
+    return (_flags.load(std::memory_order_acquire) >> MaxCountShift) & 0x7ff;
   }
 
   inline uint32_t sizeClass() const {
-    return (_flags.load(std::memory_order_seq_cst) >> SizeClassShift) & 0x3f;
+    return (_flags.load(std::memory_order_acquire) >> SizeClassShift) & 0x3f;
   }
 
   inline uint8_t svOffset() const {
-    return (_flags.load(std::memory_order_seq_cst) >> ShuffleVectorOffsetShift) & 0xff;
+    return (_flags.load(std::memory_order_acquire) >> ShuffleVectorOffsetShift) & 0xff;
   }
 
   inline void setSvOffset(uint8_t off) {

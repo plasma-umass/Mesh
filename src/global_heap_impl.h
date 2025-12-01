@@ -167,9 +167,13 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
 
       if (remaining > 0 && freelistId == list::Full) {
         // Lock-free path: Full -> Partial transition
-        // Either we succeed in pushing to pending list, or another thread
-        // already did it. Either way, no lock needed.
-        tryPushPendingPartial(mh, sizeClass);
+        // Only push to partial list when occupancy drops below 80% threshold.
+        // Use pre-computed 'remaining' to avoid extra atomic read after clearIfNotFree().
+        // Threshold fuzziness is acceptable: if concurrent frees cause us to miss
+        // the exact crossing, the next free will catch it.
+        if (isBelowPartialThreshold(remaining, mh->maxCount())) {
+          tryPushPendingPartial(mh, sizeClass);
+        }
         shouldMesh = true;
       } else {
         // remaining == 0: need lock for Empty transition

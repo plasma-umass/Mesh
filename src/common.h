@@ -135,6 +135,13 @@ static constexpr size_t kMaxMergeSets = 4096;
 // cutoff to be considered for meshing
 static constexpr double kOccupancyCutoff = .8;
 
+// Returns true if occupancy is below the threshold for partial list inclusion.
+// Equivalent to: inUseCount / maxCount < kOccupancyCutoff (0.8)
+// Uses integer math to avoid floating point: inUseCount * 5 < maxCount * 4
+inline constexpr bool isBelowPartialThreshold(uint32_t inUseCount, uint32_t maxCount) {
+  return inUseCount * 5 < maxCount * 4;
+}
+
 // if we have, e.g. a kernel-imposed max_map_count of 2^16 (65k) we
 // can only safely have about 30k meshes before we are at risk of
 // hitting the max_map_count limit. Must smaller than 1/3, because
