@@ -367,6 +367,14 @@ public:
     _flags.clearPending();
   }
 
+  inline MiniHeapID pendingNext() const {
+    return _pendingNext;
+  }
+
+  inline void setPendingNext(MiniHeapID next) {
+    _pendingNext = next;
+  }
+
   inline pid_t current() const {
     return _current.load(std::memory_order::memory_order_acquire);
   }
@@ -576,7 +584,8 @@ protected:
   Flags _flags;                       // 4        32
   const float _objectSizeReciprocal;  // 4        36
   MiniHeapID _nextMeshed{};           // 4        40
-  uint32_t _padding[6];               // 24       64 (padding to maintain 64-byte size)
+  MiniHeapID _pendingNext{};          // 4        44 (for lock-free pending list, separate from _freelist)
+  uint32_t _padding[5];               // 20       64 (padding to maintain 64-byte size)
 };
 
 template <size_t PageSize>

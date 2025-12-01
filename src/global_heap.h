@@ -221,11 +221,14 @@ public:
 
     while (head.hasValue() && head != list::Head) {
       MiniHeapT *mh = GetMiniHeap<MiniHeapT>(head);
-      MiniHeapID next = mh->getFreelist()->next();
+      // Use dedicated _pendingNext field for pending list traversal.
+      // This is separate from _freelist._next to prevent races where a processed
+      // miniheap is reallocated, freed, and pushed to a NEW pending list (which
+      // would overwrite _freelist._next) while we're still iterating the OLD list.
+      MiniHeapID next = mh->pendingNext();
 
-      // Clear the pending link before add() so it doesn't try to remove from a list
-      mh->getFreelist()->setNext(MiniHeapID{});
-      mh->getFreelist()->setPrev(MiniHeapID{});
+      // Clear the pending link
+      mh->setPendingNext(MiniHeapID{});
 
       // Check current state - inUse may have changed since queuing
       auto inUse = mh->inUseCount();
@@ -264,11 +267,12 @@ public:
       return;
     }
 
-    // Push onto pending list using _freelist._next for linking
+    // Push onto pending list using dedicated _pendingNext field for linking.
+    // This is separate from _freelist._next to prevent races during drain iteration.
     MiniHeapID myId = GetMiniHeapID(mh);
     MiniHeapID oldHead = _pendingPartialHead[sizeClass].head.load(std::memory_order_relaxed);
     do {
-      mh->getFreelist()->setNext(oldHead);
+      mh->setPendingNext(oldHead);
     } while (!_pendingPartialHead[sizeClass].head.compare_exchange_weak(oldHead, myId, std::memory_order_release,
                                                                         std::memory_order_relaxed));
   }
