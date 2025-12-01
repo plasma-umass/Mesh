@@ -90,6 +90,12 @@ endif
 	./bazel build $(BAZEL_CONFIG) --config=disable-meshing --config=nolto -c opt //src:local-refill-benchmark
 	./bazel-bin/src/local-refill-benchmark
 
+# Index computation benchmark - compares float reciprocal vs integer magic division
+# Run with: make index-benchmark
+index-benchmark:
+	./bazel build $(BAZEL_CONFIG) -c opt //src:index-compute-benchmark
+	./bazel-bin/src/index-compute-benchmark
+
 # Larson benchmark - multi-threaded allocation stress test
 # Default runs with meshing disabled for baseline comparison
 # Args: sleep_sec min_size max_size chunks_per_thread num_rounds seed num_threads
@@ -136,4 +142,4 @@ TAGS:
 	@echo "  TAGS"
 	find . -type f | egrep '\.(cpp|h|cc|hh)$$' | grep -v google | xargs etags -l c++
 
-.PHONY: all clean distclean format test test_frag check build benchmark install TAGS larson larson-mesh larson-nomesh
+.PHONY: all clean distclean format test test_frag check build benchmark index-benchmark install TAGS larson larson-mesh larson-nomesh

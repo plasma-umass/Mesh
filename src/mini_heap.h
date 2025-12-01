@@ -15,6 +15,7 @@
 #include "bitmap.h"
 #include "fixed_array.h"
 #include "internal.h"
+#include "size_class_reciprocals.h"
 
 #include "rng/mwc.h"
 
@@ -185,8 +186,7 @@ public:
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
       : _bitmap(nullptr),
         _span(span),
-        _flags(objectCount, objectCount > 1 ? SizeMap::SizeClass(objectSize) : 1, 0, list::Attached),
-        _objectSizeReciprocal(1.0 / (float)objectSize) {
+        _flags(objectCount, objectCount > 1 ? SizeMap::SizeClass(objectSize) : 1, 0, list::Attached) {
     // Use internal heap for bitmap allocation (provides 16-byte alignment, sufficient for atomics)
     void *mem = internal::Heap().malloc(sizeof(BitmapType));
     hard_assert(mem != nullptr);
@@ -291,9 +291,7 @@ public:
 
   inline size_t objectSize() const {
     if (likely(!isLargeAlloc())) {
-      // this doesn't handle all the corner cases of roundf(3),
-      // but it does work for all of our small object size classes
-      return static_cast<size_t>(1 / _objectSizeReciprocal + 0.5);
+      return static_cast<size_t>(SizeMap::class_to_size(sizeClass()));
     } else {
       return static_cast<size_t>(_span.length) << kPageShift;
     }
@@ -523,7 +521,7 @@ public:
     uintptr_t span = reinterpret_cast<uintptr_t>(arenaBegin) + (static_cast<size_t>(_span.offset) << kPageShift);
     d_assert(span != 0);
 
-    const size_t off = (ptrval - span) * _objectSizeReciprocal;
+    const size_t off = float_recip::computeIndex(ptrval - span, sizeClass());
     d_assert(off < maxCount());
 
     return off;
@@ -534,7 +532,7 @@ public:
     d_assert(span != 0);
     const auto ptrval = reinterpret_cast<uintptr_t>(ptr);
 
-    const size_t off = (ptrval - span) * _objectSizeReciprocal;
+    const size_t off = float_recip::computeIndex(ptrval - span, sizeClass());
     d_assert(off < maxCount());
 
     return off;
@@ -582,10 +580,9 @@ protected:
   ListEntryType _freelist{};          // 8        24
   atomic<pid_t> _current{0};          // 4        28
   Flags _flags;                       // 4        32
-  const float _objectSizeReciprocal;  // 4        36
-  MiniHeapID _nextMeshed{};           // 4        40
-  MiniHeapID _pendingNext{};          // 4        44 (for lock-free pending list, separate from _freelist)
-  uint32_t _padding[5];               // 20       64 (padding to maintain 64-byte size)
+  MiniHeapID _nextMeshed{};           // 4        36
+  MiniHeapID _pendingNext{};          // 4        40 (for lock-free pending list, separate from _freelist)
+  uint32_t _padding[6];               // 24       64 (padding to maintain 64-byte size)
 };
 
 template <size_t PageSize>

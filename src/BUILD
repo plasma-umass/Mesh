@@ -286,6 +286,24 @@ cc_test(
     ],
 )
 
+# Index computation benchmark - compares float reciprocal vs integer magic division
+# for computing object index from byte offset (hot path in free())
+cc_binary(
+    name = "index-compute-benchmark",
+    srcs = [
+        "testing/benchmark/index_compute_benchmark.cc",
+        "size_class_reciprocals.h",
+    ],
+    copts = [
+        "-Isrc",
+    ] + MESH_DEFAULT_COPTS,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LINKER_FLAGS,
+    linkstatic = True,
+    deps = [
+        "@com_google_benchmark//:benchmark",
+    ],
+)
+
 # Larson benchmark - multi-threaded allocation stress test
 # This benchmark exercises the "remote free" path where threads free memory
 # allocated by other threads. Use --config=disable-meshing for nomesh variant.

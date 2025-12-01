@@ -9,6 +9,7 @@
 
 #include "common.h"
 #include "internal.h"
+#include "size_class_reciprocals.h"
 
 using namespace mesh;
 
@@ -66,5 +67,27 @@ TEST(SizeClass, Reciprocal) {
 
     const size_t newObjectSize = __builtin_roundf(1 / recip);
     ASSERT_TRUE(newObjectSize == objectSize);
+  }
+}
+
+TEST(SizeClass, ReciprocalTable) {
+  // Verify that the shared reciprocal table gives correct results
+  // for all size classes and all valid byte offsets
+  for (size_t i = 0; i < kClassSizesMax; i++) {
+    const size_t objectSize = SizeMap::class_to_size(i);
+
+    // Table reciprocal should match computed reciprocal
+    const float tableRecip = float_recip::getReciprocal(i);
+    const float expectedRecip = 1.0f / static_cast<float>(objectSize);
+    ASSERT_FLOAT_EQ(tableRecip, expectedRecip);
+
+    // Test index computation for all valid byte offsets within a page
+    for (size_t j = 0; j <= getPageSize(); j += 8) {
+      const size_t tableOff = float_recip::computeIndex(j, i);
+      const size_t directOff = j / objectSize;
+      ASSERT_EQ(tableOff, directOff)
+          << "Mismatch at sizeClass=" << i << " offset=" << j
+          << " objectSize=" << objectSize;
+    }
   }
 }
