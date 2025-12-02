@@ -245,7 +245,13 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
   }
 
   if (shouldMesh) {
-    maybeMesh();
+    // Sample maybeMesh calls using pointer address bits to avoid overhead of
+    // calling clock_gettime on every free. Check ~1 in 4096 frees.
+    // Use bits 12-23 (above page offset, below typical allocation patterns).
+    constexpr uintptr_t kMeshSampleMask = 0xFFF000;
+    if (unlikely((reinterpret_cast<uintptr_t>(ptr) & kMeshSampleMask) == 0)) {
+      maybeMesh();
+    }
   }
 }
 
