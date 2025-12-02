@@ -41,7 +41,10 @@ public:
   }
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE current() const noexcept {
-    return _epoch.load(std::memory_order::memory_order_seq_cst);
+    // Acquire ordering: if we read a value stored with release, we see all
+    // operations that happened-before that store. This ensures readers see
+    // all meshing work that completed before the epoch was updated.
+    return _epoch.load(std::memory_order_acquire);
   }
 
   inline size_t ATTRIBUTE_ALWAYS_INLINE isSame(size_t startEpoch) const noexcept {
@@ -49,18 +52,21 @@ public:
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE lock() noexcept {
-    // make sure that the previous epoch was even
-    const auto old = _epoch.fetch_add(1, std::memory_order::memory_order_seq_cst);
+    // Release ordering: all subsequent meshing operations will be ordered
+    // after this store. Readers with acquire loads will see this update.
+    // The old value is only used for assertion, so relaxed read is fine.
+    const auto old = _epoch.fetch_add(1, std::memory_order_release);
     hard_assert(old % 2 == 0);
   }
 
   inline void ATTRIBUTE_ALWAYS_INLINE unlock() noexcept {
+    // Release ordering: all prior meshing operations are ordered before this
+    // store. Readers with acquire loads will see all meshing work completed.
 #ifndef NDEBUG
-    // make sure that the previous epoch was odd
-    const auto old = _epoch.fetch_add(1, std::memory_order::memory_order_seq_cst);
+    const auto old = _epoch.fetch_add(1, std::memory_order_release);
     d_assert(old % 2 == 1);
 #else
-    _epoch.fetch_add(1, std::memory_order::memory_order_seq_cst);
+    _epoch.fetch_add(1, std::memory_order_release);
 #endif
   }
 
