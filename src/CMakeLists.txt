@@ -41,6 +41,7 @@ set(unit_src
         testing/unit/mesh_test.cc
         testing/unit/pending_list_test.cc
         testing/unit/rng_test.cc
+        testing/unit/thread_exit_test.cc
         testing/unit/size_class_test.cc
         testing/unit/triple_mesh_test.cc
 )

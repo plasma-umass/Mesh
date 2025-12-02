@@ -368,23 +368,29 @@ void ThreadLocalHeap<PageSize>::DeleteHeap(ThreadLocalHeap *heap) {
     return;
   }
 
-  // Save pointers before destructor invalidates the object
-  ThreadLocalHeap *next = heap->_next;
-  ThreadLocalHeap *prev = heap->_prev;
+  {
+    // Hold the global heap lock while manipulating the linked list.
+    // This prevents races with NewHeap and other concurrent DeleteHeap calls.
+    std::lock_guard<GlobalHeapT> lock(mesh::runtime<PageSize>().heap());
 
-  // manually invoke the destructor
+    ThreadLocalHeap *next = heap->_next;
+    ThreadLocalHeap *prev = heap->_prev;
+
+    if (next != nullptr) {
+      next->_prev = prev;
+    }
+    if (prev != nullptr) {
+      prev->_next = next;
+    }
+    if (_threadLocalHeaps == heap) {
+      _threadLocalHeaps = next;
+    }
+  }
+
+  // Call destructor and free outside the lock to avoid deadlock.
+  // The destructor calls releaseAll() which acquires miniheap locks,
+  // and the global heap lock() already holds all miniheap locks.
   heap->ThreadLocalHeap::~ThreadLocalHeap();
-
-  if (next != nullptr) {
-    next->_prev = prev;
-  }
-  if (prev != nullptr) {
-    prev->_next = next;
-  }
-  if (_threadLocalHeaps == heap) {
-    _threadLocalHeaps = next;
-  }
-
   mesh::internal::Heap().free(reinterpret_cast<void *>(heap));
 }
 
