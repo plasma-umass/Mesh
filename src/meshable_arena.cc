@@ -3,6 +3,10 @@
 // Use of this source code is governed by the Apache License,
 // Version 2.0, that can be found in the LICENSE file.
 
+// Fork handling is not supported on Windows - fork() doesn't exist there.
+// These functions are only compiled for Unix platforms.
+#if !defined(_WIN32)
+
 #include "meshable_arena.h"
 #include "runtime.h"
 
@@ -160,3 +164,5 @@ void MeshableArena<PageSize>::afterForkChild() {
 template class MeshableArena<kPageSize4K>;
 template class MeshableArena<kPageSize16K>;
 }  // namespace mesh
+
+#endif  // !defined(_WIN32)

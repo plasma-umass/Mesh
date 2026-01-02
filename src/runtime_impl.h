@@ -7,6 +7,12 @@
 #ifndef MESH_RUNTIME_IMPL_H
 #define MESH_RUNTIME_IMPL_H
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <process.h>
+#else
 #include <dirent.h>
 #include <errno.h>
 #include <pthread.h>
@@ -18,18 +24,20 @@
 #ifdef __linux__
 #include <sys/signalfd.h>
 #endif
+#endif
 
 #include "runtime.h"
 #include "thread_local_heap.h"
+
+#if defined(_WIN32)
+#include "platform/exception_handler_windows.h"
+#endif
 
 namespace mesh {
 
 template <size_t PageSize>
 void Runtime<PageSize>::initMaxMapCount() {
-#ifndef __linux__
-  return;
-#endif
-
+#ifdef __linux__
   auto fd = open("/proc/sys/vm/max_map_count", O_RDONLY | O_CLOEXEC);
   if (unlikely(fd < 0)) {
     mesh::debug("initMaxMapCount: no proc file");
@@ -40,7 +48,7 @@ void Runtime<PageSize>::initMaxMapCount() {
   char buf[BUF_LEN];
   memset(buf, 0, BUF_LEN);
 
-  auto _ __attribute__((unused)) = read(fd, buf, BUF_LEN - 1);
+  auto _ ATTRIBUTE_UNUSED = read(fd, buf, BUF_LEN - 1);
   close(fd);
 
   errno = 0;
@@ -58,8 +66,13 @@ void Runtime<PageSize>::initMaxMapCount() {
   const auto meshCount = static_cast<size_t>(kMeshesPerMap * mapCount);
 
   _heap.setMaxMeshCount(meshCount);
+#else
+  // Non-Linux platforms: nothing to do
+  (void)this;
+#endif
 }
 
+#if !defined(_WIN32)
 template <size_t PageSize>
 int Runtime<PageSize>::createThread(pthread_t *thread, const pthread_attr_t *attr, PthreadFn startRoutine, void *arg) {
   lock_guard<Runtime> lock(*this);
@@ -107,7 +120,9 @@ void Runtime<PageSize>::exitThread(void *retval) {
   // pthread_exit doesn't return
   __builtin_unreachable();
 }
+#endif  // !defined(_WIN32)
 
+#if !defined(_WIN32)
 template <size_t PageSize>
 void Runtime<PageSize>::createSignalFd() {
   mesh::real::init();
@@ -179,13 +194,14 @@ void *Runtime<PageSize>::bgThread(void *arg) {
 
       // debug("<<<<<<<<<<\n");
     } else {
-      auto _ __attribute__((unused)) =
+      auto _ ATTRIBUTE_UNUSED =
           write(STDERR_FILENO, "Read unexpected signal\n", strlen("Read unexpected signal\n"));
     }
   }
 #endif
   return nullptr;
 }
+#endif  // !defined(_WIN32)
 
 template <size_t PageSize>
 void Runtime<PageSize>::lock() {
@@ -251,6 +267,7 @@ ssize_t Runtime<PageSize>::recvmsg(int sockfd, struct msghdr *msg, int flags) {
 
 #endif
 
+#if !defined(_WIN32)
 static struct sigaction sigbusAction;
 static struct sigaction sigsegvAction;
 static mutex sigactionLock;
@@ -388,6 +405,14 @@ void Runtime<PageSize>::installSegfaultHandler() {
     memcpy(&sigsegvAction, &oldAction, sizeof(sigsegvAction));
   }
 }
+#else  // _WIN32
+// On Windows, the Vectored Exception Handler is installed via DllMain/alloc8
+// and handles all meshing-related access violations. No per-thread handler needed.
+template <size_t PageSize>
+void Runtime<PageSize>::installSegfaultHandler() {
+  // VEH is already installed globally - nothing to do per-thread
+}
+#endif  // !defined(_WIN32)
 
 }  // namespace mesh
 

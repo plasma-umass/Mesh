@@ -8,7 +8,8 @@
 #define MESH_MMAP_HEAP_H
 
 #if defined(_WIN32)
-#error "TODO"
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #else
 // UNIX
@@ -27,7 +28,7 @@
 namespace mesh {
 
 // MmapHeap extends OneWayMmapHeap to track allocated address space
-// and will free memory with calls to munmap.
+// and will free memory with calls to munmap (or VirtualFree on Windows).
 class MmapHeap : public OneWayMmapHeap {
 private:
   DISALLOW_COPY_AND_ASSIGN(MmapHeap);
@@ -40,7 +41,11 @@ public:
   }
 
   inline void *malloc(size_t sz) {
+#if defined(_WIN32)
+    auto ptr = map(sz, MAP_PRIVATE | MAP_ANONYMOUS, INVALID_HANDLE_VALUE);
+#else
     auto ptr = map(sz, MAP_PRIVATE | MAP_ANONYMOUS, -1);
+#endif
 
     d_assert(_vmaMap.find(ptr) == _vmaMap.end());
     _vmaMap[ptr] = sz;
@@ -79,9 +84,16 @@ public:
 
     auto sz = entry->second;
 
+#if defined(_WIN32)
+    // On Windows, VirtualFree with MEM_RELEASE frees the entire region.
+    // The size parameter must be 0 when using MEM_RELEASE.
+    (void)sz;  // sz is tracked but not needed for VirtualFree
+    VirtualFree(ptr, 0, MEM_RELEASE);
+#else
     munmap(ptr, sz);
     // madvise(ptr, sz, MADV_DONTNEED);
     // mprotect(ptr, sz, PROT_NONE);
+#endif
 
     _vmaMap.erase(entry);
     d_assert(_vmaMap.find(ptr) == _vmaMap.end());

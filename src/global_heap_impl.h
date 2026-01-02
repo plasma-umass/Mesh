@@ -8,12 +8,69 @@
 
 #include <utility>
 
+#if defined(_WIN32)
+// Windows memory allocation compatibility (only define if not already defined)
+#ifndef PROT_READ
+#define PROT_READ 0x1
+#endif
+#ifndef PROT_WRITE
+#define PROT_WRITE 0x2
+#endif
+#ifndef MAP_PRIVATE
+#define MAP_PRIVATE 0x02
+#endif
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS 0x20
+#endif
+#ifndef MAP_FAILED
+#define MAP_FAILED ((void *)-1)
+#endif
+#ifndef MADV_DONTNEED
+#define MADV_DONTNEED 4
+#endif
+
+inline void *mesh_mmap_anon(size_t size) {
+  void *ptr = VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+  return ptr ? ptr : MAP_FAILED;
+}
+
+inline int mesh_madvise_dontneed(void *addr, size_t len) {
+  // On Windows, use DiscardVirtualMemory if available, otherwise MEM_RESET
+  typedef DWORD(WINAPI * DiscardVirtualMemoryFunc)(PVOID, SIZE_T);
+  static DiscardVirtualMemoryFunc pDiscardVirtualMemory = nullptr;
+  static bool checked = false;
+  if (!checked) {
+    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+    if (kernel32) {
+      pDiscardVirtualMemory = reinterpret_cast<DiscardVirtualMemoryFunc>(
+          GetProcAddress(kernel32, "DiscardVirtualMemory"));
+    }
+    checked = true;
+  }
+  if (pDiscardVirtualMemory) {
+    pDiscardVirtualMemory(addr, len);
+  } else {
+    VirtualAlloc(addr, len, MEM_RESET, PAGE_READWRITE);
+  }
+  return 0;
+}
+
+// Redefine mmap/madvise for these specific uses
+#define mmap(addr, length, prot, flags, fd, offset) mesh_mmap_anon(length)
+#define madvise(addr, length, advice) mesh_madvise_dontneed(addr, length)
+#endif  // _WIN32
+
 #include "global_heap.h"
 
 #include "meshing.h"
 #include "runtime.h"
+#include "thread_local_heap.h"
 
 namespace mesh {
+
+// Forward declaration for use in mallctl before full definition is available
+template <size_t PageSize>
+class ThreadLocalHeap;
 
 template <typename MiniHeapT>
 MiniHeapT *GetMiniHeap(const MiniHeapID id) {
@@ -251,26 +308,34 @@ void GlobalHeap<PageSize>::freeFor(MiniHeapT *mh, void *ptr, size_t startEpoch) 
 
 template <size_t PageSize>
 int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-  if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
-    return -1;
-
-  auto statp = reinterpret_cast<size_t *>(oldp);
-
-  // Handle operations that need special lock handling first
+  // Handle operations that don't need oldp/oldlenp first
   if (strcmp(name, "mesh.scavenge") == 0) {
     // scavenge() acquires locks internally
     scavenge(true);
     return 0;
   } else if (strcmp(name, "mesh.compact") == 0) {
+#ifdef MESH_DEBUG_VERBOSE
+    mesh_dprintf("DEBUG: mesh.compact mallctl called\n");
+#endif
     // Acquire all locks for meshing, then release for scavenge
     {
       AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
+
+      // Reset lastMeshEffective to allow meshing on existing partial heaps
+      _lastMeshEffective.store(1, std::memory_order::memory_order_release);
+
       meshAllSizeClassesLocked();
     }
     // scavenge() acquires locks internally
     scavenge(true);
     return 0;
   }
+
+  // Other operations require oldp/oldlenp
+  if (!oldp || !oldlenp || *oldlenp < sizeof(size_t))
+    return -1;
+
+  auto statp = reinterpret_cast<size_t *>(oldp);
 
   // All other operations need locks held
   AllLocksGuard allLocks(_miniheapLocks, _largeAllocLock, _arenaLock);
@@ -422,30 +487,49 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
 
 template <size_t PageSize>
 void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
+#if defined(_WIN32)
+  // Windows: use VirtualAlloc for temporary mesh working arrays
+  static MergeSetArray<PageSize> *MergeSetsPtr = []() {
+    void *ptr = VirtualAlloc(nullptr, sizeof(MergeSetArray<PageSize>), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    hard_assert(ptr != nullptr);
+    return new (ptr) MergeSetArray<PageSize>();
+  }();
+  static SplitArray<PageSize> *LeftPtr = []() {
+    void *ptr = VirtualAlloc(nullptr, sizeof(SplitArray<PageSize>), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    hard_assert(ptr != nullptr);
+    return new (ptr) SplitArray<PageSize>();
+  }();
+  static SplitArray<PageSize> *RightPtr = []() {
+    void *ptr = VirtualAlloc(nullptr, sizeof(SplitArray<PageSize>), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    hard_assert(ptr != nullptr);
+    return new (ptr) SplitArray<PageSize>();
+  }();
+#else
+  // Unix: use mmap for temporary mesh working arrays
   static MergeSetArray<PageSize> *MergeSetsPtr = []() {
     void *ptr =
         mmap(nullptr, sizeof(MergeSetArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     hard_assert(ptr != MAP_FAILED);
     return new (ptr) MergeSetArray<PageSize>();
   }();
-  static MergeSetArray<PageSize> &MergeSets = *MergeSetsPtr;
-  // static_assert(sizeof(MergeSets) == sizeof(void *) * 2 * 4096, "array too big");
-  d_assert((reinterpret_cast<uintptr_t>(&MergeSets) & (getPageSize() - 1)) == 0);
-
   static SplitArray<PageSize> *LeftPtr = []() {
     void *ptr = mmap(nullptr, sizeof(SplitArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     hard_assert(ptr != MAP_FAILED);
     return new (ptr) SplitArray<PageSize>();
   }();
-  static SplitArray<PageSize> &Left = *LeftPtr;
-
   static SplitArray<PageSize> *RightPtr = []() {
     void *ptr = mmap(nullptr, sizeof(SplitArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     hard_assert(ptr != MAP_FAILED);
     return new (ptr) SplitArray<PageSize>();
   }();
+#endif
+
+  static MergeSetArray<PageSize> &MergeSets = *MergeSetsPtr;
+  static SplitArray<PageSize> &Left = *LeftPtr;
   static SplitArray<PageSize> &Right = *RightPtr;
 
+  // static_assert(sizeof(MergeSets) == sizeof(void *) * 2 * 4096, "array too big");
+  d_assert((reinterpret_cast<uintptr_t>(&MergeSets) & (getPageSize() - 1)) == 0);
   // static_assert(sizeof(Left) == sizeof(void *) * 16384, "array too big");
   // static_assert(sizeof(Right) == sizeof(void *) * 16384, "array too big");
   d_assert((reinterpret_cast<uintptr_t>(&Left) & (getPageSize() - 1)) == 0);
@@ -456,11 +540,29 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
   // limit (which is why we set the force flag to true)
   Super::scavenge(true);
 
+#ifdef MESH_DEBUG_VERBOSE
+  // Count miniheaps in partial freelist for debug
+  size_t partialCount = 0;
+  for (size_t sc = 0; sc < kNumBins; sc++) {
+    partialCount += _partialFreelist[sc].second;
+  }
+  mesh_dprintf("DEBUG meshAll: partial=%zu lastMeshEffective=%d aboveThreshold=%d\n",
+          partialCount,
+          (int)_lastMeshEffective.load(std::memory_order_relaxed),
+          (int)Super::aboveMeshThreshold());
+#endif
+
   if (!_lastMeshEffective.load(std::memory_order::memory_order_acquire)) {
+#ifdef MESH_DEBUG_VERBOSE
+    mesh_dprintf("DEBUG meshAll: returning early - lastMeshEffective=false\n");
+#endif
     return;
   }
 
   if (Super::aboveMeshThreshold()) {
+#ifdef MESH_DEBUG_VERBOSE
+    mesh_dprintf("DEBUG meshAll: returning early - aboveMeshThreshold\n");
+#endif
     return;
   }
 
@@ -476,13 +578,39 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
 
   size_t totalMeshCount = 0;
 
-  for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
-    totalMeshCount += meshSizeClassLocked(sizeClass, MergeSets, Left, Right);
+#ifdef MESH_DEBUG_VERBOSE
+  // Count partial miniheaps after drain
+  size_t partialAfterDrain = 0;
+  for (size_t sc = 0; sc < kNumBins; sc++) {
+    partialAfterDrain += _partialFreelist[sc].second;
   }
+  mesh_dprintf("DEBUG meshAll: after drain/flush, partial=%zu\n", partialAfterDrain);
+#endif
 
+  for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
+    size_t meshCount = meshSizeClassLocked(sizeClass, MergeSets, Left, Right);
+#ifdef MESH_DEBUG_VERBOSE
+    if (_partialFreelist[sizeClass].second > 0 || meshCount > 0) {
+      mesh_dprintf("DEBUG meshAll: sizeClass=%zu partial=%zu meshCount=%zu\n",
+              sizeClass, _partialFreelist[sizeClass].second, meshCount);
+    }
+#endif
+    totalMeshCount += meshCount;
+  }
+#ifdef MESH_DEBUG_VERBOSE
+  mesh_dprintf("DEBUG meshAll: totalMeshCount=%zu\n", totalMeshCount);
+#endif
+
+#if defined(_WIN32)
+  // Windows: reset pages to release physical memory
+  VirtualAlloc(&Left, sizeof(Left), MEM_RESET, PAGE_READWRITE);
+  VirtualAlloc(&Right, sizeof(Right), MEM_RESET, PAGE_READWRITE);
+  VirtualAlloc(&MergeSets, sizeof(MergeSets), MEM_RESET, PAGE_READWRITE);
+#else
   madvise(&Left, sizeof(Left), MADV_DONTNEED);
   madvise(&Right, sizeof(Right), MADV_DONTNEED);
   madvise(&MergeSets, sizeof(MergeSets), MADV_DONTNEED);
+#endif
 
   _lastMeshEffective = totalMeshCount > 256;
   _stats.meshCount += totalMeshCount;
@@ -531,7 +659,10 @@ void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry<PageSize> *mi
     auto mh = GetMiniHeap<MiniHeap<PageSize>>(mhId);
     mhId = mh->getFreelist()->next();
 
-    if (!mh->isMeshingCandidate() || (mh->fullness() >= kOccupancyCutoff)) {
+    if (!mh->isMeshingCandidate()) {
+      continue;
+    }
+    if (mh->fullness() >= kOccupancyCutoff) {
       continue;
     }
 
@@ -543,6 +674,11 @@ void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry<PageSize> *mi
       rightSize++;
     }
   }
+#ifdef MESH_DEBUG_VERBOSE
+  if (leftSize > 0 || rightSize > 0) {
+    mesh_dprintf("DEBUG halfSplit: left=%zu right=%zu\n", leftSize, rightSize);
+  }
+#endif
 
   internal::mwcShuffle(&left[0], &left[leftSize], prng);
   internal::mwcShuffle(&right[0], &right[rightSize], prng);
@@ -592,6 +728,19 @@ void ATTRIBUTE_NEVER_INLINE shiftedSplitting(
       const auto bitmap2 = h2->bitmap().bits();
 
       const bool areMeshable = mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes);
+
+#ifdef MESH_DEBUG_VERBOSE
+      // Debug first few comparisons
+      static size_t cmpCount = 0;
+      cmpCount++;
+      if (cmpCount <= 10) {
+        mesh_dprintf("DEBUG meshCmp: h1=%p h2=%p b1=0x%016llx b2=0x%016llx meshable=%d\n",
+                (void*)h1, (void*)h2,
+                (unsigned long long)((const uint64_t*)bitmap1)[0],
+                (unsigned long long)((const uint64_t*)bitmap2)[0],
+                (int)areMeshable);
+      }
+#endif
 
       if (unlikely(areMeshable)) {
         std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> heaps{h1, h2};

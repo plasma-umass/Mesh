@@ -18,18 +18,38 @@ else
 BAZEL_CONFIG =
 endif
 
-ifeq ($(UNAME_S),Darwin)
+# Detect Windows (MSYS2/Git Bash/Cygwin report MINGW or MSYS or CYGWIN)
+ifneq (,$(findstring MINGW,$(UNAME_S)))
+IS_WINDOWS = 1
+endif
+ifneq (,$(findstring MSYS,$(UNAME_S)))
+IS_WINDOWS = 1
+endif
+ifneq (,$(findstring CYGWIN,$(UNAME_S)))
+IS_WINDOWS = 1
+endif
+
+ifdef IS_WINDOWS
+LIB_EXT        = dll
+STATIC_TARGET  = mesh_static_windows
+DYNAMIC_LIB    = mesh.dll
+LDCONFIG       =
+# On Windows, invoke bazel via Python since shebang doesn't work in MSYS
+BAZEL          = python ./bazel
+else ifeq ($(UNAME_S),Darwin)
 LIB_EXT        = dylib
 STATIC_TARGET  = mesh_static_macos
+DYNAMIC_LIB    = libmesh.$(LIB_EXT)
 LDCONFIG       =
 PREFIX         = /usr/local
+BAZEL          = ./bazel
 else
 LIB_EXT        = so
 STATIC_TARGET  = mesh_static_linux
-LDCONFIG       = ldconfig
-endif
-
 DYNAMIC_LIB    = libmesh.$(LIB_EXT)
+LDCONFIG       = ldconfig
+BAZEL          = ./bazel
+endif
 STATIC_LIB     = lib$(STATIC_TARGET).a
 INSTALL_DYNAMIC = libmesh$(LIB_SUFFIX).$(LIB_EXT)
 INSTALL_STATIC  = libmesh$(LIB_SUFFIX).a
@@ -60,10 +80,10 @@ endif
 all: test build
 
 build lib:
-	./bazel build $(BAZEL_CONFIG) -c opt //src:$(DYNAMIC_LIB) //src:$(STATIC_TARGET)
+	$(BAZEL) build $(BAZEL_CONFIG) -c opt //src:$(DYNAMIC_LIB) //src:$(STATIC_TARGET)
 
 test check:
-	./bazel test $(BAZEL_CONFIG) //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
+	$(BAZEL) test $(BAZEL_CONFIG) //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
 
 install:
 	install -c -m 0755 bazel-bin/src/$(DYNAMIC_LIB) $(PREFIX)/lib/$(INSTALL_DYNAMIC)
@@ -81,19 +101,19 @@ clang-coverage: $(UNIT_BIN) $(CONFIG)
 	rm -f default.profraw
 
 benchmark:
-	./bazel build $(BAZEL_CONFIG) -c opt //src:fragmenter //src:$(DYNAMIC_LIB)
+	$(BAZEL) build $(BAZEL_CONFIG) -c opt //src:fragmenter //src:$(DYNAMIC_LIB)
 ifeq ($(UNAME_S),Darwin)
 	DYLD_INSERT_LIBRARIES=./bazel-bin/src/$(DYNAMIC_LIB) ./bazel-bin/src/fragmenter
 else
 	LD_PRELOAD=./bazel-bin/src/$(DYNAMIC_LIB) ./bazel-bin/src/fragmenter
 endif
-	./bazel build $(BAZEL_CONFIG) --config=disable-meshing --config=nolto -c opt //src:local-refill-benchmark
+	$(BAZEL) build $(BAZEL_CONFIG) --config=disable-meshing --config=nolto -c opt //src:local-refill-benchmark
 	./bazel-bin/src/local-refill-benchmark
 
 # Index computation benchmark - compares float reciprocal vs integer magic division
 # Run with: make index-benchmark
 index-benchmark:
-	./bazel build $(BAZEL_CONFIG) -c opt //src:index-compute-benchmark
+	$(BAZEL) build $(BAZEL_CONFIG) -c opt //src:index-compute-benchmark
 	./bazel-bin/src/index-compute-benchmark
 
 # Larson benchmark - multi-threaded allocation stress test
@@ -106,7 +126,7 @@ FLAMEGRAPH_DIR = third_party/FlameGraph
 larson: larson-nomesh
 
 larson-mesh:
-	./bazel build $(BAZEL_CONFIG) --config=nolto -c opt //src:larson-benchmark
+	$(BAZEL) build $(BAZEL_CONFIG) --config=nolto -c opt //src:larson-benchmark
 ifeq ($(UNAME_S),Linux)
 	perf record -F $(PERF_FREQ) -g --call-graph fp -o perf-larson-mesh.data -- ./bazel-bin/src/larson-benchmark $(LARSON_ARGS)
 	perf script -i perf-larson-mesh.data | $(FLAMEGRAPH_DIR)/stackcollapse-perf.pl | $(FLAMEGRAPH_DIR)/flamegraph.pl --title "larson-mesh" > flamegraph-larson-mesh.svg
@@ -116,7 +136,7 @@ else
 endif
 
 larson-nomesh:
-	./bazel build $(BAZEL_CONFIG) --config=disable-meshing --config=nolto -c opt //src:larson-benchmark
+	$(BAZEL) build $(BAZEL_CONFIG) --config=disable-meshing --config=nolto -c opt //src:larson-benchmark
 ifeq ($(UNAME_S),Linux)
 	perf record -F $(PERF_FREQ) -g --call-graph fp -o perf-larson-nomesh.data -- ./bazel-bin/src/larson-benchmark $(LARSON_ARGS)
 	perf script -i perf-larson-nomesh.data | $(FLAMEGRAPH_DIR)/stackcollapse-perf.pl | $(FLAMEGRAPH_DIR)/flamegraph.pl --title "larson-nomesh" > flamegraph-larson-nomesh.svg
@@ -130,12 +150,12 @@ format:
 
 clean:
 	find . -name '*~' -print0 | xargs -0 rm -f
-	./bazel clean
-	./bazel shutdown
+	$(BAZEL) clean
+	$(BAZEL) shutdown
 
 
 distclean: clean
-	./bazel clean --expunge
+	$(BAZEL) clean --expunge
 
 # double $$ in egrep pattern is because we're embedding this shell command in a Makefile
 TAGS:

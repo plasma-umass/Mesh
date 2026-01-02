@@ -6,9 +6,22 @@
 #include <cstdarg>
 #include <cstdlib>  // for abort
 
+#if defined(_WIN32)
+#include <io.h>
+#define write _write
+#define STDERR_FILENO 2
+#else
 #include <unistd.h>
+#endif
 
 #include "common.h"
+
+// On Windows, we don't need the asprintf/vasprintf fallbacks
+// (they try to call vasprintf which doesn't exist on Windows)
+#if defined(_WIN32)
+#define HAVE_ASPRINTF 1
+#define HAVE_VASPRINTF 1
+#endif
 
 #include "rpl_printf.c"
 
@@ -37,10 +50,11 @@ void mesh::debug(const char *fmt, ...) {
 
   buf[buf_len - 1] = 0;
   if (len > 0) {
-    auto _ __attribute__((unused)) = write(STDERR_FILENO, buf, len);
+    auto result ATTRIBUTE_UNUSED = write(STDERR_FILENO, buf, len);
     // ensure a trailing newline is written out
     if (buf[len - 1] != '\n')
-      _ = write(STDERR_FILENO, "\n", 1);
+      result = write(STDERR_FILENO, "\n", 1);
+    (void)result;  // suppress unused variable warning
   }
 }
 
@@ -64,7 +78,8 @@ void mesh::internal::__mesh_assert_fail(const char *assertion, const char *file,
 
   int len = rpl_snprintf(buf, buf_len - 1, "%s:%d:%s: ASSERTION '%s' FAILED: %s\n", file, line, func, assertion, usr);
   if (len > 0) {
-    auto _ __attribute__((unused)) = write(STDERR_FILENO, buf, len);
+    auto result ATTRIBUTE_UNUSED = write(STDERR_FILENO, buf, len);
+    (void)result;  // suppress unused variable warning
   }
 
   // void *array[32];

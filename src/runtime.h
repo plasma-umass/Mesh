@@ -7,8 +7,17 @@
 #ifndef MESH_RUNTIME_H
 #define MESH_RUNTIME_H
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <process.h>
+#include <atomic>
+#include <thread>
+#else
 #include <pthread.h>
 #include <signal.h>  // for stack_t
+#endif
 
 #ifdef __FreeBSD__
 #include <pthread_np.h>
@@ -30,8 +39,10 @@ static pid_t gettid(void) {
 
 namespace mesh {
 
+#if !defined(_WIN32)
 // function passed to pthread_create
 typedef void *(*PthreadFn)(void *);
+#endif
 
 template <size_t PageSize>
 class Runtime {
@@ -47,6 +58,8 @@ private:
   }
 
 public:
+  // Expose the page size template parameter for use with dispatchByPageSize
+  static constexpr size_t kPageSizeVal = PageSize;
   void lock();
   void unlock();
 
@@ -54,13 +67,20 @@ public:
     return _heap;
   }
 
+#if !defined(_WIN32)
   void startBgThread();
+#else
+  void startBgThread();
+  void stopBgThread();
+#endif
   void initMaxMapCount();
 
+#if !defined(_WIN32)
   // we need to wrap pthread_create and pthread_exit so that we can
   // install our segfault handler and cleanup thread-local heaps.
   int createThread(pthread_t *thread, const pthread_attr_t *attr, mesh::PthreadFn startRoutine, void *arg);
   void ATTRIBUTE_NORETURN exitThread(void *retval);
+#endif
 
   void setMeshPeriodMs(std::chrono::milliseconds period) {
     _heap.setMeshPeriodMs(period);
@@ -73,6 +93,7 @@ public:
   ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
 #endif
 
+#if !defined(_WIN32)
   int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
   int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
 
@@ -90,8 +111,11 @@ public:
 
   // so we can call from the libmesh init function
   void createSignalFd();
+#endif
+
   void installSegfaultHandler();
 
+#if !defined(_WIN32)
   void updatePid() {
     _pid = getpid();
   }
@@ -99,8 +123,18 @@ public:
   pid_t pid() const {
     return _pid;
   }
+#else
+  void updatePid() {
+    _pid = GetCurrentProcessId();
+  }
+
+  DWORD pid() const {
+    return _pid;
+  }
+#endif
 
 private:
+#if !defined(_WIN32)
   // initialize our pointer to libc's pthread_create, etc.  This
   // happens lazily, as the dynamic linker's dlopen calls into malloc
   // for memory allocation, so if we try to do this in MeshHeaps's
@@ -110,13 +144,21 @@ private:
   static void segfaultHandler(int sig, siginfo_t *siginfo, void *context);
 
   static void *bgThread(void *arg);
+#endif
 
   template <size_t P>
   friend Runtime<P> &runtime();
 
   mutex _mutex{};
+#if !defined(_WIN32)
   int _signalFd{-2};
   pid_t _pid{};
+#else
+  DWORD _pid{};
+  std::thread _meshThread{};
+  std::atomic<bool> _meshThreadShutdown{false};
+  std::atomic<bool> _meshThreadStarted{false};
+#endif
   GlobalHeap<PageSize> _heap{};
 };
 

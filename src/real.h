@@ -3,6 +3,14 @@
 // Use of this source code is governed by the Apache License,
 // Version 2.0, that can be found in the LICENSE file.
 
+#pragma once
+#ifndef MESH_REAL_H
+#define MESH_REAL_H
+
+// This header is only used on Unix platforms (Linux/macOS)
+// Windows uses different mechanisms for function interposition
+#if !defined(_WIN32)
+
 #include <pthread.h>
 #include <signal.h>
 
@@ -11,10 +19,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
-
-#pragma once
-#ifndef MESH_REAL_H
-#define MESH_REAL_H
 
 #define DECLARE_REAL(name) extern decltype(::name) *name
 
@@ -36,5 +40,7 @@ DECLARE_REAL(sigaction);
 DECLARE_REAL(sigprocmask);
 }  // namespace real
 }  // namespace mesh
+
+#endif  // !defined(_WIN32)
 
 #endif  // MESH_REAL_H
