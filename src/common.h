@@ -7,13 +7,123 @@
 #ifndef MESH_COMMON_H
 #define MESH_COMMON_H
 
+// MSVC compatibility: __PRETTY_FUNCTION__ is GCC/Clang specific
+#if defined(_MSC_VER) && !defined(__PRETTY_FUNCTION__)
+#define __PRETTY_FUNCTION__ __FUNCSIG__
+#endif
+
+// MSVC compatibility: ssize_t is POSIX, not available on Windows
+#if defined(_MSC_VER) && !defined(ssize_t)
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
+
+// MSVC compatibility: __builtin_popcountl is GCC/Clang specific
+#if defined(_MSC_VER)
+#include <intrin.h>
+
+// Software fallback for population count (needed on ARM64)
+static inline int __builtin_popcount_sw(unsigned int x) {
+  x = x - ((x >> 1) & 0x55555555);
+  x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+  x = (x + (x >> 4)) & 0x0f0f0f0f;
+  return static_cast<int>((x * 0x01010101) >> 24);
+}
+
+static inline int __builtin_popcountl_sw(unsigned long long x) {
+  x = x - ((x >> 1) & 0x5555555555555555ULL);
+  x = (x & 0x3333333333333333ULL) + ((x >> 2) & 0x3333333333333333ULL);
+  x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0fULL;
+  return static_cast<int>((x * 0x0101010101010101ULL) >> 56);
+}
+
+static inline int __builtin_popcountl(unsigned long x) {
+#if defined(_M_X64)
+  // x64 has __popcnt64 intrinsic
+  return static_cast<int>(__popcnt64(x));
+#elif defined(_M_ARM64)
+  // ARM64: use software fallback (NEON intrinsics require more setup)
+  return __builtin_popcountl_sw(static_cast<unsigned long long>(x));
+#else
+  return static_cast<int>(__popcnt(x));
+#endif
+}
+
+static inline int __builtin_popcount(unsigned int x) {
+#if defined(_M_X64) || defined(_M_IX86)
+  return static_cast<int>(__popcnt(x));
+#else
+  return __builtin_popcount_sw(x);
+#endif
+}
+// Count trailing zeros - constexpr version for compile-time use
+constexpr int __builtin_ctzl_constexpr(unsigned long long x) {
+  int count = 0;
+  while ((x & 1) == 0) {
+    x >>= 1;
+    count++;
+  }
+  return count;
+}
+// Runtime version using intrinsics
+static inline int __builtin_ctzl(unsigned long x) {
+  if (x == 0) return sizeof(unsigned long) * 8;
+  unsigned long index;
+#if defined(_M_ARM64) || defined(_M_X64)
+  _BitScanForward64(&index, x);
+#else
+  _BitScanForward(&index, x);
+#endif
+  return static_cast<int>(index);
+}
+static inline int __builtin_ctz(unsigned int x) {
+  if (x == 0) return 32;
+  unsigned long index;
+  _BitScanForward(&index, x);
+  return static_cast<int>(index);
+}
+// Count leading zeros
+static inline int __builtin_clzl(unsigned long x) {
+  if (x == 0) return sizeof(unsigned long) * 8;
+  unsigned long index;
+#if defined(_M_ARM64) || defined(_M_X64)
+  _BitScanReverse64(&index, x);
+  return 63 - static_cast<int>(index);
+#else
+  _BitScanReverse(&index, x);
+  return 31 - static_cast<int>(index);
+#endif
+}
+static inline int __builtin_clz(unsigned int x) {
+  if (x == 0) return 32;
+  unsigned long index;
+  _BitScanReverse(&index, x);
+  return 31 - static_cast<int>(index);
+}
+#endif
+
+// MSVC compatibility: pid_t is POSIX
+#if defined(_MSC_VER)
+typedef int pid_t;
+#endif
+
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+// Ensure min/max macros don't interfere even if defined elsewhere
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+#else
 #include <fcntl.h>
-
-#if !defined(_WIN32)
 #ifdef __APPLE__
 #define _DARWIN_C_SOURCE  // exposes MAP_ANONYMOUS and MAP_NORESERVE
 #endif
@@ -191,14 +301,20 @@ static constexpr std::chrono::milliseconds kMeshPeriodMs{100};  // 100 ms
 
 // controls aspects of miniheaps
 static constexpr size_t kMaxMeshes = 256;  // 1 per bit
-#ifdef __APPLE__
+#if defined(_WIN32)
+// Windows: Use smaller arena because pagefile-backed sections require
+// pagefile reservation even with SEC_RESERVE. 4GB is a reasonable default.
+static constexpr size_t kArenaSize = 4ULL * 1024ULL * 1024ULL * 1024ULL;  // 4 GB
+#elif defined(__APPLE__)
 static constexpr size_t kArenaSize = 32ULL * 1024ULL * 1024ULL * 1024ULL;  // 32 GB
 #else
 static constexpr size_t kArenaSize = 64ULL * 1024ULL * 1024ULL * 1024ULL;  // 64 GB
 #endif
 static constexpr size_t kAltStackSize = 16 * 1024UL;  // 16KB sigaltstacks
+#if !defined(_WIN32)
 #define SIGQUIESCE (SIGRTMIN + 7)
 #define SIGDUMP (SIGRTMIN + 8)
+#endif
 
 // BinnedTracker
 static constexpr size_t kBinnedTrackerBinCount = 1;
@@ -231,8 +347,21 @@ inline constexpr size_t ByteSizeForClass(const int i) {
   return static_cast<size_t>(1ULL << (i + staticlog(kMinObjectSize)));
 }
 
+// Constexpr ilog2 for compile-time use (HL::ilog2 may not be constexpr on MSVC)
+constexpr int ilog2_constexpr(size_t n) {
+  int result = 0;
+  while (n >>= 1) {
+    result++;
+  }
+  return result;
+}
+
 inline constexpr int ClassForByteSize(const size_t sz) {
+#if defined(_MSC_VER)
+  return static_cast<int>(ilog2_constexpr((sz < 8) ? 8 : sz) - staticlog(kMinObjectSize));
+#else
   return static_cast<int>(HL::ilog2((sz < 8) ? 8 : sz) - staticlog(kMinObjectSize));
+#endif
 }
 }  // namespace powerOfTwo
 
@@ -247,6 +376,66 @@ using std::mutex;
 // using std::shared_mutex;
 using std::unique_lock;
 
+#if defined(_MSC_VER)
+// MSVC doesn't have __builtin_expect
+#define likely(x) (x)
+#define unlikely(x) (x)
+
+// Note: __declspec specifiers in MSVC must come BEFORE the type, but our code
+// uses them after (GCC/Clang style). Since we can't easily change all call sites,
+// make these empty and rely on compiler optimizations.
+#define ATTRIBUTE_UNUSED
+#define ATTRIBUTE_NEVER_INLINE
+#define ATTRIBUTE_ALWAYS_INLINE
+#define ATTRIBUTE_NORETURN __declspec(noreturn)
+// MSVC's __declspec(align(s)) and __declspec(restrict) must precede the type,
+// but our code puts them after. Making them empty since we can't change all
+// call sites without major refactoring.
+#define ATTRIBUTE_ALIGNED(s)
+#define ATTRIBUTE_MALLOC
+#define ATTRIBUTE_ALLOC_SIZE(x)
+#define ATTRIBUTE_ALLOC_SIZE2(x, y)
+#define MESH_EXPORT __declspec(dllexport)
+#define ATTR_INITIAL_EXEC
+
+// GCC extensions compatibility
+#define __restrict__ __restrict
+#define __builtin_assume_aligned(p, a) (p)
+// Prefetch hint - just a no-op on MSVC (it's only a performance optimization)
+#define __builtin_prefetch(addr, ...) ((void)0)
+// __builtin_unreachable - use __assume(0) on MSVC
+#define __builtin_unreachable() __assume(0)
+// Find first set bit in long (1-indexed, returns 0 if none set)
+static inline int __builtin_ffsl(long x) {
+  if (x == 0) return 0;
+  unsigned long index;
+#if defined(_M_ARM64) || defined(_M_X64)
+  _BitScanForward64(&index, static_cast<unsigned __int64>(x));
+#else
+  _BitScanForward(&index, static_cast<unsigned long>(x));
+#endif
+  return static_cast<int>(index + 1);  // ffsl is 1-indexed
+}
+// Find first set bit in long long
+static inline int __builtin_ffsll(long long x) {
+  if (x == 0) return 0;
+  unsigned long index;
+#if defined(_M_ARM64) || defined(_M_X64)
+  _BitScanForward64(&index, static_cast<unsigned __int64>(x));
+#else
+  // For 32-bit, check low and high parts separately
+  if (x & 0xFFFFFFFF) {
+    _BitScanForward(&index, static_cast<unsigned long>(x));
+    return static_cast<int>(index + 1);
+  } else {
+    _BitScanForward(&index, static_cast<unsigned long>(x >> 32));
+    return static_cast<int>(index + 33);
+  }
+#endif
+  return static_cast<int>(index + 1);
+}
+#else
+// GCC/Clang
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
@@ -258,16 +447,16 @@ using std::unique_lock;
 #define ATTRIBUTE_MALLOC __attribute__((malloc))
 #define ATTRIBUTE_ALLOC_SIZE(x) __attribute__((alloc_size(x)))
 #define ATTRIBUTE_ALLOC_SIZE2(x, y) __attribute__((alloc_size(x, y)))
+#define MESH_EXPORT __attribute__((visibility("default")))
+#define ATTR_INITIAL_EXEC __attribute__((tls_model("initial-exec")))
+#endif
+
 #define CACHELINE_SIZE 64
 #define CACHELINE_ALIGNED ATTRIBUTE_ALIGNED(CACHELINE_SIZE)
 #define CACHELINE_ALIGNED_FN CACHELINE_ALIGNED
 // Page alignment based on platform (16KB on Apple Silicon, 4KB elsewhere)
 // We align to 16KB always to be safe for both 4KB and 16KB pages
 #define PAGE_ALIGNED ATTRIBUTE_ALIGNED(16384)
-
-#define MESH_EXPORT __attribute__((visibility("default")))
-
-#define ATTR_INITIAL_EXEC __attribute__((tls_model("initial-exec")))
 
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
   TypeName(const TypeName &);              \
@@ -304,8 +493,13 @@ void debug(const char *fmt, ...);
 
 namespace internal {
 // assertions that don't attempt to recursively malloc
+#if defined(_MSC_VER)
+__declspec(noreturn) void __mesh_assert_fail(const char *assertion, const char *file, const char *func, int line,
+                                              const char *fmt, ...);
+#else
 void __attribute__((noreturn)) __mesh_assert_fail(const char *assertion, const char *file, const char *func, int line,
                                                   const char *fmt, ...);
+#endif
 
 inline static mutex *getSeedMutex() {
   static char muBuf[sizeof(mutex)];
@@ -321,11 +515,35 @@ inline mt19937_64 *initSeed() {
   static_assert(sizeof(mt19937_64::result_type) == sizeof(uint64_t), "expected 64-bit result_type for PRNG");
 
   // seed this Mersenne Twister PRNG with entropy from the host OS
-  int fd = open("/dev/urandom", O_RDONLY);
   unsigned long buf;
+#if defined(_WIN32)
+  // Use BCryptGenRandom (preferred) or RtlGenRandom as fallback
+  typedef BOOLEAN(WINAPI * RtlGenRandomFunc)(PVOID, ULONG);
+  static RtlGenRandomFunc pRtlGenRandom = nullptr;
+  static bool checkedRng = false;
+
+  if (!checkedRng) {
+    HMODULE advapi32 = GetModuleHandleW(L"advapi32.dll");
+    if (advapi32) {
+      pRtlGenRandom = reinterpret_cast<RtlGenRandomFunc>(
+          GetProcAddress(advapi32, "SystemFunction036"));  // RtlGenRandom
+    }
+    checkedRng = true;
+  }
+
+  if (pRtlGenRandom) {
+    BOOLEAN result = pRtlGenRandom(&buf, sizeof(buf));
+    hard_assert(result != FALSE);
+  } else {
+    // Fallback: use time-based seed (less secure but works)
+    buf = static_cast<unsigned long>(GetTickCount64() ^ GetCurrentProcessId());
+  }
+#else
+  int fd = open("/dev/urandom", O_RDONLY);
   auto sz = read(fd, (void *)&buf, sizeof(unsigned long));
   hard_assert(sz == sizeof(unsigned long));
   close(fd);
+#endif
   //  std::random_device rd;
   // return new (mtBuf) std::mt19937_64(rd());
   return new (mtBuf) std::mt19937_64(buf);

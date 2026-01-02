@@ -10,16 +10,28 @@
 #include <unistd.h>
 #endif
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include "platform/exception_handler_windows.h"
+#endif
+
 #include "runtime.h"
 #include "thread_local_heap.h"
 #include "runtime_impl.h"
 #include "dispatch_utils.h"
+#if !defined(_WIN32)
 #include "ifunc_resolver.h"
+#endif
 
 using namespace mesh;
 
-static __attribute__((constructor)) void libmesh_init() {
+// Core initialization logic - called from constructor (Unix) or DllMain (Windows)
+static void libmesh_init_impl() {
+#if !defined(_WIN32)
   mesh::real::init();
+#endif
 
   const size_t pageSize = getPageSize();
 
@@ -30,10 +42,17 @@ static __attribute__((constructor)) void libmesh_init() {
   }
 
   dispatchByPageSize([](auto &rt) {
+#if !defined(_WIN32)
     rt.createSignalFd();
+#endif
     rt.installSegfaultHandler();
     rt.initMaxMapCount();
   });
+
+#if defined(_WIN32)
+  // On Windows, install the Vectored Exception Handler for meshing write barriers
+  mesh::platform::installExceptionHandler();
+#endif
 
   if (pageSize == kPageSize4K) {
     ThreadLocalHeap<kPageSize4K>::InitTLH();
@@ -50,6 +69,7 @@ static __attribute__((constructor)) void libmesh_init() {
     dispatchByPageSize([period](auto &rt) { rt.setMeshPeriodMs(std::chrono::milliseconds{period}); });
   }
 
+#if !defined(_WIN32)
   char *bgThread = getenv("MESH_BACKGROUND_THREAD");
   if (!bgThread)
     return;
@@ -58,9 +78,24 @@ static __attribute__((constructor)) void libmesh_init() {
   if (shouldThread) {
     dispatchByPageSize([](auto &rt) { rt.startBgThread(); });
   }
+#else
+  // On Windows, always start the background mesh thread (unless explicitly disabled)
+  char *bgThread = getenv("MESH_BACKGROUND_THREAD");
+  bool shouldThread = !bgThread || atoi(bgThread) != 0;
+  if (shouldThread) {
+    dispatchByPageSize([](auto &rt) { rt.startBgThread(); });
+  }
+#endif
 }
 
-static __attribute__((destructor)) void libmesh_fini() {
+// Core cleanup logic - called from destructor (Unix) or DllMain (Windows)
+static void libmesh_fini_impl() {
+#if defined(_WIN32)
+  // Stop the background mesh thread before removing exception handler
+  dispatchByPageSize([](auto &rt) { rt.stopBgThread(); });
+  mesh::platform::removeExceptionHandler();
+#endif
+
   char *mstats = getenv("MALLOCSTATS");
   if (!mstats)
     return;
@@ -74,6 +109,78 @@ static __attribute__((destructor)) void libmesh_fini() {
   dispatchByPageSize([mlevel](auto &rt) { rt.heap().dumpStats(mlevel, false); });
 }
 
+#if !defined(_WIN32)
+// Unix: use constructor/destructor attributes
+static __attribute__((constructor)) void libmesh_init() {
+  libmesh_init_impl();
+}
+
+static __attribute__((destructor)) void libmesh_fini() {
+  libmesh_fini_impl();
+}
+#else
+// Windows: Use CRT initialization for static library, DllMain for DLL
+
+// Track if we've been initialized (used by both static and dynamic linking)
+static bool s_meshInitialized = false;
+
+static void libmesh_init_once() {
+  if (!s_meshInitialized) {
+    s_meshInitialized = true;
+    libmesh_init_impl();
+  }
+}
+
+static void libmesh_fini_once() {
+  if (s_meshInitialized) {
+    s_meshInitialized = false;
+    libmesh_fini_impl();
+  }
+}
+
+// CRT initializer for static library linking - runs before main()
+// Uses .CRT$XCU section which is processed after C++ static constructors
+#pragma section(".CRT$XCU", read)
+static void __cdecl libmesh_crt_init() {
+  libmesh_init_once();
+}
+__declspec(allocate(".CRT$XCU")) static void (__cdecl *libmesh_crt_init_ptr)() = libmesh_crt_init;
+
+// CRT terminator for static library linking - runs after main()
+static void __cdecl libmesh_crt_fini() {
+  libmesh_fini_once();
+}
+// Register with atexit (simpler than .CRT$XTU)
+static int libmesh_register_fini = (atexit(libmesh_crt_fini), 0);
+
+// DllMain entry point for DLL builds
+// Note: When linked as a static library, DllMain won't be called
+extern "C" BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
+  switch (fdwReason) {
+    case DLL_PROCESS_ATTACH:
+      libmesh_init_once();
+      break;
+    case DLL_PROCESS_DETACH:
+      libmesh_fini_once();
+      break;
+    case DLL_THREAD_ATTACH:
+      // Thread initialization handled by TLS
+      break;
+    case DLL_THREAD_DETACH:
+      // Clean up thread-local heap
+      dispatchByPageSize([](auto &rt) {
+        using PageSizeT = std::remove_reference_t<decltype(rt)>;
+        auto *heap = ThreadLocalHeap<PageSizeT::kPageSizeVal>::GetHeapIfPresent();
+        if (heap != nullptr) {
+          heap->releaseAll();
+        }
+      });
+      break;
+  }
+  return TRUE;
+}
+#endif
+
 namespace mesh {
 
 template <size_t PageSize>
@@ -83,7 +190,7 @@ ATTRIBUTE_NEVER_INLINE void *allocSlowpath(size_t sz) {
 }
 
 template <size_t PageSize>
-ATTRIBUTE_NEVER_INLINE __attribute__((unused)) void *cxxNewSlowpath(size_t sz) {
+ATTRIBUTE_NEVER_INLINE ATTRIBUTE_UNUSED void *cxxNewSlowpath(size_t sz) {
   ThreadLocalHeap<PageSize> *localHeap = ThreadLocalHeap<PageSize>::GetHeap();
   return localHeap->cxxNew(sz);
 }
@@ -390,6 +497,7 @@ void MESH_EXPORT xxmalloc_unlock(void) {
   mesh::dispatchByPageSize([](auto &rt) { rt.unlock(); });
 }
 
+#if !defined(_WIN32)
 int MESH_EXPORT sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) MESH_THROW {
   return mesh::dispatchByPageSize([=](auto &rt) { return rt.sigaction(signum, act, oldact); });
 }
@@ -412,6 +520,7 @@ void MESH_EXPORT ATTRIBUTE_NORETURN pthread_exit(void *retval) {
     mesh::runtime<kPageSize16K>().exitThread(retval);
   }
 }
+#endif  // !defined(_WIN32)
 
 // Same API as je_mallctl, allows a program to query stats and set
 // allocator-related options.
@@ -450,6 +559,10 @@ ssize_t MESH_EXPORT recvmsg(int sockfd, struct msghdr *msg, int flags) {
 #include "mac_wrapper.cc"
 #elif defined(__FreeBSD__)
 #include "fbsd_wrapper.cc"
+#elif defined(_WIN32)
+// Windows uses alloc8 for CRT interposition, which provides its own wrappers.
+// When using alloc8, MeshHeap (defined in mesh_alloc8.h) provides the interface.
+// For standalone DLL usage, we provide the mesh_* exports above.
 #else
-#error "only linux, macOS and FreeBSD support for now"
+#error "only linux, macOS, FreeBSD, and Windows support for now"
 #endif

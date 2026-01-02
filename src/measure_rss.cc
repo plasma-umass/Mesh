@@ -10,15 +10,20 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 #elif defined(__APPLE__)
 #include <mach/task.h>
 #include <mach/mach_init.h>
+#include <unistd.h>
 #elif defined(__FreeBSD__)
 #include <sys/types.h>
 #include <sys/user.h>
 #include <sys/sysctl.h>
-#endif
 #include <unistd.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include <psapi.h>
+#endif
 
 #include "measure_rss.h"
 
@@ -72,5 +77,14 @@ extern "C" int get_rss_kb() {
     return -1;
 
   return static_cast<int>(info.ki_rssize);
+#elif defined(_WIN32)
+  PROCESS_MEMORY_COUNTERS pmc;
+  pmc.cb = sizeof(pmc);
+  if (!GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+    return -1;
+
+  return static_cast<int>(pmc.WorkingSetSize / 1024);
+#else
+  return -1;
 #endif
 }

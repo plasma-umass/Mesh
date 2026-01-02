@@ -7,7 +7,9 @@
 #ifndef MESH_MINI_HEAP_H
 #define MESH_MINI_HEAP_H
 
+#if !defined(_WIN32)
 #include <pthread.h>
+#endif
 
 #include <atomic>
 #include <random>
@@ -20,6 +22,7 @@
 #include "rng/mwc.h"
 
 #include "heaplayers.h"
+#include "debug_printf.h"
 
 namespace mesh {
 
@@ -181,7 +184,11 @@ public:
   using BitmapType = internal::Bitmap<PageSize>;
   using ListEntryType = MiniHeapListEntry<PageSize>;
   static constexpr size_t kPageSize = PageSize;
+#if defined(_MSC_VER)
+  static constexpr unsigned kPageShift = __builtin_ctzl_constexpr(PageSize);
+#else
   static constexpr unsigned kPageShift = __builtin_ctzl(PageSize);
+#endif
 
   MiniHeap(void *arenaBegin, Span span, size_t objectCount, size_t objectSize)
       : _span(span),
@@ -316,6 +323,14 @@ public:
 
   inline void setAttached(pid_t current, ListEntryType *listHead) {
     // mesh::debug("MiniHeap(%p:%5zu): current <- %u\n", this, objectSize(), current);
+#ifdef MESH_DEBUG_VERBOSE
+    static size_t attachCalls = 0;
+    attachCalls++;
+    if (attachCalls <= 20 || attachCalls % 100 == 0) {
+      mesh_dprintf("DEBUG setAttached: mh=%p current=%u (0x%x) call=%zu\n",
+              (void*)this, (unsigned)current, (unsigned)current, attachCalls);
+    }
+#endif
     _current.store(current, std::memory_order::memory_order_release);
     if (listHead != nullptr) {
       _freelist.remove(listHead);
@@ -367,6 +382,13 @@ public:
 
   inline void unsetAttached() {
     // mesh::debug("MiniHeap(%p:%5zu): current <- UNSET\n", this, objectSize());
+#ifdef MESH_DEBUG_VERBOSE
+    static size_t unsetCalls = 0;
+    unsetCalls++;
+    if (unsetCalls <= 20 || unsetCalls % 100 == 0) {
+      mesh_dprintf("DEBUG unsetAttached: mh=%p call=%zu\n", (void*)this, unsetCalls);
+    }
+#endif
     _current.store(0, std::memory_order::memory_order_release);
   }
 

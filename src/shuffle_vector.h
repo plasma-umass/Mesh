@@ -188,6 +188,15 @@ public:
     _off--;
     _list[_off] = entry;
 
+#ifdef MESH_DEBUG_VERBOSE
+    static size_t pushCount = 0;
+    pushCount++;
+    if (pushCount <= 10 || pushCount % 10000 == 0) {
+      mesh_dprintf("DEBUG sv::push: pushCount=%zu _off=%d _maxCount=%d\n",
+              pushCount, (int)_off, (int)_maxCount);
+    }
+#endif
+
     if (kEnableShuffleOnFree) {
       size_t swapOff = _prng.inRange(_off, maxCount() - 1);
       std::swap(_list[_off], _list[swapOff]);
@@ -211,6 +220,14 @@ public:
     const size_t off = mh->getUnmeshedOff(reinterpret_cast<const void *>(_arenaBegin), ptr);
     // hard_assert_msg(off == off2, "%zu != %zu", off, off2);
 
+#ifdef MESH_DEBUG_VERBOSE
+    static size_t freeCalls = 0;
+    freeCalls++;
+    if (freeCalls <= 10 || freeCalls % 10000 == 0) {
+      mesh_dprintf("DEBUG sv::free: call=%zu _off=%d\n", freeCalls, (int)_off);
+    }
+#endif
+
     if (likely(_off > 0)) {
       push(sv::Entry{mh->svOffset(), static_cast<uint16_t>(off)});
     } else {
@@ -219,6 +236,13 @@ public:
   }
 
   void ATTRIBUTE_NEVER_INLINE freeFullSlowpath(MiniHeapT *mh, size_t off) {
+#ifdef MESH_DEBUG_VERBOSE
+    static size_t slowpathCalls = 0;
+    slowpathCalls++;
+    if (slowpathCalls <= 10 || slowpathCalls % 1000 == 0) {
+      mesh_dprintf("DEBUG freeFullSlowpath: call=%zu off=%zu\n", slowpathCalls, off);
+    }
+#endif
     mh->freeOff(off);
   }
 
@@ -248,6 +272,14 @@ public:
   inline void *ATTRIBUTE_ALWAYS_INLINE malloc() {
     d_assert(!isExhausted());
     const auto off = pop();
+#ifdef MESH_DEBUG_VERBOSE
+    static size_t allocCount = 0;
+    allocCount++;
+    if (allocCount <= 10 || allocCount % 10000 == 0) {
+      mesh_dprintf("DEBUG sv::malloc: allocCount=%zu _off=%d _maxCount=%d\n",
+              allocCount, (int)_off, (int)_maxCount);
+    }
+#endif
     return ptrFromOffset(off);
   }
 

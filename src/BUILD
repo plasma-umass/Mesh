@@ -49,10 +49,19 @@ config_setting(
     visibility = ["//visibility:private"],
 )
 
-NO_BUILTIN_MALLOC = [
-    "-fno-builtin-malloc",
-    "-fno-builtin-free",
-]
+config_setting(
+    name = "windows",
+    constraint_values = ["@platforms//os:windows"],
+    visibility = ["//visibility:private"],
+)
+
+NO_BUILTIN_MALLOC = select({
+    ":windows": [],  # MSVC doesn't use these flags
+    "//conditions:default": [
+        "-fno-builtin-malloc",
+        "-fno-builtin-free",
+    ],
+})
 
 COMMON_DEFINES = [] + select({
     ":disable_meshing": ["MESHING_ENABLED=0"],
@@ -75,11 +84,14 @@ COMMON_DEFINES = [] + select({
     "//conditions:default": [],
 })
 
-COMMON_LINKOPTS = [
-    "-lm",
-    "-lpthread",
-    "-ldl",
-] + select({
+COMMON_LINKOPTS = select({
+    ":windows": [],  # Windows uses different linking model
+    "//conditions:default": [
+        "-lm",
+        "-lpthread",
+        "-ldl",
+    ],
+}) + select({
     "@platforms//os:linux": [
         "-Wl,--no-as-needed",
         "-Wl,--no-add-needed",
@@ -97,6 +109,16 @@ COMMON_LINKOPTS = [
         "-l:libstdc++.a",
         "-Wl,-Bdynamic",
         "-lrt",
+    ],
+    "//conditions:default": [],
+})
+
+# Windows-specific link libraries
+WINDOWS_LINKOPTS = select({
+    ":windows": [
+        "kernel32.lib",
+        "psapi.lib",
+        "advapi32.lib",
     ],
     "//conditions:default": [],
 })
@@ -132,17 +154,29 @@ cc_library(
         "global_heap.cc",
         "measure_rss.cc",
         "meshable_arena.cc",
-        "real.cc",
-        "runtime.cc",
         "thread_local_heap.cc",
     ] + select({
-        "@platforms//os:macos": ["memory_stats_macos.cc"],
-        "@platforms//os:linux": ["memory_stats_linux.cc"],
+        "@platforms//os:macos": [
+            "memory_stats_macos.cc",
+            "real.cc",
+            "runtime.cc",
+        ],
+        "@platforms//os:linux": [
+            "memory_stats_linux.cc",
+            "real.cc",
+            "runtime.cc",
+        ],
+        ":windows": [
+            "memory_stats_windows.cc",
+            "platform/vmem_windows.cc",
+            "platform/exception_handler_windows.cc",
+        ],
         "//conditions:default": [],
     }),
     hdrs = glob([
         "*.h",
         "plasma/*.h",
+        "platform/*.h",
         "rng/*.h",
         "gnu_wrapper.cc",
         "mac_wrapper.cc",
@@ -152,7 +186,7 @@ cc_library(
     ]),
     copts = NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
     defines = COMMON_DEFINES,
-    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
+    linkopts = COMMON_LINKOPTS + WINDOWS_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
     linkstatic = True,
     visibility = ["//visibility:private"],
     deps = [
@@ -329,14 +363,25 @@ MESH_SHARED_SRCS = [
     "libmesh.cc",
     "measure_rss.cc",
     "meshable_arena.cc",
+    "thread_local_heap.cc",
+]
+
+# Unix-specific sources (real.cc and runtime.cc contain pthread/signal handling)
+MESH_UNIX_SRCS = [
     "real.cc",
     "runtime.cc",
-    "thread_local_heap.cc",
+]
+
+# Windows-specific sources
+MESH_WINDOWS_SRCS = [
+    "platform/vmem_windows.cc",
+    "platform/exception_handler_windows.cc",
 ]
 
 MESH_SHARED_HDRS = glob([
     "*.h",
     "plasma/*.h",
+    "platform/*.h",
     "rng/*.h",
     "static/*.h",
 ])
@@ -359,7 +404,7 @@ cc_library(
 
 cc_binary(
     name = "libmesh.dylib",
-    srcs = MESH_SHARED_SRCS + [
+    srcs = MESH_SHARED_SRCS + MESH_UNIX_SRCS + [
         "memory_stats_macos.cc",
     ],
     copts = ["-Isrc"] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
@@ -375,7 +420,7 @@ cc_binary(
 
 cc_binary(
     name = "libmesh.so",
-    srcs = MESH_SHARED_SRCS + [
+    srcs = MESH_SHARED_SRCS + MESH_UNIX_SRCS + [
         "memory_stats_linux.cc",
     ],
     copts = ["-Isrc"] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
@@ -389,9 +434,27 @@ cc_binary(
     ],
 )
 
+# Windows DLL - uses alloc8 for CRT interposition
+# Note: On Windows, mesh is typically loaded via alloc8's DllMain mechanism
+cc_binary(
+    name = "mesh.dll",
+    srcs = MESH_SHARED_SRCS + MESH_WINDOWS_SRCS + [
+        "memory_stats_windows.cc",
+    ],
+    copts = ["-Isrc"] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = WINDOWS_LINKOPTS,
+    linkshared = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":mesh-textual-hdrs",
+    ],
+)
+
 cc_library(
     name = "mesh-static-macos",
-    srcs = MESH_SHARED_SRCS + [
+    srcs = MESH_SHARED_SRCS + MESH_UNIX_SRCS + [
         "memory_stats_macos.cc",
     ],
     copts = ["-Isrc"] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
@@ -407,7 +470,7 @@ cc_library(
 
 cc_library(
     name = "mesh-static-linux",
-    srcs = MESH_SHARED_SRCS + [
+    srcs = MESH_SHARED_SRCS + MESH_UNIX_SRCS + [
         "memory_stats_linux.cc",
     ],
     copts = ["-Isrc"] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
@@ -415,6 +478,22 @@ cc_library(
     linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
     linkstatic = True,
     target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":mesh-textual-hdrs",
+    ],
+)
+
+cc_library(
+    name = "mesh-static-windows",
+    srcs = MESH_SHARED_SRCS + MESH_WINDOWS_SRCS + [
+        "memory_stats_windows.cc",
+    ],
+    copts = ["-Isrc"] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = WINDOWS_LINKOPTS,
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
     visibility = ["//visibility:private"],
     deps = [
         ":mesh-textual-hdrs",
@@ -432,5 +511,12 @@ cc_static_library(
     name = "mesh_static_linux",
     deps = [":mesh-static-linux"],
     target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+)
+
+cc_static_library(
+    name = "mesh_static_windows",
+    deps = [":mesh-static-windows"],
+    target_compatible_with = ["@platforms//os:windows"],
     visibility = ["//visibility:public"],
 )

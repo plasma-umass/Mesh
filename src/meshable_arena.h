@@ -8,8 +8,12 @@
 #define MESH_MESHABLE_ARENA_H
 
 #if defined(_WIN32)
-#error "TODO"
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
+#include <memoryapi.h>
+#include <psapi.h>
+#include "platform/vmem.h"
 #else
 // UNIX
 #include <fcntl.h>
@@ -41,7 +45,9 @@
 #define MADV_DUMP MADV_CORE
 #endif
 
+#if !defined(_WIN32)
 #include <sys/ioctl.h>
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -69,6 +75,7 @@
 namespace mesh {
 
 namespace {
+#if !defined(_WIN32)
 const char *const TMP_DIRS[] = {
     "/dev/shm",
     "/tmp",
@@ -94,6 +101,7 @@ inline char *uintToStr(char *dst, uint32_t i) {
 
   return strcat(dst, digit);
 }
+#endif  // !_WIN32
 
 template <typename Func>
 inline void forEachFree(const internal::vector<Span> freeSpans[kSpanClassCount], const Func func) {
@@ -129,7 +137,11 @@ private:
 
 public:
   static constexpr size_t kPageSizeVal = PageSize;
+#if defined(_MSC_VER)
+  static constexpr unsigned kPageShift = __builtin_ctzl_constexpr(PageSize);
+#else
   static constexpr unsigned kPageShift = __builtin_ctzl(PageSize);
+#endif
   enum { Alignment = PageSize };
 
   explicit MeshableArena();
@@ -263,7 +275,12 @@ private:
 
     if (flags == internal::PageType::Dirty) {
       if (kAdviseDump) {
+#if defined(_WIN32)
+        // Windows doesn't have MADV_DONTDUMP equivalent for minidumps
+        (void)ptrFromOffset(span.offset);
+#else
         madvise(ptrFromOffset(span.offset), span.length << kPageShift, MADV_DONTDUMP);
+#endif
       }
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
@@ -285,9 +302,13 @@ private:
     }
   }
 
+#if defined(_WIN32)
+  HANDLE openSpanFile(size_t sz);
+#else
   int openShmSpanFile(size_t sz);
   int openSpanFile(size_t sz);
   char *openSpanDir(int pid);
+#endif
 
   // pointer must already have been checked by `contains()` for bounds
   inline Offset offsetFor(const void *ptr) const {
@@ -313,17 +334,21 @@ private:
   }
 
   static void staticAtExit();
+#if !defined(_WIN32)
   static void staticPrepareForFork();
   static void staticAfterForkParent();
   static void staticAfterForkChild();
+#endif
 
   void exit() {
+#if !defined(_WIN32)
     // FIXME: do this from the destructor, and test that destructor is
     // called.  Also don't leak _spanDir
     if (_spanDir != nullptr) {
       rmdir(_spanDir);
       _spanDir = nullptr;
     }
+#endif
   }
 
   inline void trackMeshed(const Span &span) {
@@ -344,12 +369,21 @@ private:
   inline void resetSpanMapping(const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = static_cast<size_t>(span.length) << kPageShift;
+#if defined(_WIN32)
+    // On Windows, use platform abstraction to reset the mapping to identity
+    if (_fd != INVALID_HANDLE_VALUE) {
+      platform::mapSharedFixed(_fd, ptr, sz, span.offset << kPageShift);
+    }
+#else
     mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset << kPageShift);
+#endif
   }
 
+#if !defined(_WIN32)
   void prepareForFork();
   void afterForkParent();
   void afterForkChild();
+#endif
 
   void *_arenaBegin{nullptr};
   atomic<MiniHeapID> *_mhIndex{nullptr};
@@ -378,18 +412,66 @@ private:
   size_t _rssKbAtHWM{0};
   size_t _maxMeshCount{kDefaultMaxMeshCount};
 
-  int _fd;
+#if defined(_WIN32)
+  HANDLE _fd{INVALID_HANDLE_VALUE};
+#else
+  int _fd{-1};
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
   char *_spanDir{nullptr};
+#endif
 };
 
 // Implementation
 
 template <size_t PageSize>
 MeshableArena<PageSize>::MeshableArena() : SuperHeap(), _fastPrng(internal::seed(), internal::seed()) {
+  static_assert(kArenaSize > 0, "kArenaSize must be non-zero");
+  static_assert(kArenaSize >= 1024 * 1024, "kArenaSize must be at least 1MB");
+
   d_assert(getArenaInstance<PageSize>() == nullptr);
   getArenaInstance<PageSize>() = this;
 
+#if defined(_WIN32)
+  HANDLE fd = INVALID_HANDLE_VALUE;
+  if (kMeshingEnabled) {
+    // Check if we have modern API support for page-granular mapping
+    if (!platform::hasPageGranularMapping()) {
+      debug("mesh: WARNING - Windows version does not support page-granular mapping.\n");
+      debug("mesh: Meshing will be disabled. Requires Windows 10 1803 or later.\n");
+    } else {
+      fd = openSpanFile(kArenaSize);
+      if (fd == INVALID_HANDLE_VALUE) {
+        debug("mesh: opening arena file failed.\n");
+        abort();
+      }
+    }
+  }
+  _fd = fd;
+
+  if (fd != INVALID_HANDLE_VALUE) {
+    // Use placeholder-based allocation for page-granular meshing support
+    // 1. Reserve a placeholder region for the entire arena
+    _arenaBegin = platform::reservePlaceholder(kArenaSize);
+    if (_arenaBegin == nullptr) {
+      debug("mesh: failed to reserve placeholder for arena.\n");
+      abort();
+    }
+
+    // 2. Map the entire arena initially as one view
+    //    (We'll remap sub-regions during meshing)
+    void *mapped = platform::mapIntoPlaceholder(fd, _arenaBegin, kArenaSize, 0);
+    if (mapped == nullptr) {
+      DWORD err = GetLastError();
+      fprintf(stderr, "mesh: failed to map arena into placeholder. Error: %lu\n", err);
+      VirtualFree(_arenaBegin, 0, MEM_RELEASE);
+      abort();
+    }
+    d_assert(mapped == _arenaBegin);
+  } else {
+    // No meshing - use VirtualAlloc
+    _arenaBegin = VirtualAlloc(nullptr, kArenaSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+  }
+#else
   int fd = -1;
   if (kMeshingEnabled) {
     fd = openSpanFile(kArenaSize);
@@ -408,22 +490,32 @@ MeshableArena<PageSize>::MeshableArena() : SuperHeap(), _fastPrng(internal::seed
 #else
   _arenaBegin = SuperHeap::map(kArenaSize, kMapShared, fd);
 #endif
+#endif  // _WIN32
 
   _mhIndex = reinterpret_cast<atomic<MiniHeapID> *>(SuperHeap::malloc(indexSize()));
 
   hard_assert(_arenaBegin != nullptr);
   hard_assert(_mhIndex != nullptr);
 
+#if defined(_WIN32)
+  // Windows doesn't have MADV_DONTDUMP equivalent
+#else
   if (kAdviseDump) {
     madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
   }
+#endif
 
+#if !defined(_WIN32)
   debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, _fd, _arenaBegin, arenaEnd());
+#endif
 
   atexit(staticAtExit);
+#if !defined(_WIN32)
   pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
+#endif
 }
 
+#if !defined(_WIN32)
 template <size_t PageSize>
 char *MeshableArena<PageSize>::openSpanDir(int pid) {
   constexpr size_t buf_len = 128;
@@ -460,6 +552,7 @@ char *MeshableArena<PageSize>::openSpanDir(int pid) {
 
   return nullptr;
 }
+#endif  // !_WIN32
 
 template <size_t PageSize>
 void MeshableArena<PageSize>::expandArena(size_t minPagesAdded) {
@@ -628,9 +721,14 @@ char *MeshableArena<PageSize>::pageAlloc(Span &result, size_t pageCount, size_t 
 
   char *ptr = reinterpret_cast<char *>(ptrFromOffset(span.offset));
 
+#if defined(_WIN32)
+  // Windows doesn't have MADV_DODUMP equivalent
+  (void)kAdviseDump;
+#else
   if (kAdviseDump) {
     madvise(ptr, pageCount << kPageShift, MADV_DODUMP);
   }
+#endif
 
   result = span;
   return ptr;
@@ -656,7 +754,27 @@ void MeshableArena<PageSize>::partialScavenge() {
   forEachFree(_dirty, [&](const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
+#if defined(_WIN32)
+    // On Windows, use DiscardVirtualMemory or MEM_RESET
+    typedef DWORD(WINAPI * DiscardVirtualMemoryFunc)(PVOID, SIZE_T);
+    static DiscardVirtualMemoryFunc pDiscardVirtualMemory = nullptr;
+    static bool checked = false;
+    if (!checked) {
+      HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+      if (kernel32) {
+        pDiscardVirtualMemory = reinterpret_cast<DiscardVirtualMemoryFunc>(
+            GetProcAddress(kernel32, "DiscardVirtualMemory"));
+      }
+      checked = true;
+    }
+    if (pDiscardVirtualMemory) {
+      pDiscardVirtualMemory(ptr, sz);
+    } else {
+      VirtualAlloc(ptr, sz, MEM_RESET, PAGE_READWRITE);
+    }
+#else
     madvise(ptr, sz, MADV_DONTNEED);
+#endif
     freePhys(ptr, sz);
     _clean[span.spanClass()].push_back(span);
   });
@@ -706,7 +824,27 @@ void MeshableArena<PageSize>::scavenge(bool force) {
   forEachFree(_dirty, [&](const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = span.byteLength();
+#if defined(_WIN32)
+    // On Windows, use DiscardVirtualMemory or MEM_RESET
+    typedef DWORD(WINAPI * DiscardVirtualMemoryFunc)(PVOID, SIZE_T);
+    static DiscardVirtualMemoryFunc pDiscardVirtualMemory = nullptr;
+    static bool checked = false;
+    if (!checked) {
+      HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+      if (kernel32) {
+        pDiscardVirtualMemory = reinterpret_cast<DiscardVirtualMemoryFunc>(
+            GetProcAddress(kernel32, "DiscardVirtualMemory"));
+      }
+      checked = true;
+    }
+    if (pDiscardVirtualMemory) {
+      pDiscardVirtualMemory(ptr, sz);
+    } else {
+      VirtualAlloc(ptr, sz, MEM_RESET, PAGE_READWRITE);
+    }
+#else
     madvise(ptr, sz, MADV_DONTNEED);
+#endif
     freePhys(ptr, sz);
     markPages(span);
   });
@@ -765,6 +903,19 @@ void MeshableArena<PageSize>::freePhys(void *ptr, size_t sz) {
     return;
   }
 
+#if defined(_WIN32)
+  if (_fd == INVALID_HANDLE_VALUE) {
+    return;
+  }
+
+  // On Windows with pagefile-backed sections, we can't directly punch holes.
+  // The best we can do is rely on DiscardVirtualMemory (called by scavenge)
+  // to hint to the OS that the pages can be reclaimed.
+  // For actual file-backed sections, we could use FSCTL_SET_ZERO_DATA,
+  // but pagefile sections don't support this.
+  (void)ptr;
+  (void)sz;
+#else
   if (_fd == -1) {
     return;
   }
@@ -794,12 +945,20 @@ void MeshableArena<PageSize>::freePhys(void *ptr, size_t sz) {
   int result = fallocate(_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, sz);
   d_assert_msg(result == 0, "fallocate(fd %d): %d errno %d (%s)\n", _fd, result, errno, strerror(errno));
 #endif
+#endif  // _WIN32
 }
 
 template <size_t PageSize>
 void MeshableArena<PageSize>::beginMesh(void *keep, void *remove, size_t sz) {
+  (void)keep;  // Used only in finalizeMesh
+#if defined(_WIN32)
+  DWORD oldProtect;
+  BOOL r = VirtualProtect(remove, sz, PAGE_READONLY, &oldProtect);
+  hard_assert(r != 0);
+#else
   int r = mprotect(remove, sz, PROT_READ);
   hard_assert(r == 0);
+#endif
 }
 
 template <size_t PageSize>
@@ -818,7 +977,12 @@ void MeshableArena<PageSize>::finalizeMesh(void *keep, void *remove, size_t sz) 
   const Span removedSpan{removeOff, static_cast<Length>(pageCount)};
   trackMeshed(removedSpan);
 
-#ifdef __APPLE__
+#if defined(_WIN32)
+  hard_assert(_fd != INVALID_HANDLE_VALUE);
+  // On Windows, use the platform abstraction for page-granular remapping
+  void *ptr = platform::mapSharedFixed(_fd, remove, sz, keepOff << kPageShift);
+  hard_assert_msg(ptr != nullptr, "mesh remap failed: %lu", GetLastError());
+#elif defined(__APPLE__)
   hard_assert(_fd >= 0);
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff << kPageShift);
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
@@ -828,6 +992,30 @@ void MeshableArena<PageSize>::finalizeMesh(void *keep, void *remove, size_t sz) 
 #endif
 }
 
+#if defined(_WIN32)
+// Windows implementation of openSpanFile
+template <size_t PageSize>
+HANDLE MeshableArena<PageSize>::openSpanFile(size_t sz) {
+  // Create a pagefile-backed section object (anonymous shared memory).
+  // This is the Windows equivalent of memfd_create().
+  HANDLE hSection = CreateFileMappingW(
+      INVALID_HANDLE_VALUE,  // Use system pagefile as backing store
+      NULL,                  // Default security attributes
+      PAGE_READWRITE | SEC_COMMIT,
+      static_cast<DWORD>(sz >> 32),          // High 32 bits of size
+      static_cast<DWORD>(sz & 0xFFFFFFFF),   // Low 32 bits of size
+      NULL                   // No name (anonymous section)
+  );
+
+  if (hSection == NULL) {
+    debug("CreateFileMapping failed: %lu\n", GetLastError());
+    return INVALID_HANDLE_VALUE;
+  }
+
+  return hSection;
+}
+#else
+// Unix implementation
 template <size_t PageSize>
 int MeshableArena<PageSize>::openShmSpanFile(size_t sz) {
   constexpr size_t buf_len = 64;
@@ -891,6 +1079,7 @@ int MeshableArena<PageSize>::openSpanFile(size_t sz) {
   return openShmSpanFile(sz);
 }
 #endif  // USE_MEMFD
+#endif  // _WIN32
 
 template <size_t PageSize>
 void MeshableArena<PageSize>::staticAtExit() {
@@ -899,6 +1088,7 @@ void MeshableArena<PageSize>::staticAtExit() {
     reinterpret_cast<MeshableArena<PageSize> *>(getArenaInstance<PageSize>())->exit();
 }
 
+#if !defined(_WIN32)
 template <size_t PageSize>
 void MeshableArena<PageSize>::staticPrepareForFork() {
   d_assert(getArenaInstance<PageSize>() != nullptr);
@@ -916,6 +1106,7 @@ void MeshableArena<PageSize>::staticAfterForkChild() {
   d_assert(getArenaInstance<PageSize>() != nullptr);
   reinterpret_cast<MeshableArena<PageSize> *>(getArenaInstance<PageSize>())->afterForkChild();
 }
+#endif  // !_WIN32
 
 }  // namespace mesh
 

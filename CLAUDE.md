@@ -330,7 +330,99 @@ Randomized allocation only. Useful for:
 ### Platform Support
 - **Linux**: Full support (primary platform)
 - **macOS**: Full support
+- **Windows**: Experimental support (allocation only, no meshing yet)
 - **64-bit only**: Current implementation requires 64-bit address space
+
+### Windows Port Notes
+
+The Windows port required significant platform abstraction work. Key learnings:
+
+#### MSVC Compiler Compatibility (src/common.h)
+- `__PRETTY_FUNCTION__` → `__FUNCSIG__`
+- `ssize_t` not available; use `SSIZE_T` from `<BaseTsd.h>`
+- GCC builtins need reimplementation using MSVC intrinsics:
+  - `__builtin_popcountl` → `__popcnt64` (from `<intrin.h>`)
+  - `__builtin_ctzl` → `_BitScanForward64`
+  - `__builtin_clzl` → `_BitScanReverse64`
+  - `__builtin_ffsl` → Custom implementation using `_BitScanForward64`
+  - `__builtin_prefetch` → No-op (performance hint only)
+  - `__builtin_unreachable` → `__assume(0)`
+- **Attribute placement**: MSVC's `__declspec(align(x))` and `__declspec(restrict)` must come BEFORE the type, but GCC/Clang's `__attribute__` can come after. Made these empty macros since code uses GCC-style placement.
+- `__restrict__` → `__restrict`
+- `pid_t` not available; typedef to `int`
+
+#### Threading (src/thread_local_heap.h)
+- pthread API not available on Windows; implemented compatibility layer:
+  - `pthread_t` → `DWORD` (thread ID)
+  - `pthread_key_t` → `DWORD` (TLS index)
+  - `pthread_key_create` → `TlsAlloc`
+  - `pthread_getspecific` → `TlsGetValue`
+  - `pthread_setspecific` → `TlsSetValue`
+  - `pthread_self` → `GetCurrentThreadId`
+
+#### Memory Management
+- `mmap`/`munmap` → `VirtualAlloc`/`VirtualFree` (src/platform/vmem_windows.cc)
+- `madvise(MADV_DONTNEED)` → `DiscardVirtualMemory` or `VirtualAlloc(MEM_RESET)`
+- `mprotect` → `VirtualProtect`
+- No `fork()` on Windows; fork-related code wrapped in `#if !defined(_WIN32)`
+
+#### Locking (src/internal.h)
+- `PosixLockType` not available; created `WindowsLockedHeap` wrapper using `std::mutex`
+
+#### Exception Handling (src/platform/exception_handler_windows.cc)
+- Unix signal handlers (`SIGSEGV`, `SIGBUS`) → Windows Vectored Exception Handler (VEH)
+- Installed via `AddVectoredExceptionHandler` in DllMain
+
+#### Build System
+- **Use CMake for Windows builds** (not Bazel)
+- CMake used for cross-platform builds
+- Windows libraries needed: `kernel32`, `psapi`, `advapi32`
+- Disable CMake auto-export for DLL; use explicit `__declspec(dllexport)` via `MESH_EXPORT` macro
+- Build commands:
+  ```bash
+  # Configure (from repo root)
+  cmake -B build-win -DCMAKE_BUILD_TYPE=Release
+
+  # Build
+  cmake --build build-win --config Release
+
+  # Test executable location
+  build-win/bin/Release/fragmenter_test.exe
+  ```
+
+#### Windows Meshing Implementation (Win10 1803+)
+
+Full meshing is now supported on Windows 10 version 1803 and later using modern memory APIs:
+
+**Key APIs Used**:
+- `VirtualAlloc2` with `MEM_RESERVE_PLACEHOLDER` - Reserves address space as placeholder
+- `MapViewOfFile3` with `MEM_REPLACE_PLACEHOLDER` - Maps file section into placeholder with page-granular offsets
+- `UnmapViewOfFile2` with `MEM_PRESERVE_PLACEHOLDER` - Unmaps while preserving placeholder
+
+**How Meshing Works on Windows**:
+1. Arena created with `CreateFileMappingW(INVALID_HANDLE_VALUE, ...)` (pagefile-backed)
+2. Address space reserved as placeholder via `VirtualAlloc2`
+3. Initial mapping via `MapViewOfFile3` into placeholder
+4. During mesh: `mapSharedFixed()` remaps virtual address to different physical offset
+5. Two virtual addresses now share same physical memory
+
+**Fallback for Older Windows**:
+- `hasPageGranularMapping()` returns false on pre-1803 Windows
+- Meshing disabled, allocation-only mode used
+- Legacy `MapViewOfFileEx` requires 64KB-aligned offsets (incompatible with 4KB page meshing)
+
+#### Current Limitations on Windows
+- **No fork handling**: Windows doesn't have `fork()`
+- **No background mesh thread**: Mesh triggering via `epoll_wait`/`recv` interception not applicable
+- **Requires Win10 1803+**: Older Windows versions fall back to allocation-only mode
+
+#### Key Windows-Specific Files
+- `src/runtime_windows.cc` - SizeMap data, measurePssKiB implementation
+- `src/memory_stats_windows.cc` - GetProcessMemoryInfo wrapper
+- `src/platform/vmem_windows.cc` - Modern API support (VirtualAlloc2, MapViewOfFile3), memory operations
+- `src/platform/exception_handler_windows.cc` - Vectored Exception Handler for meshing faults
+- `src/platform/platform.h` - Platform detection macros and FileHandle abstraction
+- `src/platform/vmem.h` - Cross-platform memory API declarations
 
 ### Integration
 - **Drop-in replacement**: No code changes required

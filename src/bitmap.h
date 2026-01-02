@@ -36,7 +36,8 @@ static inline constexpr size_t ATTRIBUTE_ALWAYS_INLINE wordCount(size_t byteCoun
 /// To find the bit in a word, do this: word & getMask(bitPosition)
 /// @return a "mask" for the given position.
 static inline constexpr size_t ATTRIBUTE_ALWAYS_INLINE getMask(uint64_t pos) {
-  return 1UL << pos;
+  // Use size_t(1) instead of 1UL to ensure 64-bit on Windows
+  return static_cast<size_t>(1) << pos;
 }
 
 using std::atomic_compare_exchange_weak_explicit;
@@ -433,7 +434,8 @@ public:
 
       // if the offset is 3, we want to mark the first 3 bits as 'set'
       // or 'unavailable'.
-      unsetBits &= ~((1UL << off) - 1);
+      // Use size_t(1) instead of 1UL to ensure 64-bit on Windows
+      unsetBits &= ~((static_cast<size_t>(1) << off) - 1);
 
       // if, after we've masked off everything below our offset there
       // are no free bits, continue
@@ -519,14 +521,20 @@ public:
 
     const auto wordCount = byteCount() / sizeof(size_t);
     for (size_t i = startWord; i < wordCount; i++) {
-      const auto mask = ~((1UL << startOff) - 1);
+      // Use size_t(1) instead of 1UL to ensure 64-bit on Windows
+      const auto mask = ~((static_cast<size_t>(1) << startOff) - 1);
       const auto bits = Super::_bits[i] & mask;
       startOff = 0;
 
       if (bits == 0ULL)
         continue;
 
+      // Use __builtin_ffsll for 64-bit values on Windows
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(_M_X64))
+      const size_t off = __builtin_ffsll(static_cast<long long>(bits)) - 1;
+#else
       const size_t off = __builtin_ffsl(bits) - 1;
+#endif
 
       const auto bit = kWordBits * i + off;
       return bit < bitCount() ? bit : bitCount();
@@ -541,9 +549,10 @@ public:
 
     const auto wordCount = byteCount() / sizeof(size_t);
     for (ssize_t i = startWord; i >= 0; i--) {
-      uint64_t mask = (1UL << (startOff + 1)) - 1;
+      // Use size_t(1) instead of 1UL to ensure 64-bit on Windows
+      uint64_t mask = (static_cast<size_t>(1) << (startOff + 1)) - 1;
       if (startOff == 63) {
-        mask = ~0UL;
+        mask = ~static_cast<size_t>(0);
       }
       const auto bits = Super::_bits[i] & mask;
       const auto origStartOff = startOff;

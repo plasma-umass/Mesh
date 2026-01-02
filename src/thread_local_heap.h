@@ -9,9 +9,36 @@
 #if !defined(_WIN32)
 #include <pthread.h>
 #include <stdalign.h>
-#endif
-
 #include <sys/types.h>
+#else
+// Windows thread compatibility
+#include <windows.h>
+// Define pthread-like types for Windows
+using pthread_t = DWORD;
+using pthread_key_t = DWORD;
+
+inline pthread_t pthread_self() {
+  return GetCurrentThreadId();
+}
+
+inline int pthread_key_create(pthread_key_t *key, void (*destructor)(void*)) {
+  (void)destructor;  // Windows TLS doesn't have per-key destructors, handled elsewhere
+  DWORD tlsIndex = TlsAlloc();
+  if (tlsIndex == TLS_OUT_OF_INDEXES) {
+    return -1;
+  }
+  *key = tlsIndex;
+  return 0;
+}
+
+inline void *pthread_getspecific(pthread_key_t key) {
+  return TlsGetValue(key);
+}
+
+inline int pthread_setspecific(pthread_key_t key, const void *value) {
+  return TlsSetValue(key, const_cast<void*>(value)) ? 0 : -1;
+}
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -71,7 +98,14 @@ public:
 
   static void InitTLH();
 
+  // Flush all thread-local heaps - returns freed slots to miniheap bitmaps
+  // and releases miniheaps back to global heap. Must be called with global heap lock held.
+  static void FlushAllHeapsLocked();
+
   void releaseAll();
+
+  // Version of releaseAll that assumes locks are already held
+  void releaseAllLocked();
 
   void *ATTRIBUTE_NEVER_INLINE CACHELINE_ALIGNED_FN smallAllocSlowpath(size_t sizeClass);
   void *ATTRIBUTE_NEVER_INLINE CACHELINE_ALIGNED_FN smallAllocGlobalRefill(ShuffleVectorT &shuffleVector,
@@ -204,6 +238,16 @@ public:
       return;
     }
 
+#ifdef MESH_DEBUG_VERBOSE
+    static size_t freeForCalls = 0;
+    freeForCalls++;
+    if (freeForCalls <= 10 || freeForCalls % 1000 == 0) {
+      mesh_dprintf("DEBUG TLH::free -> freeFor: call=%zu mh=%p mh->current=%p _current=%p hasMeshed=%d\n",
+              freeForCalls, (void*)mh, mh ? (void*)(uintptr_t)mh->current() : nullptr,
+              (void*)(uintptr_t)_current, mh ? (int)mh->hasMeshed() : -1);
+    }
+#endif
+
     _global->freeFor(mh, ptr, startEpoch);
   }
 
@@ -293,6 +337,16 @@ void ThreadLocalHeap<PageSize>::InitTLH() {
   hard_assert(!_tlhInitialized);
   pthread_key_create(&_heapKey, DestroyThreadLocalHeap);
   _tlhInitialized = true;
+}
+
+template <size_t PageSize>
+void ThreadLocalHeap<PageSize>::FlushAllHeapsLocked() {
+  // Iterate through all thread-local heaps and flush their shuffle vectors.
+  // This returns freed slots to miniheap bitmaps so meshing can see actual occupancy.
+  // Must be called with all global heap locks held.
+  for (ThreadLocalHeap *h = _threadLocalHeaps; h != nullptr; h = h->_next) {
+    h->releaseAllLocked();
+  }
 }
 
 template <size_t PageSize>
@@ -402,6 +456,23 @@ void ThreadLocalHeap<PageSize>::releaseAll() {
   }
 }
 
+template <size_t PageSize>
+void ThreadLocalHeap<PageSize>::releaseAllLocked() {
+  // Version of releaseAll that assumes all locks are already held.
+  // Flushes shuffle vectors back to miniheap bitmaps AND releases miniheaps
+  // to the partial freelist so they can be considered for meshing.
+  for (size_t i = 1; i < kNumBins; i++) {
+    _shuffleVector[i].refillMiniheaps();
+#ifdef MESH_DEBUG_VERBOSE
+    size_t mhCount = _shuffleVector[i].miniheaps().size();
+    if (mhCount > 0) {
+      mesh_dprintf("DEBUG TLH::releaseAllLocked: sizeClass=%zu miniheaps=%zu\n", i, mhCount);
+    }
+#endif
+    _global->releaseMiniheapsLocked(_shuffleVector[i].miniheaps());
+  }
+}
+
 // we get here if the shuffleVector is exhausted
 template <size_t PageSize>
 void *CACHELINE_ALIGNED_FN ThreadLocalHeap<PageSize>::smallAllocSlowpath(size_t sizeClass) {
@@ -421,6 +492,12 @@ void *CACHELINE_ALIGNED_FN ThreadLocalHeap<PageSize>::smallAllocSlowpath(size_t 
 template <size_t PageSize>
 void *CACHELINE_ALIGNED_FN ThreadLocalHeap<PageSize>::smallAllocGlobalRefill(ShuffleVectorT &shuffleVector,
                                                                              size_t sizeClass) {
+#ifdef MESH_DEBUG_VERBOSE
+  static size_t globalRefillCalls = 0;
+  globalRefillCalls++;
+  mesh_dprintf("DEBUG smallAllocGlobalRefill: call=%zu sizeClass=%zu\n", globalRefillCalls, sizeClass);
+#endif
+
   const size_t sizeMax = SizeMap::ByteSizeForClass(sizeClass);
 
   _global->allocSmallMiniheaps(sizeClass, sizeMax, shuffleVector.miniheaps(), _current);

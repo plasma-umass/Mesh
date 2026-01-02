@@ -3,22 +3,39 @@ include_directories(./)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/../heap_layers-src)
 # include_directories(./vendor/Heap-Layers)
 
-#Create a common set of source files
+#Create a common set of source files (cross-platform core)
 set(common_src
         d_assert.cc
         global_heap.cc
-        runtime.cc
-        real.cc
         meshable_arena.cc
         measure_rss.cc
         thread_local_heap.cc
+        printf.c
+        putchar.c
         )
 
-# Add platform-specific memory stats files
-if(APPLE)
-    list(APPEND common_src memory_stats_macos.cc)
-elseif(UNIX)
-    list(APPEND common_src memory_stats_linux.cc)
+# Add platform-specific source files
+if(WIN32)
+    # Windows: use Windows-specific implementations
+    list(APPEND common_src
+        runtime_windows.cc
+        memory_stats_windows.cc
+        platform/vmem_windows.cc
+        platform/exception_handler_windows.cc
+    )
+elseif(APPLE)
+    list(APPEND common_src
+        runtime.cc
+        real.cc
+        memory_stats_macos.cc
+    )
+else()
+    # Linux/Unix
+    list(APPEND common_src
+        runtime.cc
+        real.cc
+        memory_stats_linux.cc
+    )
 endif()
 
 #Create the set of source files for the mesh library
@@ -26,9 +43,44 @@ set(mesh_src
         ${common_src}
         libmesh.cc
         )
+
 #Add a target for the mesh shared library
 add_library(mesh SHARED ${mesh_src})
-target_link_libraries(mesh PRIVATE -pthread -ldl)
+
+# On Windows, disable auto-export - we use explicit __declspec(dllexport) via MESH_EXPORT
+if(WIN32)
+    set_target_properties(mesh PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+endif()
+
+# Platform-specific link libraries
+if(WIN32)
+    target_link_libraries(mesh PRIVATE kernel32 psapi advapi32)
+elseif(APPLE)
+    target_link_libraries(mesh PRIVATE pthread dl)
+else()
+    target_link_libraries(mesh PRIVATE pthread dl rt m)
+endif()
+
+# Add static library target
+add_library(mesh_static STATIC ${mesh_src})
+set_target_properties(mesh_static PROPERTIES OUTPUT_NAME "mesh")
+if(WIN32)
+    target_link_libraries(mesh_static PRIVATE kernel32 psapi advapi32)
+elseif(APPLE)
+    target_link_libraries(mesh_static PRIVATE pthread dl)
+else()
+    target_link_libraries(mesh_static PRIVATE pthread dl rt m)
+endif()
+
+# Windows fragmenter test
+if(WIN32)
+    add_executable(fragmenter_test testing/fragmenter_windows.cc measure_rss.cc)
+    target_link_libraries(fragmenter_test PRIVATE mesh_static kernel32 psapi advapi32)
+    target_include_directories(fragmenter_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+endif()
+
+# Skip unit tests on Windows for now (googletest ExternalProject setup needs work)
+if(NOT WIN32)
 
 #Create a set of source files for the unit tests
 set(unit_src
@@ -50,9 +102,16 @@ set(unit_src
 if(APPLE)
     list(APPEND unit_src testing/unit/macos_memory_test.cc)
 endif()
+
 #Add a target to the unit tests executable
 add_executable(unit.test ${unit_src})
-target_link_libraries(unit.test PRIVATE -ldl -pthread )
+
+# Platform-specific link libraries for tests
+if(APPLE)
+    target_link_libraries(unit.test PRIVATE dl pthread)
+else()
+    target_link_libraries(unit.test PRIVATE dl pthread rt m)
+endif()
 
 set(GTEST_DIR ${CMAKE_CURRENT_BINARY_DIR}/../googletest-src/googletest)
 
@@ -98,3 +157,5 @@ if(${CLANGCOV})
     #        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
     #        DEPENDS unit.test)
 endif()
+
+endif() # NOT WIN32

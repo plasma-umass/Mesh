@@ -15,14 +15,21 @@
 #include <atomic>
 #include <unordered_set>
 
+#if !defined(_WIN32)
 #include <signal.h>
+#endif
 #include <stdint.h>
 
 #include "common.h"
 #include "rng/mwc.h"
 
 // never allocate executable heap
+#if defined(_WIN32)
+// Windows doesn't use PROT_* flags
+#define HL_MMAP_PROTECTION_MASK 0
+#else
 #define HL_MMAP_PROTECTION_MASK (PROT_READ | PROT_WRITE)
+#endif
 #define MALLOC_TRACE 0
 
 #include "heaplayers.h"
@@ -39,6 +46,11 @@ inline pid_t gettid(void) {
   uint64_t tid;
   pthread_threadid_np(NULL, &tid);
   return static_cast<uint32_t>(tid);
+}
+#endif
+#ifdef _WIN32
+inline unsigned long gettid(void) {
+  return GetCurrentThreadId();
 }
 #endif
 
@@ -288,10 +300,46 @@ inline void *MaskToPage(const void *ptr) {
 // efficiently copy data from srcFd to dstFd
 int copyFile(int dstFd, int srcFd, off_t off, size_t sz);
 
+// Platform-specific lock type for internal heap
+#if defined(_WIN32)
+// On Windows, use std::mutex-based lock instead of PosixLockType
+using MeshLockType = std::mutex;
+
+// Simple locked heap wrapper for Windows using std::mutex
+// Note: Using 'BaseHeap' instead of 'SuperHeap' to avoid MSVC name lookup finding
+// the private typedef 'SuperHeap' in PartitionedHeap before the template parameter.
+template <typename LockType, typename BaseHeap>
+class WindowsLockedHeap : public BaseHeap {
+public:
+  inline void *malloc(size_t sz) {
+    std::lock_guard<LockType> guard(_lock);
+    return BaseHeap::malloc(sz);
+  }
+
+  inline void free(void *ptr) {
+    std::lock_guard<LockType> guard(_lock);
+    BaseHeap::free(ptr);
+  }
+
+  inline size_t getSize(void *ptr) {
+    std::lock_guard<LockType> guard(_lock);
+    return BaseHeap::getSize(ptr);
+  }
+
+private:
+  LockType _lock;
+};
+
+// for mesh-internal data structures, like heap metadata
+class Heap : public ExactlyOneHeap<WindowsLockedHeap<MeshLockType, PartitionedHeap>> {
+private:
+  typedef ExactlyOneHeap<WindowsLockedHeap<MeshLockType, PartitionedHeap>> SuperHeap;
+#else
 // for mesh-internal data structures, like heap metadata
 class Heap : public ExactlyOneHeap<LockedHeap<PosixLockType, PartitionedHeap>> {
 private:
   typedef ExactlyOneHeap<LockedHeap<PosixLockType, PartitionedHeap>> SuperHeap;
+#endif
 
 public:
   Heap() : SuperHeap() {

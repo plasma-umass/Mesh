@@ -179,6 +179,13 @@ public:
     const size_t count = _miniheapCount.load(std::memory_order_relaxed);
     _stats.mhHighWaterMark = max(count, _stats.mhHighWaterMark);
 
+#ifdef MESH_DEBUG_VERBOSE
+    static size_t totalMhAllocs = 0;
+    totalMhAllocs++;
+    mesh_dprintf("DEBUG allocMiniheapLocked: sizeClass=%d objectCount=%zu objectSize=%zu pageCount=%zu total=%zu\n",
+            sizeClass, objectCount, objectSize, pageCount, totalMhAllocs);
+#endif
+
     return mh;
   }
 
@@ -357,6 +364,24 @@ public:
     d_assert(sizeClass >= 0 && sizeClass < kNumBins);
 
     lock_guard<mutex> lock(_miniheapLocks[sizeClass]);
+    drainPendingPartialLocked(sizeClass);
+    for (auto mh : miniheaps) {
+      d_assert(mh->sizeClass() == sizeClass);
+      releaseMiniheapLocked(mh, sizeClass);
+    }
+    miniheaps.clear();
+  }
+
+  // Version that assumes all locks are already held (for use during mesh.compact)
+  template <uint32_t Size>
+  inline void releaseMiniheapsLocked(FixedArray<MiniHeapT, Size> &miniheaps) {
+    if (miniheaps.size() == 0) {
+      return;
+    }
+
+    const int sizeClass = miniheaps[0]->sizeClass();
+    d_assert(sizeClass >= 0 && sizeClass < kNumBins);
+
     drainPendingPartialLocked(sizeClass);
     for (auto mh : miniheaps) {
       d_assert(mh->sizeClass() == sizeClass);
@@ -731,7 +756,7 @@ private:
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};
   std::atomic<std::chrono::milliseconds> _meshPeriodMs{kMeshPeriodMs};
 
-  atomic_size_t ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _lastMeshEffective{0};
+  atomic_size_t ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _lastMeshEffective{1};  // Start true to allow first mesh attempt
 
   // we want this on its own cacheline
   EpochLock ATTRIBUTE_ALIGNED(CACHELINE_SIZE) _meshEpoch{};
