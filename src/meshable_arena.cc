@@ -90,16 +90,30 @@ void MeshableArena<PageSize>::afterForkChild() {
 
   const int oldFd = _fd;
 
+  // Copy all allocated pages
   const auto bitmap = allocatedBitmap();
   for (auto const &i : bitmap) {
     int result = internal::copyFile(newFd, oldFd, i << kPageShift, PageSize);
     d_assert(result == CPUInfo::PageSize);
   }
 
+  // Sync the new file to ensure all copied data is persisted before remapping
+  fsync(newFd);
+
+  // First restore write permission to the arena (it was marked read-only in prepareForFork).
   int r = mprotect(_arenaBegin, kArenaSize, PROT_READ | PROT_WRITE);
   hard_assert(r == 0);
 
+  // Remap the arena to the new file descriptor.
+  // On some kernel versions/configurations, mmap with MAP_FIXED may fail with
+  // EACCES or EBADF when replacing a MAP_SHARED mapping. If that happens,
+  // retry after explicitly unmapping the old arena.
   void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, 0);
+  if (ptr == MAP_FAILED && (errno == EACCES || errno == EBADF)) {
+    r = munmap(_arenaBegin, kArenaSize);
+    hard_assert(r == 0);
+    ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, 0);
+  }
   hard_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
   {
