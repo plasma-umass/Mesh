@@ -5,6 +5,7 @@
 
 #include <pthread.h>
 #include <signal.h>
+#include <spawn.h>
 
 #ifdef __linux__
 #include <sys/epoll.h>
@@ -34,6 +35,9 @@ DECLARE_REAL(pthread_exit);
 
 DECLARE_REAL(sigaction);
 DECLARE_REAL(sigprocmask);
+
+DECLARE_REAL(posix_spawn);
+DECLARE_REAL(posix_spawnp);
 }  // namespace real
 }  // namespace mesh
 

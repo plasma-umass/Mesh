@@ -31,6 +31,9 @@ DEFINE_REAL(pthread_exit);
 DEFINE_REAL(sigaction);
 DEFINE_REAL(sigprocmask);
 
+DEFINE_REAL(posix_spawn);
+DEFINE_REAL(posix_spawnp);
+
 void init() {
   static mutex initLock;
   static bool initialized;
@@ -51,6 +54,9 @@ void init() {
 
   INIT_REAL(sigaction, RTLD_NEXT);
   INIT_REAL(sigprocmask, RTLD_NEXT);
+
+  INIT_REAL(posix_spawn, RTLD_NEXT);
+  INIT_REAL(posix_spawnp, RTLD_NEXT);
 }
 }  // namespace real
 }  // namespace mesh
