@@ -18,9 +18,6 @@ void MeshableArena<PageSize>::prepareForFork() {
   runtime<PageSize>().lock();
   internal::Heap().lock();
 
-  int r = mprotect(_arenaBegin, kArenaSize, PROT_READ);
-  hard_assert(r == 0);
-
   int err = pipe(_forkPipe);
   if (err == -1) {
     abort();
@@ -48,9 +45,6 @@ void MeshableArena<PageSize>::afterForkParent() {
 
   _forkPipe[0] = -1;
   _forkPipe[1] = -1;
-
-  int r = mprotect(_arenaBegin, kArenaSize, PROT_READ | PROT_WRITE);
-  hard_assert(r == 0);
 
   runtime<PageSize>().unlock();
   runtime<PageSize>().heap().unlock();
@@ -95,9 +89,6 @@ void MeshableArena<PageSize>::afterForkChild() {
     int result = internal::copyFile(newFd, oldFd, i << kPageShift, PageSize);
     d_assert(result == CPUInfo::PageSize);
   }
-
-  int r = mprotect(_arenaBegin, kArenaSize, PROT_READ | PROT_WRITE);
-  hard_assert(r == 0);
 
   void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, 0);
   hard_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);

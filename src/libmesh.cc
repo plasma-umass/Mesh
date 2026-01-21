@@ -442,7 +442,54 @@ ssize_t MESH_EXPORT recvmsg(int sockfd, struct msghdr *msg, int flags) {
   return mesh::dispatchByPageSize([=](auto &rt) { return rt.recvmsg(sockfd, msg, flags); });
 }
 #endif
+}  // extern "C"
+
+namespace {
+// RAII guard for the three locks needed during spawn operations.
+// Acquires locks in the same order as prepareForFork to prevent races.
+template <size_t PageSize>
+class SpawnLockGuard {
+public:
+  SpawnLockGuard() {
+    mesh::runtime<PageSize>().heap().lock();
+    mesh::runtime<PageSize>().lock();
+    mesh::internal::Heap().lock();
+  }
+
+  ~SpawnLockGuard() {
+    mesh::internal::Heap().unlock();
+    mesh::runtime<PageSize>().unlock();
+    mesh::runtime<PageSize>().heap().unlock();
+  }
+
+  SpawnLockGuard(const SpawnLockGuard &) = delete;
+  SpawnLockGuard &operator=(const SpawnLockGuard &) = delete;
+};
+}  // namespace
+
+extern "C" {
+int MESH_EXPORT mesh_posix_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *file_actions,
+                                 const posix_spawnattr_t *attrp, char *const argv[], char *const envp[]) {
+  if (likely(getPageSize() == kPageSize4K)) {
+    SpawnLockGuard<kPageSize4K> guard;
+    return mesh::real::posix_spawn(pid, path, file_actions, attrp, argv, envp);
+  } else {
+    SpawnLockGuard<kPageSize16K> guard;
+    return mesh::real::posix_spawn(pid, path, file_actions, attrp, argv, envp);
+  }
 }
+
+int MESH_EXPORT mesh_posix_spawnp(pid_t *pid, const char *file, const posix_spawn_file_actions_t *file_actions,
+                                  const posix_spawnattr_t *attrp, char *const argv[], char *const envp[]) {
+  if (likely(getPageSize() == kPageSize4K)) {
+    SpawnLockGuard<kPageSize4K> guard;
+    return mesh::real::posix_spawnp(pid, file, file_actions, attrp, argv, envp);
+  } else {
+    SpawnLockGuard<kPageSize16K> guard;
+    return mesh::real::posix_spawnp(pid, file, file_actions, attrp, argv, envp);
+  }
+}
+}  // extern "C"
 
 #if defined(__linux__)
 #include "gnu_wrapper.cc"

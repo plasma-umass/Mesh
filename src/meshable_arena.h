@@ -418,8 +418,6 @@ MeshableArena<PageSize>::MeshableArena() : SuperHeap(), _fastPrng(internal::seed
     madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
   }
 
-  debug("MeshableArena(%p): fd:%4d\t%p-%p\n", this, _fd, _arenaBegin, arenaEnd());
-
   atexit(staticAtExit);
   pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
 }

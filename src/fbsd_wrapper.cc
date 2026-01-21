@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <malloc.h>
 #include <pthread.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,6 +58,9 @@
 #define WEAK_REDEF3(type, fname, arg1, arg2, arg3) \
   MESH_EXPORT type fname(arg1, arg2, arg3)         \
   __THROW WEAK(mesh_##fname)
+#define WEAK_REDEF6(type, fname, arg1, arg2, arg3, arg4, arg5, arg6) \
+  MESH_EXPORT type fname(arg1, arg2, arg3, arg4, arg5, arg6)         \
+  __THROW WEAK(mesh_##fname)
 
 extern "C" {
 WEAK_REDEF1(void *, malloc, size_t);
@@ -69,6 +73,10 @@ WEAK_REDEF2(void *, memalign, size_t, size_t);
 WEAK_REDEF3(int, posix_memalign, void **, size_t, size_t);
 WEAK_REDEF2(void *, aligned_alloc, size_t, size_t);
 WEAK_REDEF1(size_t, malloc_usable_size, const void *);
+WEAK_REDEF6(int, posix_spawn, pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *,
+            char *const[], char *const[]);
+WEAK_REDEF6(int, posix_spawnp, pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *,
+            char *const[], char *const[]);
 }
 
 #include "wrapper.cc"
