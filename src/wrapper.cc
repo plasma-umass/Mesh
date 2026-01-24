@@ -142,7 +142,10 @@ extern "C" MESH_EXPORT void *MYCDECL CUSTOM_ALIGNED_ALLOC(size_t alignment, size
   // memalign(), except for the added restriction that size should be
   // a multiple of alignment." Rather than check and potentially fail,
   // we just enforce this by rounding up the size, if necessary.
-  size = size + alignment - (size % alignment);
+  size_t remainder = size % alignment;
+  if (remainder != 0) {
+    size = size + alignment - remainder;
+  }
   return CUSTOM_MEMALIGN(alignment, size);
 }
 

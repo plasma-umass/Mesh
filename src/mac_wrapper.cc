@@ -227,7 +227,10 @@ MESH_EXPORT void *replace_memalign(size_t alignment, size_t size) {
     // memalign(), except for the added restriction that size should be
     // a multiple of alignment." Rather than check and potentially fail,
     // we just enforce this by rounding up the size, if necessary.
-    size = size + alignment - (size % alignment);
+    size_t remainder = size % alignment;
+    if (remainder != 0) {
+      size = size + alignment - remainder;
+    }
     return replace_memalign (alignment, size);
   }
 #endif
