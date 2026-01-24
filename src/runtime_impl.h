@@ -271,7 +271,7 @@ int Runtime<PageSize>::sigaction(int signum, const struct sigaction *act, struct
 
   auto nextAct = &sigsegvAction;
   if (signum == SIGBUS) {
-    act = &sigbusAction;
+    nextAct = &sigbusAction;
   }
 
   if (oldact)
