@@ -335,7 +335,7 @@ void Runtime<PageSize>::segfaultHandler(int sig, siginfo_t *siginfo, void *conte
   }
 
   if (action != nullptr) {
-    if (action->sa_sigaction != nullptr) {
+    if ((action->sa_flags & SA_SIGINFO) && action->sa_sigaction != nullptr) {
       action->sa_sigaction(sig, siginfo, context);
       return;
     } else if (action->sa_handler == SIG_IGN) {
