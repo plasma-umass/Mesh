@@ -10,9 +10,37 @@
 #include "common.h"
 
 #define DEFINE_REAL(name) decltype(::name) *name
+
+// Try to find a symbol via RTLD_NEXT first.  When that fails (e.g. glibc 2.34+
+// merged libpthread into libc, or the runtime statically links pthread), fall
+// back to explicitly opening the system libraries that are known to provide the
+// symbol.  We cannot use RTLD_DEFAULT as a fallback because it would return
+// Mesh's own wrapper and cause infinite recursion.
+static void *fallback_dlsym(const char *symbol) {
+  static const char *const libs[] = {
+#ifdef __linux__
+      "libpthread.so.0",
+      "libc.so.6",
+#elif defined(__APPLE__)
+      "libSystem.B.dylib",
+#endif
+  };
+  for (auto lib : libs) {
+    void *h = dlopen(lib, RTLD_LAZY);
+    if (h) {
+      void *sym = dlsym(h, symbol);
+      if (sym)
+        return sym;
+    }
+  }
+  return nullptr;
+}
+
 #define INIT_REAL(name, handle)                                         \
   do {                                                                  \
     name = reinterpret_cast<decltype(::name) *>(dlsym(handle, #name));  \
+    if (name == nullptr)                                                \
+      name = reinterpret_cast<decltype(::name) *>(fallback_dlsym(#name)); \
     hard_assert_msg(name != nullptr, "mesh::real: expected %s", #name); \
   } while (false)
 
