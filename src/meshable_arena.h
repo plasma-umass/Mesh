@@ -313,9 +313,14 @@ private:
   }
 
   static void staticAtExit();
+
+public:
+  // Public so mac_wrapper.cc can call these from _malloc_fork_* handlers
   static void staticPrepareForFork();
   static void staticAfterForkParent();
   static void staticAfterForkChild();
+
+private:
 
   void exit() {
     // FIXME: do this from the destructor, and test that destructor is
@@ -419,7 +424,13 @@ MeshableArena<PageSize>::MeshableArena() : SuperHeap(), _fastPrng(internal::seed
   }
 
   atexit(staticAtExit);
+#ifndef __APPLE__
+  // On macOS, fork handling is done via _malloc_fork_prepare/parent/child
+  // interposition in mac_wrapper.cc. Registering pthread_atfork here too
+  // causes a deadlock: pthread_atfork handlers run first (locking mutexes),
+  // then _malloc_fork_prepare tries to lock the same mutexes again.
   pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
+#endif
 }
 
 template <size_t PageSize>

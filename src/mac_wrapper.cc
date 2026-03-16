@@ -54,6 +54,8 @@ using namespace std;
 #include <assert.h>
 
 #include "wrappers/macinterpose.h"
+#include "meshable_arena.h"
+#include "dispatch_utils.h"
 
 //////////
 //////////
@@ -404,19 +406,27 @@ MESH_EXPORT void *replace_malloc_zone_valloc(malloc_zone_t *, size_t size) {
 }
 
 MESH_EXPORT void replace__malloc_fork_child() {
-  /* Called in the child process after a fork() to resume normal operation.  In the MTASK case we also have to change
-   * memory inheritance so that the child does not share memory with the parent. */
-  xxmalloc_unlock();
+  /* Called in the child process after a fork() to resume normal operation.
+   * On macOS, this is the sole fork-child handler (no pthread_atfork). */
+  mesh::dispatchByPageSizeEx(
+      []() { MeshableArena<kPageSize4K>::staticAfterForkChild(); },
+      []() { MeshableArena<kPageSize16K>::staticAfterForkChild(); });
 }
 
 MESH_EXPORT void replace__malloc_fork_parent() {
-  /* Called in the parent process after a fork() to resume normal operation. */
-  xxmalloc_unlock();
+  /* Called in the parent process after a fork() to resume normal operation.
+   * On macOS, this is the sole fork-parent handler (no pthread_atfork). */
+  mesh::dispatchByPageSizeEx(
+      []() { MeshableArena<kPageSize4K>::staticAfterForkParent(); },
+      []() { MeshableArena<kPageSize16K>::staticAfterForkParent(); });
 }
 
 MESH_EXPORT void replace__malloc_fork_prepare() {
-  /* Prepare the malloc module for a fork by insuring that no thread is in a malloc critical section */
-  xxmalloc_lock();
+  /* Prepare the malloc module for a fork by insuring that no thread is in a malloc critical section.
+   * On macOS, this is the sole fork-prepare handler (no pthread_atfork). */
+  mesh::dispatchByPageSizeEx(
+      []() { MeshableArena<kPageSize4K>::staticPrepareForFork(); },
+      []() { MeshableArena<kPageSize16K>::staticPrepareForFork(); });
 }
 }
 

@@ -67,6 +67,13 @@ void MeshableArena<PageSize>::afterForkChild() {
     return;
   }
 
+  // Restore write permission to the arena FIRST, before unlocking any mutexes.
+  // prepareForFork() marked it read-only; if we unlock first, subsequent malloc
+  // calls (from this function or from system atfork handlers) will SIGSEGV
+  // trying to write to the read-only arena.
+  int r = mprotect(_arenaBegin, kArenaSize, PROT_READ | PROT_WRITE);
+  hard_assert(r == 0);
+
   internal::Heap().unlock();
   runtime<PageSize>().unlock();
   runtime<PageSize>().heap().unlock();
@@ -90,6 +97,16 @@ void MeshableArena<PageSize>::afterForkChild() {
     d_assert(result == CPUInfo::PageSize);
   }
 
+  int r = mprotect(_arenaBegin, kArenaSize, PROT_READ | PROT_WRITE);
+  hard_assert(r == 0);
+
+  // Sync the new file to ensure all copied data is persisted before remapping
+  fsync(newFd);
+
+  // Remap the arena to the new file descriptor.
+  // On some kernel versions/configurations, mmap with MAP_FIXED may fail with
+  // EACCES or EBADF when replacing a MAP_SHARED mapping. If that happens,
+  // retry after explicitly unmapping the old arena.
   void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, 0);
   hard_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
 
