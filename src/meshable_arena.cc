@@ -97,9 +97,6 @@ void MeshableArena<PageSize>::afterForkChild() {
     d_assert(result == CPUInfo::PageSize);
   }
 
-  int r = mprotect(_arenaBegin, kArenaSize, PROT_READ | PROT_WRITE);
-  hard_assert(r == 0);
-
   // Sync the new file to ensure all copied data is persisted before remapping
   fsync(newFd);
 
