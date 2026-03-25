@@ -60,9 +60,6 @@ size_t internal::measurePssKiB() {
 int internal::copyFile(int dstFd, int srcFd, off_t off, size_t sz) {
   d_assert(off >= 0);
 
-  off_t newOff = lseek(dstFd, off, SEEK_SET);
-  d_assert(newOff == off);
-
 #if defined(__APPLE__)
   // Use pread/pwrite for page-level copies. fcopyfile copies the ENTIRE
   // file (not a byte range), which is catastrophically slow when called
