@@ -46,6 +46,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <new>
 
 #include "internal.h"
@@ -67,6 +68,16 @@
 #endif
 
 namespace mesh {
+
+namespace internal {
+template <size_t PageSize>
+constexpr off_t pageOffsetToFileOffset(Offset pageOffset) {
+  static_assert(static_cast<uint64_t>(kArenaSize - PageSize) <=
+                    static_cast<uint64_t>(std::numeric_limits<off_t>::max()),
+                "off_t cannot represent Mesh arena offsets");
+  return static_cast<off_t>(pageOffset) * static_cast<off_t>(PageSize);
+}
+}  // namespace internal
 
 namespace {
 const char *const TMP_DIRS[] = {
@@ -349,7 +360,8 @@ private:
   inline void resetSpanMapping(const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = static_cast<size_t>(span.length) << kPageShift;
-    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset << kPageShift);
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
+         internal::pageOffsetToFileOffset<PageSize>(span.offset));
   }
 
   void prepareForFork();
@@ -829,10 +841,12 @@ void MeshableArena<PageSize>::finalizeMesh(void *keep, void *remove, size_t sz) 
 
 #ifdef __APPLE__
   hard_assert(_fd >= 0);
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff << kPageShift);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
+                   internal::pageOffsetToFileOffset<PageSize>(keepOff));
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
 #else
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff << kPageShift);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
+                   internal::pageOffsetToFileOffset<PageSize>(keepOff));
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
 #endif
 }
