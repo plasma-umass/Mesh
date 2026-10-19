@@ -274,7 +274,7 @@ private:
 
     if (flags == internal::PageType::Dirty) {
       if (kAdviseDump) {
-        madvise(ptrFromOffset(span.offset), span.length << kPageShift, MADV_DONTDUMP);
+        madvise(ptrFromOffset(span.offset), static_cast<size_t>(span.length) << kPageShift, MADV_DONTDUMP);
       }
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
@@ -839,16 +839,10 @@ void MeshableArena<PageSize>::finalizeMesh(void *keep, void *remove, size_t sz) 
   const Span removedSpan{removeOff, static_cast<Length>(pageCount)};
   trackMeshed(removedSpan);
 
-#ifdef __APPLE__
   hard_assert(_fd >= 0);
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
                    internal::pageOffsetToFileOffset<PageSize>(keepOff));
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-#else
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
-                   internal::pageOffsetToFileOffset<PageSize>(keepOff));
-  hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-#endif
 }
 
 template <size_t PageSize>
