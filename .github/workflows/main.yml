@@ -40,7 +40,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get -y install binutils-gold
       - name: build in debug mode
         run: |
-          ./bazel test -c dbg //src:unit-tests
+          ./bazel test -c dbg //src:unit-tests //src:high-offset-mesh-test
       - name: build tests and binary
         run: |
           make -j1
@@ -54,7 +54,7 @@ jobs:
     - uses: actions/checkout@v1
     - name: build in debug mode
       run: |
-        ./bazel test -c dbg //src:unit-tests --test_output=all
+        ./bazel test -c dbg //src:unit-tests //src:high-offset-mesh-test --test_output=all
     - name: build tests and binary
       run: |
         make -j1
