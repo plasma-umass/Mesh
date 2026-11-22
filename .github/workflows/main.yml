@@ -111,7 +111,8 @@ jobs:
     - name: Fragmentation benchmark
       run: |
         sudo --preserve-env=GITHUB_STEP_SUMMARY python3 bench/kv/fragmentation.py \
-          --libmesh build/lib/libmesh.so --mstat bin/mstat --json kv-fragmentation.json --check
+          --libmesh build/lib/libmesh.so --mstat bin/mstat --trials 3 --settle 15 \
+          --json kv-fragmentation.json --check
     - uses: actions/upload-artifact@v4
       if: always()
       with:

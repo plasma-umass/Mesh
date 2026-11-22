@@ -42,8 +42,30 @@ back to PSS.
 virtual addresses, and RSS counts it once per mapping. In this benchmark, RSS
 shows Mesh saving about 2% when it actually saves about 30%.
 
+## Latency
+
+The paper reports insertion time and time spent compacting (§6.2.2). Each
+configuration is measured the same way:
+
+- **insert**: wall time of the two `DEBUG POPULATE` commands.
+- **idle CPU**: server CPU time (user + system) during the idle window. This
+  covers meshing, active defragmentation, and jemalloc purging alike.
+- **probe p50/p99/max**: a client sends `GET` for a random second-batch key
+  every 10 ms during the idle window. Meshing (run from Mesh's `epoll_wait`
+  wrapper) and active defragmentation both run on the server's main thread,
+  so their pauses show up here. The probe runs in Python, which adds about a
+  millisecond of its own jitter.
+- **mesh passes / meshing total / longest pass**: Mesh's own accounting
+  (`mesh.pass_count`, `mesh.pass_total_ns`, `mesh.pass_max_ns`; also printed
+  by `MALLOCSTATS`). A pass holds every heap lock, so the longest pass is the
+  longest pause meshing imposes. Passes that return early count too.
+
+Each of `--trials` trials (default 5) runs every (server, config) once, in a
+new random order. Tables report medians across trials, and the final-memory
+range.
+
 ## `--check`
 
-`--check` fails unless, for each server, Mesh performed meshes and its final
-memory is at least `--min-reduction` (default 15%) below `mesh-nomesh`. CI runs
-it in the `Ubuntu_kv_fragmentation` job.
+`--check` fails unless, for each server, Mesh meshed in every trial and its
+median final memory is at least `--min-reduction` (default 15%) below
+`mesh-nomesh`'s. CI runs it in the `Ubuntu_kv_fragmentation` job (3 trials).

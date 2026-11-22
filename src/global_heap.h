@@ -80,6 +80,11 @@ public:
   size_t mhFreeCount;
   size_t mhAllocCount;
   size_t mhHighWaterMark;
+  // mesh passes (meshAllSizeClassesLocked calls): each holds every heap
+  // lock, so its duration is a pause for any thread that allocates or frees
+  atomic_size_t meshPassCount;
+  atomic_size_t meshPassTotalNs;
+  atomic_size_t meshPassMaxNs;
 };
 
 template <size_t PageSize>
