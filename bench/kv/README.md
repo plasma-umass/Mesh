@@ -12,7 +12,8 @@ Valkey. It is adapted from Redis's own active-defrag test
 
 ```sh
 bench/kv/build-servers.sh                      # Redis 8.0.2, Valkey 9.1.0; jemalloc and MALLOC=libc builds
-sudo python3 bench/kv/fragmentation.py --libmesh build/lib/libmesh.so --check
+go install github.com/bpowers/mstat@latest     # the paper's memory-measurement tool
+sudo python3 bench/kv/fragmentation.py --libmesh build/lib/libmesh.so --mstat ~/go/bin/mstat --check
 ```
 
 | Config | Build and allocator |
@@ -27,10 +28,15 @@ sudo python3 bench/kv/fragmentation.py --libmesh build/lib/libmesh.so --check
 
 ## Measuring memory
 
-As root, each server runs in its own cgroup v2 memory cgroup and the script
-samples `memory.current`. This is the paper's `mstat` method: it counts each
-physical page once and includes kernel memory such as page tables. Without
-root, the script falls back to PSS.
+With `--mstat`, each server runs under [mstat](https://github.com/bpowers/mstat),
+the tool used in the paper. mstat puts the server in its own memory cgroup and
+records cgroup memory usage, which counts each physical page once and includes
+kernel memory such as page tables, plus HugeTLB usage.
+
+Without `--mstat`, a built-in sampler reads the same cgroup v2 counters
+(`memory.current` plus `hugetlb.*.current`). On EC2 its results matched mstat
+within run-to-run noise. Both methods need root. Without root, the script falls
+back to PSS.
 
 **Do not use RSS for Mesh.** A meshed physical page is mapped at several
 virtual addresses, and RSS counts it once per mapping. In this benchmark, RSS

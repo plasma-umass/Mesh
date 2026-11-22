@@ -59,8 +59,7 @@ jobs:
     - name: Build
       run: |
         cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
-        # googletest is an ExternalProject; a parallel build can race it
-        cmake --build build -j"$(nproc)" || cmake --build build -j1
+        cmake --build build -j"$(nproc)"
     - name: Unit tests
       run: |
         build/bin/unit.test 2>&1 | tee unit.log
@@ -82,8 +81,8 @@ jobs:
   # The Mesh paper's Redis experiment (sec. 6.2.2), on Redis and Valkey:
   # checks that meshing happens and reduces memory vs. Mesh with meshing
   # disabled, and reports jemalloc / jemalloc+activedefrag / glibc alongside.
-  # Runs as root so each server gets its own memory cgroup (as in the paper's
-  # mstat); servers bind to 127.0.0.1 only.
+  # Memory is measured with the paper's mstat (per-server memory cgroup), so
+  # it runs as root; servers bind to 127.0.0.1 only.
   Ubuntu_kv_fragmentation:
     runs-on: ubuntu-latest
     steps:
@@ -96,6 +95,12 @@ jobs:
       run: |
         cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
         cmake --build build -j"$(nproc)" --target mesh
+    - uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: false
+    - name: Install mstat
+      run: GOBIN="$PWD/bin" go install github.com/bpowers/mstat@3ef2c762335c7d7966b7c2ca7246bc633a49469a
     - name: Cache Redis/Valkey builds
       uses: actions/cache@v4
       with:
@@ -106,7 +111,7 @@ jobs:
     - name: Fragmentation benchmark
       run: |
         sudo --preserve-env=GITHUB_STEP_SUMMARY python3 bench/kv/fragmentation.py \
-          --libmesh build/lib/libmesh.so --json kv-fragmentation.json --check
+          --libmesh build/lib/libmesh.so --mstat bin/mstat --json kv-fragmentation.json --check
     - uses: actions/upload-artifact@v4
       if: always()
       with:

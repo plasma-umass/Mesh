@@ -28,6 +28,8 @@ set(mesh_src
         )
 #Add a target for the mesh shared library
 add_library(mesh SHARED ${mesh_src})
+# the Heap-Layers headers come from an ExternalProject
+add_dependencies(mesh heap_layers)
 target_link_libraries(mesh PRIVATE -pthread -ldl)
 
 #Create a set of source files for the unit tests
@@ -55,6 +57,8 @@ if(APPLE)
 endif()
 #Add a target to the unit tests executable
 add_executable(unit.test ${unit_src})
+# gtest is an ExternalProject; without these, parallel builds race it
+add_dependencies(unit.test heap_layers googletest)
 target_link_libraries(unit.test PRIVATE -ldl -pthread )
 
 set(GTEST_DIR ${CMAKE_CURRENT_BINARY_DIR}/../googletest-src/googletest)

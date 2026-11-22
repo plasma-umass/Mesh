@@ -16,10 +16,12 @@ Configurations, per server:
                          (same allocator and randomization, meshing disabled)
   mesh                   MALLOC=libc build + libmesh
 
-Memory is measured as in the paper's mstat tool: each server runs in its own
-memory cgroup (cgroup v2; needs write access to /sys/fs/cgroup, e.g. root) and
-we sample memory.current -- physical pages counted once, plus kernel memory
-such as page tables.  Without a cgroup, PSS (/proc/PID/smaps_rollup) is used.
+Memory is measured with the paper's mstat tool (github.com/bpowers/mstat) when
+--mstat is given: each server runs in its own memory cgroup and mstat records
+cgroup memory usage (physical pages counted once, plus kernel memory such as
+page tables) and HugeTLB usage.  Without --mstat, an equivalent built-in
+sampler does the same on cgroup v2 (memory.current + hugetlb.*.current).
+Both need root.  Without a cgroup, PSS (/proc/PID/smaps_rollup) is used.
 Plain RSS is also reported but is misleading for Mesh: a meshed physical page
 is mapped at several virtual addresses and RSS counts it once per mapping.
 
@@ -87,6 +89,15 @@ CGROUP_ROOT = "/sys/fs/cgroup"
 
 def cgroup_usable():
     try:
+        # HugeTLB pages are charged to the hugetlb controller, not memory.current
+        # (as mstat does, enable it if the kernel has it)
+        with open(os.path.join(CGROUP_ROOT, "cgroup.controllers")) as f:
+            if "hugetlb" in f.read().split():
+                try:
+                    with open(os.path.join(CGROUP_ROOT, "cgroup.subtree_control"), "w") as sc:
+                        sc.write("+hugetlb")
+                except OSError:
+                    pass
         with open(os.path.join(CGROUP_ROOT, "cgroup.subtree_control")) as f:
             if "memory" not in f.read().split():
                 return False
@@ -110,7 +121,12 @@ class Cgroup:
     def current_kib(self):
         try:
             with open(os.path.join(self.path, "memory.current")) as f:
-                return int(f.read()) // 1024
+                total = int(f.read())
+            for name in os.listdir(self.path):  # hugetlb.2MB.current etc.
+                if name.startswith("hugetlb.") and name.endswith(".current") and ".rsvd." not in name:
+                    with open(os.path.join(self.path, name)) as f:
+                        total += int(f.read())
+            return total // 1024
         except OSError:
             return None
 
@@ -124,28 +140,52 @@ class Cgroup:
 
 
 class Server:
-    def __init__(self, binary, cli, env, log_path, cgroup=None):
+    def __init__(self, binary, cli, env, log_path, cgroup=None, mstat=None, mstat_tsv=None):
         self.port = free_port()
         self.cli_bin = cli
         self.log = open(log_path, "w")
         self.log_path = log_path
         args = [binary, "--port", str(self.port), "--bind", "127.0.0.1", "--save", "",
                 "--appendonly", "no", "--enable-debug-command", "yes", "--daemonize", "no"]
-        # join the cgroup before exec so every page is charged to it
-        preexec = (lambda: cgroup.add(os.getpid())) if cgroup else None
+        preexec = None
+        if mstat:
+            # mstat creates the cgroup, adds its child, then execs the server
+            args = [mstat, "-o", mstat_tsv, "-freq", "10", "--"] + args
+        elif cgroup:
+            # join the cgroup before exec so every page is charged to it
+            preexec = lambda: cgroup.add(os.getpid())
+        self.launched = time.time()
         self.proc = subprocess.Popen(args, env=env, stdout=self.log, stderr=subprocess.STDOUT,
                                      preexec_fn=preexec)
+        self.pid = self.proc.pid
         deadline = time.time() + 20
         while time.time() < deadline:
             if self.proc.poll() is not None:
                 raise RuntimeError(f"server exited early; see {log_path}")
             try:
                 if self.cli("PING") == "PONG":
+                    if mstat:
+                        self.pid = self._find_descendant(os.path.basename(binary))
                     return
             except subprocess.CalledProcessError:
                 pass
             time.sleep(0.1)
         raise RuntimeError(f"server did not start; see {log_path}")
+
+    def _find_descendant(self, exe_name):
+        """PID of the server under mstat (mstat re-execs itself, then runs it)."""
+        todo = [self.proc.pid]
+        while todo:
+            pid = todo.pop()
+            try:
+                if os.path.basename(os.readlink(f"/proc/{pid}/exe")) == exe_name:
+                    return pid
+                for tid in os.listdir(f"/proc/{pid}/task"):
+                    with open(f"/proc/{pid}/task/{tid}/children") as f:
+                        todo.extend(int(c) for c in f.read().split())
+            except OSError:
+                pass
+        raise RuntimeError(f"no {exe_name} process under mstat (pid {self.proc.pid})")
 
     def cli(self, *args, timeout=300):
         out = subprocess.run([self.cli_bin, "-p", str(self.port), *args], capture_output=True, text=True,
@@ -176,7 +216,18 @@ class Server:
         self.log.close()
 
 
-def run_one(server_name, config, bindir, libmesh, settle, logdir, use_cgroup):
+def read_mstat_tsv(path):
+    """[(seconds since mstat's first sample, KiB)] from mstat's usage + hugetlb columns."""
+    out = []
+    with open(path) as f:
+        next(f)  # time rss kernel hugetlb
+        for line in f:
+            t_ns, usage, kernel, hugetlb = (int(x) for x in line.split())
+            out.append((t_ns / 1e9, (usage + kernel + hugetlb) // 1024))  # kernel is 0 on cgroup v2
+    return out
+
+
+def run_one(server_name, config, bindir, libmesh, settle, logdir, use_cgroup, mstat=None):
     jemalloc = config.startswith("jemalloc")
     binary = os.path.join(bindir, f"{server_name}-server-{'jemalloc' if jemalloc else 'libc'}")
     cli = os.path.join(bindir, f"{server_name}-cli")
@@ -188,22 +239,29 @@ def run_one(server_name, config, bindir, libmesh, settle, logdir, use_cgroup):
             env["MESH_PERIOD_MS"] = "0"
 
     log_path = os.path.join(logdir, f"{server_name}-{config}.log")
-    cg = Cgroup(f"{server_name}-{config.replace('+', '-')}") if use_cgroup else None
-    srv = Server(binary, cli, env, log_path, cg)
-    pid = srv.proc.pid
+    tsv = os.path.join(logdir, f"{server_name}-{config}.mstat.tsv")
+    cg = Cgroup(f"{server_name}-{config.replace('+', '-')}") if use_cgroup and not mstat else None
+    srv = Server(binary, cli, env, log_path, cg, mstat, tsv)
+    pid = srv.pid
 
-    def memory_kib():  # the primary metric
+    def memory_kib():  # the primary metric, when we sample it ourselves
+        if mstat:
+            return None
         return cg.current_kib() if cg else pss_kib(pid)
 
-    samples = []  # (seconds since start of insertion, primary KiB, RSS KiB)
+    primary = []  # (seconds since start of insertion, KiB)
+    rss = []
     stop = threading.Event()
     t0 = time.time()
 
     def sampler():
         while not stop.is_set():
+            now = time.time() - t0
             m, r = memory_kib(), rss_kib(pid)
-            if m is not None and r is not None:
-                samples.append((time.time() - t0, m, r))
+            if m is not None:
+                primary.append((now, m))
+            if r is not None:
+                rss.append((now, r))
             stop.wait(0.1)
 
     th = threading.Thread(target=sampler, daemon=True)
@@ -239,27 +297,37 @@ def run_one(server_name, config, bindir, libmesh, settle, logdir, use_cgroup):
     m = re.search(r"Meshed MB HWM:\s+([\d.]+)", log)
     meshed_mb_hwm = float(m.group(1)) if m else None
 
-    end = samples[-1][0] if samples else 0
-    tail = [s for s in samples if s[0] >= end - 1.0] or [(0, 0, 0)]
-    after = [s for s in samples if s[0] >= insert_s] or [(0, 0, 0)]
-    mib = lambda kib: round(kib / 1024, 1)
+    end = rss[-1][0] if rss else 0
+    if mstat:
+        # mstat's clock starts at its first sample, ~at launch; align to t0
+        offset = t0 - srv.launched
+        primary = [(t - offset, kib) for t, kib in read_mstat_tsv(tsv)]
+        primary = [p for p in primary if 0 <= p[0] <= end]
+        mem_after_insert = min(primary, key=lambda p: abs(p[0] - insert_s))[1] if primary else 0
+
+    def stat(series, f, lo, hi):
+        vals = [v for t, v in series if lo <= t <= hi]
+        return round(f(vals) / 1024, 1) if vals else 0
+
+    metric = "mstat (cgroup memory + hugetlb)" if mstat else "cgroup memory.current + hugetlb" if cg else "PSS"
     return {
         "server": server_name,
         "config": config,
-        "metric": "cgroup memory.current" if cg else "PSS",
+        "metric": metric,
         "insert_s": round(insert_s, 3),
         "keys": keys,
-        "mem_after_insert_mib": mib(mem_after_insert or 0),
-        "mem_final_mib": mib(statistics.median(s[1] for s in tail)),
-        "mem_mean_mib": mib(statistics.mean(s[1] for s in after)),
-        "mem_peak_mib": mib(max(s[1] for s in samples)) if samples else 0,
-        "rss_final_mib": mib(statistics.median(s[2] for s in tail)),
+        "mem_after_insert_mib": round((mem_after_insert or 0) / 1024, 1),
+        "mem_final_mib": stat(primary, statistics.median, end - 1.0, end),
+        "mem_mean_mib": stat(primary, statistics.mean, insert_s, end),
+        "mem_peak_mib": stat(primary, max, 0, end),
+        "rss_final_mib": stat(rss, statistics.median, end - 1.0, end),
         "used_memory_mib": round(int(mem.get("used_memory", 0)) / 2**20, 1),
         "frag_ratio": float(mem.get("mem_fragmentation_ratio", "nan")),
         "active_defrag_hits": int(stats.get("active_defrag_hits", 0)),
         "mesh_count": mesh_count,
         "meshed_mb_hwm": meshed_mb_hwm,
-        "samples": samples,
+        "samples": {"t_s": [t for t, _ in primary], "mem_kib": [v for _, v in primary],
+                    "rss_t_s": [t for t, _ in rss], "rss_kib": [v for _, v in rss]},
     }
 
 
@@ -285,6 +353,7 @@ def main():
     ap.add_argument("--configs", default=",".join(CONFIGS))
     ap.add_argument("--settle", type=float, default=10.0, help="idle seconds after insertion")
     ap.add_argument("--no-cgroup", action="store_true", help="measure PSS instead of cgroup memory")
+    ap.add_argument("--mstat", help="path to mstat (github.com/bpowers/mstat); run each server under it")
     ap.add_argument("--json", help="write full results (with RSS time series) here")
     ap.add_argument("--check", action="store_true", help="fail unless meshing happened and helped")
     ap.add_argument("--min-reduction", type=float, default=0.15,
@@ -293,12 +362,17 @@ def main():
     libmesh = os.path.realpath(a.libmesh)
     logdir = tempfile.mkdtemp(prefix="kv-frag-")
     use_cgroup = not a.no_cgroup and cgroup_usable()
-    print(f"measuring {'cgroup memory.current' if use_cgroup else 'PSS (no usable cgroup v2)'}", flush=True)
+    mstat = os.path.realpath(a.mstat) if a.mstat else None
+    if mstat:
+        print(f"measuring with mstat: {mstat}", flush=True)
+    else:
+        print(f"measuring {'cgroup memory.current + hugetlb' if use_cgroup else 'PSS (no usable cgroup v2)'}",
+              flush=True)
 
     results = []
     for server in a.servers.split(","):
         for config in a.configs.split(","):
-            r = run_one(server, config, a.bin, libmesh, a.settle, logdir, use_cgroup)
+            r = run_one(server, config, a.bin, libmesh, a.settle, logdir, use_cgroup, mstat)
             print(f"{server:7s} {config:22s} final {r['mem_final_mib']:7.1f} MiB  "
                   f"(after insert {r['mem_after_insert_mib']:.1f}, RSS {r['rss_final_mib']:.1f}, "
                   f"meshes {r['mesh_count']})", flush=True)
