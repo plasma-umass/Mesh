@@ -208,6 +208,14 @@ public:
     return _barrier;
   }
 
+  inline void setBarrierFallbackHook(WriteBarrier::FallbackHook hook) {
+    _barrier.setFallbackHook(hook);
+  }
+
+  inline void noteBarrierSignalStall() {
+    _barrier.noteSignalStall();
+  }
+
   inline bool aboveMeshThreshold() const {
     return _meshedPageCount > _maxMeshCount;
   }

@@ -23,6 +23,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <random>
@@ -115,17 +116,30 @@ int main(int argc, char **argv) {
   std::vector<std::thread> threads;
 
   // user-mode writers: each owns live[i] with i % kUserWriters == w
+  // per-store latency: a store that hits an armed span takes as long as
+  // the writer is held by the barrier
   std::vector<uint64_t> finalSeq(kUserWriters, 0);
+  std::vector<uint64_t> maxStoreNs(kUserWriters, 0), slowStores(kUserWriters, 0);
   for (int w = 0; w < kUserWriters; w++) {
     threads.emplace_back([&, w] {
-      uint64_t seq = 0;
+      uint64_t seq = 0, maxNs = 0, slow = 0;
+      auto prev = std::chrono::steady_clock::now();
       while (!stop.load(std::memory_order_relaxed)) {
         seq++;
         for (size_t i = w; i < live.size(); i += kUserWriters) {
           live[i]->seq = seq;
+          auto now = std::chrono::steady_clock::now();
+          uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - prev).count();
+          prev = now;
+          if (ns > maxNs)
+            maxNs = ns;
+          if (ns > 100 * 1000)
+            slow++;
         }
       }
       finalSeq[w] = seq;
+      maxStoreNs[w] = maxNs;
+      slowStores[w] = slow;
     });
   }
 
@@ -189,11 +203,16 @@ int main(int argc, char **argv) {
       free(p);
   });
 
-  // mesh passes
+  // mesh passes (STRESS_NO_MESH=1 measures the latency noise floor)
+  const bool noMesh = getenv("STRESS_NO_MESH") != nullptr;
   size_t passes = 0;
   const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
   while (std::chrono::steady_clock::now() < end) {
     size_t dummy = 0, len = sizeof(dummy);
+    if (noMesh) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      continue;
+    }
     mesh_mallctl("mesh.compact", &dummy, &len, nullptr, 0);
     passes++;
   }
@@ -216,8 +235,16 @@ int main(int argc, char **argv) {
          (unsigned long)finalSeq[1], (unsigned long)finalSeq[2], (unsigned long)finalSeq[3], lostUser);
   printf("kernel writes: %lu, EFAULT retries: %lu, corrupt: %lu\n", (unsigned long)kernWrites.load(),
          (unsigned long)efaults.load(), (unsigned long)kernBad.load());
+  uint64_t maxNs = 0, slow = 0;
+  for (int w = 0; w < kUserWriters; w++) {
+    maxNs = std::max(maxNs, maxStoreNs[w]);
+    slow += slowStores[w];
+  }
+  printf("user stores: max latency %.1f us, stores > 100us: %lu\n", maxNs / 1000.0, (unsigned long)slow);
+  printf("barrier stalls: %zu, max armed window: %.1f us\n", mallctlSize("mesh.barrier_stalls"),
+         mallctlSize("mesh.barrier_max_window_ns") / 1000.0);
 
-  bool ok = lostUser == 0 && kernBad.load() == 0 && passes > 0;
+  bool ok = lostUser == 0 && kernBad.load() == 0 && (passes > 0 || noMesh);
   if (mode == 2 && efaults.load() != 0) {
     printf("FAIL: EFAULT under the kernel-mode uffd barrier\n");
     ok = false;

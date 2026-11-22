@@ -16,6 +16,9 @@
 //     commit(remove)               blocked writers retry against new mapping
 //   passEnd(arena)                 once, after the last mesh in the pass
 //
+// (passBegin/passEnd are currently no-ops; they bracket the pass for
+// barriers that need per-pass setup.)
+//
 // Modes (best available is chosen at init; MESH_BARRIER overrides):
 //
 //   UffdKernel  userfaultfd write-protect, kernel-mode faults included.
@@ -32,8 +35,23 @@
 // The userfaultfd modes require UFFD_FEATURE_WP_HUGETLBFS_SHMEM (Linux 5.19)
 // since the arena is a shmem (memfd) mapping.
 //
-// Note: mmap(MAP_FIXED) replaces the registered VMA, so a span remapped earlier
-// in a pass is no longer registered.  arm() re-registers on demand.
+// Userfaultfd registration is per span: arm() registers exactly the span it
+// protects, and the remap in finalizeMesh replaces that VMA, which drops the
+// registration again.  So nothing stays registered between meshes and there
+// is no per-pass cost.  (Registering the whole arena once per pass makes each
+// mesh ~1us cheaper, but UFFDIO_(UN)REGISTER is O(#VMAs) -- ~10ms each at 20k
+// meshed VMAs, which meshing itself creates -- so it loses for any pass under
+// ~25k meshes; kMaxMeshesPerIteration is 2500.)
+//
+// Only Mprotect needs Mesh's SIGSEGV handler.  In the userfaultfd modes the
+// handler is not installed at all (applications get SIGSEGV/SIGBUS to
+// themselves); if a userfaultfd operation ever fails, arm() invokes the
+// fallback hook to install it before falling back to mprotect.
+//
+// Statistics: a stall is a write that hit an armed span (one per fault event
+// under userfaultfd, one per SIGSEGV under mprotect).  The armed window is
+// the time from arming a mesh's first span to committing it, an upper bound
+// on how long any writer waited.
 
 #pragma once
 #ifndef MESH_WRITE_BARRIER_H
@@ -45,7 +63,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <unistd.h>
+
+#include <atomic>
 
 #include "common.h"
 
@@ -91,6 +112,7 @@ public:
   void init() {
     closeUffd();
     _mode = BarrierMode::Mprotect;
+    _fellBack.store(false, std::memory_order_release);
 #ifdef MESH_HAVE_UFFD_WP
     BarrierMode want = BarrierMode::UffdKernel;
     if (const char *env = getenv("MESH_BARRIER")) {
@@ -119,6 +141,35 @@ public:
     return _mode;
   }
 
+  // True if writers to an armed span are delivered SIGSEGV (Mprotect mode, or
+  // a userfaultfd mode that has fallen back to mprotect).
+  inline bool needsSignalHandler() const {
+    return _mode == BarrierMode::Mprotect || _fellBack.load(std::memory_order_acquire);
+  }
+
+  // Called (under the mesh locks) the first time a userfaultfd-mode barrier
+  // falls back to mprotect; must install the SIGSEGV handler.
+  using FallbackHook = void (*)();
+  void setFallbackHook(FallbackHook hook) {
+    _fallbackHook = hook;
+  }
+
+  struct Stats {
+    size_t meshes;       // committed spans
+    size_t stalls;       // writes that hit an armed span
+    size_t maxWindowNs;  // longest arm -> commit window
+    size_t totalWindowNs;
+  };
+  Stats stats() const {
+    return Stats{_commits.load(std::memory_order_relaxed), _stalls.load(std::memory_order_relaxed),
+                 _maxWindowNs.load(std::memory_order_relaxed), _totalWindowNs.load(std::memory_order_relaxed)};
+  }
+
+  // Mprotect: the SIGSEGV handler reports each meshing fault here.
+  inline void noteSignalStall() {
+    _stalls.fetch_add(1, std::memory_order_relaxed);
+  }
+
   // True if kernel-mode writes (syscalls) to an armed span block rather than
   // failing with EFAULT.
   inline bool blocksKernelWrites() const {
@@ -126,46 +177,29 @@ public:
   }
 
   void passBegin(void *arena, size_t len) {
-#ifdef MESH_HAVE_UFFD_WP
-    if (isUffd()) {
-      // Best effort: if this fails, arm() registers each span on demand.
-      _passRegistered = uffdRegister(arena, len);
-    }
-#endif
     (void)arena;
     (void)len;
   }
 
   void passEnd(void *arena, size_t len) {
-#ifdef MESH_HAVE_UFFD_WP
-    if (isUffd()) {
-      // Drop registrations so normal execution runs on plain VMAs (uffd-wp
-      // VMAs disable fault-around on shmem).  Also clears any stale WP bits.
-      uffdio_range r{reinterpret_cast<uintptr_t>(arena), len};
-      if (ioctl(_uffd, UFFDIO_UNREGISTER, &r) != 0) {
-        debug("mesh: UFFDIO_UNREGISTER failed: %d (%s)\n", errno, strerror(errno));
-      }
-      _passRegistered = false;
-    }
-#endif
     (void)arena;
     (void)len;
   }
 
   // Block writes to [ptr, ptr+len).
   void arm(void *ptr, size_t len) {
+    if (_armedAtNs == 0) {
+      _armedAtNs = nowNs();
+    }
 #ifdef MESH_HAVE_UFFD_WP
     if (isUffd()) {
-      if (_passRegistered && uffdWriteProtect(ptr, len, true)) {
-        return;
-      }
-      // Either whole-arena registration failed, or the range was remapped
-      // earlier in this pass and its new VMA is unregistered.
       if (uffdRegister(ptr, len) && uffdWriteProtect(ptr, len, true)) {
         return;
       }
       debug("mesh: uffd write-protect failed (%d: %s); using mprotect for %p\n", errno, strerror(errno), ptr);
-      // fall through: the SIGSEGV handler remains installed in every mode.
+      if (!_fellBack.exchange(true, std::memory_order_acq_rel) && _fallbackHook != nullptr) {
+        _fallbackHook();
+      }
     }
 #endif
     int r = mprotect(ptr, len, PROT_READ);
@@ -177,9 +211,10 @@ public:
   void commit(void *ptr, size_t len) {
 #ifdef MESH_HAVE_UFFD_WP
     if (isUffd()) {
+      // Count stalled writers; the wake below would discard their events.
+      drainEvents();
       // Wake is keyed on (ctx, address), not on the VMA, so it reaches
       // writers that faulted on the VMA mmap(MAP_FIXED) just replaced.
-      // Unread fault events are discarded by the wake.
       uffdio_range r{reinterpret_cast<uintptr_t>(ptr), len};
       int err = ioctl(_uffd, UFFDIO_WAKE, &r);
       hard_assert_msg(err == 0, "UFFDIO_WAKE failed: %d", errno);
@@ -189,9 +224,25 @@ public:
     // proceed once the mesh releases its size-class lock.
     (void)ptr;
     (void)len;
+
+    _commits.fetch_add(1, std::memory_order_relaxed);
+    if (_armedAtNs != 0) {
+      const size_t window = nowNs() - _armedAtNs;
+      _armedAtNs = 0;
+      _totalWindowNs.fetch_add(window, std::memory_order_relaxed);
+      if (window > _maxWindowNs.load(std::memory_order_relaxed)) {
+        _maxWindowNs.store(window, std::memory_order_relaxed);
+      }
+    }
   }
 
 private:
+  static size_t nowNs() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<size_t>(ts.tv_sec) * 1000000000ULL + static_cast<size_t>(ts.tv_nsec);
+  }
+
   inline bool isUffd() const {
     return _mode != BarrierMode::Mprotect;
   }
@@ -201,7 +252,6 @@ private:
       close(_uffd);
       _uffd = -1;
     }
-    _passRegistered = false;
   }
 
 #ifdef MESH_HAVE_UFFD_WP
@@ -236,6 +286,18 @@ private:
     return true;
   }
 
+  void drainEvents() {
+    uffd_msg msgs[16];
+    ssize_t n;
+    while ((n = read(_uffd, msgs, sizeof(msgs))) > 0) {
+      for (ssize_t i = 0; i < n / static_cast<ssize_t>(sizeof(uffd_msg)); i++) {
+        if (msgs[i].event == UFFD_EVENT_PAGEFAULT) {
+          _stalls.fetch_add(1, std::memory_order_relaxed);
+        }
+      }
+    }
+  }
+
   bool uffdRegister(void *ptr, size_t len) {
     uffdio_register r{};
     r.range.start = reinterpret_cast<uintptr_t>(ptr);
@@ -255,7 +317,14 @@ private:
 
   BarrierMode _mode{BarrierMode::Mprotect};
   int _uffd{-1};
-  bool _passRegistered{false};
+  std::atomic<bool> _fellBack{false};
+  FallbackHook _fallbackHook{nullptr};
+
+  size_t _armedAtNs{0};  // only touched by the (single, locked) mesher
+  std::atomic<size_t> _commits{0};
+  std::atomic<size_t> _stalls{0};
+  std::atomic<size_t> _maxWindowNs{0};
+  std::atomic<size_t> _totalWindowNs{0};
 };
 
 }  // namespace mesh

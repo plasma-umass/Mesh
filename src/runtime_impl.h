@@ -265,9 +265,16 @@ int Runtime<PageSize>::sigaction(int signum, const struct sigaction *act, struct
     return mesh::real::sigaction(signum, act, oldact);
   }
 
-  // if a user is trying to install a segfault handler, record that
-  // here to proxy to later.
   lock_guard<mutex> lock(sigactionLock);
+
+  // without our handler (userfaultfd barrier), the application owns
+  // SIGSEGV/SIGBUS outright.  If we install ours later, it captures and
+  // chains to whatever is installed at that point.
+  if (!_segfaultHandlerInstalled.load(std::memory_order_acquire)) {
+    return mesh::real::sigaction(signum, act, oldact);
+  }
+
+  // otherwise record the user's segfault handler here to proxy to.
 
   auto nextAct = &sigsegvAction;
   if (signum == SIGBUS) {
@@ -277,10 +284,8 @@ int Runtime<PageSize>::sigaction(int signum, const struct sigaction *act, struct
   if (oldact)
     memcpy(oldact, nextAct, sizeof(*nextAct));
 
-  if (act == nullptr) {
-    memset(nextAct, 0, sizeof(*nextAct));
-  } else {
-    // debug("TODO: user installed a segfault handler");
+  // act == nullptr is a query: it must not clear the recorded handler
+  if (act != nullptr) {
     memcpy(nextAct, act, sizeof(*nextAct));
   }
 
@@ -323,7 +328,7 @@ void Runtime<PageSize>::segfaultHandler(int sig, siginfo_t *siginfo, void *conte
   }
 
   if (isMeshingFault && runtime<PageSize>().heap().okToProceed(siginfo->si_addr)) {
-    // debug("TODO: trapped access violation from meshing, log stat\n");
+    runtime<PageSize>().heap().noteBarrierSignalStall();
     return;
   }
 
@@ -360,7 +365,15 @@ void Runtime<PageSize>::segfaultHandler(int sig, siginfo_t *siginfo, void *conte
 }
 
 template <size_t PageSize>
-void Runtime<PageSize>::installSegfaultHandler() {
+void Runtime<PageSize>::installSegfaultHandler(bool force) {
+  if (!force && !_heap.writeBarrier().needsSignalHandler()) {
+    return;
+  }
+
+  if (unlikely(mesh::real::sigaction == nullptr)) {
+    mesh::real::init();
+  }
+
   struct sigaction action;
   struct sigaction oldAction;
 
@@ -370,10 +383,10 @@ void Runtime<PageSize>::installSegfaultHandler() {
   action.sa_sigaction = segfaultHandler;
   action.sa_flags = SA_SIGINFO | SA_NODEFER;
 
+  lock_guard<mutex> lock(sigactionLock);
+
   auto err = mesh::real::sigaction(SIGBUS, &action, &oldAction);
   hard_assert(err == 0);
-
-  lock_guard<mutex> lock(sigactionLock);
 
   if (oldAction.sa_sigaction != nullptr && oldAction.sa_sigaction != segfaultHandler) {
     // debug("TODO: oldAction not null: %p\n", (void *)oldAction.sa_sigaction);
@@ -387,6 +400,13 @@ void Runtime<PageSize>::installSegfaultHandler() {
     // debug("TODO: oldAction not null: %p\n", (void *)oldAction.sa_sigaction);
     memcpy(&sigsegvAction, &oldAction, sizeof(sigsegvAction));
   }
+
+  _segfaultHandlerInstalled.store(true, std::memory_order_release);
+}
+
+template <size_t PageSize>
+void Runtime<PageSize>::barrierFallback() {
+  runtime<PageSize>().installSegfaultHandler(true);
 }
 
 }  // namespace mesh

@@ -285,6 +285,12 @@ int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp,
   } else if (strcmp(name, "mesh.barrier") == 0) {
     // read-only: 0 = mprotect, 1 = userfaultfd (user-mode only), 2 = userfaultfd
     *statp = static_cast<size_t>(Super::writeBarrier().mode());
+  } else if (strcmp(name, "mesh.barrier_stalls") == 0) {
+    // writes that hit a span while it was being meshed
+    *statp = Super::writeBarrier().stats().stalls;
+  } else if (strcmp(name, "mesh.barrier_max_window_ns") == 0) {
+    // longest time a span was write-protected (upper bound on a stall)
+    *statp = Super::writeBarrier().stats().maxWindowNs;
   } else if (strcmp(name, "arena") == 0) {
     // not sure what this should do
   } else if (strcmp(name, "stats.resident") == 0) {
@@ -523,6 +529,14 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
   debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
   debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
+  {
+    const auto &barrier = Super::writeBarrier();
+    const auto bs = barrier.stats();
+    debug("Write barrier:      %s\n", barrierModeName(barrier.mode()));
+    debug("Barrier stalls:     %zu (in %zu meshed spans)\n", bs.stalls, bs.meshes);
+    debug("Barrier window:     max %.1f us, mean %.1f us\n", bs.maxWindowNs / 1000.0,
+          bs.meshes ? bs.totalWindowNs / 1000.0 / bs.meshes : 0.0);
+  }
   if (level > 1) {
     // for (size_t i = 0; i < kNumBins; i++) {
     //   _littleheaps[i].dumpStats(beDetailed);

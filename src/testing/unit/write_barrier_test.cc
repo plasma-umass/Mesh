@@ -11,8 +11,11 @@
 // Run with MESH_BARRIER=mprotect|uffd-user|uffd to select a mode; kernel-mode
 // uffd needs root, vm.unprivileged_userfaultfd=1, or /dev/userfaultfd access.
 
+#include <fcntl.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -24,6 +27,7 @@
 
 #include "internal.h"
 #include "meshing.h"
+#include "real.h"
 #include "runtime.h"
 
 using namespace mesh;
@@ -130,6 +134,7 @@ void racingWritersImpl() {
     }
   }
 
+  const auto statsBefore = barrier.stats();
   auto p = makePair<PageSize>();
 
   int pipefd[2];
@@ -166,6 +171,13 @@ void racingWritersImpl() {
 
   ASSERT_EQ(race.hookCalls, 1);
   EXPECT_FALSE(race.userDoneDuringMesh) << "user-mode write was not blocked by the barrier";
+
+  // stats: the hook held the span armed for >= 200ms, and the user-mode
+  // writer (plus the kernel-mode one, under uffd) stalled on it
+  const auto statsAfter = barrier.stats();
+  EXPECT_EQ(statsAfter.meshes - statsBefore.meshes, 1UL);
+  EXPECT_GE(statsAfter.maxWindowNs, 200UL * 1000 * 1000);
+  EXPECT_GE(statsAfter.stalls - statsBefore.stalls, barrier.blocksKernelWrites() ? 2UL : 1UL);
 
   // the mesh happened
   ASSERT_EQ(p.keep->meshCount(), 2ULL);
@@ -248,7 +260,113 @@ void mallctlImpl() {
   EXPECT_EQ(mode, static_cast<size_t>(gheap.writeBarrier().mode()));
 }
 
+int gTestSignals = 0;
+void testSegvHandler(int) {
+  gTestSignals++;
+}
+
+template <size_t PageSize>
+void signalOwnershipImpl() {
+  auto &rt = runtime<PageSize>();
+  const auto &barrier = rt.heap().writeBarrier();
+  // as libmesh_init does (the unit tests don't link libmesh.cc, so we call
+  // Runtime's sigaction interposer directly below)
+  rt.installSegfaultHandler();
+  EXPECT_EQ(rt.segfaultHandlerInstalled(), barrier.needsSignalHandler());
+  if (kMeshingEnabled && barrier.mode() == BarrierMode::Mprotect) {
+    EXPECT_TRUE(rt.segfaultHandlerInstalled());
+  }
+
+  struct sigaction mine{};
+  mine.sa_handler = testSegvHandler;
+  struct sigaction saved{};
+  ASSERT_EQ(rt.sigaction(SIGSEGV, &mine, &saved), 0);
+
+  // a query (act == nullptr) must report, not clear, the installed handler
+  struct sigaction q1{}, q2{};
+  ASSERT_EQ(rt.sigaction(SIGSEGV, nullptr, &q1), 0);
+  ASSERT_EQ(rt.sigaction(SIGSEGV, nullptr, &q2), 0);
+  EXPECT_EQ(q1.sa_handler, testSegvHandler);
+  EXPECT_EQ(q2.sa_handler, testSegvHandler);
+
+  // what the kernel actually has installed
+  struct sigaction kernel{};
+  ASSERT_EQ(mesh::real::sigaction(SIGSEGV, nullptr, &kernel), 0);
+  if (rt.segfaultHandlerInstalled()) {
+    EXPECT_NE(kernel.sa_handler, testSegvHandler) << "Mesh's handler should stay in front";
+  } else {
+    EXPECT_EQ(kernel.sa_handler, testSegvHandler) << "without Mesh's handler the app should own SIGSEGV";
+  }
+
+  ASSERT_EQ(rt.sigaction(SIGSEGV, &saved, nullptr), 0);
+}
+
+// A userfaultfd barrier that cannot write-protect a range must install the
+// SIGSEGV handler and fall back to mprotect.  Runs in a child, since the
+// fallback is permanent for the process.
+template <size_t PageSize>
+void fallbackImpl() {
+  if (!kMeshingEnabled) {
+    GTEST_SKIP();
+  }
+  auto &rt = runtime<PageSize>();
+  if (rt.heap().writeBarrier().mode() == BarrierMode::Mprotect) {
+    GTEST_SKIP() << "userfaultfd barrier not active";
+  }
+
+  pid_t pid = fork();
+  ASSERT_GE(pid, 0);
+  if (pid == 0) {
+    // userfaultfd-wp does not support regular-file mappings (/var/tmp is not
+    // tmpfs), so registering this range fails
+    char path[] = "/var/tmp/mesh-wb-XXXXXX";
+    int fd = mkstemp(path);
+    if (fd < 0)
+      _exit(10);
+    unlink(path);
+    if (ftruncate(fd, PageSize) != 0)
+      _exit(11);
+    void *ptr = mmap(nullptr, PageSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (ptr == MAP_FAILED)
+      _exit(12);
+
+    if (rt.segfaultHandlerInstalled() || rt.heap().writeBarrier().needsSignalHandler())
+      _exit(13);
+    rt.heap().beginMesh(nullptr, ptr, PageSize);  // -> WriteBarrier::arm
+    if (!rt.heap().writeBarrier().needsSignalHandler())
+      _exit(14);
+    if (!rt.segfaultHandlerInstalled())
+      _exit(15);
+    // the range really is read-only now
+    if (mprotect(ptr, PageSize, PROT_READ | PROT_WRITE) != 0)
+      _exit(16);
+    _exit(0);
+  }
+  int status = 0;
+  ASSERT_EQ(waitpid(pid, &status, 0), pid);
+  ASSERT_TRUE(WIFEXITED(status));
+  ASSERT_EQ(WEXITSTATUS(status), 0);
+  // the parent is unaffected
+  EXPECT_FALSE(rt.segfaultHandlerInstalled());
+}
+
 }  // namespace
+
+TEST(WriteBarrierTest, SignalHandlerOwnership) {
+  if (getPageSize() == 4096) {
+    signalOwnershipImpl<4096>();
+  } else {
+    signalOwnershipImpl<16384>();
+  }
+}
+
+TEST(WriteBarrierTest, FallbackToMprotectInstallsHandler) {
+  if (getPageSize() == 4096) {
+    fallbackImpl<4096>();
+  } else {
+    fallbackImpl<16384>();
+  }
+}
 
 TEST(WriteBarrierTest, RacingWritersDuringMesh) {
   if (getPageSize() == 4096) {
