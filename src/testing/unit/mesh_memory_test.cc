@@ -23,9 +23,20 @@
 #endif
 #include "fixed_array.h"
 #include "internal.h"
+#include "meshable_arena.h"
 #include "meshing.h"
 
 namespace mesh {
+
+TEST(MeshMemory, PageOffsetToFileOffsetPreservesFourGiBBoundary) {
+  EXPECT_EQ(internal::pageOffsetToFileOffset<4096>(0xfffff), static_cast<off_t>(0xfffff000ULL));
+  EXPECT_EQ(internal::pageOffsetToFileOffset<4096>(0x100000), static_cast<off_t>(0x100000000ULL));
+  EXPECT_EQ(internal::pageOffsetToFileOffset<4096>(0x100001), static_cast<off_t>(0x100001000ULL));
+
+  EXPECT_EQ(internal::pageOffsetToFileOffset<16384>(0x3ffff), static_cast<off_t>(0xffffc000ULL));
+  EXPECT_EQ(internal::pageOffsetToFileOffset<16384>(0x40000), static_cast<off_t>(0x100000000ULL));
+  EXPECT_EQ(internal::pageOffsetToFileOffset<16384>(0x40001), static_cast<off_t>(0x100004000ULL));
+}
 
 template <size_t PageSize>
 void testPrecisePageDeallocation() {

@@ -46,6 +46,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <new>
 
 #include "internal.h"
@@ -67,6 +68,16 @@
 #endif
 
 namespace mesh {
+
+namespace internal {
+template <size_t PageSize>
+constexpr off_t pageOffsetToFileOffset(Offset pageOffset) {
+  static_assert(static_cast<uint64_t>(kArenaSize - PageSize) <=
+                    static_cast<uint64_t>(std::numeric_limits<off_t>::max()),
+                "off_t cannot represent Mesh arena offsets");
+  return static_cast<off_t>(pageOffset) * static_cast<off_t>(PageSize);
+}
+}  // namespace internal
 
 namespace {
 const char *const TMP_DIRS[] = {
@@ -263,7 +274,7 @@ private:
 
     if (flags == internal::PageType::Dirty) {
       if (kAdviseDump) {
-        madvise(ptrFromOffset(span.offset), span.length << kPageShift, MADV_DONTDUMP);
+        madvise(ptrFromOffset(span.offset), static_cast<size_t>(span.length) << kPageShift, MADV_DONTDUMP);
       }
       d_assert(span.length > 0);
       _dirty[span.spanClass()].push_back(span);
@@ -313,9 +324,14 @@ private:
   }
 
   static void staticAtExit();
+
+public:
+  // Public so mac_wrapper.cc can call these from _malloc_fork_* handlers
   static void staticPrepareForFork();
   static void staticAfterForkParent();
   static void staticAfterForkChild();
+
+private:
 
   void exit() {
     // FIXME: do this from the destructor, and test that destructor is
@@ -344,7 +360,8 @@ private:
   inline void resetSpanMapping(const Span &span) {
     auto ptr = ptrFromOffset(span.offset);
     auto sz = static_cast<size_t>(span.length) << kPageShift;
-    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, span.offset << kPageShift);
+    mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
+         internal::pageOffsetToFileOffset<PageSize>(span.offset));
   }
 
   void prepareForFork();
@@ -419,7 +436,13 @@ MeshableArena<PageSize>::MeshableArena() : SuperHeap(), _fastPrng(internal::seed
   }
 
   atexit(staticAtExit);
+#ifndef __APPLE__
+  // On macOS, fork handling is done via _malloc_fork_prepare/parent/child
+  // interposition in mac_wrapper.cc. Registering pthread_atfork here too
+  // causes a deadlock: pthread_atfork handlers run first (locking mutexes),
+  // then _malloc_fork_prepare tries to lock the same mutexes again.
   pthread_atfork(staticPrepareForFork, staticAfterForkParent, staticAfterForkChild);
+#endif
 }
 
 template <size_t PageSize>
@@ -816,14 +839,10 @@ void MeshableArena<PageSize>::finalizeMesh(void *keep, void *remove, size_t sz) 
   const Span removedSpan{removeOff, static_cast<Length>(pageCount)};
   trackMeshed(removedSpan);
 
-#ifdef __APPLE__
   hard_assert(_fd >= 0);
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff << kPageShift);
+  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
+                   internal::pageOffsetToFileOffset<PageSize>(keepOff));
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-#else
-  void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd, keepOff << kPageShift);
-  hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
-#endif
 }
 
 template <size_t PageSize>

@@ -417,8 +417,8 @@ public:
         free(p);
       }
 
-      // Try a simple exec
-      execl("/bin/true", "true", nullptr);
+      // Try a simple exec (use execlp to search PATH, since /bin/true doesn't exist on macOS)
+      execlp("true", "true", nullptr);
       _exit(127);
     } else {
       ASSERT_GT(pid, 0) << "fork() failed";

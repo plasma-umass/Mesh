@@ -63,7 +63,7 @@ build lib:
 	./bazel build $(BAZEL_CONFIG) -c opt //src:$(DYNAMIC_LIB) //src:$(STATIC_TARGET)
 
 test check:
-	./bazel test $(BAZEL_CONFIG) //src:unit-tests --test_output=all --action_env="GTEST_COLOR=1"
+	./bazel test $(BAZEL_CONFIG) //src:unit-tests //src:high-offset-mesh-test --test_output=all --action_env="GTEST_COLOR=1"
 
 install:
 	install -c -m 0755 bazel-bin/src/$(DYNAMIC_LIB) $(PREFIX)/lib/$(INSTALL_DYNAMIC)

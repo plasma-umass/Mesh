@@ -269,6 +269,23 @@ cc_test(
     ],
 )
 
+# Meshes spans more than 4 GiB into the arena.  Kept out of unit-tests because
+# it reserves 4 GiB of (untouched) arena address space; CI runs it explicitly.
+cc_test(
+    name = "high-offset-mesh-test",
+    size = "small",
+    srcs = ["testing/high_offset/high_offset_mesh_test.cc"],
+    copts = [
+        "-Isrc",
+    ] + NO_BUILTIN_MALLOC + MESH_DEFAULT_COPTS,
+    defines = COMMON_DEFINES,
+    linkopts = COMMON_LINKOPTS + ARCH_LINKOPTS + LTO_LINKOPTS,
+    deps = [
+        ":mesh-core",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_test(
     name = "local-refill-benchmark",
     srcs = [

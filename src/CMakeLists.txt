@@ -36,7 +36,9 @@ set(unit_src
         ${google_src}
         testing/unit/alignment.cc
         testing/unit/bitmap_test.cc
+        testing/unit/cacheline_padding_test.cc
         testing/unit/concurrent_mesh_test.cc
+        testing/unit/fork_test.cc
         testing/unit/mesh_memory_test.cc
         testing/unit/mesh_test.cc
         testing/unit/pending_list_test.cc
