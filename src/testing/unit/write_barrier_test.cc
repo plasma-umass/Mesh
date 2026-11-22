@@ -16,6 +16,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#ifdef __linux__
+#include <linux/magic.h>
+#include <sys/vfs.h>
+#endif
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -314,18 +318,32 @@ void fallbackImpl() {
     GTEST_SKIP() << "userfaultfd barrier not active";
   }
 
+  // userfaultfd-wp does not support mappings of regular (non-shmem) files,
+  // so registering one fails.  Find a writable directory not on tmpfs.
+  int fd = -1;
+#ifdef __linux__
+  const char *dirs[] = {getenv("TEST_TMPDIR"), "/var/tmp", "."};
+  for (const char *dir : dirs) {
+    struct statfs sfs;
+    if (dir == nullptr || statfs(dir, &sfs) != 0 || sfs.f_type == TMPFS_MAGIC)
+      continue;
+    char path[512];
+    snprintf(path, sizeof(path), "%s/mesh-wb-XXXXXX", dir);
+    fd = mkstemp(path);
+    if (fd >= 0) {
+      unlink(path);
+      break;
+    }
+  }
+#endif
+  if (fd < 0) {
+    GTEST_SKIP() << "no writable non-tmpfs directory";
+  }
+  ASSERT_EQ(ftruncate(fd, PageSize), 0);
+
   pid_t pid = fork();
   ASSERT_GE(pid, 0);
   if (pid == 0) {
-    // userfaultfd-wp does not support regular-file mappings (/var/tmp is not
-    // tmpfs), so registering this range fails
-    char path[] = "/var/tmp/mesh-wb-XXXXXX";
-    int fd = mkstemp(path);
-    if (fd < 0)
-      _exit(10);
-    unlink(path);
-    if (ftruncate(fd, PageSize) != 0)
-      _exit(11);
     void *ptr = mmap(nullptr, PageSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED)
       _exit(12);
@@ -346,6 +364,7 @@ void fallbackImpl() {
   ASSERT_EQ(waitpid(pid, &status, 0), pid);
   ASSERT_TRUE(WIFEXITED(status));
   ASSERT_EQ(WEXITSTATUS(status), 0);
+  close(fd);
   // the parent is unaffected
   EXPECT_FALSE(rt.segfaultHandlerInstalled());
 }
