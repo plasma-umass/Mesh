@@ -79,6 +79,40 @@ jobs:
         test "${PIPESTATUS[0]}" -eq 0
         grep -q "^barrier: $MESH_BARRIER\$" stress.log
 
+  # The Mesh paper's Redis experiment (sec. 6.2.2), on Redis and Valkey:
+  # checks that meshing happens and reduces memory vs. Mesh with meshing
+  # disabled, and reports jemalloc / jemalloc+activedefrag / glibc alongside.
+  # Runs as root so each server gets its own memory cgroup (as in the paper's
+  # mstat); servers bind to 127.0.0.1 only.
+  Ubuntu_kv_fragmentation:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install required packages
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install gcc g++ make cmake python3
+    - name: Build Mesh
+      run: |
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build -j"$(nproc)" --target mesh
+    - name: Cache Redis/Valkey builds
+      uses: actions/cache@v4
+      with:
+        path: bench/kv/build/bin
+        key: kv-servers-${{ runner.os }}-${{ hashFiles('bench/kv/build-servers.sh') }}
+    - name: Build Redis and Valkey
+      run: bench/kv/build-servers.sh
+    - name: Fragmentation benchmark
+      run: |
+        sudo --preserve-env=GITHUB_STEP_SUMMARY python3 bench/kv/fragmentation.py \
+          --libmesh build/lib/libmesh.so --json kv-fragmentation.json --check
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: kv-fragmentation
+        path: kv-fragmentation.json
+
   Ubuntu_bazel:
     runs-on: ubuntu-latest
     steps:

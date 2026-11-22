@@ -53,3 +53,4 @@ __pycache__
 /bazel-mesh
 /bazel-out
 /bazel-testlogs
+/bench/kv/build
