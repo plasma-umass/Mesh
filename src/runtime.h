@@ -116,7 +116,10 @@ private:
 
   mutex _mutex{};
   int _signalFd{-2};
-  pid_t _pid{};
+  // must be valid from the start: segfaultHandler compares it against
+  // getpid() to detect a post-fork child.  (Previously this was only set by
+  // that comparison's own side effect on the first meshing fault.)
+  pid_t _pid{getpid()};
   GlobalHeap<PageSize> _heap{};
 };
 

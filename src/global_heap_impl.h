@@ -282,6 +282,9 @@ int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp,
     auto newVal = reinterpret_cast<size_t *>(newp);
     _meshPeriod = *newVal;
     // resetNextMeshCheck();
+  } else if (strcmp(name, "mesh.barrier") == 0) {
+    // read-only: 0 = mprotect, 1 = userfaultfd (user-mode only), 2 = userfaultfd
+    *statp = static_cast<size_t>(Super::writeBarrier().mode());
   } else if (strcmp(name, "arena") == 0) {
     // not sure what this should do
   } else if (strcmp(name, "stats.resident") == 0) {
@@ -329,6 +332,10 @@ void GlobalHeap<PageSize>::meshLocked(MiniHeapT *dst, MiniHeapT *&src) {
     Super::beginMesh(dstSpanStart, srcSpan, dstSpanSize);
     return false;
   });
+
+  if (unlikely(_meshHookForTesting != nullptr)) {
+    _meshHookForTesting(_meshHookArg);
+  }
 
   // does the copying of objects and updating of span metadata
   dst->consume(this->arenaBegin(), src);
@@ -466,6 +473,8 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
 
   lock_guard<EpochLock> epochLock(_meshEpoch);
 
+  Super::beginMeshPass();
+
   // const auto start = time::now();
 
   // first, drain pending partial lists and clear out any free memory we might have
@@ -479,6 +488,8 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
   for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
     totalMeshCount += meshSizeClassLocked(sizeClass, MergeSets, Left, Right);
   }
+
+  Super::endMeshPass();
 
   madvise(&Left, sizeof(Left), MADV_DONTNEED);
   madvise(&Right, sizeof(Right), MADV_DONTNEED);

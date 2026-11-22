@@ -74,6 +74,10 @@ void MeshableArena<PageSize>::afterForkChild() {
   int r = mprotect(_arenaBegin, kArenaSize, PROT_READ | PROT_WRITE);
   hard_assert(r == 0);
 
+  // the inherited userfaultfd belongs to the parent's mm; replace it before
+  // anything can mesh in the child.
+  _barrier.afterForkChild();
+
   internal::Heap().unlock();
   runtime<PageSize>().unlock();
   runtime<PageSize>().heap().unlock();

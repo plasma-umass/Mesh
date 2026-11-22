@@ -46,6 +46,7 @@ set(unit_src
         testing/unit/thread_exit_test.cc
         testing/unit/size_class_test.cc
         testing/unit/triple_mesh_test.cc
+        testing/unit/write_barrier_test.cc
 )
 
 # Add macOS-specific tests only on Apple platforms
