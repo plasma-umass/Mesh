@@ -78,7 +78,7 @@ if(${GCOV})
     add_custom_target(coverage_gcc
             COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
             COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ --ignore-errors mismatch,inconsistent --rc geninfo_unexecuted_blocks=1
-            COMMAND genhtml app.info -o .
+            COMMAND genhtml app.info -o . --ignore-errors inconsistent
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
             DEPENDS unit.test)
 endif()
