@@ -13,6 +13,9 @@ Configurations, per server:
                          (parameters from memefficiency.tcl)
   glibc                  MALLOC=libc build
   mesh-nomesh            MALLOC=libc build + libmesh, MESH_PERIOD_MS=0
+  mesh-thp               MALLOC=libc build + libmesh, MESH_THP=1: arena on
+                         transparent huge pages (needs shmem_enabled=advise);
+                         not in the default set
                          (same allocator and randomization, meshing disabled)
   mesh                   MALLOC=libc build + libmesh
 
@@ -106,6 +109,19 @@ def cpu_s(pid):
     with open(f"/proc/{pid}/stat") as f:
         fields = f.read().rsplit(")", 1)[1].split()
     return (int(fields[11]) + int(fields[12])) / CLK_TCK  # utime, stime
+
+
+def pmd_mapped_mib(pid):
+    """Shmem/file memory of pid mapped with huge (PMD) pages, from smaps_rollup."""
+    total = 0
+    try:
+        with open(f"/proc/{pid}/smaps_rollup") as f:
+            for line in f:
+                if line.startswith(("ShmemPmdMapped:", "FilePmdMapped:", "AnonHugePages:")):
+                    total += int(line.split()[1])
+    except OSError:
+        return None
+    return round(total / 1024, 1)
 
 
 CGROUP_ROOT = "/sys/fs/cgroup"
@@ -322,12 +338,15 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
     jemalloc = config.startswith("jemalloc")
     binary = os.path.join(a.bin, f"{server_name}-server-{'jemalloc' if jemalloc else 'libc'}")
     cli = os.path.join(a.bin, f"{server_name}-cli")
-    env = {k: v for k, v in os.environ.items() if k not in ("LD_PRELOAD", "MESH_PERIOD_MS", "MALLOCSTATS")}
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("LD_PRELOAD", "MESH_PERIOD_MS", "MALLOCSTATS", "MESH_THP")}
     if config.startswith("mesh"):
         env["LD_PRELOAD"] = a.libmesh
         env["MALLOCSTATS"] = "2"  # level 2 adds the arena accounting (ACCT lines)
         if config == "mesh-nomesh":
             env["MESH_PERIOD_MS"] = "0"
+        if config == "mesh-thp":
+            env["MESH_THP"] = "1"
 
     tag = f"{server_name}-{config.replace('+', '-')}-{trial}"
     log_path = os.path.join(logdir, f"{tag}.log")
@@ -383,6 +402,7 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         mem = srv.info("memory")
         stats = srv.info("stats")
         keys = int(srv.cli("DBSIZE"))
+        pmd_mib = pmd_mapped_mib(pid)
     finally:
         if probe and not probe.stop.is_set():
             probe.stop.set()
@@ -449,6 +469,8 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         "active_defrag_hits": int(stats.get("active_defrag_hits", 0)),
         "mesh_count": mesh_count,
         "barrier": barrier,
+        # memory the kernel maps with 2 MiB pages (THP), at the end of the window
+        "pmd_mapped_mib": pmd_mib,
         "arena_vmas": arena_vmas,
         "meshed_mb_hwm": meshed_mb_hwm,
         "mesh_passes": passes,

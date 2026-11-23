@@ -295,6 +295,9 @@ int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp,
   } else if (strcmp(name, "mesh.pairs_deferred") == 0) {
     // meshable pairs skipped because a span's occupancy was still changing
     *statp = _stats.meshPairsDeferred;
+  } else if (strcmp(name, "mesh.thp_intact_regions") == 0) {
+    // THP mode: 2 MiB regions not split by a punched or remapped page
+    *statp = Super::thpStats().intact;
   } else if (strcmp(name, "mesh.vma_count") == 0) {
     // kernel mappings the arena occupies (upper bound)
     *statp = Super::arenaVmaCount();
@@ -449,6 +452,27 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
     if (!starving && !(settled(dst) && settled(src))) {
       deferred++;
       continue;
+    }
+
+    // THP mode: meshing remaps src's spans, splitting their huge pages.  If
+    // that would split an intact, dense one, mesh the other way round if dst's
+    // spans are not in one; otherwise leave the pair alone.
+    if (Super::thpEnabled() && Super::thpProtect() > 0) {
+      auto splitsDense = [&](MiniHeapT *mh) {
+        bool hit = false;
+        mh->forEachMeshed([&](const MiniHeapT *m) {
+          hit = Super::spanInDenseIntactRegion(m->span());
+          return hit;
+        });
+        return hit;
+      };
+      if (splitsDense(src)) {
+        if (splitsDense(dst)) {
+          _stats.meshPairsProtected.fetch_add(1, std::memory_order_relaxed);
+          continue;
+        }
+        std::swap(dst, src);
+      }
     }
 
     // every span of src's chain gets remapped onto dst
@@ -720,6 +744,22 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   debug("Mesh passes:        %zu (total %.1f ms, max %.2f ms; %zu pairs deferred until settled)\n",
         (size_t)_stats.meshPassCount, _stats.meshPassTotalNs / 1e6, _stats.meshPassMaxNs / 1e6,
         (size_t)_stats.meshPairsDeferred);
+  if (Super::thpEnabled()) {
+    const auto th = Super::thpStats();
+    long pmdKiB = -1;  // the kernel's view: arena memory mapped by huge pages
+    if (FILE *f = fopen("/proc/self/smaps_rollup", "r")) {
+      char line[256];
+      while (fgets(line, sizeof(line), f))
+        if (sscanf(line, "ShmemPmdMapped: %ld kB", &pmdKiB) == 1 || sscanf(line, "FilePmdMapped: %ld kB", &pmdKiB) == 1)
+          break;
+      fclose(f);
+    }
+    debug(
+        "THP:                regions %zu: intact %zu (%.1f MiB in use), split %zu (%.1f MiB); "
+        "protect %.2f; pairs protected %zu; kernel PMD-mapped %.1f MiB\n",
+        th.regions, th.intact, th.intactPages * PageSize / 1048576.0, th.split, th.splitPages * PageSize / 1048576.0,
+        Super::thpProtect(), (size_t)_stats.meshPairsProtected, pmdKiB / 1024.0);
+  }
   if (Super::arenaVmaLimit() != 0) {
     debug("Arena VMAs:         %zu (limit %zu of vm.max_map_count %zu)\n", Super::arenaVmaCount(),
           Super::arenaVmaLimit(), Super::maxMapCount());

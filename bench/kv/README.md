@@ -23,6 +23,7 @@ sudo python3 bench/kv/fragmentation.py --libmesh build/lib/libmesh.so --mstat ~/
 | `glibc` | `MALLOC=libc` build |
 | `mesh-nomesh` | `MALLOC=libc` build, `LD_PRELOAD=libmesh.so`, `MESH_PERIOD_MS=0` |
 | `mesh` | `MALLOC=libc` build, `LD_PRELOAD=libmesh.so` |
+| `mesh-thp` (opt-in, `--configs`) | as `mesh`, with `MESH_THP=1`; needs `shmem_enabled=advise` (see `docs/thp.md`) |
 
 `mesh-nomesh` keeps Mesh's allocator and randomization and only disables meshing.
 
