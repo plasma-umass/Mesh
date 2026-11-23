@@ -390,6 +390,8 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         log = f.read()
     m = re.search(r"MESH COUNT:\s+(\d+)", log)
     mesh_count = int(m.group(1)) if m else None
+    m = re.search(r"Write barrier:\s+(\S+)", log)
+    barrier = m.group(1) if m else None
     m = re.search(r"Meshed MB HWM:\s+([\d.]+)", log)
     meshed_mb_hwm = float(m.group(1)) if m else None
     m = re.search(r"Mesh passes:\s+(\d+) \(total ([\d.]+) ms, max ([\d.]+) ms\)", log)
@@ -429,6 +431,7 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         "probe_max_ms": round(max(lat_ms), 3) if lat_ms else 0,
         "active_defrag_hits": int(stats.get("active_defrag_hits", 0)),
         "mesh_count": mesh_count,
+        "barrier": barrier,
         "meshed_mb_hwm": meshed_mb_hwm,
         "mesh_passes": passes,
         "mesh_pass_total_ms": pass_total_ms,
@@ -529,7 +532,8 @@ def main():
             print(f"[trial {trial + 1}/{a.trials}] {server:7s} {config:22s} final {r['mem_final_mib']:7.1f} MiB  "
                   f"insert {r['insert_s']:.2f}s  idle CPU {r['idle_cpu_s']:.2f}s  "
                   f"probe p99 {r['probe_p99_ms']:.2f} max {r['probe_max_ms']:.1f} ms  "
-                  f"meshes {r['mesh_count']}", flush=True)
+                  f"meshes {r['mesh_count']}" + (f"  barrier {r['barrier']}" if r["barrier"] else ""),
+                  flush=True)
             results.append(r)
 
     agg = aggregate(results)
