@@ -78,6 +78,60 @@ objects to any free slot; meshing needs non-overlapping offsets. Paced Mesh
 takes about 30–40 s to level off. Unpaced Mesh gets there in 5–10 s, with
 130–166 ms pauses.
 
+## Mesh vs. active defragmentation
+
+Redis 8.0.2 on EC2 t3.2xlarge, `vm.max_map_count` 65,530, mstat, median of 3
+trials, 40 s idle window (MiB, ms):
+
+| | low-key: Mesh | low-key: activedefrag | high-key: Mesh | high-key: activedefrag |
+|---|---|---|---|---|
+| mean, paper's first 7.5 s | **243.0** | 274.2 | **278.3** | 291.0 |
+| mean, whole run | **158.6** | 164.1 | 216.5 | **155.3** |
+| peak | 328.6 | 328.1 | 328.0 | 328.1 |
+| final | 129.7 | **115.2** | 186.6 | **114.4** |
+| probe latency p99 | **8.4** | 10.5 | **4.3** | 4.9 |
+| probe latency p99.9 | **20.5** | 23.3 | 10.2 | **6.1** |
+| server CPU while idle (s) | **3.8** | 5.9 | **3.6** | 4.5 |
+
+- **Within the paper's 7.5 s window, Mesh uses less memory**, as in its
+  Figure 7. Mesh starts compacting as soon as insertion ends; active
+  defragmentation starts a few seconds later.
+- **Peaks are the same**: they're set by insertion, before compaction.
+- **Active defragmentation ends lower**: ~15 MiB lower in the low-key state,
+  ~70 MiB lower in the high-key state.
+- **Mesh's latency tail is similar or better up to p99**, and Mesh uses less
+  CPU.
+- **Valkey behaves the same way.**
+
+### Why Mesh ends higher: the non-relocating limit
+
+Where the memory goes at the end of a low-key Redis run (MiB; Mesh from
+`MALLOCSTATS=2`, jemalloc from Redis's `allocator_*` statistics):
+
+| | jemalloc + activedefrag | Mesh |
+|---|---|---|
+| live objects (`used_memory`) | 100 | 100 |
+| free slots inside allocated spans | 3.4 | ~17 |
+| other (allocator metadata, kernel memory for mappings, binary) | ~12 | ~13 |
+| total | 115.2 | 129.7 |
+
+Two spans can mesh only if no slot is occupied in both, so their combined
+occupancy must be at most 100%. Free slots in spans more than half full
+therefore cannot be reclaimed by meshing at any span size; only moving objects
+can recover them, which is what active defragmentation does.
+
+Of Mesh's ~17 MiB of free slots:
+
+| Spans | Free slots | Recoverable by meshing? |
+|---|---|---|
+| 75–100% full (mostly 512 B objects, 8 per 4 KiB span, ~7/8 full) | 7.7 MiB | no (only 2 of 21,250 such spans meshed) |
+| 50–75% full | 2.7 MiB | no |
+| under 50% full, already mostly meshed | 4.5 MiB | in principle |
+
+Plain jemalloc, which neither meshes nor moves objects, ends at 215 MiB. In
+the high-key state Mesh runs out of meshable pairs (see above) and the gap is
+larger for the same reason.
+
 ## Measuring memory
 
 With `--mstat`, each server runs under [mstat](https://github.com/bpowers/mstat),
