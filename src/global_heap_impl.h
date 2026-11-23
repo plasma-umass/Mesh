@@ -292,9 +292,9 @@ int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp,
   } else if (strcmp(name, "mesh.pass_max_ns") == 0) {
     // longest mesh pass: the longest pause meshing imposes on allocating threads
     *statp = _stats.meshPassMaxNs;
-  } else if (strcmp(name, "mesh.pass_deferred") == 0) {
-    // passes that deferred meshing because the heap was shrinking
-    *statp = _stats.meshPassDeferred;
+  } else if (strcmp(name, "mesh.pairs_deferred") == 0) {
+    // meshable pairs skipped because a span's occupancy was still changing
+    *statp = _stats.meshPairsDeferred;
   } else if (strcmp(name, "mesh.vma_count") == 0) {
     // kernel mappings the arena occupies (upper bound)
     *statp = Super::arenaVmaCount();
@@ -405,6 +405,10 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
 
   size_t meshCount = 0;
 
+  // after kMaxMeshDeferral of only unsettled pairs, mesh them anyway
+  const bool starving = _unsettled[sizeClass] && time::now() - _unsettledSince[sizeClass] >= kMaxMeshDeferral;
+  size_t deferred = 0;
+
   for (size_t i = 0; i < mergeSetCount && budget.allows(); i++) {
     std::pair<MiniHeapT *, MiniHeapT *> &mergeSet = mergeSets[i];
     MiniHeapT *dst = mergeSet.first;
@@ -437,11 +441,40 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
       oneEmpty = true;
     }
 
+    if (oneEmpty) {
+      continue;
+    }
+
+    // still emptying (or new): mesh it once it settles
+    if (!starving && !(settled(dst) && settled(src))) {
+      deferred++;
+      continue;
+    }
+
     // every span of src's chain gets remapped onto dst
-    if (!oneEmpty && !this->meshWouldExceedMapLimit(src->meshCount())) {
+    if (!this->meshWouldExceedMapLimit(src->meshCount())) {
       meshLocked(dst, src);
       meshCount++;
     }
+  }
+
+  if (deferred > 0) {
+    _stats.meshPairsDeferred.fetch_add(deferred, std::memory_order_relaxed);
+  }
+  if (deferred > 0 && meshCount == 0) {
+    if (!_unsettled[sizeClass]) {
+      _unsettled[sizeClass] = true;
+      _unsettledSince[sizeClass] = time::now();
+    }
+  } else {
+    _unsettled[sizeClass] = false;
+  }
+
+  // remember every partial span's occupancy, for the next pass to compare
+  for (MiniHeapID id = _partialFreelist[sizeClass].first.next(); id != list::Head;) {
+    const auto mh = GetMiniHeap<MiniHeapT>(id);
+    _lastInUse[id.value()] = static_cast<uint16_t>(mh->inUseCount() + 1);
+    id = mh->getFreelist()->next();
   }
 
   // flush things once more (since we may have called postFree instead
@@ -532,26 +565,6 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
     return;
   }
 
-  // Defer meshing while the heap is shrinking.  (Counts every miniheap freed
-  // since the last pass, by frees or by this pass's flush above.)
-  {
-    const size_t freed = _stats.mhFreeCount - _mhFreeCountAtLastPass;
-    _mhFreeCountAtLastPass = _stats.mhFreeCount;
-    const bool shrinking = freed >= std::max(kShrinkingMinFrees, _stats.mhAllocCount / kShrinkingDivisor);
-    const auto now = time::now();
-    if (shrinking) {
-      if (!_deferringMesh) {
-        _deferringMesh = true;
-        _deferringSince = now;
-      }
-      if (now - _deferringSince < kMaxMeshDeferral) {
-        _stats.meshPassDeferred.fetch_add(1, std::memory_order_relaxed);
-        return;  // _lastMeshEffective stays set: try again next period
-      }
-    }
-    _deferringMesh = false;
-  }
-
   lock_guard<EpochLock> epochLock(_meshEpoch);
 
   Super::beginMeshPass();
@@ -597,9 +610,9 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   const auto meshedPageHWM = this->meshedPageHighWaterMark();
 
   debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
-  debug("Mesh passes:        %zu (total %.1f ms, max %.2f ms, %zu deferred: heap shrinking)\n",
+  debug("Mesh passes:        %zu (total %.1f ms, max %.2f ms; %zu pairs deferred until settled)\n",
         (size_t)_stats.meshPassCount, _stats.meshPassTotalNs / 1e6, _stats.meshPassMaxNs / 1e6,
-        (size_t)_stats.meshPassDeferred);
+        (size_t)_stats.meshPairsDeferred);
   if (Super::arenaVmaLimit() != 0) {
     debug("Arena VMAs:         %zu (limit %zu of vm.max_map_count %zu)\n", Super::arenaVmaCount(),
           Super::arenaVmaLimit(), Super::maxMapCount());

@@ -85,8 +85,8 @@ public:
   atomic_size_t meshPassCount;
   atomic_size_t meshPassTotalNs;
   atomic_size_t meshPassMaxNs;
-  // passes that deferred meshing because the heap was shrinking
-  atomic_size_t meshPassDeferred;
+  // meshable pairs skipped because a span's occupancy was still changing
+  atomic_size_t meshPairsDeferred;
 };
 
 template <size_t PageSize>
@@ -185,6 +185,7 @@ public:
 
     const auto miniheapID = MiniHeapID{this->_mhAllocator.offsetFor(buf)};
     Super::trackMiniHeap(span, miniheapID);
+    _lastInUse[miniheapID.value()] = 0;  // a new miniheap has not settled
 
     // mesh::debug("%p (%u) created!\n", mh, GetMiniHeapID(mh));
 
@@ -767,10 +768,17 @@ private:
                              SplitArray<PageSize> &right, PassBudget &budget);
 
   uint64_t _passBudgetNs{0};
-  // heap-shrinking detection (see kShrinkingDivisor)
-  size_t _mhFreeCountAtLastPass{0};
-  bool _deferringMesh{false};
-  time::time_point _deferringSince{};
+  // Settledness (see kMaxMeshDeferral): per miniheap ID, 1 + its in-use
+  // count when a pass last looked at it (0 = not seen yet).  Indexed like
+  // _mhAllocator; touched lazily.
+  static constexpr size_t kMaxMiniheaps = kArenaSize / PageSize;
+  uint16_t *_lastInUse{reinterpret_cast<uint16_t *>(OneWayMmapHeap().malloc(sizeof(uint16_t) * kMaxMiniheaps))};
+  bool _unsettled[kNumBins]{};
+  time::time_point _unsettledSince[kNumBins]{};
+
+  inline bool settled(const MiniHeapT *mh) const {
+    return _lastInUse[miniheapIDFor(mh).value()] == mh->inUseCount() + 1;
+  }
   // size class the next pass starts from: a pass cut short by its budget
   // resumes where it stopped, so every class gets meshed
   size_t _nextMeshSizeClass{0};
