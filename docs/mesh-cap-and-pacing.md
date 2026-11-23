@@ -83,5 +83,34 @@ Now:
 - **Every pass frees empty miniheaps first**, before the "ineffective" and
   "at the cap" early returns.
 
-Besides bounding pauses, pacing spreads meshing out. A burst of frees then no
-longer spends the cap on spans that are still emptying.
+## Meshing only settled spans
+
+A time budget alone made the cap's spend rate depend on CPU speed. On a faster
+machine, each 10 ms pass did more meshes during the post-insert eviction,
+reached the cap mid-eviction, and ended 40–60 MiB higher.
+
+A first fix deferred whole passes while many miniheaps were being freed. That
+signal missed Valkey, whose eviction frees in bursts on a background thread
+(`lazyfree-lazy-eviction yes`).
+
+Instead, each pass records every partial span's in-use count, in a side table
+indexed by miniheap ID. A pair is meshed only if both spans are unchanged
+since they were last seen, so spans that are still emptying wait until they
+settle.
+
+- **Starvation guard:** if a size class has had only unsettled pairs for 5 s,
+  they are meshed anyway, so constant churn can't starve meshing.
+- **Deferral keeps meshing on:** a pass that deferred pairs counts as
+  effective, so passes continue after the application stops freeing.
+- **No fast-path cost:** nothing is added to malloc/free.
+
+## Benchmark caveat: Valkey's eviction is bimodal
+
+Valkey ends the benchmark with either ~191k or ~273k keys (same 100 MB of
+data), in every configuration. The 273k-key state is more fragmented:
+
+| | ~191k keys | ~273k keys |
+|---|---|---|
+| jemalloc | ~224 MiB | ~298 MiB |
+| Mesh | ~128 MiB | ~200 MiB, still dropping at 15 s |
+| jemalloc + activedefrag | ~113 MiB | ~113 MiB |

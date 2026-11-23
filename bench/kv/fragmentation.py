@@ -532,7 +532,8 @@ def main():
             print(f"[trial {trial + 1}/{a.trials}] {server:7s} {config:22s} final {r['mem_final_mib']:7.1f} MiB  "
                   f"insert {r['insert_s']:.2f}s  idle CPU {r['idle_cpu_s']:.2f}s  "
                   f"probe p99 {r['probe_p99_ms']:.2f} max {r['probe_max_ms']:.1f} ms  "
-                  f"meshes {r['mesh_count']}" + (f"  barrier {r['barrier']}" if r["barrier"] else ""),
+                  f"meshes {r['mesh_count']}  keys {r['keys']}" +
+                  (f"  barrier {r['barrier']}" if r["barrier"] else ""),
                   flush=True)
             results.append(r)
 

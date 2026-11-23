@@ -577,6 +577,7 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
   budget.deadlineNs = _passBudgetNs ? passStartNs + _passBudgetNs : 0;
 
   size_t totalMeshCount = 0;
+  const size_t deferredBefore = _stats.meshPairsDeferred.load(std::memory_order_relaxed);
   const size_t first = _nextMeshSizeClass;
   size_t visited = 0;
   for (; visited < kNumBins && budget.allows(); visited++) {
@@ -591,8 +592,11 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
   madvise(&Right, sizeof(Right), MADV_DONTNEED);
   madvise(&MergeSets, sizeof(MergeSets), MADV_DONTNEED);
 
-  // a pass cut short by its budget left work behind: keep meshing
-  _lastMeshEffective = totalMeshCount > 256 || budget.exhausted;
+  // a pass cut short by its budget, or that deferred unsettled pairs, left
+  // work behind: keep meshing.  (Otherwise passes stop until the next free --
+  // and once an application stops freeing, deferred pairs would never mesh.)
+  const bool deferredAny = _stats.meshPairsDeferred.load(std::memory_order_relaxed) != deferredBefore;
+  _lastMeshEffective = totalMeshCount > 256 || budget.exhausted || deferredAny;
   _stats.meshCount += totalMeshCount;
 
   Super::scavenge(true);
