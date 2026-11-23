@@ -409,7 +409,9 @@ function renderPanel(p) {
     // no end labels: every line ends near zero; the legend carries identity
   });
   // CDF on a log axis: x holds log10(ms)
-  const lx0 = -1, lx1 = Math.max(1, Math.ceil(Math.log10(Math.max(...p.series.map(s => s.latCdf[s.latCdf.length - 1] || 1)))));
+  // from the decade below the fastest request
+  const fastest = Math.min(...p.series.map(s => s.latCdf[0] || 1));
+  const lx0 = Math.max(-3, Math.floor(Math.log10(fastest))), lx1 = Math.max(1, Math.ceil(Math.log10(Math.max(...p.series.map(s => s.latCdf[s.latCdf.length - 1] || 1)))));
   const latCdf = p.series.map(s => {
     const n = s.latCdf.length;
     return {...s, xs: s.latCdf.map(v => Math.max(lx0, Math.log10(v))), ys: s.latCdf.map((_, i) => i / (n - 1) * 100),
@@ -491,7 +493,8 @@ def main():
         with open(path) as f:
             d = json.load(f)
         results.extend(d["results"])
-        notes.append(f"{d.get('trials', '?')} trials, {d.get('settle_s', '?'):g} s idle window "
+        n = d.get("trials", "?")
+        notes.append(f"{n} trial{'' if n == 1 else 's'}, {d.get('settle_s', '?'):g} s idle window "
                      f"({os.path.basename(path)})")
     if any("state" not in r for r in results):
         sys.exit("results lack eviction states; regenerate them with the current fragmentation.py")
