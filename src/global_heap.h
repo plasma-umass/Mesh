@@ -166,6 +166,8 @@ public:
   }
 
   void dumpStats(int level, bool beDetailed) const;
+  // MALLOCSTATS=2: where the arena's resident memory is (see dumpStats)
+  void dumpAccounting() const;
 
   // must be called with _arenaLock AND appropriate size-class lock held
   inline MiniHeapT *ATTRIBUTE_ALWAYS_INLINE allocMiniheapLocked(int sizeClass, size_t pageCount, size_t objectCount,

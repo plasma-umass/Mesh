@@ -269,6 +269,19 @@ public:
 
   // While a mesh pass runs it scavenges on its own schedule; frees during
   // the pass must not trigger extra (unbudgeted-in-aggregate) scavenges.
+  // read-only views for GlobalHeap::dumpAccounting
+  inline size_t arenaEndPages() const {
+    return _end;
+  }
+  template <typename F>
+  void forEachFreeSpan(F f) const {
+    forEachFree(_clean, [&](const Span &s) { f(s, false); });
+    forEachFree(_dirty, [&](const Span &s) { f(s, true); });
+  }
+  inline void *pagePointer(size_t off) const {
+    return ptrFromOffset(off);
+  }
+
   inline void setInMeshPass(bool inPass) {
     _inMeshPass = inPass;
   }

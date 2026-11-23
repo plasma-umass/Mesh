@@ -38,6 +38,8 @@ LABELS = {
 }
 GRID_S = 0.1
 PAPER_WINDOW_S = 7.5
+LAT_BUCKET_S = 0.5  # latency over time: the slowest request in each bucket
+CDF_POINTS = 400    # latency CDF: quantiles kept per configuration
 
 
 def resample(t, v, end):
@@ -88,6 +90,23 @@ def build_panels(results):
                 "y": [round(x, 1) for x in median],
                 "cdf": [round(x, 1) for x in pooled],
             })
+            # latency: per trial, the slowest probe request in each LAT_BUCKET_S
+            probes = [r.get("probe") or {"t_s": [], "ms": []} for r in rs]
+            lat_end = min((pr["t_s"][-1] for pr in probes if pr["t_s"]), default=0)
+            nb = int(lat_end / LAT_BUCKET_S)
+            per_trial = []
+            for pr in probes:
+                worst = [0.0] * nb
+                for t, ms in zip(pr["t_s"], pr["ms"]):
+                    b = int(t / LAT_BUCKET_S)
+                    if b < nb:
+                        worst[b] = max(worst[b], ms)
+                per_trial.append(worst)
+            lat_ms = sorted(ms for pr in probes for ms in pr["ms"])
+            series[-1]["latT"] = [round((i + 0.5) * LAT_BUCKET_S, 2) for i in range(nb)]
+            series[-1]["latWorst"] = [round(statistics.median(w[i] for w in per_trial), 3) for i in range(nb)] if nb else []
+            q = [percentile(lat_ms, 100 * i / (CDF_POINTS - 1)) for i in range(CDF_POINTS)] if lat_ms else []
+            series[-1]["latCdf"] = [round(max(x, 0.001), 4) for x in q]
             rows.append({
                 "name": LABELS.get(config, config),
                 "slot": SLOTS.get(config, 6),
@@ -99,6 +118,13 @@ def build_panels(results):
                 "peak": statistics.median(max(g) for g in grids),
                 "final": statistics.median(g[-1] for g in grids),
                 "insert": statistics.median(r["insert_s"] for r in rs),
+                "idle_cpu": statistics.median(r.get("idle_cpu_s") or 0 for r in rs),
+                "lat_p50": percentile(lat_ms, 50),
+                "lat_p99": percentile(lat_ms, 99),
+                "lat_p999": percentile(lat_ms, 99.9),
+                "lat_max": lat_ms[-1] if lat_ms else 0.0,
+                "pass_max": statistics.median((r.get("mesh_pass_max_ms") or 0) for r in rs),
+                "requests": len(lat_ms),
             })
         insert_end = statistics.median(r["insert"] for r in rows) if rows else 0
         panels.append({
@@ -189,6 +215,7 @@ td .key { margin-right: 6px; vertical-align: middle; }
 <script>
 const PANELS = __DATA__;
 const PAPER_WINDOW = __PAPER__;
+const LAT_BUCKET = __LATB__;
 const W = 560, H = 300, M = {l: 48, r: 150, t: 12, b: 36};
 const NS = "http://www.w3.org/2000/svg";
 const color = s => `var(--series-${s})`;
@@ -224,7 +251,7 @@ function lineChart(parent, o) {
     el("line", {x1: M.l, x2: M.l + pw, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1}, svg);
     el("text", {x: M.l - 6, y: y(t) + 4, "text-anchor": "end"}, svg).textContent = o.yFmt(t);
   }
-  for (const t of niceTicks(o.x0, o.x1, 6)) {
+  for (const t of (o.xTicks || niceTicks(o.x0, o.x1, 6))) {
     el("text", {x: x(t), y: M.t + ph + 16, "text-anchor": "middle"}, svg).textContent = o.xFmt(t);
   }
   el("line", {x1: M.l, x2: M.l + pw, y1: M.t + ph, y2: M.t + ph, stroke: "var(--axis)", "stroke-width": 1}, svg);
@@ -236,7 +263,8 @@ function lineChart(parent, o) {
     el("line", {x1: x(g.x), x2: x(g.x), y1: M.t, y2: M.t + ph, stroke: "var(--axis)", "stroke-width": 1}, svg);
     // staggered so neighboring guides' labels never overlap
     // at the bottom, where early in the run every line is still high
-    el("text", {x: x(g.x) + 4, y: M.t + ph - 6 - 13 * i, "text-anchor": "start", class: "guide"}, svg)
+    el("text", {x: x(g.x) + 4, y: o.guidesTop ? M.t + 10 + 13 * i : M.t + ph - 6 - 13 * i, "text-anchor": "start",
+                class: "guide"}, svg)
         .textContent = g.label;
   });
   // lines
@@ -355,6 +383,58 @@ for (const p of PANELS) {
     tr.insertCell().textContent = r.trials;
     for (const f of ["mean_paper", "mean", "p50", "p90", "peak", "final"]) tr.insertCell().textContent = r[f].toFixed(1);
   }
+  // 4. latency
+  const h4 = document.createElement("h3"); h4.textContent = "Latency (GET every 10 ms during the idle window)";
+  h4.style.margin = "20px 0 0"; sec.appendChild(h4);
+  const lcharts = div("charts", sec);
+  const allW = p.series.flatMap(s => s.latWorst);
+  const wMax = Math.max(1, Math.ceil(Math.max(...allW) / 5) * 5);
+  lineChart(lcharts, {
+    title: `Slowest request in each ${LAT_BUCKET} s (median of trials)`,
+    series: p.series.map(s => ({...s, xs: s.latT, ys: s.latWorst})),
+    x0: 0, x1: xMax, y0: 0, y1: wMax, xLabel: "seconds since insertion started", yLabel: "ms",
+    xFmt: v => v + "s", xFmtLong: v => "at " + v.toFixed(1) + " s", yFmt: v => String(v),
+    yFmtLong: v => v.toFixed(2) + " ms", guides: [{x: PAPER_WINDOW, label: "paper's 7.5 s"}], guidesTop: true,
+    snap: v => (Math.round(v / LAT_BUCKET - 0.5) + 0.5) * LAT_BUCKET,
+    valueAt: (s, xv) => s.ys[Math.min(s.ys.length - 1, Math.max(0, Math.round(xv / LAT_BUCKET - 0.5)))] ?? 0,
+    // no end labels: every line ends near zero; the legend carries identity
+  });
+  // CDF on a log axis: x holds log10(ms)
+  const lx0 = -1, lx1 = Math.max(1, Math.ceil(Math.log10(Math.max(...p.series.map(s => s.latCdf[s.latCdf.length - 1] || 1)))));
+  const latCdf = p.series.map(s => {
+    const n = s.latCdf.length;
+    return {...s, xs: s.latCdf.map(v => Math.max(lx0, Math.log10(v))), ys: s.latCdf.map((_, i) => i / (n - 1) * 100),
+            sortedLog: s.latCdf.map(v => Math.log10(v))};
+  });
+  const fracLog = (s, xv) => { let lo = 0, hi = s.sortedLog.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (s.sortedLog[m] <= xv) lo = m + 1; else hi = m; }
+    return lo / s.sortedLog.length * 100; };
+  const ticks = []; for (let e = lx0; e <= lx1; e++) ticks.push(e);
+  lineChart(lcharts, {
+    title: "Share of requests at or below each latency",
+    series: latCdf, x0: lx0, x1: lx1, y0: 0, y1: 100, xTicks: ticks,
+    xLabel: "ms (log scale)", yLabel: "% of requests",
+    xFmt: v => String(+Math.pow(10, v).toPrecision(1)), xFmtLong: v => "≤ " + (+Math.pow(10, v).toPrecision(2)) + " ms",
+    yFmt: v => v + "%", yFmtLong: v => v.toFixed(1) + "% of requests",
+    snap: v => Math.round(v * 20) / 20, valueAt: fracLog,
+  });
+  const lt = document.createElement("table"); sec.appendChild(lt);
+  const lh = lt.insertRow();
+  for (const h of ["configuration", "requests", "insert (s)", "idle CPU (s)", "p50 (ms)", "p99 (ms)", "p99.9 (ms)",
+                   "max (ms)", "longest mesh pass (ms)"]) {
+    const th = document.createElement("th"); th.textContent = h; lh.appendChild(th);
+  }
+  for (const r of p.rows) {
+    const tr = lt.insertRow();
+    const c0 = tr.insertCell();
+    const k = document.createElement("i"); k.className = "key"; k.style.background = color(r.slot); c0.appendChild(k);
+    c0.appendChild(document.createTextNode(r.name));
+    tr.insertCell().textContent = r.requests;
+    tr.insertCell().textContent = r.insert.toFixed(2);
+    tr.insertCell().textContent = r.idle_cpu.toFixed(2);
+    for (const f of ["lat_p50", "lat_p99", "lat_p999", "lat_max"]) tr.insertCell().textContent = r[f].toFixed(2);
+    tr.insertCell().textContent = r.pass_max ? r.pass_max.toFixed(1) : "—";
+  }
   div("note", sec, "MiB of cgroup memory (mstat). Means, median and p90 are over time from the start of " +
       `insertion, pooled across trials ("first ${PAPER_WINDOW} s" is the paper's measurement window); ` +
       "peak and final are medians across trials.");
@@ -383,6 +463,7 @@ def main():
     page = (PAGE.replace("__TITLE__", html.escape(a.title))
             .replace("__SUBTITLE__", html.escape("; ".join(notes)))
             .replace("__PAPER__", str(PAPER_WINDOW_S))
+            .replace("__LATB__", str(LAT_BUCKET_S))
             .replace("__DATA__", json.dumps(panels).replace("</", "<\\/")))
     with open(a.output, "w") as f:
         f.write(page)
@@ -391,7 +472,9 @@ def main():
         print(f"  {p['server']} {p['state']}:")
         for r in p["rows"]:
             print(f"    {r['name']:26s} mean@{PAPER_WINDOW_S:g}s {r['mean_paper']:6.1f}  mean {r['mean']:6.1f}  p50 {r['p50']:6.1f}  p90 {r['p90']:6.1f}  "
-                  f"peak {r['peak']:6.1f}  final {r['final']:6.1f}  (n={r['trials']})")
+                  f"peak {r['peak']:6.1f}  final {r['final']:6.1f}  (n={r['trials']})  |  latency p50 "
+                  f"{r['lat_p50']:.2f} p99 {r['lat_p99']:.2f} p99.9 {r['lat_p999']:.2f} max {r['lat_max']:.1f} ms  "
+                  f"idle CPU {r['idle_cpu']:.2f} s")
 
 
 if __name__ == "__main__":
