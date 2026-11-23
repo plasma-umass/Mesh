@@ -136,6 +136,17 @@ Plain jemalloc, which neither meshes nor moves objects, ends at 215 MiB. In
 the high-key state Mesh runs out of meshable pairs (see above) and the gap is
 larger for the same reason.
 
+## Hardware counters
+
+`--perf` attaches `perf stat` to each server from the start of insertion to
+the end of the window and stores the counts in the JSON (`perf`). With no
+argument it counts `dTLB-load-misses,dTLB-store-misses,cycles,instructions`;
+pass a comma-separated list to choose others. On Intel,
+`dtlb_load_misses.walk_active,dtlb_store_misses.walk_active` add the cycles
+spent walking page tables. It needs `perf` and a PMU: EC2 exposes one on
+metal and whole-socket instances, not on t3. Results for THP mode are in
+`docs/thp.md`.
+
 ## Measuring memory
 
 With `--mstat`, each server runs under [mstat](https://github.com/bpowers/mstat),

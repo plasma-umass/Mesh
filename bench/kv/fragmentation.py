@@ -51,6 +51,7 @@ import json
 import os
 import random
 import re
+import signal
 import socket
 import statistics
 import subprocess
@@ -334,6 +335,22 @@ def read_mstat_tsv(path):
     return out
 
 
+# Generic events, valid on any CPU with a PMU.  On Intel, add
+# dtlb_load_misses.walk_active,dtlb_store_misses.walk_active for cycles spent walking page tables.
+PERF_EVENTS = "dTLB-load-misses,dTLB-store-misses,cycles,instructions"
+
+
+def read_perf_csv(path):
+    """{event: count} from perf stat -x , output (unsupported/uncounted events omitted)."""
+    out = {}
+    with open(path) as f:
+        for line in f:
+            parts = line.strip().split(",")
+            if len(parts) >= 3 and parts[0].replace(".", "").isdigit():
+                out[parts[2]] = int(float(parts[0]))
+    return out
+
+
 def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
     jemalloc = config.startswith("jemalloc")
     binary = os.path.join(a.bin, f"{server_name}-server-{'jemalloc' if jemalloc else 'libc'}")
@@ -376,9 +393,14 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
 
     th = threading.Thread(target=sampler, daemon=True)
     probe = None
+    perf, counters = None, {}
     try:
         srv.cli("CONFIG", "SET", "maxmemory", "100mb")
         srv.cli("CONFIG", "SET", "maxmemory-policy", a.policy)
+        if a.perf:  # hardware counters for the server, insertion through the end of the window
+            perf_out = os.path.join(logdir, f"{tag}.perf.csv")
+            perf = subprocess.Popen(["perf", "stat", "-x", ",", "-e", a.perf, "-p", str(pid), "-o", perf_out])
+            time.sleep(0.5)  # let perf attach
         t0 = time.time()
         th.start()
         srv.cli("DEBUG", "POPULATE", *map(str, FIRST))
@@ -403,6 +425,10 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         stats = srv.info("stats")
         keys = int(srv.cli("DBSIZE"))
         pmd_mib = pmd_mapped_mib(pid)
+        if perf:
+            perf.send_signal(signal.SIGINT)
+            perf.wait(timeout=30)
+            counters = read_perf_csv(perf_out)
     finally:
         if probe and not probe.stop.is_set():
             probe.stop.set()
@@ -471,6 +497,7 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         "barrier": barrier,
         # memory the kernel maps with 2 MiB pages (THP), at the end of the window
         "pmd_mapped_mib": pmd_mib,
+        "perf": counters,
         "arena_vmas": arena_vmas,
         "meshed_mb_hwm": meshed_mb_hwm,
         "mesh_passes": passes,
@@ -572,6 +599,9 @@ def main():
                     help="seconds to wait between the two batches (> 1 makes eviction deterministic)")
     ap.add_argument("--no-cgroup", action="store_true", help="measure PSS instead of cgroup memory")
     ap.add_argument("--mstat", help="path to mstat (github.com/bpowers/mstat); run each server under it")
+    ap.add_argument("--perf", metavar="EVENTS", nargs="?", const=PERF_EVENTS,
+                    help="count perf events (comma-separated; default: TLB misses, cycles, instructions) for "
+                         "each server, from insertion to the end of the window; needs perf and hardware counters")
     ap.add_argument("--json", help="write per-trial results (with memory time series) here")
     ap.add_argument("--check", action="store_true", help="fail unless meshing happened and helped")
     ap.add_argument("--min-reduction", type=float, default=0.15,
@@ -605,7 +635,9 @@ def main():
                   f"insert {r['insert_s']:.2f}s  idle CPU {r['idle_cpu_s']:.2f}s  "
                   f"probe p99 {r['probe_p99_ms']:.2f} max {r['probe_max_ms']:.1f} ms  "
                   f"meshes {r['mesh_count']}  keys {r['keys']}  arena VMAs {r['arena_vmas']}" +
-                  (f"  barrier {r['barrier']}" if r["barrier"] else ""),
+                  (f"  barrier {r['barrier']}" if r["barrier"] else "") +
+                  (f"  dTLB load misses {r['perf']['dTLB-load-misses'] / 1e6:.2f}M"
+                   if "dTLB-load-misses" in r["perf"] else ""),
                   flush=True)
             results.append(r)
 
