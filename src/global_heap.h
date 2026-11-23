@@ -85,6 +85,8 @@ public:
   atomic_size_t meshPassCount;
   atomic_size_t meshPassTotalNs;
   atomic_size_t meshPassMaxNs;
+  // passes that deferred meshing because the heap was shrinking
+  atomic_size_t meshPassDeferred;
 };
 
 template <size_t PageSize>
@@ -765,6 +767,10 @@ private:
                              SplitArray<PageSize> &right, PassBudget &budget);
 
   uint64_t _passBudgetNs{0};
+  // heap-shrinking detection (see kShrinkingDivisor)
+  size_t _mhFreeCountAtLastPass{0};
+  bool _deferringMesh{false};
+  time::time_point _deferringSince{};
   // size class the next pass starts from: a pass cut short by its budget
   // resumes where it stopped, so every class gets meshed
   size_t _nextMeshSizeClass{0};

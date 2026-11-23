@@ -292,6 +292,9 @@ int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp,
   } else if (strcmp(name, "mesh.pass_max_ns") == 0) {
     // longest mesh pass: the longest pause meshing imposes on allocating threads
     *statp = _stats.meshPassMaxNs;
+  } else if (strcmp(name, "mesh.pass_deferred") == 0) {
+    // passes that deferred meshing because the heap was shrinking
+    *statp = _stats.meshPassDeferred;
   } else if (strcmp(name, "mesh.vma_count") == 0) {
     // kernel mappings the arena occupies (upper bound)
     *statp = Super::arenaVmaCount();
@@ -529,6 +532,26 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
     return;
   }
 
+  // Defer meshing while the heap is shrinking.  (Counts every miniheap freed
+  // since the last pass, by frees or by this pass's flush above.)
+  {
+    const size_t freed = _stats.mhFreeCount - _mhFreeCountAtLastPass;
+    _mhFreeCountAtLastPass = _stats.mhFreeCount;
+    const bool shrinking = freed >= std::max(kShrinkingMinFrees, _stats.mhAllocCount / kShrinkingDivisor);
+    const auto now = time::now();
+    if (shrinking) {
+      if (!_deferringMesh) {
+        _deferringMesh = true;
+        _deferringSince = now;
+      }
+      if (now - _deferringSince < kMaxMeshDeferral) {
+        _stats.meshPassDeferred.fetch_add(1, std::memory_order_relaxed);
+        return;  // _lastMeshEffective stays set: try again next period
+      }
+    }
+    _deferringMesh = false;
+  }
+
   lock_guard<EpochLock> epochLock(_meshEpoch);
 
   Super::beginMeshPass();
@@ -574,8 +597,9 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   const auto meshedPageHWM = this->meshedPageHighWaterMark();
 
   debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
-  debug("Mesh passes:        %zu (total %.1f ms, max %.2f ms)\n", (size_t)_stats.meshPassCount,
-        _stats.meshPassTotalNs / 1e6, _stats.meshPassMaxNs / 1e6);
+  debug("Mesh passes:        %zu (total %.1f ms, max %.2f ms, %zu deferred: heap shrinking)\n",
+        (size_t)_stats.meshPassCount, _stats.meshPassTotalNs / 1e6, _stats.meshPassMaxNs / 1e6,
+        (size_t)_stats.meshPassDeferred);
   if (Super::arenaVmaLimit() != 0) {
     debug("Arena VMAs:         %zu (limit %zu of vm.max_map_count %zu)\n", Super::arenaVmaCount(),
           Super::arenaVmaLimit(), Super::maxMapCount());

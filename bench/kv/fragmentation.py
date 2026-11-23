@@ -394,7 +394,7 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
     barrier = m.group(1) if m else None
     m = re.search(r"Meshed MB HWM:\s+([\d.]+)", log)
     meshed_mb_hwm = float(m.group(1)) if m else None
-    m = re.search(r"Mesh passes:\s+(\d+) \(total ([\d.]+) ms, max ([\d.]+) ms\)", log)
+    m = re.search(r"Mesh passes:\s+(\d+) \(total ([\d.]+) ms, max ([\d.]+) ms", log)
     passes, pass_total_ms, pass_max_ms = (int(m.group(1)), float(m.group(2)), float(m.group(3))) if m else (
         None, None, None)
 

@@ -164,6 +164,16 @@ static constexpr std::chrono::milliseconds kMeshPassBudget{10};
 static constexpr std::chrono::milliseconds kScavengeBudget{5};
 static constexpr std::chrono::milliseconds kFreeScavengeInterval{10};
 
+// Don't spend the mesh cap while the heap is still shrinking: a pass defers
+// meshing if at least max(kShrinkingMinFrees, live / kShrinkingDivisor)
+// miniheaps were freed since the previous pass (e.g. an application evicting
+// a cache).  Spans meshed mid-eviction keep emptying and end up sparse while
+// still holding their share of the cap.  After kMaxMeshDeferral of deferring,
+// mesh anyway so steady churn cannot starve meshing.
+static constexpr size_t kShrinkingMinFrees = 64;
+static constexpr size_t kShrinkingDivisor = 128;
+static constexpr std::chrono::milliseconds kMaxMeshDeferral{5000};
+
 static constexpr size_t kDefaultMaxMeshCount = 30000;
 static constexpr size_t kMaxMeshesPerIteration = 2500;
 
