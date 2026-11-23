@@ -30,9 +30,13 @@ void Runtime<PageSize>::initMaxMapCount() {
   return;
 #endif
 
+  // the kernel default, if we cannot read the actual value
+  static constexpr int64_t kDefaultMaxMapCount = 65530;
+
   auto fd = open("/proc/sys/vm/max_map_count", O_RDONLY | O_CLOEXEC);
   if (unlikely(fd < 0)) {
     mesh::debug("initMaxMapCount: no proc file");
+    _heap.setMaxMapCount(kDefaultMaxMapCount);
     return;
   }
 
@@ -45,19 +49,12 @@ void Runtime<PageSize>::initMaxMapCount() {
 
   errno = 0;
   int64_t mapCount = strtoll(buf, nullptr, 10);
-  if (errno != 0) {
-    mesh::debug("strtoll: %s (%s)", strerror(errno), buf);
-    return;
+  if (errno != 0 || mapCount <= 0) {
+    mesh::debug("initMaxMapCount: unexpected max_map_count '%s'", buf);
+    mapCount = kDefaultMaxMapCount;
   }
 
-  if (mapCount <= 0) {
-    mesh::debug("expected positive mapCount, not %ll", mapCount);
-    return;
-  }
-
-  const auto meshCount = static_cast<size_t>(kMeshesPerMap * mapCount);
-
-  _heap.setMaxMeshCount(meshCount);
+  _heap.setMaxMapCount(static_cast<size_t>(mapCount));
 }
 
 template <size_t PageSize>

@@ -501,6 +501,8 @@ def main():
     ap.add_argument("--check", action="store_true", help="fail unless meshing happened and helped")
     ap.add_argument("--min-reduction", type=float, default=0.15,
                     help="with --check: required median final-memory reduction of mesh vs mesh-nomesh")
+    ap.add_argument("--max-pass-ms", type=float, default=None,
+                    help="with --check: also require Mesh's median longest mesh pass to be at most this")
     a = ap.parse_args()
     a.libmesh = os.path.realpath(a.libmesh)
     logdir = tempfile.mkdtemp(prefix="kv-frag-")
@@ -508,7 +510,12 @@ def main():
     mstat = os.path.realpath(a.mstat) if a.mstat else None
     metric = ("mstat: cgroup memory + hugetlb" if mstat else
               "cgroup memory.current + hugetlb" if use_cgroup else "PSS (no usable cgroup v2)")
-    print(f"measuring {metric}; {a.trials} trials, {a.settle:g} s idle window", flush=True)
+    try:
+        max_map_count = open("/proc/sys/vm/max_map_count").read().strip()
+    except OSError:
+        max_map_count = "?"
+    print(f"measuring {metric}; {a.trials} trials, {a.settle:g} s idle window; "
+          f"vm.max_map_count={max_map_count}", flush=True)
 
     servers, configs = a.servers.split(","), a.configs.split(",")
     order = [(s, c) for s in servers for c in configs]
@@ -529,7 +536,8 @@ def main():
     out = tables(agg, order, metric, a.trials, a.settle)
     versions = os.path.join(a.bin, "VERSIONS")
     if os.path.exists(versions):
-        out = "Versions: " + ", ".join(open(versions).read().split("\n")).strip(", ") + "\n\n" + out
+        out = ("Versions: " + ", ".join(open(versions).read().split("\n")).strip(", ") +
+               f"; vm.max_map_count={max_map_count}\n\n" + out)
     print("\n" + out)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
@@ -551,6 +559,11 @@ def main():
             continue
         reduction = 1 - mesh["mem_final_mib"] / nomesh["mem_final_mib"]
         passed = mesh["mesh_count_min"] > 0 and reduction >= a.min_reduction and mesh["keys"] > 0
+        if a.max_pass_ms is not None:
+            pass_ok = (mesh["mesh_pass_max_ms"] or 0) <= a.max_pass_ms
+            print(f"CHECK {server}: {'PASS' if pass_ok else 'FAIL'}: median longest mesh pass "
+                  f"{mesh['mesh_pass_max_ms']} ms (need <= {a.max_pass_ms:g})")
+            passed &= pass_ok
         ok &= passed
         print(f"CHECK {server}: {'PASS' if passed else 'FAIL'}: meshes in every trial "
               f"(min {mesh['mesh_count_min']}), median final {mesh['mem_final_mib']} vs "

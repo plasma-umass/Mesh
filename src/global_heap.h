@@ -133,6 +133,13 @@ public:
   };
 
   GlobalHeap() : Super(), _maxObjectSize(SizeMap::ByteSizeForClass(kNumBins - 1)), _lastMesh{time::now()} {
+    auto budgetNs = [](const char *env, std::chrono::milliseconds dflt) -> uint64_t {
+      const char *s = getenv(env);
+      const auto ms = s ? std::chrono::milliseconds{strtoull(s, nullptr, 10)} : dflt;
+      return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(ms).count());
+    };
+    _passBudgetNs = budgetNs("MESH_PASS_BUDGET_MS", kMeshPassBudget);
+    Super::setScavengeBudgetNs(budgetNs("MESH_SCAVENGE_BUDGET_MS", kScavengeBudget));
   }
 
   inline void dumpStrings() const {
@@ -737,9 +744,30 @@ public:
 private:
   // check for meshes in all size classes -- must be called LOCKED
   void meshAllSizeClassesLocked();
-  // meshSizeClassLocked returns the number of merged sets found
+  // Bounds one mesh pass, and so the pause it imposes on every thread that
+  // allocates or frees: no new mesh (or size class) once the deadline passes.
+  struct PassBudget {
+    uint64_t deadlineNs{0};  // 0 = unbounded
+    bool exhausted{false};
+    bool allows() {
+      if (!exhausted && deadlineNs != 0 &&
+          static_cast<uint64_t>(
+              std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                  .count()) >= deadlineNs) {
+        exhausted = true;
+      }
+      return !exhausted;
+    }
+  };
+
+  // meshSizeClassLocked returns the number of meshes performed
   size_t meshSizeClassLocked(size_t sizeClass, MergeSetArray<PageSize> &mergeSets, SplitArray<PageSize> &left,
-                             SplitArray<PageSize> &right);
+                             SplitArray<PageSize> &right, PassBudget &budget);
+
+  uint64_t _passBudgetNs{0};
+  // size class the next pass starts from: a pass cut short by its budget
+  // resumes where it stopped, so every class gets meshed
+  size_t _nextMeshSizeClass{0};
 
   const size_t _maxObjectSize;
   MeshHookFn _meshHookForTesting{nullptr};
