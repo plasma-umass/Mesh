@@ -110,14 +110,25 @@ jobs:
       run: bench/kv/build-servers.sh
     - name: Fragmentation benchmark
       run: |
+        # the common distro default (Ubuntu 24.04 raised it 16x): exercises
+        # the mesh cap and keeps results independent of the runner image
+        sudo sysctl -w vm.max_map_count=65530
+        # --populate-gap: deterministic eviction outcome (see bench/kv/README.md)
         sudo --preserve-env=GITHUB_STEP_SUMMARY python3 bench/kv/fragmentation.py \
           --libmesh build/lib/libmesh.so --mstat bin/mstat --trials 3 --settle 15 \
-          --json kv-fragmentation.json --check
+          --populate-gap 1.5 --json kv-fragmentation.json --check --max-pass-ms 60
+    - name: Fragmentation benchmark, high-key eviction state (report only)
+      run: |
+        # random eviction leaves a more fragmented heap; Mesh needs ~40 s to converge
+        sudo --preserve-env=GITHUB_STEP_SUMMARY python3 bench/kv/fragmentation.py \
+          --libmesh build/lib/libmesh.so --mstat bin/mstat --trials 1 --settle 45 \
+          --policy allkeys-random --configs mesh-nomesh,mesh,jemalloc+activedefrag \
+          --json kv-fragmentation-high-key.json
     - uses: actions/upload-artifact@v4
       if: always()
       with:
         name: kv-fragmentation
-        path: kv-fragmentation.json
+        path: kv-fragmentation*.json
 
   Ubuntu_bazel:
     runs-on: ubuntu-latest

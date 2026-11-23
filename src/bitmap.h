@@ -514,6 +514,10 @@ public:
   }
 
   size_t lowestSetBitAt(uint64_t startingAt) const {
+    // e.g. begin() on an empty bitmap
+    if (unlikely(startingAt >= bitCount())) {
+      return bitCount();
+    }
     uint32_t startWord, startOff;
     computeItemPosition(startingAt, startWord, startOff);
 

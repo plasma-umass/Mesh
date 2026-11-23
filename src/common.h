@@ -147,7 +147,30 @@ inline constexpr bool isBelowPartialThreshold(uint32_t inUseCount, uint32_t maxC
 // hitting the max_map_count limit. Must smaller than 1/3, because
 // when meshing, in the worst case, 1 map would become 3. (A high
 // load server can easily trigger this worst case)
-static constexpr double kMeshesPerMap = .33;
+// The mesh cap.  On Linux it tracks the arena's actual VMA count against
+// vm.max_map_count (MeshableArena::meshWouldExceedMapLimit), keeping
+// max(kMinMapCountReserve, max_map_count / kMapCountReserveDivisor) mappings
+// in reserve for the rest of the process.  Elsewhere, at most
+// kDefaultMaxMeshCount pages may be meshed.
+static constexpr size_t kMinMapCountReserve = 1024;
+static constexpr size_t kMapCountReserveDivisor = 8;
+
+// Mesh pacing: each pass stops starting new meshes after kMeshPassBudget,
+// resuming from the same size class next pass, and each scavenge releases
+// memory for at most kScavengeBudget (MESH_PASS_BUDGET_MS and
+// MESH_SCAVENGE_BUDGET_MS override; 0 = unbounded).  Scavenges triggered by
+// frees run at most once per kFreeScavengeInterval.
+static constexpr std::chrono::milliseconds kMeshPassBudget{10};
+static constexpr std::chrono::milliseconds kScavengeBudget{5};
+static constexpr std::chrono::milliseconds kFreeScavengeInterval{10};
+
+// Only mesh spans that have settled: a pair is meshed only if both spans'
+// occupancy is unchanged since the previous pass looked at them.  Spans that
+// are still emptying (e.g. while an application evicts a cache) would keep
+// emptying after meshing and end up sparse while still holding their share
+// of the mesh cap.  If a size class has had only unsettled pairs for
+// kMaxMeshDeferral, mesh them anyway so constant churn cannot starve meshing.
+static constexpr std::chrono::milliseconds kMaxMeshDeferral{5000};
 
 static constexpr size_t kDefaultMaxMeshCount = 30000;
 static constexpr size_t kMaxMeshesPerIteration = 2500;

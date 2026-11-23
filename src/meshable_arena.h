@@ -74,9 +74,9 @@ namespace mesh {
 namespace internal {
 template <size_t PageSize>
 constexpr off_t pageOffsetToFileOffset(Offset pageOffset) {
-  static_assert(static_cast<uint64_t>(kArenaSize - PageSize) <=
-                    static_cast<uint64_t>(std::numeric_limits<off_t>::max()),
-                "off_t cannot represent Mesh arena offsets");
+  static_assert(
+      static_cast<uint64_t>(kArenaSize - PageSize) <= static_cast<uint64_t>(std::numeric_limits<off_t>::max()),
+      "off_t cannot represent Mesh arena offsets");
   return static_cast<off_t>(pageOffset) * static_cast<off_t>(PageSize);
 }
 }  // namespace internal
@@ -216,17 +216,66 @@ public:
     _barrier.noteSignalStall();
   }
 
-  inline bool aboveMeshThreshold() const {
-    return _meshedPageCount > _maxMeshCount;
+  // The mesh cap.  Every remapped (meshed) span is its own kernel mapping
+  // (VMA) unless it happens to continue its neighbor's file offsets, and
+  // exceeding vm.max_map_count makes mmap fail.  On Linux we track the
+  // arena's VMA count (see retrackVmaBoundaries) and allow a mesh of a chain
+  // of `spans` virtual spans only if, in the worst case -- each armed span
+  // split off by the write barrier, then remapped -- the process stays under
+  // the limit, minus a reserve for the application's own mappings.
+  // Elsewhere (no max_map_count), fall back to a cap on meshed pages.
+  inline bool meshWouldExceedMapLimit(size_t spans) const {
+    if (_maxMapCount == 0) {
+      return _meshedPageCount > _maxMeshCount;
+    }
+    return arenaVmaCount() + 2 * spans + _mapCountReserve > _maxMapCount;
   }
 
+  inline bool aboveMeshThreshold() const {
+    return meshWouldExceedMapLimit(1);
+  }
+
+  // Linux: the process's vm.max_map_count
+  inline void setMaxMapCount(size_t maxMapCount) {
+    _maxMapCount = maxMapCount;
+    _mapCountReserve = std::max<size_t>(kMinMapCountReserve, maxMapCount / kMapCountReserveDivisor);
+  }
+
+  inline size_t maxMapCount() const {
+    return _maxMapCount;
+  }
+
+  // the most VMAs meshing may use (0 if not tracking VMAs)
+  inline size_t arenaVmaLimit() const {
+    return _maxMapCount > _mapCountReserve ? _maxMapCount - _mapCountReserve : 0;
+  }
+
+  // kernel mappings the arena currently occupies (an upper bound; exact
+  // whenever every remapped neighbor's owner is known)
+  inline size_t arenaVmaCount() const {
+    return 1 + _vmaBoundaryCount;
+  }
+
+  // non-Linux fallback cap, in meshed pages
   inline void setMaxMeshCount(size_t maxMeshCount) {
-    // debug("setting max map count: %zu", maxMeshCount);
     _maxMeshCount = maxMeshCount;
   }
 
-  inline size_t maxMeshCount() const {
-    return _maxMeshCount;
+  // Bound the time scavenge()/partialScavenge() spend releasing memory
+  // (0 = unbounded).  Unfinished work stays queued for the next call.
+  inline void setScavengeBudgetNs(uint64_t ns) {
+    _scavengeBudgetNs = ns;
+  }
+
+  // While a mesh pass runs it scavenges on its own schedule; frees during
+  // the pass must not trigger extra (unbudgeted-in-aggregate) scavenges.
+  inline void setInMeshPass(bool inPass) {
+    _inMeshPass = inPass;
+  }
+
+  // pages freed but not yet released to the OS
+  inline size_t dirtyPageCount() const {
+    return _dirtyPageCount;
   }
 
   // protected:
@@ -305,12 +354,18 @@ private:
 
       const size_t maxDirtyPageThreshold = (kMaxDirtyPageThreshold * kPageSize4K) / PageSize;
 
-      if (_dirtyPageCount > maxDirtyPageThreshold) {
-        // do a full scavenge with a probability 1/10
-        if (_fastPrng.inRange(0, 9) == 9) {
-          scavenge(true);
-        } else {
-          partialScavenge();
+      // (a mesh pass scavenges on its own; and since scavenges are time
+      // budgeted, don't let a run of frees chain them back to back)
+      if (_dirtyPageCount > maxDirtyPageThreshold && !_inMeshPass) {
+        const auto now = time::now();
+        if (now - _lastFreeScavenge >= kFreeScavengeInterval) {
+          _lastFreeScavenge = now;
+          // do a full scavenge with a probability 1/10
+          if (_fastPrng.inRange(0, 9) == 9) {
+            scavenge(true);
+          } else {
+            partialScavenge();
+          }
         }
       }
     } else if (flags == internal::PageType::Meshed) {
@@ -355,7 +410,6 @@ public:
   static void staticAfterForkChild();
 
 private:
-
   void exit() {
     // FIXME: do this from the destructor, and test that destructor is
     // called.  Also don't leak _spanDir
@@ -385,6 +439,85 @@ private:
     auto sz = static_cast<size_t>(span.length) << kPageShift;
     mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
          internal::pageOffsetToFileOffset<PageSize>(span.offset));
+    retrackVmaBoundaries(span.offset, span.length, span.offset);
+  }
+
+  // --- VMA tracking ---------------------------------------------------
+  //
+  // The arena is one MAP_SHARED mapping of the memfd; the kernel splits it
+  // into a new VMA wherever consecutive virtual pages stop mapping
+  // consecutive file pages (and merges VMAs again when they line up).  We
+  // keep one bit per arena page: set if a VMA starts there.  Arena VMAs =
+  // 1 + boundaries.
+  //
+  // A span is always mapped as a unit onto consecutive file pages, so when
+  // span [a, a+n) is (re)mapped only the boundaries at a and a+n can change.
+  // Page a-1 is the *last* page of whatever span precedes ours and a+n the
+  // *first* page of the next, so their file pages follow from their owning
+  // miniheap's physical span.  If a neighbor is meshed but its owner is gone
+  // (freed, waiting in _toReset), count a boundary: the estimate may run
+  // high until that span is reset, never low.
+
+  // file page mapped at arena page `page`, which is the last (isLast) or
+  // first page of its span; false if unknown
+  bool neighborFilePage(size_t page, bool isLast, size_t &filePage) const {
+    if (!_meshedBitmap.isSet(page)) {
+      filePage = page;  // identity
+      return true;
+    }
+    auto mh = reinterpret_cast<const MiniHeap<PageSize> *>(miniheapForArenaOffset(page));
+    if (mh == nullptr) {
+      return false;
+    }
+    const Span phys = mh->span();
+    filePage = phys.offset + (isLast ? phys.length - 1 : 0);
+    return true;
+  }
+
+  inline void setVmaBoundary(size_t page, bool boundary) {
+    if (boundary) {
+      if (!_vmaBoundaries.isSet(page)) {
+        _vmaBoundaries.tryToSet(page);
+        _vmaBoundaryCount++;
+      }
+    } else if (_vmaBoundaries.isSet(page)) {
+      _vmaBoundaries.unset(page);
+      _vmaBoundaryCount--;
+    }
+  }
+
+  // span [start, start+length) now maps file pages [filePage, filePage+length)
+  void retrackVmaBoundaries(size_t start, size_t length, size_t filePage) {
+    constexpr size_t arenaPages = kArenaSize / PageSize;
+    for (size_t i = 1; i < length; i++) {
+      setVmaBoundary(start + i, false);
+    }
+    size_t neighbor = 0;
+    if (start > 0) {
+      const bool known = neighborFilePage(start - 1, true, neighbor);
+      setVmaBoundary(start, !known || neighbor + 1 != filePage);
+    }
+    const size_t end = start + length;
+    if (end < arenaPages) {
+      const bool known = neighborFilePage(end, false, neighbor);
+      setVmaBoundary(end, !known || neighbor != filePage + length);
+    }
+  }
+
+  inline bool pastDeadline(uint64_t deadlineNs) const {
+    return deadlineNs != 0 && static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                        std::chrono::steady_clock::now().time_since_epoch())
+                                                        .count()) >= deadlineNs;
+  }
+
+  inline uint64_t scavengeDeadlineNs() const {
+    if (_scavengeBudgetNs == 0) {
+      return 0;
+    }
+    return static_cast<uint64_t>(
+               std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                   .count()) +
+           _scavengeBudgetNs;
   }
 
   void prepareForFork();
@@ -417,6 +550,18 @@ private:
   size_t _meshedPageCountHWM{0};
   size_t _rssKbAtHWM{0};
   size_t _maxMeshCount{kDefaultMaxMeshCount};
+
+  // VMA tracking (see retrackVmaBoundaries) and the map-count cap
+  internal::RelaxedBitmap _vmaBoundaries{
+      kArenaSize / PageSize,
+      reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / PageSize))), false};
+  size_t _vmaBoundaryCount{0};
+  size_t _maxMapCount{0};  // 0: not on Linux / unknown -> page-based cap
+  size_t _mapCountReserve{0};
+
+  uint64_t _scavengeBudgetNs{0};
+  bool _inMeshPass{false};
+  time::time_point _lastFreeScavenge{};
 
   int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
@@ -702,19 +847,30 @@ void MeshableArena<PageSize>::free(void *ptr, size_t sz, internal::PageType type
 
 template <size_t PageSize>
 void MeshableArena<PageSize>::partialScavenge() {
-  forEachFree(_dirty, [&](const Span &span) {
-    auto ptr = ptrFromOffset(span.offset);
-    auto sz = span.byteLength();
-    madvise(ptr, sz, MADV_DONTNEED);
-    freePhys(ptr, sz);
-    _clean[span.spanClass()].push_back(span);
-  });
-
+  // release dirty spans until the scavenge budget runs out; the rest stay
+  // dirty for the next call
+  const uint64_t deadline = scavengeDeadlineNs();
+  size_t keptPages = 0;
   for (size_t i = 0; i < kSpanClassCount; i++) {
-    _dirty[i] = internal::vector<Span>{};
+    internal::vector<Span> kept{};
+    for (size_t j = 0; j < _dirty[i].size(); j++) {
+      const Span span = _dirty[i][j];
+      // once over budget keep everything else; check the clock every 16 spans
+      if (keptPages != 0 || ((j & 15) == 0 && pastDeadline(deadline))) {
+        kept.push_back(span);
+        keptPages += span.length;
+        continue;
+      }
+      auto ptr = ptrFromOffset(span.offset);
+      auto sz = span.byteLength();
+      madvise(ptr, sz, MADV_DONTNEED);
+      freePhys(ptr, sz);
+      _clean[span.spanClass()].push_back(span);
+    }
+    _dirty[i] = std::move(kept);
   }
 
-  _dirtyPageCount = 0;
+  _dirtyPageCount = keptPages;
 }
 
 template <size_t PageSize>
@@ -739,32 +895,49 @@ void MeshableArena<PageSize>::scavenge(bool force) {
     }
   };
 
-  std::for_each(_toReset.begin(), _toReset.end(), [&](Span span) {
+  // Bounded by the scavenge budget (as is releasing dirty spans below).
+  // Spans left in _toReset or _dirty are treated as allocated by the bitmap
+  // above, so they stay off the clean lists until a later scavenge.
+  const uint64_t deadline = scavengeDeadlineNs();
+
+  internal::vector<Span> notReset{};
+  for (size_t j = 0; j < _toReset.size(); j++) {
+    const Span span = _toReset[j];
+    if (!notReset.empty() || ((j & 15) == 0 && pastDeadline(deadline))) {
+      notReset.push_back(span);
+      continue;
+    }
     untrackMeshed(span);
     markPages(span);
     resetSpanMapping(span);
-  });
-
-  _toReset = internal::vector<Span>{};
+  }
+  _toReset = std::move(notReset);
 
   _meshedPageCount = _meshedBitmap.inUseCount();
   if (_meshedPageCount > _meshedPageCountHWM) {
     _meshedPageCountHWM = _meshedPageCount;
   }
 
-  forEachFree(_dirty, [&](const Span &span) {
-    auto ptr = ptrFromOffset(span.offset);
-    auto sz = span.byteLength();
-    madvise(ptr, sz, MADV_DONTNEED);
-    freePhys(ptr, sz);
-    markPages(span);
-  });
-
+  size_t keptPages = 0;
   for (size_t i = 0; i < kSpanClassCount; i++) {
-    _dirty[i] = internal::vector<Span>{};
+    internal::vector<Span> kept{};
+    for (size_t j = 0; j < _dirty[i].size(); j++) {
+      const Span span = _dirty[i][j];
+      if (keptPages != 0 || ((j & 15) == 0 && pastDeadline(deadline))) {
+        kept.push_back(span);
+        keptPages += span.length;
+        continue;
+      }
+      auto ptr = ptrFromOffset(span.offset);
+      auto sz = span.byteLength();
+      madvise(ptr, sz, MADV_DONTNEED);
+      freePhys(ptr, sz);
+      markPages(span);
+    }
+    _dirty[i] = std::move(kept);
   }
 
-  _dirtyPageCount = 0;
+  _dirtyPageCount = keptPages;
 
   for (size_t i = 0; i < kSpanClassCount; i++) {
     _clean[i] = internal::vector<Span>{};
@@ -788,7 +961,9 @@ void MeshableArena<PageSize>::scavenge(bool force) {
     _clean[current.spanClass()].push_back(current);
   }
 #ifndef NDEBUG
-  auto newBitmap = allocatedBitmap();
+  // spans the budget left dirty are still off the clean lists, so compare
+  // with dirty spans counted as allocated -- as `bitmap` above treats them
+  auto newBitmap = allocatedBitmap(false);
   newBitmap.invert();
 
   const size_t *bits1 = bitmap.bits();
@@ -870,6 +1045,7 @@ void MeshableArena<PageSize>::finalizeMesh(void *keep, void *remove, size_t sz) 
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
                    internal::pageOffsetToFileOffset<PageSize>(keepOff));
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
+  retrackVmaBoundaries(removeOff, pageCount, keepOff);
 
   // writers blocked by beginMesh retry against the new mapping
   _barrier.commit(remove, sz);

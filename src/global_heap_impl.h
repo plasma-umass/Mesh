@@ -292,6 +292,15 @@ int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp,
   } else if (strcmp(name, "mesh.pass_max_ns") == 0) {
     // longest mesh pass: the longest pause meshing imposes on allocating threads
     *statp = _stats.meshPassMaxNs;
+  } else if (strcmp(name, "mesh.pairs_deferred") == 0) {
+    // meshable pairs skipped because a span's occupancy was still changing
+    *statp = _stats.meshPairsDeferred;
+  } else if (strcmp(name, "mesh.vma_count") == 0) {
+    // kernel mappings the arena occupies (upper bound)
+    *statp = Super::arenaVmaCount();
+  } else if (strcmp(name, "mesh.vma_limit") == 0) {
+    // the most the arena may occupy before meshing stops (0: page-based cap)
+    *statp = Super::arenaVmaLimit();
   } else if (strcmp(name, "mesh.barrier_stalls") == 0) {
     // writes that hit a span while it was being meshed
     *statp = Super::writeBarrier().stats().stalls;
@@ -371,7 +380,8 @@ void GlobalHeap<PageSize>::meshLocked(MiniHeapT *dst, MiniHeapT *&src) {
 
 template <size_t PageSize>
 size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray<PageSize> &mergeSets,
-                                                 SplitArray<PageSize> &left, SplitArray<PageSize> &right) {
+                                                 SplitArray<PageSize> &left, SplitArray<PageSize> &right,
+                                                 PassBudget &budget) {
   size_t mergeSetCount = 0;
   // memset(reinterpret_cast<void *>(&mergeSets), 0, sizeof(mergeSets));
   // memset(&left, 0, sizeof(left));
@@ -395,7 +405,11 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
 
   size_t meshCount = 0;
 
-  for (size_t i = 0; i < mergeSetCount; i++) {
+  // after kMaxMeshDeferral of only unsettled pairs, mesh them anyway
+  const bool starving = _unsettled[sizeClass] && time::now() - _unsettledSince[sizeClass] >= kMaxMeshDeferral;
+  size_t deferred = 0;
+
+  for (size_t i = 0; i < mergeSetCount && budget.allows(); i++) {
     std::pair<MiniHeapT *, MiniHeapT *> &mergeSet = mergeSets[i];
     MiniHeapT *dst = mergeSet.first;
     MiniHeapT *src = mergeSet.second;
@@ -427,10 +441,40 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
       oneEmpty = true;
     }
 
-    if (!oneEmpty && !this->aboveMeshThreshold()) {
+    if (oneEmpty) {
+      continue;
+    }
+
+    // still emptying (or new): mesh it once it settles
+    if (!starving && !(settled(dst) && settled(src))) {
+      deferred++;
+      continue;
+    }
+
+    // every span of src's chain gets remapped onto dst
+    if (!this->meshWouldExceedMapLimit(src->meshCount())) {
       meshLocked(dst, src);
       meshCount++;
     }
+  }
+
+  if (deferred > 0) {
+    _stats.meshPairsDeferred.fetch_add(deferred, std::memory_order_relaxed);
+  }
+  if (deferred > 0 && meshCount == 0) {
+    if (!_unsettled[sizeClass]) {
+      _unsettled[sizeClass] = true;
+      _unsettledSince[sizeClass] = time::now();
+    }
+  } else {
+    _unsettled[sizeClass] = false;
+  }
+
+  // remember every partial span's occupancy, for the next pass to compare
+  for (MiniHeapID id = _partialFreelist[sizeClass].first.next(); id != list::Head;) {
+    const auto mh = GetMiniHeap<MiniHeapT>(id);
+    _lastInUse[id.value()] = static_cast<uint16_t>(mh->inUseCount() + 1);
+    id = mh->getFreelist()->next();
   }
 
   // flush things once more (since we may have called postFree instead
@@ -488,9 +532,29 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
   d_assert((reinterpret_cast<uintptr_t>(&Left) & (getPageSize() - 1)) == 0);
   d_assert((reinterpret_cast<uintptr_t>(&Right) & (getPageSize() - 1)) == 0);
 
-  // if we have freed but not reset meshed mappings, this will reset
-  // them to the identity mapping, ensuring we don't blow past our VMA
-  // limit (which is why we set the force flag to true)
+  const uint64_t passStartNs = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+
+  // frees during the pass must not trigger scavenges of their own
+  Super::setInMeshPass(true);
+  struct PassEnd {
+    GlobalHeap &heap;
+    ~PassEnd() {
+      heap.Super::setInMeshPass(false);
+    }
+  } passEnd{*this};
+
+  // Free empty miniheaps first, on every pass -- including passes that will
+  // not mesh because meshing is ineffective or at the mesh cap.  (Returning
+  // before this used to strand empty spans once the cap was reached.)
+  for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
+    drainPendingPartialLocked(sizeClass);
+    flushBinLocked(sizeClass);
+  }
+
+  // release those pages, and reset freed meshed spans to the identity
+  // mapping, which also returns their VMAs under the cap
   Super::scavenge(true);
 
   if (!_lastMeshEffective.load(std::memory_order::memory_order_acquire)) {
@@ -505,19 +569,22 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
 
   Super::beginMeshPass();
 
-  // const auto start = time::now();
-
-  // first, drain pending partial lists and clear out any free memory we might have
-  for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
-    drainPendingPartialLocked(sizeClass);
-    flushBinLocked(sizeClass);
-  }
+  // Meshing stops once the pass budget runs out; the next pass resumes at
+  // the size class we stopped in.  Besides bounding the pause, pacing keeps
+  // a burst of meshing from spending the whole mesh cap on spans that are
+  // still emptying (e.g. while an application evicts a cache).
+  PassBudget budget;
+  budget.deadlineNs = _passBudgetNs ? passStartNs + _passBudgetNs : 0;
 
   size_t totalMeshCount = 0;
-
-  for (size_t sizeClass = 0; sizeClass < kNumBins; sizeClass++) {
-    totalMeshCount += meshSizeClassLocked(sizeClass, MergeSets, Left, Right);
+  const size_t deferredBefore = _stats.meshPairsDeferred.load(std::memory_order_relaxed);
+  const size_t first = _nextMeshSizeClass;
+  size_t visited = 0;
+  for (; visited < kNumBins && budget.allows(); visited++) {
+    totalMeshCount += meshSizeClassLocked((first + visited) % kNumBins, MergeSets, Left, Right, budget);
   }
+  // a class cut off mid-way is redone first
+  _nextMeshSizeClass = (first + (budget.exhausted && visited > 0 ? visited - 1 : visited)) % kNumBins;
 
   Super::endMeshPass();
 
@@ -525,13 +592,16 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
   madvise(&Right, sizeof(Right), MADV_DONTNEED);
   madvise(&MergeSets, sizeof(MergeSets), MADV_DONTNEED);
 
-  _lastMeshEffective = totalMeshCount > 256;
+  // a pass cut short by its budget, or that deferred unsettled pairs, left
+  // work behind: keep meshing.  (Otherwise passes stop until the next free --
+  // and once an application stops freeing, deferred pairs would never mesh.)
+  const bool deferredAny = _stats.meshPairsDeferred.load(std::memory_order_relaxed) != deferredBefore;
+  _lastMeshEffective = totalMeshCount > 256 || budget.exhausted || deferredAny;
   _stats.meshCount += totalMeshCount;
 
   Super::scavenge(true);
 
   _lastMesh.store(time::now(), std::memory_order_release);
-
 }
 
 template <size_t PageSize>
@@ -544,8 +614,13 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   const auto meshedPageHWM = this->meshedPageHighWaterMark();
 
   debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
-  debug("Mesh passes:        %zu (total %.1f ms, max %.2f ms)\n", (size_t)_stats.meshPassCount,
-        _stats.meshPassTotalNs / 1e6, _stats.meshPassMaxNs / 1e6);
+  debug("Mesh passes:        %zu (total %.1f ms, max %.2f ms; %zu pairs deferred until settled)\n",
+        (size_t)_stats.meshPassCount, _stats.meshPassTotalNs / 1e6, _stats.meshPassMaxNs / 1e6,
+        (size_t)_stats.meshPairsDeferred);
+  if (Super::arenaVmaLimit() != 0) {
+    debug("Arena VMAs:         %zu (limit %zu of vm.max_map_count %zu)\n", Super::arenaVmaCount(),
+          Super::arenaVmaLimit(), Super::maxMapCount());
+  }
   debug("Meshed MB (total):  %.1f\n", (size_t)_stats.meshCount * (double)PageSize / 1024.0 / 1024.0);
   debug("Meshed pages HWM:   %zu\n", meshedPageHWM);
   debug("Meshed MB HWM:      %.1f\n", meshedPageHWM * (double)PageSize / 1024.0 / 1024.0);

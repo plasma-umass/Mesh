@@ -26,6 +26,38 @@ sudo python3 bench/kv/fragmentation.py --libmesh build/lib/libmesh.so --mstat ~/
 
 `mesh-nomesh` keeps Mesh's allocator and randomization and only disables meshing.
 
+## Eviction is bimodal
+
+How many keys survive eviction varies from run to run. LRU timestamps have
+1-second resolution, so the outcome depends on whether the clock ticks
+between the two inserted batches:
+
+- **Low-key state:** the first batch looks older, and eviction removes mostly
+  its 240-byte keys (Redis ~178k keys left, Valkey ~191k).
+- **High-key state:** both batches look the same age, and eviction picks
+  among both, leaving more and smaller keys and a much more fragmented heap
+  (Redis ~255–264k, Valkey ~273–282k).
+
+Results are therefore grouped by eviction state (`eviction state` and `n`
+columns). Two options pin the state; key counts were measured on EC2:
+
+| Option | Redis keys left | Valkey keys left |
+|---|---|---|
+| default (the paper's workload) | 178k ×6, 260k ×2 | 191k ×6, 273k ×2 |
+| `--populate-gap 1.5` (wait between the batches) | always ~178k | always ~191k |
+| `--policy allkeys-random` | always ~264k | always ~282k |
+
+CI checks the deterministic low-key workload (`--populate-gap 1.5`). It also
+reports the high-key state, without a check, using a longer window.
+
+In the high-key state Mesh is limited by meshability, not by the mesh cap. On
+EC2, with a 60 s window, it levels off at ~185 MiB (Redis) and ~169 MiB
+(Valkey) whether `vm.max_map_count` is 65,530 or 1,048,576 (~36k meshes, ~53k
+VMAs either way). Active defragmentation reaches ~115 MiB, because it can move
+objects to any free slot; meshing needs non-overlapping offsets. Paced Mesh
+takes about 30–40 s to level off. Unpaced Mesh gets there in 5–10 s, with
+130–166 ms pauses.
+
 ## Measuring memory
 
 With `--mstat`, each server runs under [mstat](https://github.com/bpowers/mstat),
