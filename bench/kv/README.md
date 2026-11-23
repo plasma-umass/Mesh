@@ -44,7 +44,10 @@ server and eviction state it shows:
 - **a table:** mean over the paper's 7.5 s window, mean, median, p90, peak and
   final memory.
 
-CI uploads the page as part of the `kv-fragmentation` artifact.
+CI uploads the page as part of the `kv-fragmentation` artifact. On pull requests
+from this repository, `post-pr-comment.sh` also posts the tables and one chart
+image per panel as a PR comment, which later runs update in place. The images
+live on the `ci-results` branch.
 
 ## Eviction is bimodal
 

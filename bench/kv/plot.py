@@ -12,10 +12,17 @@ each server and eviction state:
   - a table of the time-weighted mean, median, p90, peak and final memory.
 
 Usage: plot.py RESULTS.json [MORE.json ...] -o memory.html [--title TEXT]
+               [--markdown summary.md --image-url URL_WITH_{panel}]
+
+The page shows one panel when opened as memory.html#panel=N (used to render
+per-panel PNGs).  --markdown writes the same tables as GitHub markdown, with
+one image per panel (--image-url, "{panel}" replaced by its index), for PR
+comments.
 """
 
 import argparse
 import html
+import os
 import json
 import statistics
 import sys
@@ -328,7 +335,9 @@ function lineChart(parent, o) {
 }
 const mib = v => v.toFixed(0), mibLong = v => v.toFixed(1) + " MiB";
 const root = document.getElementById("root");
-for (const p of PANELS) {
+const only = /panel=(\d+)/.exec(location.hash);
+PANELS.forEach((p, i) => { if (!only || +only[1] === i) renderPanel(p); });
+function renderPanel(p) {
   const sec = document.createElement("section"); root.appendChild(sec);
   const h2 = document.createElement("h2"); h2.textContent = `${p.server} — ${p.state} left after eviction`; sec.appendChild(h2);
   const lg = div("legend", sec);
@@ -445,18 +454,45 @@ for (const p of PANELS) {
 """
 
 
+def markdown(panels, notes, image_url):
+    """GitHub-markdown version of the tables, one image per panel."""
+    out = [f"_{'; '.join(notes)}. Memory: MiB of cgroup memory (mstat); latency: a GET every 10 ms during "
+           f"the idle window._", ""]
+    for i, p in enumerate(panels):
+        out.append(f"#### {p['server']} — {p['state']} left after eviction")
+        if image_url:
+            out.append(f"![{p['server']} {p['state']}: memory and latency over time]({image_url.format(panel=i)})")
+        out.append("")
+        out.append(f"| configuration | trials | mean, first {PAPER_WINDOW_S:g} s | mean | median | p90 | peak | final "
+                   f"| latency p99 (ms) | p99.9 (ms) | max (ms) | idle CPU (s) | longest mesh pass (ms) |")
+        out.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        for r in p["rows"]:
+            out.append(f"| {r['name']} | {r['trials']} | {r['mean_paper']:.1f} | {r['mean']:.1f} | {r['p50']:.1f} | "
+                       f"{r['p90']:.1f} | {r['peak']:.1f} | {r['final']:.1f} | {r['lat_p99']:.2f} | "
+                       f"{r['lat_p999']:.2f} | {r['lat_max']:.1f} | {r['idle_cpu']:.2f} | "
+                       f"{r['pass_max']:.1f} |" if r["pass_max"] else
+                       f"| {r['name']} | {r['trials']} | {r['mean_paper']:.1f} | {r['mean']:.1f} | {r['p50']:.1f} | "
+                       f"{r['p90']:.1f} | {r['peak']:.1f} | {r['final']:.1f} | {r['lat_p99']:.2f} | "
+                       f"{r['lat_p999']:.2f} | {r['lat_max']:.1f} | {r['idle_cpu']:.2f} | — |")
+        out.append("")
+    return "\n".join(out)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("json", nargs="+", help="result files from fragmentation.py --json")
     ap.add_argument("-o", "--output", default="memory.html")
     ap.add_argument("--title", default="Redis / Valkey memory over time")
+    ap.add_argument("--markdown", help="also write the tables as GitHub markdown here")
+    ap.add_argument("--image-url", help="with --markdown: per-panel image URL, '{panel}' = panel index")
     a = ap.parse_args()
     results, notes = [], []
     for path in a.json:
         with open(path) as f:
             d = json.load(f)
         results.extend(d["results"])
-        notes.append(f"{d.get('trials', '?')} trials, {d.get('settle_s', '?'):g} s idle window ({path})")
+        notes.append(f"{d.get('trials', '?')} trials, {d.get('settle_s', '?'):g} s idle window "
+                     f"({os.path.basename(path)})")
     if any("state" not in r for r in results):
         sys.exit("results lack eviction states; regenerate them with the current fragmentation.py")
     panels = build_panels(results)
@@ -467,6 +503,10 @@ def main():
             .replace("__DATA__", json.dumps(panels).replace("</", "<\\/")))
     with open(a.output, "w") as f:
         f.write(page)
+    if a.markdown:
+        with open(a.markdown, "w") as f:
+            f.write(markdown(panels, notes, a.image_url))
+    print(f"panels: {len(panels)}")
     print(f"wrote {a.output}: {len(panels)} panels")
     for p in panels:
         print(f"  {p['server']} {p['state']}:")
