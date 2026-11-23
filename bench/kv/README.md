@@ -26,6 +26,26 @@ sudo python3 bench/kv/fragmentation.py --libmesh build/lib/libmesh.so --mstat ~/
 
 `mesh-nomesh` keeps Mesh's allocator and randomization and only disables meshing.
 
+## Plotting
+
+```sh
+python3 bench/kv/fragmentation.py ... --json low.json --populate-gap 1.5
+python3 bench/kv/fragmentation.py ... --json high.json --policy allkeys-random
+python3 bench/kv/plot.py low.json high.json -o memory.html
+```
+
+`plot.py` writes one self-contained HTML page with no dependencies. For each
+server and eviction state it shows:
+
+- **memory over time:** the median across trials, from the start of insertion,
+  as in the paper's Figure 7;
+- **share of time at or below each memory level:** a CDF of memory over the
+  run, so averages compare at the distribution level;
+- **a table:** mean over the paper's 7.5 s window, mean, median, p90, peak and
+  final memory.
+
+CI uploads the page as part of the `kv-fragmentation` artifact.
+
 ## Eviction is bimodal
 
 How many keys survive eviction varies from run to run. LRU timestamps have

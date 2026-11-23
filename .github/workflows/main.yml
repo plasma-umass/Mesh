@@ -124,11 +124,16 @@ jobs:
           --libmesh build/lib/libmesh.so --mstat bin/mstat --trials 1 --settle 45 \
           --policy allkeys-random --configs mesh-nomesh,mesh,jemalloc+activedefrag \
           --json kv-fragmentation-high-key.json
+    - name: Plot memory over time
+      if: always()
+      run: python3 bench/kv/plot.py kv-fragmentation.json kv-fragmentation-high-key.json -o kv-memory.html
     - uses: actions/upload-artifact@v4
       if: always()
       with:
         name: kv-fragmentation
-        path: kv-fragmentation*.json
+        path: |
+          kv-fragmentation*.json
+          kv-memory.html
 
   Ubuntu_bazel:
     runs-on: ubuntu-latest
