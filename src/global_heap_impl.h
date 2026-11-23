@@ -606,7 +606,11 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
 
 // resident pages of [ptr, ptr + pages * pageSize), per mincore (shmem page cache)
 inline size_t residentPages(void *ptr, size_t pages, size_t pageSize) {
+#ifdef __APPLE__
+  static char vec[4096];  // mincore(2) takes char * on macOS
+#else
   static unsigned char vec[4096];
+#endif
   size_t resident = 0;
   char *p = reinterpret_cast<char *>(ptr);
   while (pages > 0) {
