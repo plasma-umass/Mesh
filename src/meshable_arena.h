@@ -74,9 +74,9 @@ namespace mesh {
 namespace internal {
 template <size_t PageSize>
 constexpr off_t pageOffsetToFileOffset(Offset pageOffset) {
-  static_assert(static_cast<uint64_t>(kArenaSize - PageSize) <=
-                    static_cast<uint64_t>(std::numeric_limits<off_t>::max()),
-                "off_t cannot represent Mesh arena offsets");
+  static_assert(
+      static_cast<uint64_t>(kArenaSize - PageSize) <= static_cast<uint64_t>(std::numeric_limits<off_t>::max()),
+      "off_t cannot represent Mesh arena offsets");
   return static_cast<off_t>(pageOffset) * static_cast<off_t>(PageSize);
 }
 }  // namespace internal
@@ -273,6 +273,11 @@ public:
     _inMeshPass = inPass;
   }
 
+  // pages freed but not yet released to the OS
+  inline size_t dirtyPageCount() const {
+    return _dirtyPageCount;
+  }
+
   // protected:
   // public for testing
   void scavenge(bool force);
@@ -405,7 +410,6 @@ public:
   static void staticAfterForkChild();
 
 private:
-
   void exit() {
     // FIXME: do this from the destructor, and test that destructor is
     // called.  Also don't leak _spanDir
@@ -957,7 +961,9 @@ void MeshableArena<PageSize>::scavenge(bool force) {
     _clean[current.spanClass()].push_back(current);
   }
 #ifndef NDEBUG
-  auto newBitmap = allocatedBitmap();
+  // spans the budget left dirty are still off the clean lists, so compare
+  // with dirty spans counted as allocated -- as `bitmap` above treats them
+  auto newBitmap = allocatedBitmap(false);
   newBitmap.invert();
 
   const size_t *bits1 = bitmap.bits();
