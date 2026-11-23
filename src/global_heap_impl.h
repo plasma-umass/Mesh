@@ -604,6 +604,109 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
   _lastMesh.store(time::now(), std::memory_order_release);
 }
 
+// resident pages of [ptr, ptr + pages * pageSize), per mincore (shmem page cache)
+inline size_t residentPages(void *ptr, size_t pages, size_t pageSize) {
+#ifdef __APPLE__
+  static char vec[4096];  // mincore(2) takes char * on macOS
+#else
+  static unsigned char vec[4096];
+#endif
+  size_t resident = 0;
+  char *p = reinterpret_cast<char *>(ptr);
+  while (pages > 0) {
+    const size_t n = pages < sizeof(vec) ? pages : sizeof(vec);
+    if (mincore(p, n * pageSize, vec) != 0) {
+      return resident;
+    }
+    for (size_t i = 0; i < n; i++) {
+      resident += vec[i] & 1;
+    }
+    p += n * pageSize;
+    pages -= n;
+  }
+  return resident;
+}
+
+// Classify every resident arena page: live spans by how full they are and by
+// size class, large allocations, and free spans not yet returned to the OS.
+// "free" = resident bytes in live spans not holding an object (size-class
+// rounding is not included: objects count at their size class).
+template <size_t PageSize>
+void GlobalHeap<PageSize>::dumpAccounting() const {
+  struct Bucket {
+    size_t spans, residentPages, inUseBytes, meshed;
+  };
+  // by occupancy: empty, (0,25%), [25,50%), [50,75%), [75,100%), full
+  Bucket occ[6] = {}, large{};
+  Bucket bySize[kNumBins] = {};
+  size_t aliasPages = 0;
+  for (size_t off = 0; off < Super::arenaEndPages(); off++) {
+    auto mh = reinterpret_cast<const MiniHeapT *>(Super::miniheapForArenaOffset(off));
+    if (mh == nullptr) {
+      continue;
+    }
+    const Span span = mh->span();
+    if (off != span.offset) {
+      if (off < span.offset || off >= span.offset + span.length) {
+        aliasPages++;  // a meshed virtual span aliasing mh's physical span
+      }
+      continue;
+    }
+    const size_t resident = residentPages(Super::pagePointer(span.offset), span.length, PageSize);
+    if (mh->isLargeAlloc()) {
+      large.spans++;
+      large.residentPages += resident;
+      continue;
+    }
+    const uint32_t inUse = mh->inUseCount(), max = mh->maxCount();
+    const int i = inUse == 0            ? 0
+                  : inUse == max        ? 5
+                  : inUse * 4 < max     ? 1
+                  : inUse * 2 < max     ? 2
+                  : inUse * 4 < max * 3 ? 3
+                                        : 4;
+    for (Bucket *b : {&occ[i], &bySize[mh->sizeClass()]}) {
+      b->spans++;
+      b->residentPages += resident;
+      b->inUseBytes += static_cast<size_t>(inUse) * mh->objectSize();
+      b->meshed += mh->meshCount() > 1;
+    }
+  }
+  size_t freePages[2] = {}, freeResident[2] = {};
+  Super::forEachFreeSpan([&](const Span &s, bool dirty) {
+    freePages[dirty] += s.length;
+    freeResident[dirty] += residentPages(Super::pagePointer(s.offset), s.length, PageSize);
+  });
+
+  const double mib = static_cast<double>(PageSize) / (1 << 20);
+  auto line = [&](const char *what, const Bucket &b) {
+    const double res = b.residentPages * mib, used = b.inUseBytes / 1048576.0;
+    debug("ACCT %-14s spans=%-7zu resident=%7.1f MiB  objects=%7.1f MiB  free=%6.1f MiB  meshed=%zu\n", what, b.spans,
+          res, used, res - used, b.meshed);
+  };
+  const char *names[6] = {"empty", "<25% full", "25-50% full", "50-75% full", "75-100% full", "full"};
+  size_t residentTotal = large.residentPages + freeResident[0] + freeResident[1];
+  size_t objectBytes = 0;
+  for (int i = 0; i < 6; i++) {
+    line(names[i], occ[i]);
+    residentTotal += occ[i].residentPages;
+    objectBytes += occ[i].inUseBytes;
+  }
+  debug("ACCT large          spans=%-7zu resident=%7.1f MiB\n", large.spans, large.residentPages * mib);
+  debug("ACCT free spans     dirty=%.1f MiB (resident %.1f)  clean=%.1f MiB (resident %.1f)\n", freePages[1] * mib,
+        freeResident[1] * mib, freePages[0] * mib, freeResident[0] * mib);
+  debug("ACCT meshed aliases %.1f MiB virtual\n", aliasPages * mib);
+  for (size_t c = 0; c < kNumBins; c++) {
+    if (bySize[c].spans == 0) {
+      continue;
+    }
+    char what[32];
+    snprintf(what, sizeof(what), "class %zuB", SizeMap::ByteSizeForClass(c));
+    line(what, bySize[c]);
+  }
+  debug("ACCT total resident=%.1f MiB  small objects=%.1f MiB\n", residentTotal * mib, objectBytes / 1048576.0);
+}
+
 template <size_t PageSize>
 void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   if (level < 1)
@@ -637,9 +740,7 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
           bs.meshes ? bs.totalWindowNs / 1000.0 / bs.meshes : 0.0);
   }
   if (level > 1) {
-    // for (size_t i = 0; i < kNumBins; i++) {
-    //   _littleheaps[i].dumpStats(beDetailed);
-    // }
+    dumpAccounting();
   }
 }
 

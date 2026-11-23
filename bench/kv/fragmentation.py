@@ -243,11 +243,13 @@ class Server:
 class Probe:
     """GETs a random second-batch key every PROBE_INTERVAL_S; records latencies."""
 
-    def __init__(self, port):
+    def __init__(self, port, t0):
         self.sock = socket.create_connection(("127.0.0.1", port))
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.buf = b""
         self.latencies = []  # seconds
+        self.times = []  # when each request was sent, seconds since t0
+        self.t0 = t0
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
 
@@ -278,6 +280,7 @@ class Probe:
             key = f"{SECOND[1]}:{rng.randrange(SECOND[0])}".encode()
             cmd = b"*2\r\n$3\r\nGET\r\n$%d\r\n%s\r\n" % (len(key), key)
             t = time.perf_counter()
+            self.times.append(time.time() - self.t0)
             self.sock.sendall(cmd)
             self._read_reply()
             self.latencies.append(time.perf_counter() - t)
@@ -322,7 +325,7 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
     env = {k: v for k, v in os.environ.items() if k not in ("LD_PRELOAD", "MESH_PERIOD_MS", "MALLOCSTATS")}
     if config.startswith("mesh"):
         env["LD_PRELOAD"] = a.libmesh
-        env["MALLOCSTATS"] = "1"
+        env["MALLOCSTATS"] = "2"  # level 2 adds the arena accounting (ACCT lines)
         if config == "mesh-nomesh":
             env["MESH_PERIOD_MS"] = "0"
 
@@ -372,7 +375,7 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
             for k, v in ACTIVEDEFRAG:
                 srv.cli("CONFIG", "SET", k, v)
         cpu0 = cpu_s(pid)
-        probe = Probe(srv.port)
+        probe = Probe(srv.port, t0)
         probe.start()
         time.sleep(a.settle)
         probe.finish()
@@ -429,6 +432,14 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         "mem_peak_mib": stat(primary, max, 0, end),
         "rss_final_mib": stat(rss, statistics.median, end - 1.0, end),
         "used_memory_mib": round(int(mem.get("used_memory", 0)) / 2**20, 1),
+        # the allocator's own view (jemalloc builds report these; libc builds don't)
+        "allocator_mib": {k: round(int(mem[k]) / 2**20, 1) for k in
+                          ("allocator_allocated", "allocator_active", "allocator_resident", "allocator_frag_bytes",
+                           "allocator_rss_bytes", "rss_overhead_bytes", "used_memory_rss")
+                          if mem.get(k, "").lstrip("-").isdigit()},
+        "accounting": re.findall(r"ACCT .*", log),
+        "probe": {"t_s": [round(t, 3) for t in probe.times] if probe else [],
+                  "ms": [round(x, 3) for x in lat_ms]},
         "insert_s": round(insert_s, 3),
         "idle_cpu_s": round(idle_cpu_s, 3),
         "probe_n": len(lat_ms),

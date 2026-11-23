@@ -85,6 +85,9 @@ jobs:
   # it runs as root; servers bind to 127.0.0.1 only.
   Ubuntu_kv_fragmentation:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push chart images to the ci-results branch (same-repo PRs only)
+      pull-requests: write   # post the results as a PR comment
     steps:
     - uses: actions/checkout@v4
     - name: Install required packages
@@ -124,11 +127,28 @@ jobs:
           --libmesh build/lib/libmesh.so --mstat bin/mstat --trials 1 --settle 45 \
           --policy allkeys-random --configs mesh-nomesh,mesh,jemalloc+activedefrag \
           --json kv-fragmentation-high-key.json
+    - name: Plot memory over time
+      if: always()
+      run: python3 bench/kv/plot.py kv-fragmentation.json kv-fragmentation-high-key.json -o kv-memory.html
     - uses: actions/upload-artifact@v4
       if: always()
       with:
         name: kv-fragmentation
-        path: kv-fragmentation*.json
+        path: |
+          kv-fragmentation*.json
+          kv-memory.html
+    - name: Post results to the pull request
+      # PRs from forks get a read-only token: skip there
+      if: >-
+        always() && github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        RUN: ${{ github.run_id }}
+        SERVER_URL: ${{ github.server_url }}
+      run: bench/kv/post-pr-comment.sh kv-fragmentation.json kv-fragmentation-high-key.json
 
   Ubuntu_bazel:
     runs-on: ubuntu-latest
