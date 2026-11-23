@@ -59,6 +59,8 @@
 
 #include "mini_heap.h"
 
+#include "write_barrier.h"
+
 #ifndef MADV_DONTDUMP
 #define MADV_DONTDUMP 0
 #endif
@@ -192,6 +194,27 @@ public:
 
   void beginMesh(void *keep, void *remove, size_t sz);
   void finalizeMesh(void *keep, void *remove, size_t sz);
+
+  // bracket every mesh pass: all beginMesh/finalizeMesh calls must happen
+  // between these (see write_barrier.h for the protocol).
+  inline void beginMeshPass() {
+    _barrier.passBegin(_arenaBegin, kArenaSize);
+  }
+  inline void endMeshPass() {
+    _barrier.passEnd(_arenaBegin, kArenaSize);
+  }
+
+  inline const WriteBarrier &writeBarrier() const {
+    return _barrier;
+  }
+
+  inline void setBarrierFallbackHook(WriteBarrier::FallbackHook hook) {
+    _barrier.setFallbackHook(hook);
+  }
+
+  inline void noteBarrierSignalStall() {
+    _barrier.noteSignalStall();
+  }
 
   inline bool aboveMeshThreshold() const {
     return _meshedPageCount > _maxMeshCount;
@@ -397,6 +420,7 @@ private:
 
   int _fd;
   int _forkPipe[2]{-1, -1};  // used for signaling during fork
+  WriteBarrier _barrier{};
   char *_spanDir{nullptr};
 };
 
@@ -430,6 +454,10 @@ MeshableArena<PageSize>::MeshableArena() : SuperHeap(), _fastPrng(internal::seed
 
   hard_assert(_arenaBegin != nullptr);
   hard_assert(_mhIndex != nullptr);
+
+  if (kMeshingEnabled) {
+    _barrier.init();
+  }
 
   if (kAdviseDump) {
     madvise(_arenaBegin, kArenaSize, MADV_DONTDUMP);
@@ -819,8 +847,7 @@ void MeshableArena<PageSize>::freePhys(void *ptr, size_t sz) {
 
 template <size_t PageSize>
 void MeshableArena<PageSize>::beginMesh(void *keep, void *remove, size_t sz) {
-  int r = mprotect(remove, sz, PROT_READ);
-  hard_assert(r == 0);
+  _barrier.arm(remove, sz);
 }
 
 template <size_t PageSize>
@@ -843,6 +870,9 @@ void MeshableArena<PageSize>::finalizeMesh(void *keep, void *remove, size_t sz) 
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
                    internal::pageOffsetToFileOffset<PageSize>(keepOff));
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
+
+  // writers blocked by beginMesh retry against the new mapping
+  _barrier.commit(remove, sz);
 }
 
 template <size_t PageSize>

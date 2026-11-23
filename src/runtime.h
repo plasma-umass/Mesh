@@ -44,6 +44,8 @@ private:
       // force init
       internal::seed();
     }
+    // a userfaultfd barrier that falls back to mprotect needs our handler
+    _heap.setBarrierFallbackHook(&Runtime::barrierFallback);
   }
 
 public:
@@ -90,7 +92,14 @@ public:
 
   // so we can call from the libmesh init function
   void createSignalFd();
-  void installSegfaultHandler();
+  // Installs Mesh's SIGSEGV/SIGBUS handler if the write barrier needs it
+  // (always under mprotect; never under userfaultfd unless it fell back), or
+  // unconditionally with force.  Idempotent.
+  void installSegfaultHandler(bool force = false);
+
+  bool segfaultHandlerInstalled() const {
+    return _segfaultHandlerInstalled.load(std::memory_order_acquire);
+  }
 
   void updatePid() {
     _pid = getpid();
@@ -108,6 +117,7 @@ private:
   void initThreads();
 
   static void segfaultHandler(int sig, siginfo_t *siginfo, void *context);
+  static void barrierFallback();
 
   static void *bgThread(void *arg);
 
@@ -116,7 +126,11 @@ private:
 
   mutex _mutex{};
   int _signalFd{-2};
-  pid_t _pid{};
+  // must be valid from the start: segfaultHandler compares it against
+  // getpid() to detect a post-fork child.  (Previously this was only set by
+  // that comparison's own side effect on the first meshing fault.)
+  pid_t _pid{getpid()};
+  atomic<bool> _segfaultHandlerInstalled{false};
   GlobalHeap<PageSize> _heap{};
 };
 

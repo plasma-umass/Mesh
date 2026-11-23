@@ -282,6 +282,22 @@ int GlobalHeap<PageSize>::mallctl(const char *name, void *oldp, size_t *oldlenp,
     auto newVal = reinterpret_cast<size_t *>(newp);
     _meshPeriod = *newVal;
     // resetNextMeshCheck();
+  } else if (strcmp(name, "mesh.barrier") == 0) {
+    // read-only: 0 = mprotect, 1 = userfaultfd (user-mode only), 2 = userfaultfd
+    *statp = static_cast<size_t>(Super::writeBarrier().mode());
+  } else if (strcmp(name, "mesh.pass_count") == 0) {
+    *statp = _stats.meshPassCount;
+  } else if (strcmp(name, "mesh.pass_total_ns") == 0) {
+    *statp = _stats.meshPassTotalNs;
+  } else if (strcmp(name, "mesh.pass_max_ns") == 0) {
+    // longest mesh pass: the longest pause meshing imposes on allocating threads
+    *statp = _stats.meshPassMaxNs;
+  } else if (strcmp(name, "mesh.barrier_stalls") == 0) {
+    // writes that hit a span while it was being meshed
+    *statp = Super::writeBarrier().stats().stalls;
+  } else if (strcmp(name, "mesh.barrier_max_window_ns") == 0) {
+    // longest time a span was write-protected (upper bound on a stall)
+    *statp = Super::writeBarrier().stats().maxWindowNs;
   } else if (strcmp(name, "arena") == 0) {
     // not sure what this should do
   } else if (strcmp(name, "stats.resident") == 0) {
@@ -329,6 +345,10 @@ void GlobalHeap<PageSize>::meshLocked(MiniHeapT *dst, MiniHeapT *&src) {
     Super::beginMesh(dstSpanStart, srcSpan, dstSpanSize);
     return false;
   });
+
+  if (unlikely(_meshHookForTesting != nullptr)) {
+    _meshHookForTesting(_meshHookArg);
+  }
 
   // does the copying of objects and updating of span metadata
   dst->consume(this->arenaBegin(), src);
@@ -422,6 +442,23 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
 
 template <size_t PageSize>
 void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
+  // account the whole pass, including the scavenges and early returns.
+  // (time::now() is CLOCK_MONOTONIC_COARSE -- scheduler-tick resolution,
+  // fine for rate limiting but too coarse to time a pass.)
+  struct PassTimer {
+    GlobalHeapStats &stats;
+    const std::chrono::steady_clock::time_point start{std::chrono::steady_clock::now()};
+    ~PassTimer() {
+      const size_t ns =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+      stats.meshPassCount.fetch_add(1, std::memory_order_relaxed);
+      stats.meshPassTotalNs.fetch_add(ns, std::memory_order_relaxed);
+      if (ns > stats.meshPassMaxNs.load(std::memory_order_relaxed)) {
+        stats.meshPassMaxNs.store(ns, std::memory_order_relaxed);
+      }
+    }
+  } passTimer{_stats};
+
   static MergeSetArray<PageSize> *MergeSetsPtr = []() {
     void *ptr =
         mmap(nullptr, sizeof(MergeSetArray<PageSize>), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -466,6 +503,8 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
 
   lock_guard<EpochLock> epochLock(_meshEpoch);
 
+  Super::beginMeshPass();
+
   // const auto start = time::now();
 
   // first, drain pending partial lists and clear out any free memory we might have
@@ -480,6 +519,8 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
     totalMeshCount += meshSizeClassLocked(sizeClass, MergeSets, Left, Right);
   }
 
+  Super::endMeshPass();
+
   madvise(&Left, sizeof(Left), MADV_DONTNEED);
   madvise(&Right, sizeof(Right), MADV_DONTNEED);
   madvise(&MergeSets, sizeof(MergeSets), MADV_DONTNEED);
@@ -491,8 +532,6 @@ void GlobalHeap<PageSize>::meshAllSizeClassesLocked() {
 
   _lastMesh.store(time::now(), std::memory_order_release);
 
-  // const std::chrono::duration<double> duration = _lastMesh - start;
-  // debug("mesh took %f, found %zu", duration.count(), totalMeshCount);
 }
 
 template <size_t PageSize>
@@ -505,6 +544,8 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   const auto meshedPageHWM = this->meshedPageHighWaterMark();
 
   debug("MESH COUNT:         %zu\n", (size_t)_stats.meshCount);
+  debug("Mesh passes:        %zu (total %.1f ms, max %.2f ms)\n", (size_t)_stats.meshPassCount,
+        _stats.meshPassTotalNs / 1e6, _stats.meshPassMaxNs / 1e6);
   debug("Meshed MB (total):  %.1f\n", (size_t)_stats.meshCount * (double)PageSize / 1024.0 / 1024.0);
   debug("Meshed pages HWM:   %zu\n", meshedPageHWM);
   debug("Meshed MB HWM:      %.1f\n", meshedPageHWM * (double)PageSize / 1024.0 / 1024.0);
@@ -512,6 +553,14 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
   debug("MH Alloc Count:     %zu\n", (size_t)_stats.mhAllocCount);
   debug("MH Free  Count:     %zu\n", (size_t)_stats.mhFreeCount);
   debug("MH High Water Mark: %zu\n", (size_t)_stats.mhHighWaterMark);
+  {
+    const auto &barrier = Super::writeBarrier();
+    const auto bs = barrier.stats();
+    debug("Write barrier:      %s\n", barrierModeName(barrier.mode()));
+    debug("Barrier stalls:     %zu (in %zu meshed spans)\n", bs.stalls, bs.meshes);
+    debug("Barrier window:     max %.1f us, mean %.1f us\n", bs.maxWindowNs / 1000.0,
+          bs.meshes ? bs.totalWindowNs / 1000.0 / bs.meshes : 0.0);
+  }
   if (level > 1) {
     // for (size_t i = 0; i < kNumBins; i++) {
     //   _littleheaps[i].dumpStats(beDetailed);

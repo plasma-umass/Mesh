@@ -136,6 +136,35 @@ static void meshTestImpl(bool invert) {
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
 }
 
+template <size_t PageSize>
+static void passStatsImpl() {
+  if (!kMeshingEnabled) {
+    GTEST_SKIP();
+  }
+  auto &gheap = runtime<PageSize>().heap();
+  auto get = [&](const char *name) {
+    size_t v = 0, len = sizeof(v);
+    EXPECT_EQ(gheap.mallctl(name, &v, &len, nullptr, 0), 0) << name;
+    return v;
+  };
+  const size_t passes = get("mesh.pass_count");
+  const size_t totalNs = get("mesh.pass_total_ns");
+  size_t dummy = 0, len = sizeof(dummy);
+  ASSERT_EQ(gheap.mallctl("mesh.compact", &dummy, &len, nullptr, 0), 0);
+  EXPECT_EQ(get("mesh.pass_count"), passes + 1);
+  EXPECT_GT(get("mesh.pass_total_ns"), totalNs);
+  EXPECT_GT(get("mesh.pass_max_ns"), 0UL);
+  EXPECT_LE(get("mesh.pass_max_ns"), get("mesh.pass_total_ns"));
+}
+
+TEST(MeshTest, PassStats) {
+  if (getPageSize() == 4096) {
+    passStatsImpl<4096>();
+  } else {
+    passStatsImpl<16384>();
+  }
+}
+
 static void meshTest(bool invert) {
   if (getPageSize() == 4096) {
     meshTestImpl<4096>(invert);

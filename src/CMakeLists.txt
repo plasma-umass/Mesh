@@ -28,6 +28,8 @@ set(mesh_src
         )
 #Add a target for the mesh shared library
 add_library(mesh SHARED ${mesh_src})
+# the Heap-Layers headers come from an ExternalProject
+add_dependencies(mesh heap_layers)
 target_link_libraries(mesh PRIVATE -pthread -ldl)
 
 #Create a set of source files for the unit tests
@@ -46,6 +48,7 @@ set(unit_src
         testing/unit/thread_exit_test.cc
         testing/unit/size_class_test.cc
         testing/unit/triple_mesh_test.cc
+        testing/unit/write_barrier_test.cc
 )
 
 # Add macOS-specific tests only on Apple platforms
@@ -54,6 +57,8 @@ if(APPLE)
 endif()
 #Add a target to the unit tests executable
 add_executable(unit.test ${unit_src})
+# gtest is an ExternalProject; without these, parallel builds race it
+add_dependencies(unit.test heap_layers googletest)
 target_link_libraries(unit.test PRIVATE -ldl -pthread )
 
 set(GTEST_DIR ${CMAKE_CURRENT_BINARY_DIR}/../googletest-src/googletest)
@@ -76,8 +81,8 @@ target_compile_options(unit.test PRIVATE -Wno-unused-const-variable -Wno-unused-
 if(${GCOV})
     add_custom_target(coverage_gcc
             COMMAND cd ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ && ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit.test
-            COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ --ignore-errors mismatch --rc geninfo_unexecuted_blocks=1
-            COMMAND genhtml app.info -o .
+            COMMAND lcov -o app.info -c --directory ${CMAKE_BINARY_DIR}/src/CMakeFiles/unit.test.dir/ --ignore-errors mismatch,inconsistent --rc geninfo_unexecuted_blocks=1
+            COMMAND genhtml app.info -o . --ignore-errors inconsistent
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/coverage/
             DEPENDS unit.test)
 endif()

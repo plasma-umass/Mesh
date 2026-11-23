@@ -32,6 +32,93 @@ jobs:
        cd cmake-cache
        make coverage_gcc
 
+  # Mesh's write barrier in each mode (src/write_barrier.h).  The userfaultfd
+  # modes need Linux 5.19+ (uffd-wp on shmem); "uffd" also needs kernel-mode
+  # faults, enabled here via vm.unprivileged_userfaultfd=1.
+  Ubuntu_write_barrier:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        barrier: [mprotect, uffd-user, uffd]
+    env:
+      MESH_BARRIER: ${{ matrix.barrier }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install required packages
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install gcc g++ make cmake
+    - name: Kernel and userfaultfd configuration
+      run: |
+        uname -r
+        if [ "$MESH_BARRIER" = uffd ]; then
+          sudo sysctl -w vm.unprivileged_userfaultfd=1
+        fi
+        sysctl vm.unprivileged_userfaultfd
+    - name: Build
+      run: |
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        cmake --build build -j"$(nproc)"
+    - name: Unit tests
+      run: |
+        build/bin/unit.test 2>&1 | tee unit.log
+        test "${PIPESTATUS[0]}" -eq 0
+        # the requested mode must actually be in effect (no silent fallback)
+        grep -q "write barrier mode: $MESH_BARRIER\$" unit.log
+    - name: userfaultfd protocol probe
+      if: matrix.barrier != 'mprotect'
+      run: |
+        g++ -O2 -std=c++17 -pthread -Wall src/testing/uffd-barrier-probe.cc -o uffd-barrier-probe
+        if [ "$MESH_BARRIER" = uffd ]; then ./uffd-barrier-probe; else ./uffd-barrier-probe --user-mode-only; fi
+    - name: End-to-end stress (LD_PRELOAD)
+      run: |
+        g++ -O2 -std=c++17 -pthread -Wall src/testing/mesh-barrier-stress.cc -o mesh-barrier-stress -ldl
+        LD_PRELOAD="$PWD/build/lib/libmesh.so" MALLOCSTATS=1 ./mesh-barrier-stress 10 2>&1 | tee stress.log
+        test "${PIPESTATUS[0]}" -eq 0
+        grep -q "^barrier: $MESH_BARRIER\$" stress.log
+
+  # The Mesh paper's Redis experiment (sec. 6.2.2), on Redis and Valkey:
+  # checks that meshing happens and reduces memory vs. Mesh with meshing
+  # disabled, and reports jemalloc / jemalloc+activedefrag / glibc alongside.
+  # Memory is measured with the paper's mstat (per-server memory cgroup), so
+  # it runs as root; servers bind to 127.0.0.1 only.
+  Ubuntu_kv_fragmentation:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install required packages
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install gcc g++ make cmake python3
+    - name: Build Mesh
+      run: |
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build -j"$(nproc)" --target mesh
+    - uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: false
+    - name: Install mstat
+      run: GOBIN="$PWD/bin" go install github.com/bpowers/mstat@3ef2c762335c7d7966b7c2ca7246bc633a49469a
+    - name: Cache Redis/Valkey builds
+      uses: actions/cache@v4
+      with:
+        path: bench/kv/build/bin
+        key: kv-servers-${{ runner.os }}-${{ hashFiles('bench/kv/build-servers.sh') }}
+    - name: Build Redis and Valkey
+      run: bench/kv/build-servers.sh
+    - name: Fragmentation benchmark
+      run: |
+        sudo --preserve-env=GITHUB_STEP_SUMMARY python3 bench/kv/fragmentation.py \
+          --libmesh build/lib/libmesh.so --mstat bin/mstat --trials 3 --settle 15 \
+          --json kv-fragmentation.json --check
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: kv-fragmentation
+        path: kv-fragmentation.json
+
   Ubuntu_bazel:
     runs-on: ubuntu-latest
     steps:

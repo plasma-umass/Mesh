@@ -80,6 +80,11 @@ public:
   size_t mhFreeCount;
   size_t mhAllocCount;
   size_t mhHighWaterMark;
+  // mesh passes (meshAllSizeClassesLocked calls): each holds every heap
+  // lock, so its duration is a pause for any thread that allocates or frees
+  atomic_size_t meshPassCount;
+  atomic_size_t meshPassTotalNs;
+  atomic_size_t meshPassMaxNs;
 };
 
 template <size_t PageSize>
@@ -641,6 +646,15 @@ public:
   // after call to meshLocked() completes src is a nullptr
   void ATTRIBUTE_NEVER_INLINE meshLocked(MiniHeapT *dst, MiniHeapT *&src);
 
+  // PUBLIC ONLY FOR TESTING
+  // called by meshLocked() after src's spans are write-protected and before
+  // any objects are copied, so tests can exercise writers racing a mesh.
+  using MeshHookFn = void (*)(void *arg);
+  void setMeshHookForTesting(MeshHookFn fn, void *arg) {
+    _meshHookArg = arg;
+    _meshHookForTesting = fn;
+  }
+
   inline void ATTRIBUTE_ALWAYS_INLINE maybeMesh() {
     if (!kMeshingEnabled) {
       return;
@@ -728,6 +742,8 @@ private:
                              SplitArray<PageSize> &right);
 
   const size_t _maxObjectSize;
+  MeshHookFn _meshHookForTesting{nullptr};
+  void *_meshHookArg{nullptr};
   atomic_size_t _meshPeriod{kDefaultMeshPeriod};
   std::atomic<std::chrono::milliseconds> _meshPeriodMs{kMeshPeriodMs};
 
