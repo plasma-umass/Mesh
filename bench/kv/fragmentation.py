@@ -356,10 +356,14 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
     probe = None
     try:
         srv.cli("CONFIG", "SET", "maxmemory", "100mb")
-        srv.cli("CONFIG", "SET", "maxmemory-policy", "allkeys-lru")
+        srv.cli("CONFIG", "SET", "maxmemory-policy", a.policy)
         t0 = time.time()
         th.start()
         srv.cli("DEBUG", "POPULATE", *map(str, FIRST))
+        if a.populate_gap > 0:
+            # LRU timestamps have 1 s resolution: a gap of more than a second
+            # makes the first batch reliably older than the second
+            time.sleep(a.populate_gap)
         srv.cli("DEBUG", "POPULATE", *map(str, SECOND))
         srv.cli("DBSIZE")  # eviction runs before each command
         insert_s = time.time() - t0
@@ -390,6 +394,8 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         log = f.read()
     m = re.search(r"MESH COUNT:\s+(\d+)", log)
     mesh_count = int(m.group(1)) if m else None
+    m = re.search(r"Arena VMAs:\s+(\d+)", log)
+    arena_vmas = int(m.group(1)) if m else None
     m = re.search(r"Write barrier:\s+(\S+)", log)
     barrier = m.group(1) if m else None
     m = re.search(r"Meshed MB HWM:\s+([\d.]+)", log)
@@ -432,6 +438,7 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         "active_defrag_hits": int(stats.get("active_defrag_hits", 0)),
         "mesh_count": mesh_count,
         "barrier": barrier,
+        "arena_vmas": arena_vmas,
         "meshed_mb_hwm": meshed_mb_hwm,
         "mesh_passes": passes,
         "mesh_pass_total_ms": pass_total_ms,
@@ -441,11 +448,35 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
     }
 
 
-def aggregate(results):
-    """{(server, config): {metric: median over trials}} plus *_min/*_max for final memory."""
+def label_eviction_states(results):
+    """Tag each result with its server's eviction outcome ("191k keys", ...).
+
+    How many keys survive eviction is bimodal: LRU timestamps have 1 s
+    resolution, so whether the two inserted batches get distinguishable
+    timestamps decides whether eviction removes mostly the older 240-byte keys
+    (fewer keys left) or picks among both batches (more, smaller keys left,
+    a more fragmented heap).  Key counts are clustered per server: a new
+    state starts where the count jumps by more than 10%.
+    """
+    for server in sorted({r["server"] for r in results}):
+        rs = sorted((r for r in results if r["server"] == server), key=lambda r: r["keys"])
+        clusters = [[rs[0]]] if rs else []
+        for r in rs[1:]:
+            if r["keys"] > clusters[-1][-1]["keys"] * 1.10:
+                clusters.append([])
+            clusters[-1].append(r)
+        for c in clusters:
+            label = f"{round(statistics.median(x['keys'] for x in c) / 1000)}k keys"
+            for x in c:
+                x["state"] = label
+
+
+def aggregate(results, by_state=False):
+    """{(server, config[, state]): {metric: median over trials}} plus *_min/*_max for final memory."""
     groups = {}
     for r in results:
-        groups.setdefault((r["server"], r["config"]), []).append(r)
+        key = (r["server"], r["config"], r["state"]) if by_state else (r["server"], r["config"])
+        groups.setdefault(key, []).append(r)
     agg = {}
     for key, rs in groups.items():
         d: dict = {"trials": len(rs)}
@@ -466,22 +497,27 @@ def fmt(v, spec=".1f"):
 
 
 def tables(agg, order, metric, trials, settle):
-    mem = [f"Memory ({metric}, MiB): median of {trials} trials, final range in brackets.  "
-           f"*RSS counts a meshed page once per virtual mapping.", "",
-           "| server | config | after insert | final | mean | RSS final* | used_memory |",
-           "|---|---|---|---|---|---|---|"]
-    lat = [f"Latency: median of {trials} trials.  Idle window = {settle:g} s after insertion; "
-           f"probe = GET every {PROBE_INTERVAL_S * 1000:g} ms during it.", "",
-           "| server | config | insert (s) | idle CPU (s) | probe p50 (ms) | probe p99 (ms) | probe max (ms) | "
-           "mesh passes | meshing total (ms) | longest pass (ms) | meshes | defrag hits |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
-    for key in order:
+    """Rows per (server, config, eviction state); medians within each."""
+    mem = [f"Memory ({metric}, MiB): median over the trials in each eviction state (n), final range in "
+           f"brackets; {trials} trials per config.  *RSS counts a meshed page once per virtual mapping.", "",
+           "| server | config | eviction state | n | after insert | final | mean | RSS final* | used_memory |",
+           "|---|---|---|---|---|---|---|---|---|"]
+    lat = [f"Latency: median over the trials in each eviction state.  Idle window = {settle:g} s after "
+           f"insertion; probe = GET every {PROBE_INTERVAL_S * 1000:g} ms during it.", "",
+           "| server | config | eviction state | insert (s) | idle CPU (s) | probe p50 (ms) | probe p99 (ms) | "
+           "probe max (ms) | mesh passes | meshing total (ms) | longest pass (ms) | meshes | defrag hits |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    rows = []
+    for s, c in order:
+        states = sorted((k for k in agg if k[0] == s and k[1] == c), key=lambda k: agg[k]["keys"])
+        rows.extend(states)
+    for key in rows:
         d = agg[key]
-        s, c = key
-        mem.append(f"| {s} | {c} | {fmt(d['mem_after_insert_mib'])} | {fmt(d['mem_final_mib'])} "
-                   f"[{fmt(d['mem_final_min'])}–{fmt(d['mem_final_max'])}] | {fmt(d['mem_mean_mib'])} | "
-                   f"{fmt(d['rss_final_mib'])} | {fmt(d['used_memory_mib'])} |")
-        lat.append(f"| {s} | {c} | {fmt(d['insert_s'], '.2f')} | {fmt(d['idle_cpu_s'], '.2f')} | "
+        s, c, st = key
+        mem.append(f"| {s} | {c} | {st} | {d['trials']} | {fmt(d['mem_after_insert_mib'])} | "
+                   f"{fmt(d['mem_final_mib'])} [{fmt(d['mem_final_min'])}–{fmt(d['mem_final_max'])}] | "
+                   f"{fmt(d['mem_mean_mib'])} | {fmt(d['rss_final_mib'])} | {fmt(d['used_memory_mib'])} |")
+        lat.append(f"| {s} | {c} | {st} | {fmt(d['insert_s'], '.2f')} | {fmt(d['idle_cpu_s'], '.2f')} | "
                    f"{fmt(d['probe_p50_ms'], '.2f')} | {fmt(d['probe_p99_ms'], '.2f')} | "
                    f"{fmt(d['probe_max_ms'], '.1f')} | {fmt(d['mesh_passes'], '.0f')} | "
                    f"{fmt(d['mesh_pass_total_ms'], '.0f')} | {fmt(d['mesh_pass_max_ms'], '.1f')} | "
@@ -498,6 +534,9 @@ def main():
     ap.add_argument("--trials", type=int, default=5)
     ap.add_argument("--settle", type=float, default=15.0, help="idle seconds after insertion")
     ap.add_argument("--seed", type=int, default=None, help="seed for the per-trial run order")
+    ap.add_argument("--policy", default="allkeys-lru", help="maxmemory-policy (the paper: allkeys-lru)")
+    ap.add_argument("--populate-gap", type=float, default=0.0,
+                    help="seconds to wait between the two batches (> 1 makes eviction deterministic)")
     ap.add_argument("--no-cgroup", action="store_true", help="measure PSS instead of cgroup memory")
     ap.add_argument("--mstat", help="path to mstat (github.com/bpowers/mstat); run each server under it")
     ap.add_argument("--json", help="write per-trial results (with memory time series) here")
@@ -532,13 +571,16 @@ def main():
             print(f"[trial {trial + 1}/{a.trials}] {server:7s} {config:22s} final {r['mem_final_mib']:7.1f} MiB  "
                   f"insert {r['insert_s']:.2f}s  idle CPU {r['idle_cpu_s']:.2f}s  "
                   f"probe p99 {r['probe_p99_ms']:.2f} max {r['probe_max_ms']:.1f} ms  "
-                  f"meshes {r['mesh_count']}  keys {r['keys']}" +
+                  f"meshes {r['mesh_count']}  keys {r['keys']}  arena VMAs {r['arena_vmas']}" +
                   (f"  barrier {r['barrier']}" if r["barrier"] else ""),
                   flush=True)
             results.append(r)
 
-    agg = aggregate(results)
-    out = tables(agg, order, metric, a.trials, a.settle)
+    label_eviction_states(results)
+    agg = aggregate(results)  # the check uses medians over all trials
+    out = tables(aggregate(results, by_state=True), order, metric, a.trials, a.settle)
+    if a.populate_gap > 0 or a.policy != "allkeys-lru":
+        out = f"Workload: maxmemory-policy {a.policy}, {a.populate_gap:g} s between batches.\n\n" + out
     versions = os.path.join(a.bin, "VERSIONS")
     if os.path.exists(versions):
         out = ("Versions: " + ", ".join(open(versions).read().split("\n")).strip(", ") +

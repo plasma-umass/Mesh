@@ -104,13 +104,20 @@ settle.
   effective, so passes continue after the application stops freeing.
 - **No fast-path cost:** nothing is added to malloc/free.
 
-## Benchmark caveat: Valkey's eviction is bimodal
+## Benchmark caveat: eviction is bimodal
 
-Valkey ends the benchmark with either ~191k or ~273k keys (same 100 MB of
-data), in every configuration. The 273k-key state is more fragmented:
+Redis and Valkey end the benchmark in one of two states. LRU timestamps have
+1-second resolution, so the outcome depends on whether the clock ticks between
+the two inserted batches. See `bench/kv/README.md`, whose `--populate-gap` and
+`--policy` options pin the state.
 
-| | ~191k keys | ~273k keys |
+| | low-key state | high-key state (more fragmented) |
 |---|---|---|
-| jemalloc | ~224 MiB | ~298 MiB |
-| Mesh | ~128 MiB | ~200 MiB, still dropping at 15 s |
-| jemalloc + activedefrag | ~113 MiB | ~113 MiB |
+| keys left (Redis / Valkey) | ~178k / ~191k | ~258k / ~282k |
+| Mesh, final | ~130 / ~128 MiB | ~185 / ~169 MiB (60 s window) |
+| jemalloc + activedefrag | ~115 / ~113 MiB | ~116 / ~113 MiB |
+
+In the high-key state the mesh cap is not binding. Raising `vm.max_map_count`
+16× gives the same result (~36k meshes, ~53k VMAs): Mesh runs out of meshable
+pairs. Earlier, an apparent difference between machines was mostly which state
+runs happened to land in.
