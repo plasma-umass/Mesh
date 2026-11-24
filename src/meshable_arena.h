@@ -274,8 +274,13 @@ public:
   // ---- THP mode ----------------------------------------------------------
   // Huge pages for the arena need shmem THP enabled for madvise:
   // /sys/kernel/mm/transparent_hugepage/shmem_enabled = advise (or always).
+  // (again: all but the pages remapped since, which stay unadvised)
   inline void adviseHugePages() {
 #ifdef MADV_HUGEPAGE
+    if (_advised) {
+      adviseHugePagesExceptRemapped();
+      return;
+    }
     madvise(_arenaBegin, kArenaSize, MADV_HUGEPAGE);
     _advised = true;
 #endif
