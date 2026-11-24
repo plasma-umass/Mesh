@@ -28,6 +28,19 @@ MiniHeap<PageSize> *oneMiniheap(GlobalHeap<PageSize> &gheap, size_t objectSize) 
   return mh;
 }
 
+// a 512 B miniheap that is the first in its region (earlier tests may have
+// left free pages in touched regions; those get used up into fillers)
+template <size_t PageSize>
+MiniHeap<PageSize> *firstInFreshRegion(GlobalHeap<PageSize> &gheap, std::vector<MiniHeap<PageSize> *> &fillers) {
+  while (true) {
+    const size_t touched = gheap.thpStats().regions;
+    auto mh = oneMiniheap(gheap, 512);
+    if (gheap.thpStats().regions > touched)
+      return mh;
+    fillers.push_back(mh);
+  }
+}
+
 template <size_t PageSize>
 void thpImpl() {
   if (!kMeshingEnabled) {
@@ -39,7 +52,8 @@ void thpImpl() {
   constexpr size_t kRegionPages = kThpRegionBytes / PageSize;
   auto region = [&](MiniHeap<PageSize> *mh) { return mh->span().offset / kRegionPages; };
 
-  // THP off: one zone
+  // THP off: one zone (THP mode may be on by default on this kernel)
+  gheap.setThpForTesting(false);
   {
     auto small = oneMiniheap(gheap, 64), big = oneMiniheap(gheap, 512);
     EXPECT_EQ(gheap.zoneOf(small->span().offset), 0);
@@ -52,8 +66,8 @@ void thpImpl() {
   gheap.setThpForTesting(true, 0.9);
   // 512 B+ classes go to zone-1 regions, small classes to zone 0
   auto small = oneMiniheap(gheap, 64);
-  std::vector<MiniHeap<PageSize> *> bigs;
-  bigs.push_back(oneMiniheap(gheap, 512));
+  std::vector<MiniHeap<PageSize> *> fillers, bigs;
+  bigs.push_back(firstInFreshRegion(gheap, fillers));
   EXPECT_EQ(gheap.zoneOf(small->span().offset), 0);
   EXPECT_EQ(gheap.zoneOf(bigs[0]->span().offset), 1);
   EXPECT_NE(region(small), region(bigs[0]));
@@ -84,6 +98,9 @@ void thpImpl() {
   EXPECT_EQ(gheap.thpStats().split, before.split + 1);
 
   for (auto mh : bigs) {
+    gheap.freeMiniheap(mh);
+  }
+  for (auto mh : fillers) {
     gheap.freeMiniheap(mh);
   }
   gheap.freeMiniheap(small);

@@ -277,6 +277,26 @@ public:
   inline void adviseHugePages() {
 #ifdef MADV_HUGEPAGE
     madvise(_arenaBegin, kArenaSize, MADV_HUGEPAGE);
+    _advised = true;
+#endif
+  }
+  // has the arena been MADV_HUGEPAGE'd (so remaps change VMA flags)?
+  inline bool hugePagesAdvised() const {
+    return _advised;
+  }
+  // after fork's remap: advise every page except those remapped since the
+  // arena was created (see markUnadvised), so the VMA flags match _unadvised
+  void adviseHugePagesExceptRemapped() {
+#ifdef MADV_HUGEPAGE
+    size_t runStart = 0;
+    for (auto const &page : _unadvised) {
+      if (page > runStart)
+        madvise(ptrFromOffset(runStart), (page - runStart) << kPageShift, MADV_HUGEPAGE);
+      runStart = page + 1;
+    }
+    const size_t arenaPages = kArenaSize / PageSize;
+    if (arenaPages > runStart)
+      madvise(ptrFromOffset(runStart), (arenaPages - runStart) << kPageShift, MADV_HUGEPAGE);
 #endif
   }
   // for tests: zones and the protect rule apply to spans allocated afterwards
@@ -295,16 +315,44 @@ public:
   }
   // would remapping or punching span (as meshing does) split an intact huge
   // page that is at least thpProtect() full?
+  // /sys/kernel/mm/transparent_hugepage/shmem_enabled selects (in brackets)
+  // advise, always, within_size or force.  (Raw syscalls: this runs while
+  // the allocator is being constructed, so nothing here may call malloc.)
+  static bool kernelShmemThpAvailable() {
+    const int fd = open("/sys/kernel/mm/transparent_hugepage/shmem_enabled", O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+      return false;
+    char buf[128];
+    const ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0)
+      return false;
+    buf[n] = '\0';
+    const char *sel = strchr(buf, '[');
+    if (sel == nullptr)
+      return false;
+    for (const char *mode : {"[advise]", "[always]", "[within_size]", "[force]"})
+      if (strncmp(sel, mode, strlen(mode)) == 0)
+        return true;
+    return false;
+  }
+
+  // touched and never punched or remapped: still on one huge page
+  inline bool regionIntact(size_t r) const {
+    return (_regionFlags[r] & (kRegionTouched | kRegionSplit)) == kRegionTouched;
+  }
   inline bool spanInDenseIntactRegion(const Span &span) const {
     for (size_t r = span.offset / kRegionPages; r <= (span.offset + span.length - 1) / kRegionPages; r++) {
-      if ((_regionFlags[r] & (kRegionTouched | kRegionSplit)) == kRegionTouched &&
-          _regionUsed[r] >= _thpProtect * kRegionPages)
+      if (regionIntact(r) && _regionUsed[r] >= _thpProtect * kRegionPages)
         return true;
     }
     return false;
   }
   struct ThpStats {
     size_t regions, intact, intactPages, split, splitPages;
+    size_t intactSlackPages() const {
+      return intact * kRegionPages - intactPages;  // resident (one huge page each) but unused
+    }
   };
   ThpStats thpStats() const {
     ThpStats st{};
@@ -509,6 +557,7 @@ private:
     auto sz = static_cast<size_t>(span.length) << kPageShift;
     mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
          internal::pageOffsetToFileOffset<PageSize>(span.offset));
+    markUnadvised(span.offset, span.length);
     retrackVmaBoundaries(span.offset, span.length, span.offset);
   }
 
@@ -575,21 +624,32 @@ private:
     }
   }
 
+  inline void markUnadvised(size_t start, size_t length) {
+    if (!_advised)
+      return;
+    for (size_t i = 0; i < length; i++)
+      _unadvised.tryToSet(start + i);
+  }
+  // do pages p-1 and p differ in MADV_HUGEPAGE (and so can't share a VMA)?
+  inline bool adviceChangesAt(size_t page) const {
+    return _unadvised.isSet(page - 1) != _unadvised.isSet(page);
+  }
+
   // span [start, start+length) now maps file pages [filePage, filePage+length)
   void retrackVmaBoundaries(size_t start, size_t length, size_t filePage) {
     constexpr size_t arenaPages = kArenaSize / PageSize;
     for (size_t i = 1; i < length; i++) {
-      setVmaBoundary(start + i, false);
+      setVmaBoundary(start + i, adviceChangesAt(start + i));
     }
     size_t neighbor = 0;
     if (start > 0) {
       const bool known = neighborFilePage(start - 1, true, neighbor);
-      setVmaBoundary(start, !known || neighbor + 1 != filePage);
+      setVmaBoundary(start, !known || neighbor + 1 != filePage || adviceChangesAt(start));
     }
     const size_t end = start + length;
     if (end < arenaPages) {
       const bool known = neighborFilePage(end, false, neighbor);
-      setVmaBoundary(end, !known || neighbor != filePage + length);
+      setVmaBoundary(end, !known || neighbor != filePage + length || adviceChangesAt(end));
     }
   }
 
@@ -636,6 +696,7 @@ private:
   static constexpr size_t kRegionPages = kThpRegionBytes / PageSize;
   static constexpr size_t kRegions = kArenaSize / kThpRegionBytes;
   bool _thp{false};
+  bool _advised{false};  // see hugePagesAdvised
   double _thpProtect{kThpProtectDefault};
   // per 2 MiB region (mmap'd: zeroed, touched only as the arena grows)
   uint8_t *_regionZone{reinterpret_cast<uint8_t *>(OneWayMmapHeap().malloc(kRegions))};
@@ -660,6 +721,14 @@ private:
       kArenaSize / PageSize,
       reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / PageSize))), false};
   size_t _vmaBoundaryCount{0};
+  // THP mode: pages remapped (meshed, or reset to identity) at some point.
+  // A MAP_FIXED remap makes a fresh VMA without MADV_HUGEPAGE; we leave it
+  // that way, so the kernel never collapses (and refills) memory meshing
+  // released.  Its flags differ from advised neighbors, so the kernel can't
+  // merge them: a VMA boundary.
+  internal::RelaxedBitmap _unadvised{
+      kArenaSize / PageSize,
+      reinterpret_cast<char *>(OneWayMmapHeap().malloc(bitmap::representationSize(kArenaSize / PageSize))), false};
   size_t _maxMapCount{0};  // 0: not on Linux / unknown -> page-based cap
   size_t _mapCountReserve{0};
 
@@ -716,8 +785,12 @@ MeshableArena<PageSize>::MeshableArena() : SuperHeap(), _fastPrng(internal::seed
       munmap(reinterpret_cast<char *>(aligned) + kArenaSize, kThpRegionBytes - head);
   }
   if (kMeshingEnabled) {
+    // MESH_THP=1 forces THP mode on, MESH_THP=0 off; by default it is on
+    // when the kernel will give a madvised memfd huge pages
     if (const char *thp = getenv("MESH_THP")) {
       _thp = strcmp(thp, "1") == 0;
+    } else {
+      _thp = kernelShmemThpAvailable();
     }
     if (const char *prot = getenv("MESH_THP_PROTECT")) {
       _thpProtect = strtod(prot, nullptr);
@@ -1194,6 +1267,7 @@ void MeshableArena<PageSize>::finalizeMesh(void *keep, void *remove, size_t sz) 
   void *ptr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
                    internal::pageOffsetToFileOffset<PageSize>(keepOff));
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
+  markUnadvised(removeOff, pageCount);
   retrackVmaBoundaries(removeOff, pageCount, keepOff);
   markRegionsSplit(removeOff, pageCount);  // remapped: the kernel splits its huge page
 
