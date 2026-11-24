@@ -144,6 +144,9 @@ public:
       return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(ms).count());
     };
     _passBudgetNs = budgetNs("MESH_PASS_BUDGET_MS", kMeshPassBudget);
+    if (const char *s = getenv("MESH_MAX_PROBES")) {
+      _maxProbes = std::max<size_t>(1, strtoull(s, nullptr, 10));
+    }
     Super::setScavengeBudgetNs(budgetNs("MESH_SCAVENGE_BUDGET_MS", kScavengeBudget));
   }
 
@@ -786,6 +789,7 @@ private:
                              SplitArray<PageSize> &right, PassBudget &budget);
 
   uint64_t _passBudgetNs{0};
+  size_t _maxProbes{kDefaultMaxProbes};
   // Settledness (see kMaxMeshDeferral): per miniheap ID, 1 + its in-use
   // count when a pass last looked at it (0 = not seen yet).  Indexed like
   // _mhAllocator; touched lazily.

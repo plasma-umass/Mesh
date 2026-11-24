@@ -406,7 +406,7 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
   auto canPair = function<bool(const MiniHeapT *, const MiniHeapT *)>(
       [&](const MiniHeapT *a, const MiniHeapT *b) { return !(meshSplitsDenseRegion(a) && meshSplitsDenseRegion(b)); });
   method::shiftedSplitting(this->_fastPrng, &_partialFreelist[sizeClass].first, left, right, meshFound,
-                           protect ? &canPair : nullptr);
+                           protect ? &canPair : nullptr, _maxProbes, budget.deadlineNs);
 
   if (mergeSetCount == 0) {
     // debug("nothing to mesh.");
@@ -813,13 +813,25 @@ void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry<PageSize> *mi
   internal::mwcShuffle(&right[0], &right[rightSize], prng);
 }
 
+// right-half entry with its occupancy at the start of the pass (frees during
+// the pass may lower inUseCount; sorting needs fixed keys)
+template <size_t PageSize>
+struct RightEntry {
+  uint32_t occ;
+  MiniHeap<PageSize> *mh;
+};
+
+/// SplitMesher (Figure 2 of the paper), probing only possible pairs: two
+/// spans with r and r' objects can mesh only if r + r' <= b (their bitmaps
+/// overlap otherwise).  The right half is sorted by occupancy, and left span
+/// j with r objects probes positions j, j+1, ... (mod P) of the P right spans
+/// holding at most b - r, up to probeLimit of them, until the deadline.
 template <size_t PageSize>
 void ATTRIBUTE_NEVER_INLINE shiftedSplitting(
     MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, SplitArray<PageSize> &right,
     const function<bool(std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> &&)> &meshFound,
-    const function<bool(const MiniHeap<PageSize> *, const MiniHeap<PageSize> *)> *canPair) noexcept {
-  constexpr size_t t = 64;
-
+    const function<bool(const MiniHeap<PageSize> *, const MiniHeap<PageSize> *)> *canPair, size_t probeLimit,
+    uint64_t deadlineNs) noexcept {
   if (miniheaps->empty()) {
     return;
   }
@@ -833,26 +845,60 @@ void ATTRIBUTE_NEVER_INLINE shiftedSplitting(
     return;
   }
 
-  // Bitmap size increased from 32 bytes (256 bits) to 128 bytes (1024 bits)
-  // Using PageSize to calculate nBytes
+  // (mmap'd once: no allocation while the heap's locks are held)
+  using Entries = std::array<RightEntry<PageSize>, kMaxSplitListSize>;
+  static Entries *entriesPtr = []() {
+    void *ptr = mmap(nullptr, sizeof(Entries), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    hard_assert(ptr != MAP_FAILED);
+    return new (ptr) Entries();
+  }();
+  Entries &entries = *entriesPtr;
+  for (size_t k = 0; k < rightSize; k++) {
+    entries[k] = RightEntry<PageSize>{right[k]->inUseCount(), right[k]};
+  }
+  // (right was shuffled, so spans of equal occupancy stay in random order)
+  std::sort(&entries[0], &entries[rightSize],
+            [](const RightEntry<PageSize> &x, const RightEntry<PageSize> &y) { return x.occ < y.occ; });
+  for (size_t k = 0; k < rightSize; k++) {
+    right[k] = entries[k].mh;
+  }
+
   constexpr size_t nBytes = PageSize / kMinObjectSize / 8;
-  const size_t limit = rightSize < t ? rightSize : t;
   d_assert(nBytes == left[0]->bitmap().byteCount());
+  const uint32_t b = left[0]->maxCount();
 
   size_t foundCount = 0;
+  size_t probes = 0;
   for (size_t j = 0; j < leftSize; j++) {
-    const size_t idxLeft = j;
-    size_t idxRight = j;
-
+    auto h1 = left[j];
+    if (h1 == nullptr)
+      continue;
+    const uint32_t r = h1->inUseCount();
+    if (r > b)
+      continue;
+    // P = number of right spans with occupancy <= b - r
+    const auto *end = std::upper_bound(&entries[0], &entries[rightSize], b - r,
+                                       [](uint32_t v, const RightEntry<PageSize> &e) { return v < e.occ; });
+    const size_t P = static_cast<size_t>(end - &entries[0]);
+    if (P == 0)
+      continue;
+    const size_t limit = P < probeLimit ? P : probeLimit;
+    size_t idxRight = j % P;
     for (size_t i = 0; i < limit; i++, idxRight++) {
-      if (unlikely(idxRight >= rightSize)) {
-        idxRight %= rightSize;
+      if (unlikely(idxRight >= P)) {
+        idxRight -= P;
       }
-      auto h1 = left[idxLeft];
       auto h2 = right[idxRight];
-
-      if (h1 == nullptr || h2 == nullptr)
+      if (h2 == nullptr)
         continue;
+
+      if (unlikely(deadlineNs != 0 && (++probes & 4095) == 0)) {
+        const auto now = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                .count());
+        if (now >= deadlineNs)
+          return;
+      }
 
       const auto bitmap1 = h1->bitmap().bits();
       const auto bitmap2 = h2->bitmap().bits();
@@ -864,12 +910,13 @@ void ATTRIBUTE_NEVER_INLINE shiftedSplitting(
       if (unlikely(areMeshable)) {
         std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> heaps{h1, h2};
         bool shouldContinue = meshFound(std::move(heaps));
-        left[idxLeft] = nullptr;
+        left[j] = nullptr;
         right[idxRight] = nullptr;
         foundCount++;
         if (unlikely(foundCount > kMaxMeshesPerIteration || !shouldContinue)) {
           return;
         }
+        break;
       }
     }
   }

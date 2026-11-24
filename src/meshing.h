@@ -57,7 +57,8 @@ template <size_t PageSize>
 void shiftedSplitting(
     MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, SplitArray<PageSize> &right,
     const function<bool(std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> &&)> &meshFound,
-    const function<bool(const MiniHeap<PageSize> *, const MiniHeap<PageSize> *)> *canPair = nullptr) noexcept;
+    const function<bool(const MiniHeap<PageSize> *, const MiniHeap<PageSize> *)> *canPair = nullptr,
+    size_t probeLimit = kDefaultMaxProbes, uint64_t deadlineNs = 0) noexcept;
 }  // namespace method
 }  // namespace mesh
 
