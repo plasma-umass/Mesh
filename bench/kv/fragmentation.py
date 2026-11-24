@@ -13,6 +13,9 @@ Configurations, per server:
                          (parameters from memefficiency.tcl)
   glibc                  MALLOC=libc build
   mesh-nomesh            MALLOC=libc build + libmesh, MESH_PERIOD_MS=0
+  mesh-thp               MALLOC=libc build + libmesh, MESH_THP=1: arena on
+                         transparent huge pages (needs shmem_enabled=advise);
+                         not in the default set
                          (same allocator and randomization, meshing disabled)
   mesh                   MALLOC=libc build + libmesh
 
@@ -48,6 +51,7 @@ import json
 import os
 import random
 import re
+import signal
 import socket
 import statistics
 import subprocess
@@ -106,6 +110,19 @@ def cpu_s(pid):
     with open(f"/proc/{pid}/stat") as f:
         fields = f.read().rsplit(")", 1)[1].split()
     return (int(fields[11]) + int(fields[12])) / CLK_TCK  # utime, stime
+
+
+def pmd_mapped_mib(pid):
+    """Shmem/file memory of pid mapped with huge (PMD) pages, from smaps_rollup."""
+    total = 0
+    try:
+        with open(f"/proc/{pid}/smaps_rollup") as f:
+            for line in f:
+                if line.startswith(("ShmemPmdMapped:", "FilePmdMapped:", "AnonHugePages:")):
+                    total += int(line.split()[1])
+    except OSError:
+        return None
+    return round(total / 1024, 1)
 
 
 CGROUP_ROOT = "/sys/fs/cgroup"
@@ -318,16 +335,35 @@ def read_mstat_tsv(path):
     return out
 
 
+# Generic events, valid on any CPU with a PMU.  On Intel, add
+# dtlb_load_misses.walk_active,dtlb_store_misses.walk_active for cycles spent walking page tables.
+PERF_EVENTS = "dTLB-load-misses,dTLB-store-misses,cycles,instructions"
+
+
+def read_perf_csv(path):
+    """{event: count} from perf stat -x , output (unsupported/uncounted events omitted)."""
+    out = {}
+    with open(path) as f:
+        for line in f:
+            parts = line.strip().split(",")
+            if len(parts) >= 3 and parts[0].replace(".", "").isdigit():
+                out[parts[2]] = int(float(parts[0]))
+    return out
+
+
 def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
     jemalloc = config.startswith("jemalloc")
     binary = os.path.join(a.bin, f"{server_name}-server-{'jemalloc' if jemalloc else 'libc'}")
     cli = os.path.join(a.bin, f"{server_name}-cli")
-    env = {k: v for k, v in os.environ.items() if k not in ("LD_PRELOAD", "MESH_PERIOD_MS", "MALLOCSTATS")}
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("LD_PRELOAD", "MESH_PERIOD_MS", "MALLOCSTATS", "MESH_THP")}
     if config.startswith("mesh"):
         env["LD_PRELOAD"] = a.libmesh
         env["MALLOCSTATS"] = "2"  # level 2 adds the arena accounting (ACCT lines)
         if config == "mesh-nomesh":
             env["MESH_PERIOD_MS"] = "0"
+        if config == "mesh-thp":
+            env["MESH_THP"] = "1"
 
     tag = f"{server_name}-{config.replace('+', '-')}-{trial}"
     log_path = os.path.join(logdir, f"{tag}.log")
@@ -357,9 +393,14 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
 
     th = threading.Thread(target=sampler, daemon=True)
     probe = None
+    perf, counters = None, {}
     try:
         srv.cli("CONFIG", "SET", "maxmemory", "100mb")
         srv.cli("CONFIG", "SET", "maxmemory-policy", a.policy)
+        if a.perf:  # hardware counters for the server, insertion through the end of the window
+            perf_out = os.path.join(logdir, f"{tag}.perf.csv")
+            perf = subprocess.Popen(["perf", "stat", "-x", ",", "-e", a.perf, "-p", str(pid), "-o", perf_out])
+            time.sleep(0.5)  # let perf attach
         t0 = time.time()
         th.start()
         srv.cli("DEBUG", "POPULATE", *map(str, FIRST))
@@ -383,6 +424,11 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         mem = srv.info("memory")
         stats = srv.info("stats")
         keys = int(srv.cli("DBSIZE"))
+        pmd_mib = pmd_mapped_mib(pid)
+        if perf:
+            perf.send_signal(signal.SIGINT)
+            perf.wait(timeout=30)
+            counters = read_perf_csv(perf_out)
     finally:
         if probe and not probe.stop.is_set():
             probe.stop.set()
@@ -449,6 +495,9 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         "active_defrag_hits": int(stats.get("active_defrag_hits", 0)),
         "mesh_count": mesh_count,
         "barrier": barrier,
+        # memory the kernel maps with 2 MiB pages (THP), at the end of the window
+        "pmd_mapped_mib": pmd_mib,
+        "perf": counters,
         "arena_vmas": arena_vmas,
         "meshed_mb_hwm": meshed_mb_hwm,
         "mesh_passes": passes,
@@ -550,6 +599,9 @@ def main():
                     help="seconds to wait between the two batches (> 1 makes eviction deterministic)")
     ap.add_argument("--no-cgroup", action="store_true", help="measure PSS instead of cgroup memory")
     ap.add_argument("--mstat", help="path to mstat (github.com/bpowers/mstat); run each server under it")
+    ap.add_argument("--perf", metavar="EVENTS", nargs="?", const=PERF_EVENTS,
+                    help="count perf events (comma-separated; default: TLB misses, cycles, instructions) for "
+                         "each server, from insertion to the end of the window; needs perf and hardware counters")
     ap.add_argument("--json", help="write per-trial results (with memory time series) here")
     ap.add_argument("--check", action="store_true", help="fail unless meshing happened and helped")
     ap.add_argument("--min-reduction", type=float, default=0.15,
@@ -583,7 +635,9 @@ def main():
                   f"insert {r['insert_s']:.2f}s  idle CPU {r['idle_cpu_s']:.2f}s  "
                   f"probe p99 {r['probe_p99_ms']:.2f} max {r['probe_max_ms']:.1f} ms  "
                   f"meshes {r['mesh_count']}  keys {r['keys']}  arena VMAs {r['arena_vmas']}" +
-                  (f"  barrier {r['barrier']}" if r["barrier"] else ""),
+                  (f"  barrier {r['barrier']}" if r["barrier"] else "") +
+                  (f"  dTLB load misses {r['perf']['dTLB-load-misses'] / 1e6:.2f}M"
+                   if "dTLB-load-misses" in r["perf"] else ""),
                   flush=True)
             results.append(r)
 

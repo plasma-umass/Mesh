@@ -110,6 +110,9 @@ void MeshableArena<PageSize>::afterForkChild() {
   // retry after explicitly unmapping the old arena.
   void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, 0);
   hard_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
+  if (_thp) {
+    adviseHugePages();  // the new mapping lost MADV_HUGEPAGE
+  }
 
   {
     internal::unordered_set<void *> seenMiniheaps{};
@@ -143,9 +146,8 @@ void MeshableArena<PageSize>::afterForkChild() {
         }
 #endif
 
-        void *remapPtr =
-            mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd,
-                 internal::pageOffsetToFileOffset<PageSize>(keepOff));
+        void *remapPtr = mmap(remove, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd,
+                              internal::pageOffsetToFileOffset<PageSize>(keepOff));
         hard_assert_msg(remapPtr != MAP_FAILED, "mesh remap failed: %d", errno);
 
         return false;

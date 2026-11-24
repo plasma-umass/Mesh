@@ -172,6 +172,17 @@ static constexpr std::chrono::milliseconds kFreeScavengeInterval{10};
 // kMaxMeshDeferral, mesh them anyway so constant churn cannot starve meshing.
 static constexpr std::chrono::milliseconds kMaxMeshDeferral{5000};
 
+// THP mode (MESH_THP=1; needs shmem THP: shmem_enabled = advise or always):
+// the arena is advised MADV_HUGEPAGE in 2 MiB regions.  Spans of size
+// classes of kThpBigClassBytes and up (which tend to stay dense and mesh
+// rarely) and large allocations get their own regions (zone 1), others zone 0.
+// A mesh that would split an intact huge page at least kThpProtectDefault
+// full (MESH_THP_PROTECT) is skipped.
+static constexpr size_t kThpRegionBytes = 2UL << 20;
+static constexpr int kThpZones = 2;
+static constexpr size_t kThpBigClassBytes = 512;
+static constexpr double kThpProtectDefault = 0.9;
+
 static constexpr size_t kDefaultMaxMeshCount = 30000;
 static constexpr size_t kMaxMeshesPerIteration = 2500;
 
