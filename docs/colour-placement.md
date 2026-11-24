@@ -99,6 +99,43 @@ pass finds nothing.  The table shows spans released, as a share of the ideal
   rare; hedging is insurance against them, and `α` trades gain for the
   worst-case bound.
 
+## On real traces: no gain, and why
+
+Replaying the Redis/Valkey traces through the simulator's model of today's
+Mesh (`bench/hugepage/meshsim.cc --mode mesh4k`, branch `hugepage-sim`):
+
+| | today | colour, α = 0 | colour, α = ½ | 4 levels, α = 0 |
+|---|---|---|---|---|
+| Redis, low-key | 114.8 MiB | 114.8 | 114.8 | 114.7 |
+| Redis, high-key | 169.8 | 169.6 | 169.9 | 169.6 |
+| Valkey, low-key | 114.0 | 114.0 | 114.1 | 114.1 |
+| Valkey, high-key | 153.0 | 152.8 | 152.8 | 152.8 |
+
+The 4-level row is hierarchical colour placement (`--colour-levels`): blocks
+filled in order of `index XOR colour`, so merged spans keep a colour at the
+next level up.  It doesn't help either.  Where the memory is (Redis,
+high-key, end of run):
+
+- **16 B and 32 B spans** (256 and 128 slots, 53 MiB, mostly 25–50% full)
+  never mesh under any placement or search setting.  Redis fills them
+  completely while populating, then evicts at random.  A span that has been
+  full has no colour structure left; its survivors are wherever eviction left
+  them.  **No placement policy can help a span that has been full.** That is
+  the non-relocating limit, here exactly.
+- **256 B and 512 B spans** (16 and 8 slots, 108 MiB, 50–100% full) are
+  limited by **search depth**: with 4,096 probes instead of 64, Redis
+  high-key ends at 156.9 MiB instead of 169.7 (−8%).  Lemma 5.3 asks for
+  `t = k/q` probes; Mesh uses a fixed 64, too few when `q` is small.
+
+Two conclusions:
+
+- **Colour placement** helps workloads whose spans shrink before they fill:
+  spans freed while still filling, short-lived bursts, newest-first frees. It
+  does not help fill-then-evict workloads like these.
+- **An adaptive probe limit**, `t ≈ k/q̂` per size class from a running
+  estimate `q̂` of the probe success rate, within the pass budget, follows
+  directly from Lemma 5.3 and needs no workload tuning.
+
 ## Open obligations
 
 - **Lemma 5.3 with heterogeneous edge probabilities.** Hedged populations have
@@ -110,6 +147,5 @@ pass finds nothing.  The table shows spans released, as a share of the ideal
   fraction `α`; the mixed statement is still to be written.
 - **Multiple spans per shuffle vector, and refills**, are relabelling-invariant
   but are not modelled in `Shuffle.lean`.
-- **Real traces:** the Redis/Valkey traces (`bench/hugepage`, branch
-  `hugepage-sim`) are on the EC2 dev box; replaying them with colour placement
-  is the next check before implementing.
+- **Lemma 5.3 itself:** the paper's proof has a gap. `theory/lean/README.md`
+  describes it, and the repaired argument proved there.
