@@ -1,0 +1,5 @@
+name = "mesh-theory"
+defaultTargets = ["MeshTheory"]
+
+[[lean_lib]]
+name = "MeshTheory"
