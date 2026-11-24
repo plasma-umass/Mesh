@@ -892,7 +892,10 @@ void ATTRIBUTE_NEVER_INLINE shiftedSplitting(
       if (h2 == nullptr)
         continue;
 
-      if (unlikely(deadlineNs != 0 && (++probes & 4095) == 0)) {
+      if (unlikely(++probes >= kMaxProbesPerClass)) {
+        return;
+      }
+      if (unlikely(deadlineNs != 0 && (probes & 4095) == 0)) {
         const auto now = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
                 .count());
