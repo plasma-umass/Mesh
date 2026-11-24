@@ -153,7 +153,9 @@ public:
     return arena <= ptrval && ptrval < arena + kArenaSize;
   }
 
-  char *pageAlloc(Span &result, size_t pageCount, size_t pageAlignment = 1);
+  // zone: see kThpZones -- spans of small size classes (0) vs. 512 B+ classes
+  // and large allocations (1); always 0 unless THP mode is on
+  char *pageAlloc(Span &result, size_t pageCount, size_t pageAlignment = 1, int zone = 0);
 
   void free(void *ptr, size_t sz, internal::PageType type);
 
@@ -269,14 +271,68 @@ public:
 
   // While a mesh pass runs it scavenges on its own schedule; frees during
   // the pass must not trigger extra (unbudgeted-in-aggregate) scavenges.
+  // ---- THP mode ----------------------------------------------------------
+  // Huge pages for the arena need shmem THP enabled for madvise:
+  // /sys/kernel/mm/transparent_hugepage/shmem_enabled = advise (or always).
+  inline void adviseHugePages() {
+#ifdef MADV_HUGEPAGE
+    madvise(_arenaBegin, kArenaSize, MADV_HUGEPAGE);
+#endif
+  }
+  // for tests: zones and the protect rule apply to spans allocated afterwards
+  inline void setThpForTesting(bool on, double protect = kThpProtectDefault) {
+    _thp = on;
+    _thpProtect = protect;
+  }
+  inline bool thpEnabled() const {
+    return _thp;
+  }
+  inline double thpProtect() const {
+    return _thpProtect;
+  }
+  inline int zoneOf(size_t offset) const {
+    return _regionZone[offset / kRegionPages];
+  }
+  // would remapping or punching span (as meshing does) split an intact huge
+  // page that is at least thpProtect() full?
+  inline bool spanInDenseIntactRegion(const Span &span) const {
+    for (size_t r = span.offset / kRegionPages; r <= (span.offset + span.length - 1) / kRegionPages; r++) {
+      if ((_regionFlags[r] & (kRegionTouched | kRegionSplit)) == kRegionTouched &&
+          _regionUsed[r] >= _thpProtect * kRegionPages)
+        return true;
+    }
+    return false;
+  }
+  struct ThpStats {
+    size_t regions, intact, intactPages, split, splitPages;
+  };
+  ThpStats thpStats() const {
+    ThpStats st{};
+    for (size_t r = 0; r < kRegions && r * kRegionPages < _end; r++) {
+      if (!(_regionFlags[r] & kRegionTouched))
+        continue;
+      st.regions++;
+      if (_regionFlags[r] & kRegionSplit) {
+        st.split++;
+        st.splitPages += _regionUsed[r];
+      } else {
+        st.intact++;
+        st.intactPages += _regionUsed[r];
+      }
+    }
+    return st;
+  }
+
   // read-only views for GlobalHeap::dumpAccounting
   inline size_t arenaEndPages() const {
     return _end;
   }
   template <typename F>
   void forEachFreeSpan(F f) const {
-    forEachFree(_clean, [&](const Span &s) { f(s, false); });
-    forEachFree(_dirty, [&](const Span &s) { f(s, true); });
+    for (int z = 0; z < kThpZones; z++) {
+      forEachFree(_clean[z], [&](const Span &s) { f(s, false); });
+      forEachFree(_dirty[z], [&](const Span &s) { f(s, true); });
+    }
   }
   inline void *pagePointer(size_t off) const {
     return ptrFromOffset(off);
@@ -319,11 +375,11 @@ public:
   void freePhys(void *ptr, size_t sz);
 
 private:
-  void expandArena(size_t minPagesAdded);
-  bool findPages(size_t pageCount, Span &result, internal::PageType &type);
+  void expandArena(size_t minPagesAdded, int zone);
+  bool findPages(size_t pageCount, Span &result, internal::PageType &type, int zone);
   bool ATTRIBUTE_NEVER_INLINE findPagesInner(internal::vector<Span> freeSpans[kSpanClassCount], size_t i,
                                              size_t pageCount, Span &result);
-  Span reservePages(size_t pageCount, size_t pageAlignment);
+  Span reservePages(size_t pageCount, size_t pageAlignment, int zone);
   internal::RelaxedBitmap allocatedBitmap(bool includeDirty = true) const;
 
   void *malloc(size_t sz) = delete;
@@ -351,18 +407,19 @@ private:
     // this happens when we are trying to get an aligned allocation
     // and returning excess back to the arena
     if (flags == internal::PageType::Clean) {
-      _clean[span.spanClass()].push_back(span);
+      _clean[zoneOf(span.offset)][span.spanClass()].push_back(span);
       return;
     }
 
     clearIndex(span);
+    addRegionUse(span, -1);
 
     if (flags == internal::PageType::Dirty) {
       if (kAdviseDump) {
         madvise(ptrFromOffset(span.offset), static_cast<size_t>(span.length) << kPageShift, MADV_DONTDUMP);
       }
       d_assert(span.length > 0);
-      _dirty[span.spanClass()].push_back(span);
+      _dirty[zoneOf(span.offset)][span.spanClass()].push_back(span);
       _dirtyPageCount += span.length;
 
       const size_t maxDirtyPageThreshold = (kMaxDirtyPageThreshold * kPageSize4K) / PageSize;
@@ -453,6 +510,25 @@ private:
     mmap(ptr, sz, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, _fd,
          internal::pageOffsetToFileOffset<PageSize>(span.offset));
     retrackVmaBoundaries(span.offset, span.length, span.offset);
+  }
+
+  // ---- THP region bookkeeping --------------------------------------------
+  inline void addRegionUse(const Span &span, int sign) {
+    size_t off = span.offset, left = span.length;
+    while (left > 0) {
+      const size_t r = off / kRegionPages;
+      const size_t n = std::min(left, (r + 1) * kRegionPages - off);
+      _regionUsed[r] = static_cast<uint16_t>(_regionUsed[r] + sign * static_cast<int>(n));
+      if (sign > 0)
+        _regionFlags[r] |= kRegionTouched;
+      off += n;
+      left -= n;
+    }
+  }
+  // a page in these regions was punched or remapped: the kernel splits the huge page
+  inline void markRegionsSplit(size_t offset, size_t length) {
+    for (size_t r = offset / kRegionPages; r <= (offset + length - 1) / kRegionPages; r++)
+      _regionFlags[r] |= kRegionSplit;
   }
 
   // --- VMA tracking ---------------------------------------------------
@@ -551,8 +627,23 @@ private:
   // to identity mappings in the page tables.
   internal::vector<Span> _toReset;
 
-  internal::vector<Span> _clean[kSpanClassCount];
-  internal::vector<Span> _dirty[kSpanClassCount];
+  internal::vector<Span> _clean[kThpZones][kSpanClassCount];
+  internal::vector<Span> _dirty[kThpZones][kSpanClassCount];
+
+  // THP mode (MESH_THP=1): the arena is 2 MiB aligned and MADV_HUGEPAGE, and
+  // the kernel backs each 2 MiB region with a huge page while no page of it
+  // has been punched or remapped.  Regions are owned by one zone each.
+  static constexpr size_t kRegionPages = kThpRegionBytes / PageSize;
+  static constexpr size_t kRegions = kArenaSize / kThpRegionBytes;
+  bool _thp{false};
+  double _thpProtect{kThpProtectDefault};
+  // per 2 MiB region (mmap'd: zeroed, touched only as the arena grows)
+  uint8_t *_regionZone{reinterpret_cast<uint8_t *>(OneWayMmapHeap().malloc(kRegions))};
+  // pages of live (or meshed-away) spans
+  uint16_t *_regionUsed{reinterpret_cast<uint16_t *>(OneWayMmapHeap().malloc(kRegions * sizeof(uint16_t)))};
+  // kRegionTouched | kRegionSplit
+  uint8_t *_regionFlags{reinterpret_cast<uint8_t *>(OneWayMmapHeap().malloc(kRegions))};
+  static constexpr uint8_t kRegionTouched = 1, kRegionSplit = 2;
 
   size_t _dirtyPageCount{0};
 
@@ -605,7 +696,36 @@ MeshableArena<PageSize>::MeshableArena() : SuperHeap(), _fastPrng(internal::seed
   }
   _arenaBegin = SuperHeap::map(kArenaSize, kMapShared, fd);
 #else
-  _arenaBegin = SuperHeap::map(kArenaSize, kMapShared, fd);
+  {
+    // 2 MiB aligned, so each 2 MiB region of the arena can be one huge page
+    // (and file offsets line up with virtual addresses)
+    const int flags = kMapShared;
+    void *reserve =
+        mmap(nullptr, kArenaSize + kThpRegionBytes, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    hard_assert(reserve != MAP_FAILED);
+    const uintptr_t aligned =
+        (reinterpret_cast<uintptr_t>(reserve) + kThpRegionBytes - 1) & ~(uintptr_t)(kThpRegionBytes - 1);
+    _arenaBegin =
+        mmap(reinterpret_cast<void *>(aligned), kArenaSize, HL_MMAP_PROTECTION_MASK, flags | MAP_FIXED, fd, 0);
+    hard_assert(_arenaBegin != MAP_FAILED);
+    // return the unused ends of the reservation
+    const size_t head = aligned - reinterpret_cast<uintptr_t>(reserve);
+    if (head > 0)
+      munmap(reserve, head);
+    if (kThpRegionBytes - head > 0)
+      munmap(reinterpret_cast<char *>(aligned) + kArenaSize, kThpRegionBytes - head);
+  }
+  if (kMeshingEnabled) {
+    if (const char *thp = getenv("MESH_THP")) {
+      _thp = strcmp(thp, "1") == 0;
+    }
+    if (const char *prot = getenv("MESH_THP_PROTECT")) {
+      _thpProtect = strtod(prot, nullptr);
+    }
+    if (_thp) {
+      adviseHugePages();
+    }
+  }
 #endif
 
   _mhIndex = reinterpret_cast<atomic<MiniHeapID> *>(SuperHeap::malloc(indexSize()));
@@ -669,8 +789,10 @@ char *MeshableArena<PageSize>::openSpanDir(int pid) {
 }
 
 template <size_t PageSize>
-void MeshableArena<PageSize>::expandArena(size_t minPagesAdded) {
-  const size_t pageCount = std::max(minPagesAdded, kMinArenaExpansion);
+void MeshableArena<PageSize>::expandArena(size_t minPagesAdded, int zone) {
+  // whole 2 MiB regions, so each region belongs to one zone
+  size_t pageCount = std::max(minPagesAdded, kMinArenaExpansion);
+  pageCount = (pageCount + kRegionPages - 1) / kRegionPages * kRegionPages;
 
   Span expansion(_end, pageCount);
   _end += pageCount;
@@ -682,7 +804,9 @@ void MeshableArena<PageSize>::expandArena(size_t minPagesAdded) {
     abort();
   }
 
-  _clean[expansion.spanClass()].push_back(expansion);
+  for (size_t r = expansion.offset / kRegionPages; r < _end / kRegionPages; r++)
+    _regionZone[r] = static_cast<uint8_t>(zone);
+  _clean[zone][expansion.spanClass()].push_back(expansion);
 }
 
 template <size_t PageSize>
@@ -731,16 +855,16 @@ bool MeshableArena<PageSize>::findPagesInner(internal::vector<Span> freeSpans[kS
 }
 
 template <size_t PageSize>
-bool MeshableArena<PageSize>::findPages(const size_t pageCount, Span &result, internal::PageType &type) {
+bool MeshableArena<PageSize>::findPages(const size_t pageCount, Span &result, internal::PageType &type, int zone) {
   for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
-    if (findPagesInner(_dirty, i, pageCount, result)) {
+    if (findPagesInner(_dirty[zone], i, pageCount, result)) {
       type = internal::PageType::Dirty;
       return true;
     }
   }
 
   for (size_t i = Span(0, pageCount).spanClass(); i < kSpanClassCount; i++) {
-    if (findPagesInner(_clean, i, pageCount, result)) {
+    if (findPagesInner(_clean[zone], i, pageCount, result)) {
       type = internal::PageType::Clean;
       return true;
     }
@@ -750,15 +874,15 @@ bool MeshableArena<PageSize>::findPages(const size_t pageCount, Span &result, in
 }
 
 template <size_t PageSize>
-Span MeshableArena<PageSize>::reservePages(const size_t pageCount, const size_t pageAlignment) {
+Span MeshableArena<PageSize>::reservePages(const size_t pageCount, const size_t pageAlignment, int zone) {
   d_assert(pageCount >= 1);
 
   internal::PageType flags(internal::PageType::Unknown);
   Span result(0, 0);
-  auto ok = findPages(pageCount, result, flags);
+  auto ok = findPages(pageCount, result, flags, zone);
   if (!ok) {
-    expandArena(pageCount);
-    ok = findPages(pageCount, result, flags);
+    expandArena(pageCount, zone);
+    ok = findPages(pageCount, result, flags, zone);
     hard_assert(ok);
   }
 
@@ -767,7 +891,7 @@ Span MeshableArena<PageSize>::reservePages(const size_t pageCount, const size_t 
 
   if (unlikely(pageAlignment > 1 && ((ptrvalFromOffset(result.offset) >> kPageShift) % pageAlignment != 0))) {
     freeSpan(result, flags);
-    result = reservePages(pageCount + 2 * pageAlignment, 1);
+    result = reservePages(pageCount + 2 * pageAlignment, 1, zone);
 
     const size_t alignment = pageAlignment << kPageShift;
     const uintptr_t alignedPtr = (ptrvalFromOffset(result.offset) + alignment - 1) & ~(alignment - 1);
@@ -803,15 +927,17 @@ internal::RelaxedBitmap MeshableArena<PageSize>::allocatedBitmap(bool includeDir
     }
   };
 
-  if (includeDirty)
-    forEachFree(_dirty, unmarkPages);
-  forEachFree(_clean, unmarkPages);
+  for (int z = 0; z < kThpZones; z++) {
+    if (includeDirty)
+      forEachFree(_dirty[z], unmarkPages);
+    forEachFree(_clean[z], unmarkPages);
+  }
 
   return bitmap;
 }
 
 template <size_t PageSize>
-char *MeshableArena<PageSize>::pageAlloc(Span &result, size_t pageCount, size_t pageAlignment) {
+char *MeshableArena<PageSize>::pageAlloc(Span &result, size_t pageCount, size_t pageAlignment, int zone) {
   if (pageCount == 0) {
     return nullptr;
   }
@@ -821,8 +947,9 @@ char *MeshableArena<PageSize>::pageAlloc(Span &result, size_t pageCount, size_t 
   d_assert(pageCount >= 1);
   d_assert(pageCount < std::numeric_limits<Length>::max());
 
-  auto span = reservePages(pageCount, pageAlignment);
+  auto span = reservePages(pageCount, pageAlignment, _thp ? zone : 0);
   d_assert(isAligned(span, pageAlignment));
+  addRegionUse(span, +1);
 
   d_assert(contains(ptrFromOffset(span.offset)));
 #ifndef NDEBUG
@@ -864,23 +991,25 @@ void MeshableArena<PageSize>::partialScavenge() {
   // dirty for the next call
   const uint64_t deadline = scavengeDeadlineNs();
   size_t keptPages = 0;
-  for (size_t i = 0; i < kSpanClassCount; i++) {
-    internal::vector<Span> kept{};
-    for (size_t j = 0; j < _dirty[i].size(); j++) {
-      const Span span = _dirty[i][j];
-      // once over budget keep everything else; check the clock every 16 spans
-      if (keptPages != 0 || ((j & 15) == 0 && pastDeadline(deadline))) {
-        kept.push_back(span);
-        keptPages += span.length;
-        continue;
+  for (int z = 0; z < kThpZones; z++) {
+    for (size_t i = 0; i < kSpanClassCount; i++) {
+      internal::vector<Span> kept{};
+      for (size_t j = 0; j < _dirty[z][i].size(); j++) {
+        const Span span = _dirty[z][i][j];
+        // once over budget keep everything else; check the clock every 16 spans
+        if (keptPages != 0 || ((j & 15) == 0 && pastDeadline(deadline))) {
+          kept.push_back(span);
+          keptPages += span.length;
+          continue;
+        }
+        auto ptr = ptrFromOffset(span.offset);
+        auto sz = span.byteLength();
+        madvise(ptr, sz, MADV_DONTNEED);
+        freePhys(ptr, sz);
+        _clean[z][span.spanClass()].push_back(span);
       }
-      auto ptr = ptrFromOffset(span.offset);
-      auto sz = span.byteLength();
-      madvise(ptr, sz, MADV_DONTNEED);
-      freePhys(ptr, sz);
-      _clean[span.spanClass()].push_back(span);
+      _dirty[z][i] = std::move(kept);
     }
-    _dirty[i] = std::move(kept);
   }
 
   _dirtyPageCount = keptPages;
@@ -932,46 +1061,52 @@ void MeshableArena<PageSize>::scavenge(bool force) {
   }
 
   size_t keptPages = 0;
-  for (size_t i = 0; i < kSpanClassCount; i++) {
-    internal::vector<Span> kept{};
-    for (size_t j = 0; j < _dirty[i].size(); j++) {
-      const Span span = _dirty[i][j];
-      if (keptPages != 0 || ((j & 15) == 0 && pastDeadline(deadline))) {
-        kept.push_back(span);
-        keptPages += span.length;
-        continue;
+  for (int z = 0; z < kThpZones; z++) {
+    for (size_t i = 0; i < kSpanClassCount; i++) {
+      internal::vector<Span> kept{};
+      for (size_t j = 0; j < _dirty[z][i].size(); j++) {
+        const Span span = _dirty[z][i][j];
+        if (keptPages != 0 || ((j & 15) == 0 && pastDeadline(deadline))) {
+          kept.push_back(span);
+          keptPages += span.length;
+          continue;
+        }
+        auto ptr = ptrFromOffset(span.offset);
+        auto sz = span.byteLength();
+        madvise(ptr, sz, MADV_DONTNEED);
+        freePhys(ptr, sz);
+        markPages(span);
       }
-      auto ptr = ptrFromOffset(span.offset);
-      auto sz = span.byteLength();
-      madvise(ptr, sz, MADV_DONTNEED);
-      freePhys(ptr, sz);
-      markPages(span);
+      _dirty[z][i] = std::move(kept);
     }
-    _dirty[i] = std::move(kept);
   }
 
   _dirtyPageCount = keptPages;
 
-  for (size_t i = 0; i < kSpanClassCount; i++) {
-    _clean[i] = internal::vector<Span>{};
+  for (int z = 0; z < kThpZones; z++) {
+    for (size_t i = 0; i < kSpanClassCount; i++) {
+      _clean[z][i] = internal::vector<Span>{};
+    }
   }
 
+  // rebuild the clean lists from the free pages; a free run never crosses
+  // from one zone's region into another's
   Span current(0, 0);
   for (auto const &i : bitmap) {
-    if (i == current.offset + current.length) {
+    if (i == current.offset + current.length && zoneOf(i) == zoneOf(current.offset)) {
       current.length++;
       continue;
     }
 
     if (!current.empty()) {
-      _clean[current.spanClass()].push_back(current);
+      _clean[zoneOf(current.offset)][current.spanClass()].push_back(current);
     }
 
     current = Span(i, 1);
   }
 
   if (!current.empty()) {
-    _clean[current.spanClass()].push_back(current);
+    _clean[zoneOf(current.offset)][current.spanClass()].push_back(current);
   }
 #ifndef NDEBUG
   // spans the budget left dirty are still off the clean lists, so compare
@@ -994,6 +1129,7 @@ template <size_t PageSize>
 void MeshableArena<PageSize>::freePhys(void *ptr, size_t sz) {
   d_assert(contains(ptr));
   d_assert(sz > 0);
+  markRegionsSplit(offsetFor(ptr), sz >> kPageShift);
 
   d_assert(sz / CPUInfo::PageSize > 0);
   d_assert(sz % CPUInfo::PageSize == 0);
@@ -1059,6 +1195,7 @@ void MeshableArena<PageSize>::finalizeMesh(void *keep, void *remove, size_t sz) 
                    internal::pageOffsetToFileOffset<PageSize>(keepOff));
   hard_assert_msg(ptr != MAP_FAILED, "mesh remap failed: %d", errno);
   retrackVmaBoundaries(removeOff, pageCount, keepOff);
+  markRegionsSplit(removeOff, pageCount);  // remapped: the kernel splits its huge page
 
   // writers blocked by beginMesh retry against the new mapping
   _barrier.commit(remove, sz);

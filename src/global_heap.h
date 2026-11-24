@@ -87,6 +87,9 @@ public:
   atomic_size_t meshPassMaxNs;
   // meshable pairs skipped because a span's occupancy was still changing
   atomic_size_t meshPairsDeferred;
+  // THP mode: meshable pairs skipped because both sides would split an
+  // intact, dense huge page
+  atomic_size_t meshPairsProtected;
 };
 
 template <size_t PageSize>
@@ -179,7 +182,10 @@ public:
 
     // allocate out of the arena
     Span span{0, 0};
-    char *spanBegin = Super::pageAlloc(span, pageCount, pageAlignment);
+    // THP mode: 512 B+ size classes and large allocations get their own 2 MiB
+    // regions (zone 1); they tend to stay dense, so their huge pages stay intact
+    const int zone = (sizeClass < 0 || objectSize >= kThpBigClassBytes) ? 1 : 0;
+    char *spanBegin = Super::pageAlloc(span, pageCount, pageAlignment, zone);
     d_assert(spanBegin != nullptr);
     d_assert((reinterpret_cast<uintptr_t>(spanBegin) / getPageSize()) % pageAlignment == 0);
 

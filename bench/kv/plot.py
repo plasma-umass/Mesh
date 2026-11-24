@@ -35,6 +35,7 @@ SLOTS = {
     "jemalloc": 3,
     "glibc": 4,
     "mesh-nomesh": 5,
+    "mesh-thp": 6,
 }
 LABELS = {
     "mesh": "Mesh",
@@ -42,6 +43,7 @@ LABELS = {
     "jemalloc": "jemalloc",
     "glibc": "glibc",
     "mesh-nomesh": "Mesh, meshing off",
+    "mesh-thp": "Mesh + THP",
 }
 GRID_S = 0.1
 PAPER_WINDOW_S = 7.5
@@ -131,6 +133,7 @@ def build_panels(results):
                 "lat_p999": percentile(lat_ms, 99.9),
                 "lat_max": lat_ms[-1] if lat_ms else 0.0,
                 "pass_max": statistics.median((r.get("mesh_pass_max_ms") or 0) for r in rs),
+                "pmd": statistics.median((r.get("pmd_mapped_mib") or 0) for r in rs),
                 "requests": len(lat_ms),
             })
         insert_end = statistics.median(r["insert"] for r in rows) if rows else 0
@@ -381,7 +384,7 @@ function renderPanel(p) {
   const tbl = document.createElement("table"); sec.appendChild(tbl);
   const hr = tbl.insertRow();
   for (const h of ["configuration", "trials", `mean, first ${PAPER_WINDOW} s`, "mean", "median", "p90", "peak",
-                   "final"]) {
+                   "final", "on huge pages"]) {
     const th = document.createElement("th"); th.textContent = h; hr.appendChild(th);
   }
   for (const r of p.rows) {
@@ -390,7 +393,7 @@ function renderPanel(p) {
     const k = document.createElement("i"); k.className = "key"; k.style.background = color(r.slot); c0.appendChild(k);
     c0.appendChild(document.createTextNode(r.name));
     tr.insertCell().textContent = r.trials;
-    for (const f of ["mean_paper", "mean", "p50", "p90", "peak", "final"]) tr.insertCell().textContent = r[f].toFixed(1);
+    for (const f of ["mean_paper", "mean", "p50", "p90", "peak", "final", "pmd"]) tr.insertCell().textContent = r[f].toFixed(1);
   }
   // 4. latency
   const h4 = document.createElement("h3"); h4.textContent = "Latency (GET every 10 ms during the idle window)";
