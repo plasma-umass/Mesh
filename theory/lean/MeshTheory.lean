@@ -8,3 +8,4 @@ import MeshTheory.Paper
 import MeshTheory.SplitMesher
 import MeshTheory.Prob.Bounds
 import MeshTheory.Prob.Lemma53
+import MeshTheory.Prob.Lipschitz
