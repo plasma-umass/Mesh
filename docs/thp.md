@@ -96,10 +96,20 @@ wherever file pages stop being consecutive.
 
 The kernel makes a region's whole 2 MiB resident at its first touch. The
 arena fills regions in order, so each zone's newest region is partly used
-but fully resident. That is up to 2 MiB per zone, about 1.5 MiB in total in
+but fully resident. That is up to 2 MiB per zone, 1.4–1.8 MiB in total in
 the Redis/Valkey runs, and doesn't grow with the heap. The rest of the gap
-to plain Mesh comes from regions the protect rule keeps intact, which then
-aren't meshed.
+to plain Mesh (up to about 2 MiB) is memory in regions the protect rule
+keeps intact, which then isn't meshed.
+
+Measured on EC2 t3.2xlarge (median of 3 trials), THP mode against plain
+Mesh:
+
+| | final | mean over the run | peak |
+|---|---|---|---|
+| Redis, low-key | +1.1 MiB | +0.6 MiB | +0.7 MiB |
+| Valkey, low-key | +3.2 MiB | +3.5 MiB | +2.3 MiB |
+| Redis, high-key | +2.0 MiB | −2.9 MiB | +0.9 MiB |
+| Valkey, high-key | +3.8 MiB | +1.6 MiB | +2.4 MiB |
 
 ### Why not mesh whole huge pages
 
