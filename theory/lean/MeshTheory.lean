@@ -5,7 +5,9 @@ import MeshTheory.Hedged
 import MeshTheory.Colour
 import MeshTheory.Shuffle
 import MeshTheory.Paper
+import MeshTheory.Occupancy
 import MeshTheory.SplitMesher
 import MeshTheory.Prob.Bounds
 import MeshTheory.Prob.Lemma53
 import MeshTheory.Prob.Lipschitz
+import MeshTheory.Prob.Hetero

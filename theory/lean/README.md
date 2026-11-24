@@ -54,6 +54,20 @@ paper's `(1−e^{−2k})/2`; all three tend to 1/2.
    exactly `t` windows, so `Σ_i T_i ≤ t M`.
 5. `matches_bound`: combining gives the bound.
 
+Extensions, also fully formal:
+- **`lemma53_hetero`** (`Prob/Hetero.lean`): the same bound when each pair
+  meshes independently with its own probability `p i j ≥ q`.  This is the
+  setting of hedged placement and of size classes whose spans differ in
+  occupancy.
+- **`lipschitz`** (`Prob/Lipschitz.lean`): changing one left span's row changes
+  the match count by at most 1.  That is the bounded-differences hypothesis
+  for McDiarmid or Azuma–Hoeffding (Mathlib has the latter in measure form),
+  which would give the high-probability version.  Connecting this finite model
+  to Mathlib's filtrations is not done.
+- **`filter_sound`, `qu_antitone`** (`Occupancy.lean`): Mesh's occupancy
+  filter (probe only partners with `r + r' ≤ b`) never skips a pair that could
+  mesh, and lower-occupancy partners mesh more often.
+
 The Nat versions (`good_match_found`, `taken_in_windows`, `chord_bound`,
 `lemma53_core` in `SplitMesher.lean`) are core-only.
 
@@ -78,6 +92,7 @@ Still open:
 | `Paper.lean` | §5.1–5.2 |
 | `SplitMesher.lean` | §5.3 (algorithm, good matches, core-only pieces) |
 | `Prob/Bounds.lean`, `Prob/Lemma53.lean` | §5.3 in expectation (Mathlib) |
+| `Prob/Hetero.lean`, `Prob/Lipschitz.lean`, `Occupancy.lean` | extensions above |
 
 General theorems use only `propext`, `Classical.choice` and `Quot.sound`. The
 exhaustive checks (`native_decide`) also trust the compiler.
