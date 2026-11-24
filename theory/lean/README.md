@@ -1,7 +1,8 @@
 # Mesh theory in Lean
 
-Lean 4 core only (no Mathlib), toolchain in `lean-toolchain`.  Build with
-`lake build`.
+Lean 4 with Mathlib (`v4.36.0`), toolchain in `lean-toolchain`.  Build with
+`lake exe cache get && lake build`.  The combinatorial files use only Lean
+core; the probabilistic ones (`Prob/`) use Mathlib.
 
 ## The paper's §5 (PLDI '19), result by result
 
@@ -17,7 +18,7 @@ Lean 4 core only (no Mathlib), toolchain in `lean-toolchain`.  Build with
 | §5.2 example: b = 32, r = 10, n = 1000: under 2 triangles, against 167 if independent | `paper_triangle_example` | |
 | SplitMesher (Figure 2) | `firstFree`, `run`, `splitMesher` | |
 | Lemma 5.3: every good match is found | `good_match_found` | with condition (3) corrected; `printed_condition_insufficient` is a counterexample to the printed one |
-| Lemma 5.3: the bound on matches | `taken_in_windows`, `chord_bound`, `lemma53_core` | **repaired argument**, see below |
+| Lemma 5.3: the bound on matches | `Prob.lemma53_expectation`, `Prob.lemma53_exp` | **repaired argument, in expectation, fully formal**, see below |
 | The random-placement assumption, for Mesh's actual shuffle vector | `shuffle_vector_uniform`, `unshuffled_not_uniform` | exhaustive, 4 slots, all sequences up to 10 ops |
 
 ### Lemma 5.3
@@ -38,22 +39,30 @@ edge to `v_j'` for `i ≤ j' < j`, and (3) "no edges between `u_i'` and `v_j` fo
   is 0.34, 0.52, 0.72 and 0.88 for k = ½, 1, 2 and 4, against the claimed
   (1−e^{−2k})/2 = 0.32, 0.43, 0.49 and 0.50 (`theory/colour/lemma53.py`).
 
-**Repaired argument**, giving `E[M]/(n/2) ≥ (1−(1−q)^t)/(2−(1−q)^t) ≥
-(1−e^{−k})/(2−e^{−k})`.  That is close to the paper's bound and also tends to
-1/2.
+**Repaired argument** (`Prob/Lemma53.lean`).  The setting is `h` left and `h`
+right vertices, independent edges with probability `q`, and SplitMesher as
+Mesh implements it (window `i … i+t-1` mod `h`).  The probability space is the
+finite set of graphs with product weights.  It proves
+`E[M]/h ≥ (1−(1−q)^t)/(2−(1−q)^t)`, and `≥ (1−e^{−k})/(2−e^{−k})` once
+`t ≥ k/q`.  `repaired_vs_paper` places this between `(1−e^{−k})/2` and the
+paper's `(1−e^{−2k})/2`; all three tend to 1/2.
 
-1. `taken_in_windows`: each right vertex is in at most `t` windows, so
-   `Σ_i T_i ≤ t M`, where `T_i` counts taken vertices in `u_i`'s window.
-   `run_taken_mono` shows taken sets only grow.
-2. *(modelling step)* Edges are revealed only when probed, and each pair at
-   most once, so `u_i` stays unmatched with probability `(1−q)^(t−T_i)`.  This
-   holds for independent edges.  Mesh's strings are independent only on
-   acyclic edge sets, the same caveat as the paper's.
-3. `chord_bound`: `(1−q)^(t−T) ≤ (1−q)^t + (T/t)(1−(1−q)^t)` (convexity).
-4. `lemma53_core`: summing gives the bound.
+1. `takenAt_congr`: the vertices taken before `u_i` depend only on rows `< i`.
+2. `expect_row_avoid` (row independence): `P(u_i unmatched) = E[(1−q)^(free_i)]`.
+3. `chord`: `(1−q)^(t−T) ≤ (1−q)^t + (T/t)(1−(1−q)^t)`, by convexity.
+4. `sum_window_inter`, `card_windows_containing`: every right vertex is in
+   exactly `t` windows, so `Σ_i T_i ≤ t M`.
+5. `matches_bound`: combining gives the bound.
 
-The high-probability part (Chernoff and union bounds) isn't formalized; it
-would need Mathlib.
+The Nat versions (`good_match_found`, `taken_in_windows`, `chord_bound`,
+`lemma53_core` in `SplitMesher.lean`) are core-only.
+
+Still open:
+- **High probability.** The paper's Chernoff argument needs independent
+  indicators; here they are dependent, and changing one row can cascade, so
+  bounded differences doesn't apply directly.
+- **The string model.** In it, edges are independent only on acyclic sets
+  (the paper's caveat as well).
 
 ## Extensions: colour placement
 
@@ -67,7 +76,8 @@ would need Mathlib.
 | `Colour.lean` | `canonical_dominates`, oblivious-adversary counterexamples |
 | `Shuffle.lean` | `shuffle_vector_uniform` |
 | `Paper.lean` | §5.1–5.2 |
-| `SplitMesher.lean` | §5.3 |
+| `SplitMesher.lean` | §5.3 (algorithm, good matches, core-only pieces) |
+| `Prob/Bounds.lean`, `Prob/Lemma53.lean` | §5.3 in expectation (Mathlib) |
 
 General theorems use only `propext`, `Classical.choice` and `Quot.sound`. The
 exhaustive checks (`native_decide`) also trust the compiler.
