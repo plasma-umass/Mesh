@@ -65,8 +65,10 @@ MiniHeap<PageSize> *oneMiniheap(GlobalHeap<PageSize> &gheap) {
   return mh;
 }
 
+// thp: as in THP mode, the arena is MADV_HUGEPAGE and remapped ranges are
+// left unadvised, so they don't merge back with advised neighbors
 template <size_t PageSize>
-void vmaTrackingImpl() {
+void vmaTrackingImpl(bool thp) {
 #ifndef __linux__
   GTEST_SKIP() << "VMA tracking is Linux-only";
 #endif
@@ -77,6 +79,10 @@ void vmaTrackingImpl() {
   gheap.setMeshPeriodMs(kZeroMs);
   ASSERT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
   gheap.scavenge(true);
+  if (thp) {
+    gheap.setThpForTesting(true);
+    gheap.adviseHugePages();
+  }
 
   // exact whenever every meshed span's owner is known; otherwise an upper bound
   auto check = [&](const char *when, bool exact = true) {
@@ -164,16 +170,29 @@ void vmaTrackingImpl() {
   }
   check("after freeing (resets pending)", false);  // owners gone: may over-count
   gheap.scavenge(true);
-  EXPECT_EQ(check("after scavenge"), 1UL);
+  const size_t after = check("after scavenge");
+  if (!gheap.hugePagesAdvised()) {
+    EXPECT_EQ(after, 1UL);  // (advised: reset ranges stay separate VMAs)
+  }
   EXPECT_EQ(gheap.getAllocatedMiniheapCount(), 0UL);
+  gheap.setThpForTesting(false);
 }
 
 }  // namespace
 
 TEST(VmaTrackingTest, MatchesProcMaps) {
   if (getPageSize() == 4096) {
-    vmaTrackingImpl<4096>();
+    vmaTrackingImpl<4096>(false);
   } else {
-    vmaTrackingImpl<16384>();
+    vmaTrackingImpl<16384>(false);
+  }
+}
+
+// (after the test above: once advised, the arena stays advised)
+TEST(VmaTrackingTest, MatchesProcMapsThp) {
+  if (getPageSize() == 4096) {
+    vmaTrackingImpl<4096>(true);
+  } else {
+    vmaTrackingImpl<16384>(true);
   }
 }

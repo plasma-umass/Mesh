@@ -13,11 +13,11 @@ Configurations, per server:
                          (parameters from memefficiency.tcl)
   glibc                  MALLOC=libc build
   mesh-nomesh            MALLOC=libc build + libmesh, MESH_PERIOD_MS=0
+                         (same allocator and randomization, meshing disabled)
+  mesh                   MALLOC=libc build + libmesh, MESH_THP=0
   mesh-thp               MALLOC=libc build + libmesh, MESH_THP=1: arena on
                          transparent huge pages (needs shmem_enabled=advise);
                          not in the default set
-                         (same allocator and randomization, meshing disabled)
-  mesh                   MALLOC=libc build + libmesh
 
 Each of --trials trials runs every (server, config) once, in a fresh random
 order; tables report medians across trials.
@@ -362,8 +362,8 @@ def run_one(server_name, config, a, logdir, trial, use_cgroup, mstat):
         env["MALLOCSTATS"] = "2"  # level 2 adds the arena accounting (ACCT lines)
         if config == "mesh-nomesh":
             env["MESH_PERIOD_MS"] = "0"
-        if config == "mesh-thp":
-            env["MESH_THP"] = "1"
+        # THP mode is on by default where the kernel allows it; pin it either way
+        env["MESH_THP"] = "1" if config == "mesh-thp" else "0"
 
     tag = f"{server_name}-{config.replace('+', '-')}-{trial}"
     log_path = os.path.join(logdir, f"{tag}.log")

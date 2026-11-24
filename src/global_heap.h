@@ -772,6 +772,16 @@ private:
   };
 
   // meshSizeClassLocked returns the number of meshes performed
+  // THP mode: would remapping mh's spans (meshing it away) split a dense intact region?
+  bool meshSplitsDenseRegion(const MiniHeapT *mh) const {
+    bool hit = false;
+    mh->forEachMeshed([&](const MiniHeapT *m) {
+      hit = Super::spanInDenseIntactRegion(m->span());
+      return hit;
+    });
+    return hit;
+  }
+
   size_t meshSizeClassLocked(size_t sizeClass, MergeSetArray<PageSize> &mergeSets, SplitArray<PageSize> &left,
                              SplitArray<PageSize> &right, PassBudget &budget);
 

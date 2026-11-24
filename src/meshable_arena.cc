@@ -110,7 +110,7 @@ void MeshableArena<PageSize>::afterForkChild() {
   // retry after explicitly unmapping the old arena.
   void *ptr = mmap(_arenaBegin, kArenaSize, HL_MMAP_PROTECTION_MASK, kMapShared | MAP_FIXED, newFd, 0);
   hard_assert_msg(ptr != MAP_FAILED, "map failed: %d", errno);
-  if (_thp) {
+  if (_advised) {
     adviseHugePages();  // the new mapping lost MADV_HUGEPAGE
   }
 

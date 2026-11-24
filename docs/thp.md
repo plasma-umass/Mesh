@@ -1,6 +1,6 @@
 # THP mode: Mesh on transparent huge pages
 
-`MESH_THP=1` puts Mesh's arena on 2 MiB transparent huge pages (THP) wherever
+THP mode puts Mesh's arena on 2 MiB transparent huge pages (THP) wherever
 that doesn't cost meshing. Meshing still works at 4 KiB, as before. Memory
 that stays dense keeps its huge pages; memory that fragments gets meshed and
 falls back to 4 KiB pages, one 2 MiB region at a time.
@@ -8,16 +8,20 @@ falls back to 4 KiB pages, one 2 MiB region at a time.
 On Redis and Valkey it cuts data-TLB misses by 83–94% and server CPU cycles
 by 7–10%, for 1–5 MiB of extra memory (see [Results](#results)).
 
-## Requirement
+## Turning it on
 
-Shmem THP must be enabled for `madvise`:
+THP mode is on by default wherever the kernel gives huge pages to a
+madvised memfd: when `/sys/kernel/mm/transparent_hugepage/shmem_enabled`
+selects `advise`, `always`, `within_size` or `force`. `MESH_THP=1` forces it
+on and `MESH_THP=0` off. (With `always` or `force` the kernel uses huge
+pages even with `MESH_THP=0`, just without the zones and protect rule.)
+
+Many distributions (AL2023 among them) default to `never`, which leaves
+Mesh on 4 KiB pages. To allow huge pages:
 
 ```sh
 echo advise | sudo tee /sys/kernel/mm/transparent_hugepage/shmem_enabled
 ```
-
-Many distributions (AL2023 among them) default to `never`; then the arena
-stays on 4 KiB pages and THP mode only changes where spans are placed.
 
 ## The algorithm
 
@@ -66,11 +70,46 @@ whether any of `src`'s spans lies in a **dense intact region** (at least
 
 - if not, mesh as usual;
 - if so and `dst` isn't in one, swap them, splitting `dst`'s region instead;
-- if both are, skip the pair (counted as *pairs protected*).
+- if both are, the pair can't be meshed without splitting one. The mesh
+  search (SplitMesher) rejects such pairs, so each span keeps probing for a
+  partner outside a dense region. A pair that becomes both-dense after the
+  search is skipped (counted as *pairs protected*).
 
 Regions below the threshold are fair game: they are mostly empty, so meshing
 them saves more memory than their huge page is worth. `MESH_THP_PROTECT=0`
 turns the rule off.
+
+### Remapped pages stay off huge pages
+
+Meshing remaps virtual pages with `mmap(MAP_FIXED)`, and so does restoring a
+freed meshed span to its own file pages. The new mapping doesn't carry
+`MADV_HUGEPAGE`, and Mesh leaves it that way. Otherwise the kernel's
+`khugepaged` would collapse split regions back into huge pages, allocating
+zeroed pages for the holes meshing and scavenging had released.
+
+The cost is VMAs: a remapped range can't merge with its advised neighbors.
+Mesh's VMA count (which caps meshing below `vm.max_map_count`) keeps one bit
+per page for "remapped", and counts a boundary wherever it changes as well as
+wherever file pages stop being consecutive.
+
+### Where the extra memory goes
+
+The kernel makes a region's whole 2 MiB resident at its first touch. The
+arena fills regions in order, so each zone's newest region is partly used
+but fully resident. That is up to 2 MiB per zone, 1.4–1.8 MiB in total in
+the Redis/Valkey runs, and doesn't grow with the heap. The rest of the gap
+to plain Mesh (up to about 2 MiB) is memory in regions the protect rule
+keeps intact, which then isn't meshed.
+
+Measured on EC2 t3.2xlarge (median of 3 trials), THP mode against plain
+Mesh:
+
+| | final | mean over the run | peak |
+|---|---|---|---|
+| Redis, low-key | +1.1 MiB | +0.6 MiB | +0.7 MiB |
+| Valkey, low-key | +3.2 MiB | +3.5 MiB | +2.3 MiB |
+| Redis, high-key | +2.0 MiB | −2.9 MiB | +0.9 MiB |
+| Valkey, high-key | +3.8 MiB | +1.6 MiB | +2.4 MiB |
 
 ### Why not mesh whole huge pages
 

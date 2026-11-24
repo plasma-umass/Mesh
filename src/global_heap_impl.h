@@ -399,7 +399,14 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
         return mergeSetCount < kMaxMergeSets;
       });
 
-  method::shiftedSplitting(this->_fastPrng, &_partialFreelist[sizeClass].first, left, right, meshFound);
+  // THP mode: a pair whose spans all lie in dense intact regions can't be
+  // meshed without splitting one (see below), so let the search find each of
+  // them another partner instead
+  const bool protect = Super::thpEnabled() && Super::thpProtect() > 0;
+  auto canPair = function<bool(const MiniHeapT *, const MiniHeapT *)>(
+      [&](const MiniHeapT *a, const MiniHeapT *b) { return !(meshSplitsDenseRegion(a) && meshSplitsDenseRegion(b)); });
+  method::shiftedSplitting(this->_fastPrng, &_partialFreelist[sizeClass].first, left, right, meshFound,
+                           protect ? &canPair : nullptr);
 
   if (mergeSetCount == 0) {
     // debug("nothing to mesh.");
@@ -457,17 +464,9 @@ size_t GlobalHeap<PageSize>::meshSizeClassLocked(size_t sizeClass, MergeSetArray
     // THP mode: meshing remaps src's spans, splitting their huge pages.  If
     // that would split an intact, dense one, mesh the other way round if dst's
     // spans are not in one; otherwise leave the pair alone.
-    if (Super::thpEnabled() && Super::thpProtect() > 0) {
-      auto splitsDense = [&](MiniHeapT *mh) {
-        bool hit = false;
-        mh->forEachMeshed([&](const MiniHeapT *m) {
-          hit = Super::spanInDenseIntactRegion(m->span());
-          return hit;
-        });
-        return hit;
-      };
-      if (splitsDense(src)) {
-        if (splitsDense(dst)) {
+    if (protect) {
+      if (meshSplitsDenseRegion(src)) {
+        if (meshSplitsDenseRegion(dst)) {
           _stats.meshPairsProtected.fetch_add(1, std::memory_order_relaxed);
           continue;
         }
@@ -755,9 +754,10 @@ void GlobalHeap<PageSize>::dumpStats(int level, bool beDetailed) const {
       fclose(f);
     }
     debug(
-        "THP:                regions %zu: intact %zu (%.1f MiB in use), split %zu (%.1f MiB); "
+        "THP:                regions %zu: intact %zu (%.1f MiB in use, %.1f MiB unused), split %zu (%.1f MiB); "
         "protect %.2f; pairs protected %zu; kernel PMD-mapped %.1f MiB\n",
-        th.regions, th.intact, th.intactPages * PageSize / 1048576.0, th.split, th.splitPages * PageSize / 1048576.0,
+        th.regions, th.intact, th.intactPages * PageSize / 1048576.0, th.intactSlackPages() * PageSize / 1048576.0,
+        th.split, th.splitPages * PageSize / 1048576.0,
         Super::thpProtect(), (size_t)_stats.meshPairsProtected, pmdKiB / 1024.0);
   }
   if (Super::arenaVmaLimit() != 0) {
@@ -816,7 +816,8 @@ void ATTRIBUTE_NEVER_INLINE halfSplit(MWC &prng, MiniHeapListEntry<PageSize> *mi
 template <size_t PageSize>
 void ATTRIBUTE_NEVER_INLINE shiftedSplitting(
     MWC &prng, MiniHeapListEntry<PageSize> *miniheaps, SplitArray<PageSize> &left, SplitArray<PageSize> &right,
-    const function<bool(std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> &&)> &meshFound) noexcept {
+    const function<bool(std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> &&)> &meshFound,
+    const function<bool(const MiniHeap<PageSize> *, const MiniHeap<PageSize> *)> *canPair) noexcept {
   constexpr size_t t = 64;
 
   if (miniheaps->empty()) {
@@ -856,7 +857,9 @@ void ATTRIBUTE_NEVER_INLINE shiftedSplitting(
       const auto bitmap1 = h1->bitmap().bits();
       const auto bitmap2 = h2->bitmap().bits();
 
-      const bool areMeshable = mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes);
+      // (canPair can veto a meshable pair; then h1 keeps probing)
+      const bool areMeshable =
+          mesh::bitmapsMeshable(bitmap1, bitmap2, nBytes) && (canPair == nullptr || (*canPair)(h1, h2));
 
       if (unlikely(areMeshable)) {
         std::pair<MiniHeap<PageSize> *, MiniHeap<PageSize> *> heaps{h1, h2};

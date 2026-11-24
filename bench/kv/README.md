@@ -22,7 +22,7 @@ sudo python3 bench/kv/fragmentation.py --libmesh build/lib/libmesh.so --mstat ~/
 | `jemalloc+activedefrag` | default build, with the server's active defragmentation enabled after insertion |
 | `glibc` | `MALLOC=libc` build |
 | `mesh-nomesh` | `MALLOC=libc` build, `LD_PRELOAD=libmesh.so`, `MESH_PERIOD_MS=0` |
-| `mesh` | `MALLOC=libc` build, `LD_PRELOAD=libmesh.so` |
+| `mesh` | `MALLOC=libc` build, `LD_PRELOAD=libmesh.so`, `MESH_THP=0` (THP mode is otherwise on wherever the kernel allows it) |
 | `mesh-thp` (opt-in, `--configs`) | as `mesh`, with `MESH_THP=1`; needs `shmem_enabled=advise` (see `docs/thp.md`) |
 
 `mesh-nomesh` keeps Mesh's allocator and randomization and only disables meshing.
