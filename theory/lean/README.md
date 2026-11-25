@@ -64,6 +64,17 @@ Extensions, also fully formal:
   for McDiarmid or Azuma–Hoeffding (Mathlib has the latter in measure form),
   which would give the high-probability version.  Connecting this finite model
   to Mathlib's filtrations is not done.
+- **The string model** (`Star.lean`, `StringModel.lean`).  In the paper's
+  model the spans are random strings, not independent edges.
+  - `star_none_mesh`: `m` fresh partners all fail against a fixed span with
+    probability exactly `(1−q)^m`, as if independent.
+  - `step_fails`: an exhaustive counterexample (b = 4, 1,296 configurations)
+    to the independent-edge step.  After earlier failures, `P(u_i unmatched)`
+    exceeds `E[(1−q)^(free_i)]` (20/27), because right spans that failed
+    against the same left span are correlated.
+  - `bound_holds_small`: the bound itself still holds there.
+  So `lemma53_expectation` is proved for independent edges; for strings the
+  paper's statement remains unproved.
 - **`filter_sound`, `qu_antitone`** (`Occupancy.lean`): Mesh's occupancy
   filter (probe only partners with `r + r' ≤ b`) never skips a pair that could
   mesh, and lower-occupancy partners mesh more often.

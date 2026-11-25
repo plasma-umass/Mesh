@@ -6,6 +6,8 @@ import MeshTheory.Colour
 import MeshTheory.Shuffle
 import MeshTheory.Paper
 import MeshTheory.Occupancy
+import MeshTheory.Star
+import MeshTheory.StringModel
 import MeshTheory.SplitMesher
 import MeshTheory.Prob.Bounds
 import MeshTheory.Prob.Lemma53
