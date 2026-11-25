@@ -13,3 +13,4 @@ import MeshTheory.Prob.Bounds
 import MeshTheory.Prob.Lemma53
 import MeshTheory.Prob.Lipschitz
 import MeshTheory.Prob.Hetero
+import MeshTheory.Prob.StringLemma53

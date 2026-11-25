@@ -73,8 +73,18 @@ Extensions, also fully formal:
     exceeds `E[(1−q)^(free_i)]` (20/27), because right spans that failed
     against the same left span are correlated.
   - `bound_holds_small`: the bound itself still holds there.
-  So `lemma53_expectation` is proved for independent edges; for strings the
-  paper's statement remains unproved.
+  - **`string_lemma53`** (`Prob/StringLemma53.lean`): a lower bound **in the
+    paper's own string model**, with independent uniform spans and the
+    corrected good matches.
+    - `double_star_count`: on the good-match tree the mesh events are exactly
+      independent, giving probability `q(1−q)^(m+l)`.
+    - `good_le_matches`: good matches are at most the matches, by
+      `good_match_found`.
+    - Together: `E[M] ≥ q(1−q)^(t−1) Σ_i |window_i|`, about `k e^{−k}` per left
+      span with `t = k/q`.
+  So for strings this proves a weaker bound than the paper states.  The
+  paper's `(1−e^{−2k})/2` is proved only for independent edges, in the
+  repaired form `lemma53_expectation`; for strings it is still open.
 - **`filter_sound`, `qu_antitone`** (`Occupancy.lean`): Mesh's occupancy
   filter (probe only partners with `r + r' ≤ b`) never skips a pair that could
   mesh, and lower-occupancy partners mesh more often.
@@ -104,6 +114,7 @@ Still open:
 | `SplitMesher.lean` | §5.3 (algorithm, good matches, core-only pieces) |
 | `Prob/Bounds.lean`, `Prob/Lemma53.lean` | §5.3 in expectation (Mathlib) |
 | `Prob/Hetero.lean`, `Prob/Lipschitz.lean`, `Occupancy.lean` | extensions above |
+| `Star.lean`, `StringModel.lean`, `Prob/StringLemma53.lean` | the string model |
 
 General theorems use only `propext`, `Classical.choice` and `Quot.sound`. The
 exhaustive checks (`native_decide`) also trust the compiler.
