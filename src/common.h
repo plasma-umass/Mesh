@@ -185,6 +185,13 @@ static constexpr double kThpProtectDefault = 0.9;
 
 static constexpr size_t kDefaultMaxMeshCount = 30000;
 static constexpr size_t kMaxMeshesPerIteration = 2500;
+// SplitMesher probes per left span (MESH_MAX_PROBES overrides).  With the
+// occupancy filter (shiftedSplitting) only possible pairs are probed; Lemma 5.3
+// wants t ~ k / q probes, and q is small in fragmented classes.
+static constexpr size_t kDefaultMaxProbes = 256;
+// probes per size class per pass, so one large class can't spend a pass's
+// whole time budget searching and starve the others (~1-2 ms)
+static constexpr size_t kMaxProbesPerClass = 1 << 18;
 
 // maximum number of dirty pages to hold onto before we flush them
 // back to the OS (via MeshableArena::scavenge()
